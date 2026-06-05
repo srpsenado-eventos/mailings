@@ -1,0 +1,31 @@
+"use client";
+import { useState } from "react";
+import type { ResultadoAnalise } from "@/lib/types";
+import { UploadZone } from "@/components/upload-zone";
+import { ResultadoTabela } from "@/components/resultado-tabela";
+import { ExportButtons } from "@/components/export-buttons";
+
+export default function Home() {
+  const [analise, setAnalise] = useState<ResultadoAnalise | null>(null);
+
+  return (
+    <main className="mx-auto max-w-5xl p-6">
+      <h1 className="mb-4 text-2xl font-bold">Fiscal de Mailings</h1>
+      {!analise && <UploadZone onResultado={(r) => setAnalise(r as ResultadoAnalise)} />}
+      {analise && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-600">
+              {analise.arquivoNome} — {analise.resumo.total} registros · 🟢 {analise.resumo.verde} · 🟡 {analise.resumo.amarelo} · 🔴 {analise.resumo.vermelho} · ✨ {analise.resumo.novo}
+            </p>
+            <div className="flex gap-2">
+              <ExportButtons analise={analise} />
+              <button className="text-sm underline" onClick={() => setAnalise(null)}>Nova análise</button>
+            </div>
+          </div>
+          <ResultadoTabela analise={analise} />
+        </div>
+      )}
+    </main>
+  );
+}

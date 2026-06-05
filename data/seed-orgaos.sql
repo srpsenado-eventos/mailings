@@ -1,0 +1,7 @@
+-- Catálogo inicial de fontes oficiais — Clovis preenche manualmente.
+-- Exemplo (descomente e ajuste):
+-- insert into public.grupos (nome) values ('STF') on conflict (nome) do nothing;
+-- insert into public.fontes (grupo_id, url, descricao)
+--   select id, 'https://www.stf.jus.br/ministros', 'Lista de ministros'
+--   from public.grupos where nome = 'STF'
+--   on conflict (grupo_id, url) do nothing;

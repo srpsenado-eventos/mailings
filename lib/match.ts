@@ -135,6 +135,36 @@ function detectarNovos(
   return novos;
 }
 
+/**
+ * Grupo cujo scrape falhou: a URL existe, mas não foi possível ler a página.
+ * Não fabrica veredito (não conseguimos verificar) — marca cada contato como
+ * "indeterminado" e expõe o motivo técnico para o usuário conferir à mão.
+ */
+export function marcarFonteInacessivel(
+  grupo: string,
+  contatos: ContatoPlanilha[],
+  url: string,
+  motivo: string,
+): ResultadoGrupo {
+  return {
+    grupo,
+    fonteUrl: url,
+    semFonte: false,
+    fonteInacessivel: true,
+    erroFonte: motivo,
+    contatos: contatos.map((c) => ({
+      contato: c,
+      semaforo: "indeterminado" as Semaforo,
+      score: 0,
+      camposDivergentes: [],
+      origem: "oficial" as const,
+      fonteUrl: url,
+      observacao: "Fonte cadastrada, mas inacessível — verifique manualmente",
+    })),
+    novos: [],
+  };
+}
+
 export function compararGrupo(
   grupo: string,
   contatos: ContatoPlanilha[],

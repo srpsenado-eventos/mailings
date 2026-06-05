@@ -1,11 +1,57 @@
 import * as cheerio from "cheerio";
+import { Agent } from "undici";
 import type { ConteudoFonte } from "@/lib/types";
 
 export class ScrapeError extends Error {
-  constructor(public url: string, motivo: string) {
+  constructor(
+    public url: string,
+    public motivo: string,
+  ) {
     super(`Falha ao raspar ${url}: ${motivo}`);
     this.name = "ScrapeError";
   }
+}
+
+/**
+ * Headers de navegador real. Vários sites .gov.br têm WAF que bloqueia
+ * User-Agent de bot (HTTP 403); com headers de navegador a página responde.
+ * Não há custo de segurança em enviar estes cabeçalhos.
+ */
+const HEADERS_NAVEGADOR: Record<string, string> = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  Accept:
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+};
+
+/** RequestInit + `dispatcher` (extensão do undici/Node, ausente no lib.dom). */
+type RequestInitComDispatcher = RequestInit & { dispatcher?: Agent };
+
+/**
+ * Agent que aceita cadeia de certificado incompleta. Usado SÓ no retry quando o
+ * fetch estrito falha por erro de certificado — sites com cadeia válida mantêm
+ * verificação completa. Tradeoff documentado em
+ * docs/superpowers/specs/2026-06-05-fonte-inacessivel-e-scrape-resiliente.md
+ */
+const agenteTlsRelaxado = new Agent({ connect: { rejectUnauthorized: false } });
+
+/** Detecta falha de verificação de certificado TLS (cadeia incompleta, self-signed). */
+function ehErroDeCertificado(err: unknown): boolean {
+  const causa = err instanceof Error ? (err as { cause?: unknown }).cause : undefined;
+  const codigoCausa =
+    causa && typeof causa === "object" && "code" in causa
+      ? String((causa as { code?: unknown }).code)
+      : undefined;
+  const codigoDireto =
+    err && typeof err === "object" && "code" in err
+      ? String((err as { code?: unknown }).code)
+      : undefined;
+  const codigo = codigoCausa ?? codigoDireto ?? "";
+  if (/CERT|UNABLE_TO_VERIFY|SELF_SIGNED|LEAF_SIGNATURE|CERTIFICATE/i.test(codigo)) return true;
+  const msg = err instanceof Error ? err.message : "";
+  const msgCausa = causa instanceof Error ? causa.message : "";
+  return /certificate|self.signed|leaf signature/i.test(`${msg} ${msgCausa}`);
 }
 
 /** Extrai texto limpo + destaques (negrito) de um HTML já baixado. Função pura. */
@@ -28,17 +74,15 @@ export function extrairConteudo(html: string, url: string): ConteudoFonte {
   };
 }
 
-/** Baixa a página e extrai o conteúdo. Lança ScrapeError em falha de rede/timeout. */
+/**
+ * Baixa a página e extrai o conteúdo. Lança ScrapeError em falha de rede/timeout.
+ * Tenta TLS estrito primeiro; só em erro de certificado repete com TLS relaxado.
+ */
 export async function raspar(url: string, timeoutMs = 15000): Promise<ConteudoFonte> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const resp = await fetch(url, {
-      signal: ctrl.signal,
-      headers: { "User-Agent": "FiscalDeMailings/1.0 (Senado Federal)" },
-    });
-    if (!resp.ok) throw new ScrapeError(url, `HTTP ${resp.status}`);
-    const html = await resp.text();
+    const html = await baixarHtml(url, ctrl.signal);
     if (!html.trim()) throw new ScrapeError(url, "HTML vazio");
     return extrairConteudo(html, url);
   } catch (err) {
@@ -47,4 +91,25 @@ export async function raspar(url: string, timeoutMs = 15000): Promise<ConteudoFo
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Faz o fetch e devolve o HTML, com retry de TLS relaxado em erro de certificado. */
+async function baixarHtml(url: string, signal: AbortSignal): Promise<string> {
+  try {
+    return await requisitar(url, signal);
+  } catch (err) {
+    if (ehErroDeCertificado(err)) {
+      return await requisitar(url, signal, agenteTlsRelaxado);
+    }
+    throw err;
+  }
+}
+
+/** Uma requisição HTTP; lança ScrapeError em status não-OK. */
+async function requisitar(url: string, signal: AbortSignal, dispatcher?: Agent): Promise<string> {
+  const opcoes: RequestInitComDispatcher = { signal, headers: HEADERS_NAVEGADOR };
+  if (dispatcher) opcoes.dispatcher = dispatcher;
+  const resp = await fetch(url, opcoes);
+  if (!resp.ok) throw new ScrapeError(url, `HTTP ${resp.status}`);
+  return resp.text();
 }

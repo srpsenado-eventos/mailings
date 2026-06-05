@@ -32,7 +32,7 @@ export interface ConteudoFonte {
   destaques: string[];
 }
 
-export type Semaforo = "verde" | "amarelo" | "vermelho" | "novo";
+export type Semaforo = "verde" | "amarelo" | "vermelho" | "novo" | "indeterminado";
 export type OrigemVeredito = "oficial" | "pesquisa_ampla";
 
 export interface CampoDivergente {
@@ -54,7 +54,15 @@ export interface ResultadoContato {
 export interface ResultadoGrupo {
   grupo: string;
   fonteUrl?: string;
+  /** Não há URL oficial cadastrada para o grupo. */
   semFonte: boolean;
+  /**
+   * Há URL cadastrada, mas o scrape falhou (TLS, WAF, timeout, bloqueio de IP).
+   * Distinto de `semFonte`: a fonte existe, só não foi possível lê-la agora.
+   */
+  fonteInacessivel?: boolean;
+  /** Motivo técnico da falha de acesso (ex.: "HTTP 403"). Sem PII. */
+  erroFonte?: string;
   contatos: ResultadoContato[];
   /** Pessoas no site sem correspondência na planilha. */
   novos: PessoaSite[];
@@ -66,7 +74,9 @@ export interface ResumoAnalise {
   amarelo: number;
   vermelho: number;
   novo: number;
+  indeterminado: number;
   gruposSemFonte: number;
+  gruposFonteInacessivel: number;
 }
 
 export interface ResultadoAnalise {

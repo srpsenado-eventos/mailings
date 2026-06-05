@@ -22,7 +22,12 @@ export default function Home() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-600">
-              {analise.arquivoNome} — {analise.resumo.total} registros · 🟢 {analise.resumo.verde} · 🟡 {analise.resumo.amarelo} · 🔴 {analise.resumo.vermelho} · ✨ {analise.resumo.novo}
+              {analise.arquivoNome} — {analise.resumo.total} registros · 🟢 {analise.resumo.verde} · 🟡 {analise.resumo.amarelo} · 🔴 {analise.resumo.vermelho} · ✨ {analise.resumo.novo} · ⚪ {analise.resumo.indeterminado}
+              {analise.resumo.gruposFonteInacessivel > 0 && (
+                <span className="text-amber-600">
+                  {" "}· {analise.resumo.gruposFonteInacessivel} grupo(s) com fonte inacessível
+                </span>
+              )}
             </p>
             <div className="flex gap-2">
               <ExportButtons analise={analise} />

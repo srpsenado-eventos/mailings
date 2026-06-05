@@ -8,9 +8,26 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
         <section key={g.grupo} className="rounded border bg-white p-4">
           <h2 className="mb-2 font-semibold">
             {g.grupo}{" "}
-            {g.semFonte
-              ? <span className="text-sm text-red-600">(sem fonte cadastrada)</span>
-              : <a href={g.fonteUrl} className="text-sm text-blue-600 underline" target="_blank" rel="noreferrer">fonte</a>}
+            {g.semFonte ? (
+              <span className="text-sm text-red-600">(sem fonte cadastrada)</span>
+            ) : g.fonteInacessivel ? (
+              <span className="text-sm text-amber-600">
+                (fonte inacessível — verifique manualmente:{" "}
+                <a href={g.fonteUrl} className="underline" target="_blank" rel="noreferrer">
+                  abrir
+                </a>
+                {g.erroFonte ? ` · ${g.erroFonte}` : ""})
+              </span>
+            ) : (
+              <a
+                href={g.fonteUrl}
+                className="text-sm text-blue-600 underline"
+                target="_blank"
+                rel="noreferrer"
+              >
+                fonte
+              </a>
+            )}
           </h2>
           <table className="w-full text-sm">
             <thead><tr className="text-left text-gray-500">

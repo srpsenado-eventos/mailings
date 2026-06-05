@@ -6,7 +6,8 @@ import type {
   ResumoAnalise,
 } from "@/lib/types";
 import { agruparPorGrupo } from "@/lib/planilha";
-import { compararGrupo } from "@/lib/match";
+import { compararGrupo, marcarFonteInacessivel } from "@/lib/match";
+import { ScrapeError } from "@/lib/scrape";
 
 /**
  * Dependências injetadas no orquestrador. Permitem testar o pipeline sem rede
@@ -30,10 +31,17 @@ async function analisarGrupo(
   let fonte: ConteudoFonte;
   try {
     fonte = await deps.raspar(url);
-  } catch {
-    // Falha de rede/timeout no scrape → degrada para "sem fonte" (vermelho),
+  } catch (err) {
+    // Fonte cadastrada, mas inacessível (TLS, WAF, timeout, bloqueio de IP).
+    // NÃO é "sem fonte": preserva a URL e o motivo, marca como "indeterminado",
     // sem derrubar a análise dos demais grupos.
-    return compararGrupo(grupo, contatos, undefined);
+    const motivo =
+      err instanceof ScrapeError
+        ? err.motivo
+        : err instanceof Error
+          ? err.message
+          : "erro desconhecido";
+    return marcarFonteInacessivel(grupo, contatos, url, motivo);
   }
 
   const base = compararGrupo(grupo, contatos, fonte);
@@ -52,10 +60,13 @@ function resumir(grupos: ResultadoGrupo[]): ResumoAnalise {
     amarelo: 0,
     vermelho: 0,
     novo: 0,
+    indeterminado: 0,
     gruposSemFonte: 0,
+    gruposFonteInacessivel: 0,
   };
   for (const g of grupos) {
     if (g.semFonte) resumo.gruposSemFonte += 1;
+    if (g.fonteInacessivel) resumo.gruposFonteInacessivel += 1;
     resumo.novo += g.novos.length;
     for (const c of g.contatos) {
       resumo.total += 1;

@@ -33,7 +33,7 @@ describe("analisar", () => {
     expect(r.grupos[0].contatos[0].semaforo).toBe("verde");
   });
 
-  test("falha de scrape não derruba a análise (grupo vira semFonte-like vermelho)", async () => {
+  test("falha de scrape marca fonte inacessível (≠ sem fonte), sem derrubar a análise", async () => {
     const depsQuebrado: Dependencias = {
       ...deps,
       raspar: async () => {
@@ -41,7 +41,26 @@ describe("analisar", () => {
       },
     };
     const r = await analisar("c.xlsx", [contatos[0]], depsQuebrado);
-    expect(r.grupos[0].contatos[0].semaforo).toBe("vermelho");
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBe(true);
+    expect(g.semFonte).toBe(false);
+    expect(g.fonteUrl).toBe("https://orgao.gov.br");
+    expect(g.erroFonte).toBe("timeout");
+    expect(g.contatos[0].semaforo).toBe("indeterminado");
+  });
+
+  test("resumo conta grupos inacessíveis e registros indeterminados", async () => {
+    const depsQuebrado: Dependencias = {
+      ...deps,
+      raspar: async () => {
+        throw new Error("HTTP 403");
+      },
+    };
+    const r = await analisar("c.xlsx", contatos, depsQuebrado);
+    // "ORG" tem URL mas falha o scrape → inacessível; "SEM_FONTE" → sem fonte.
+    expect(r.resumo.gruposFonteInacessivel).toBe(1);
+    expect(r.resumo.gruposSemFonte).toBe(1);
+    expect(r.resumo.indeterminado).toBe(1);
   });
 
   test("falha do refinador (Camada B) degrada para o veredito da Camada A sem derrubar", async () => {

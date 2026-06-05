@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { compararContato, compararGrupo } from "@/lib/match";
+import { compararContato, compararGrupo, marcarFonteInacessivel } from "@/lib/match";
 import type { ContatoPlanilha, ConteudoFonte } from "@/lib/types";
 
 const fonte: ConteudoFonte = {
@@ -54,5 +54,24 @@ describe("compararGrupo", () => {
     const r = compararGrupo("ORG", [contato({ nome: "Ana" })], undefined);
     expect(r.semFonte).toBe(true);
     expect(r.contatos[0].semaforo).toBe("vermelho");
+  });
+});
+
+describe("marcarFonteInacessivel", () => {
+  test("preserva a URL, marca inacessível (≠ sem fonte) e contatos indeterminados", () => {
+    const r = marcarFonteInacessivel(
+      "STF",
+      [contato({ nome: "Ana" }), contato({ nome: "João" })],
+      "https://stf.jus.br/min",
+      "HTTP 403",
+    );
+    expect(r.semFonte).toBe(false);
+    expect(r.fonteInacessivel).toBe(true);
+    expect(r.fonteUrl).toBe("https://stf.jus.br/min");
+    expect(r.erroFonte).toBe("HTTP 403");
+    expect(r.contatos).toHaveLength(2);
+    expect(r.contatos.every((c) => c.semaforo === "indeterminado")).toBe(true);
+    expect(r.contatos[0].camposDivergentes).toHaveLength(0);
+    expect(r.novos).toHaveLength(0);
   });
 });

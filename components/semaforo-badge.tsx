@@ -5,10 +5,12 @@ const CORES: Record<Semaforo, string> = {
   amarelo: "bg-yellow-100 text-yellow-800",
   vermelho: "bg-red-100 text-red-800",
   novo: "bg-blue-100 text-blue-800",
+  indeterminado: "bg-gray-100 text-gray-700",
 };
 
 const ROTULOS: Record<Semaforo, string> = {
   verde: "OK", amarelo: "Revisar", vermelho: "Divergência", novo: "Novo",
+  indeterminado: "Não verificado",
 };
 
 export function SemaforoBadge({ status }: { status: Semaforo }) {

@@ -36,6 +36,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/string-similarity": "^4.0.2",
     "@vitejs/plugin-react": "^6.0.2",
+    "pg": "^8.21.0",
     "postcss": "^8.5.15",
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3",

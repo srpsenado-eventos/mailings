@@ -43,4 +43,16 @@ describe("analisar", () => {
     const r = await analisar("c.xlsx", [contatos[0]], depsQuebrado);
     expect(r.grupos[0].contatos[0].semaforo).toBe("vermelho");
   });
+
+  test("falha do refinador (Camada B) degrada para o veredito da Camada A sem derrubar", async () => {
+    const depsRefinarQuebrado: Dependencias = {
+      ...deps,
+      refinar: async () => {
+        throw new Error("cota do Gemini esgotada");
+      },
+    };
+    const r = await analisar("c.xlsx", [contatos[0]], depsRefinarQuebrado);
+    expect(r.grupos[0].contatos[0].semaforo).toBe("verde");
+    expect(r.grupos[0].contatos[0].origem).toBe("oficial");
+  });
 });

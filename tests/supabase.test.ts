@@ -59,6 +59,33 @@ describe("buscarFontePrimaria", () => {
     );
     expect(url).toBeUndefined();
   });
+
+  test("casa um segmento quando o rótulo da planilha junta vários grupos com ponto e vírgula", async () => {
+    const url = await buscarFontePrimaria(
+      fakeClient([{ url: "https://stf.jus.br/min", grupos: { nome: "Ministros do STF" } }]),
+      "MAILING RP - Sessão Especial; MAILING RP - Sessão Solene; Ministros do STF",
+    );
+    expect(url).toBe("https://stf.jus.br/min");
+  });
+
+  test("escolhe a fonte primária (mais antiga) quando dois segmentos têm fonte", async () => {
+    const url = await buscarFontePrimaria(
+      fakeClient([
+        { url: "https://primeira.gov.br", grupos: { nome: "Ministros do STF" } },
+        { url: "https://segunda.gov.br", grupos: { nome: "MAILING RP - Sessão Solene" } },
+      ]),
+      "MAILING RP - Sessão Solene; Ministros do STF",
+    );
+    expect(url).toBe("https://primeira.gov.br");
+  });
+
+  test("ignora segmentos vazios gerados por ponto e vírgula sobrando", async () => {
+    const url = await buscarFontePrimaria(
+      fakeClient([{ url: "https://stf.jus.br/min", grupos: { nome: "Ministros do STF" } }]),
+      "; Ministros do STF ;",
+    );
+    expect(url).toBe("https://stf.jus.br/min");
+  });
 });
 
 /** Cliente fake para listarGruposComFonte: ignora o builder e devolve as linhas de `grupos`. */

@@ -23,16 +23,33 @@ function nomeDoGrupo(linha: FonteComGrupo): string {
 }
 
 /**
+ * Quebra o rótulo "Grupo" da planilha em segmentos normalizados.
+ * No Sistema Contatos uma mesma autoridade pertence a vários mailings ao mesmo
+ * tempo, e a célula "Grupo" vem com eles colados por ";" (ex.: "MAILING RP -
+ * Sessão Especial; ...; Ministros do STF"). Cada segmento é um grupo candidato
+ * que pode ter fonte oficial cadastrada.
+ */
+function segmentarGrupo(grupoNome: string): string[] {
+  return grupoNome
+    .split(";")
+    .map((s) => normalizarTexto(s))
+    .filter((s) => s.length > 0);
+}
+
+/**
  * Busca a URL oficial primária (fonte ativa mais antiga) de um grupo.
  * A junção planilha↔fontes é por grupos.nome. A comparação é feita sobre o
- * nome normalizado (sem acento, sem caixa) para tolerar diferenças entre a
- * planilha do Sistema Contatos e o cadastro — evitando falsos "sem fonte".
+ * nome normalizado (sem acento, sem caixa) e por segmento — o rótulo da
+ * planilha pode juntar vários grupos com ";", então casa qualquer segmento
+ * contra o cadastro, evitando falsos "sem fonte".
  */
 export async function buscarFontePrimaria(
   client: SupabaseClient,
   grupoNome: string,
 ): Promise<string | undefined> {
-  const alvo = normalizarTexto(grupoNome);
+  const segmentos = segmentarGrupo(grupoNome);
+  if (segmentos.length === 0) return undefined;
+
   const { data, error } = await client
     .from("fontes")
     .select("url, grupos!inner(nome)")
@@ -43,7 +60,7 @@ export async function buscarFontePrimaria(
 
   const linhas = data as FonteComGrupo[];
   // Lista já vem ordenada por created_at asc; o primeiro match é a fonte primária.
-  const match = linhas.find((linha) => normalizarTexto(nomeDoGrupo(linha)) === alvo);
+  const match = linhas.find((linha) => segmentos.includes(normalizarTexto(nomeDoGrupo(linha))));
   return match?.url;
 }
 

@@ -8,10 +8,24 @@ export function criarClienteServidor(): SupabaseClient {
   return createClient(url, key);
 }
 
+/** Linha de `fontes` com o nome do grupo via join. O Supabase pode tipar o
+ * relacionamento como objeto ou array; tratamos ambos. */
+interface FonteComGrupo {
+  url: string;
+  grupos: { nome: string } | { nome: string }[] | null;
+}
+
+function nomeDoGrupo(linha: FonteComGrupo): string {
+  const g = linha.grupos;
+  if (!g) return "";
+  return Array.isArray(g) ? (g[0]?.nome ?? "") : g.nome;
+}
+
 /**
  * Busca a URL oficial primária (fonte ativa mais antiga) de um grupo.
- * A junção planilha↔fontes é por grupos.nome; normalizamos para tolerar
- * variações de caixa/acento.
+ * A junção planilha↔fontes é por grupos.nome. A comparação é feita sobre o
+ * nome normalizado (sem acento, sem caixa) para tolerar diferenças entre a
+ * planilha do Sistema Contatos e o cadastro — evitando falsos "sem fonte".
  */
 export async function buscarFontePrimaria(
   client: SupabaseClient,
@@ -22,14 +36,12 @@ export async function buscarFontePrimaria(
     .from("fontes")
     .select("url, grupos!inner(nome)")
     .eq("ativo", true)
-    .eq("grupos.nome", grupoNome)
-    .order("created_at", { ascending: true })
-    .limit(1);
+    .order("created_at", { ascending: true });
   if (error) throw new Error(`Erro ao buscar fonte: ${error.message}`);
-  // fallback de normalização caso a busca exata não retorne
-  if (!data || data.length === 0) {
-    void alvo; // normalização disponível para evolução futura (RPC com unaccent)
-    return undefined;
-  }
-  return (data[0] as { url: string }).url;
+  if (!data) return undefined;
+
+  const linhas = data as FonteComGrupo[];
+  // Lista já vem ordenada por created_at asc; o primeiro match é a fonte primária.
+  const match = linhas.find((linha) => normalizarTexto(nomeDoGrupo(linha)) === alvo);
+  return match?.url;
 }

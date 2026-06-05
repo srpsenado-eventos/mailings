@@ -9,19 +9,6 @@ export function criarClienteServidor(): SupabaseClient {
   return createClient(url, key);
 }
 
-/** Linha de `fontes` com o nome do grupo via join. O Supabase pode tipar o
- * relacionamento como objeto ou array; tratamos ambos. */
-interface FonteComGrupo {
-  url: string;
-  grupos: { nome: string } | { nome: string }[] | null;
-}
-
-function nomeDoGrupo(linha: FonteComGrupo): string {
-  const g = linha.grupos;
-  if (!g) return "";
-  return Array.isArray(g) ? (g[0]?.nome ?? "") : g.nome;
-}
-
 /**
  * Quebra o rótulo "Grupo" da planilha em segmentos normalizados.
  * No Sistema Contatos uma mesma autoridade pertence a vários mailings ao mesmo
@@ -36,12 +23,23 @@ function segmentarGrupo(grupoNome: string): string[] {
     .filter((s) => s.length > 0);
 }
 
+/** Linha de `grupos` com suas fontes via embed grupos→fontes (mesmo caminho de
+ * listarGruposComFonte). */
+interface GrupoComFonteUrl {
+  nome: string;
+  fontes: { url: string; ativo: boolean; created_at: string }[] | null;
+}
+
 /**
  * Busca a URL oficial primária (fonte ativa mais antiga) de um grupo.
  * A junção planilha↔fontes é por grupos.nome. A comparação é feita sobre o
  * nome normalizado (sem acento, sem caixa) e por segmento — o rótulo da
  * planilha pode juntar vários grupos com ";", então casa qualquer segmento
  * contra o cadastro, evitando falsos "sem fonte".
+ *
+ * Usa o embed grupos→fontes (e não fontes→grupos!inner): é o mesmo caminho da
+ * tela /grupos, comprovadamente robusto em produção, onde o embed inverso com
+ * `!inner` deixava de retornar certos grupos de forma intermitente.
  */
 export async function buscarFontePrimaria(
   client: SupabaseClient,
@@ -51,17 +49,20 @@ export async function buscarFontePrimaria(
   if (segmentos.length === 0) return undefined;
 
   const { data, error } = await client
-    .from("fontes")
-    .select("url, grupos!inner(nome)")
-    .eq("ativo", true)
-    .order("created_at", { ascending: true });
+    .from("grupos")
+    .select("nome, fontes(url, ativo, created_at)");
   if (error) throw new Error(`Erro ao buscar fonte: ${error.message}`);
   if (!data) return undefined;
 
-  const linhas = data as FonteComGrupo[];
-  // Lista já vem ordenada por created_at asc; o primeiro match é a fonte primária.
-  const match = linhas.find((linha) => segmentos.includes(normalizarTexto(nomeDoGrupo(linha))));
-  return match?.url;
+  const grupos = data as GrupoComFonteUrl[];
+  // Junta as fontes ativas de todo grupo cujo nome casa com algum segmento e
+  // escolhe a primária (created_at mais antigo).
+  const ativas = grupos
+    .filter((g) => segmentos.includes(normalizarTexto(g.nome)))
+    .flatMap((g) => g.fontes ?? [])
+    .filter((f) => f.ativo)
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  return ativas[0]?.url;
 }
 
 /** Linha de `grupos` com responsáveis e fontes via join (para a tela de visualização). */

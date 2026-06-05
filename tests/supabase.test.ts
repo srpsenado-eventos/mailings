@@ -1,28 +1,38 @@
 import { describe, expect, test } from "vitest";
 import { buscarFontePrimaria, listarGruposComFonte } from "@/lib/supabase";
 
-interface LinhaFake {
+interface FonteFake {
   url: string;
-  grupos: { nome: string };
+  ativo: boolean;
+  created_at: string;
+}
+interface GrupoFake {
+  nome: string;
+  fontes: FonteFake[] | null;
 }
 
-/** Cliente fake que ignora o query builder e devolve as linhas já "ordenadas". */
-function fakeClient(linhas: LinhaFake[]) {
+/**
+ * Cliente fake que ignora o query builder e devolve linhas de `grupos` com suas
+ * `fontes` embutidas — o mesmo formato do embed grupos→fontes que
+ * buscarFontePrimaria passou a usar (caminho robusto, idêntico ao da /grupos).
+ */
+function fakeClient(grupos: GrupoFake[]) {
   return {
     from: () => ({
-      select: () => ({
-        eq: () => ({
-          order: () => Promise.resolve({ data: linhas, error: null }),
-        }),
-      }),
+      select: () => Promise.resolve({ data: grupos, error: null }),
     }),
   } as never;
+}
+
+/** Açúcar para declarar um grupo com uma única fonte ativa. */
+function grupoComFonte(nome: string, url: string, created_at = "2024-01-01T00:00:00Z"): GrupoFake {
+  return { nome, fontes: [{ url, ativo: true, created_at }] };
 }
 
 describe("buscarFontePrimaria", () => {
   test("retorna a primeira URL ativa do grupo com nome idêntico", async () => {
     const url = await buscarFontePrimaria(
-      fakeClient([{ url: "https://a.gov.br", grupos: { nome: "STF" } }]),
+      fakeClient([grupoComFonte("STF", "https://a.gov.br")]),
       "STF",
     );
     expect(url).toBe("https://a.gov.br");
@@ -30,7 +40,7 @@ describe("buscarFontePrimaria", () => {
 
   test("tolera diferença de caixa e acento entre planilha e cadastro", async () => {
     const url = await buscarFontePrimaria(
-      fakeClient([{ url: "https://gov.br/sp", grupos: { nome: "Governador de São Paulo" } }]),
+      fakeClient([grupoComFonte("Governador de São Paulo", "https://gov.br/sp")]),
       "governador de sao paulo",
     );
     expect(url).toBe("https://gov.br/sp");
@@ -39,8 +49,8 @@ describe("buscarFontePrimaria", () => {
   test("escolhe o grupo certo quando há fontes de vários grupos", async () => {
     const url = await buscarFontePrimaria(
       fakeClient([
-        { url: "https://a.gov.br/stj", grupos: { nome: "STJ" } },
-        { url: "https://a.gov.br/stf", grupos: { nome: "STF" } },
+        grupoComFonte("STJ", "https://a.gov.br/stj"),
+        grupoComFonte("STF", "https://a.gov.br/stf"),
       ]),
       "STF",
     );
@@ -54,25 +64,38 @@ describe("buscarFontePrimaria", () => {
 
   test("retorna undefined quando nenhum grupo corresponde", async () => {
     const url = await buscarFontePrimaria(
-      fakeClient([{ url: "https://a.gov.br/stf", grupos: { nome: "STF" } }]),
+      fakeClient([grupoComFonte("STF", "https://a.gov.br/stf")]),
       "STJ",
     );
     expect(url).toBeUndefined();
   });
 
+  test("ignora fonte inativa e retorna undefined quando só há inativa", async () => {
+    const url = await buscarFontePrimaria(
+      fakeClient([{ nome: "STF", fontes: [{ url: "https://antiga", ativo: false, created_at: "2024-01-01T00:00:00Z" }] }]),
+      "STF",
+    );
+    expect(url).toBeUndefined();
+  });
+
+  test("grupo correspondente sem fontes (null) retorna undefined", async () => {
+    const url = await buscarFontePrimaria(fakeClient([{ nome: "STF", fontes: null }]), "STF");
+    expect(url).toBeUndefined();
+  });
+
   test("casa um segmento quando o rótulo da planilha junta vários grupos com ponto e vírgula", async () => {
     const url = await buscarFontePrimaria(
-      fakeClient([{ url: "https://stf.jus.br/min", grupos: { nome: "Ministros do STF" } }]),
+      fakeClient([grupoComFonte("Ministros do STF", "https://stf.jus.br/min")]),
       "MAILING RP - Sessão Especial; MAILING RP - Sessão Solene; Ministros do STF",
     );
     expect(url).toBe("https://stf.jus.br/min");
   });
 
-  test("escolhe a fonte primária (mais antiga) quando dois segmentos têm fonte", async () => {
+  test("escolhe a fonte primária (mais antiga por created_at) quando dois segmentos têm fonte", async () => {
     const url = await buscarFontePrimaria(
       fakeClient([
-        { url: "https://primeira.gov.br", grupos: { nome: "Ministros do STF" } },
-        { url: "https://segunda.gov.br", grupos: { nome: "MAILING RP - Sessão Solene" } },
+        grupoComFonte("MAILING RP - Sessão Solene", "https://segunda.gov.br", "2024-02-01T00:00:00Z"),
+        grupoComFonte("Ministros do STF", "https://primeira.gov.br", "2024-01-01T00:00:00Z"),
       ]),
       "MAILING RP - Sessão Solene; Ministros do STF",
     );
@@ -81,7 +104,7 @@ describe("buscarFontePrimaria", () => {
 
   test("ignora segmentos vazios gerados por ponto e vírgula sobrando", async () => {
     const url = await buscarFontePrimaria(
-      fakeClient([{ url: "https://stf.jus.br/min", grupos: { nome: "Ministros do STF" } }]),
+      fakeClient([grupoComFonte("Ministros do STF", "https://stf.jus.br/min")]),
       "; Ministros do STF ;",
     );
     expect(url).toBe("https://stf.jus.br/min");

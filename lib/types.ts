@@ -74,3 +74,17 @@ export interface ResultadoAnalise {
   grupos: ResultadoGrupo[];
   resumo: ResumoAnalise;
 }
+
+/** Grupo cadastrado no Supabase com seus responsáveis e status de fonte (para a tela de visualização). */
+export interface GrupoCadastro {
+  nome: string;
+  responsavel1?: string;
+  responsavel2?: string;
+  backup?: string;
+  emailResp1?: string;
+  emailResp2?: string;
+  emailBackup?: string;
+  /** URL oficial primária ativa, se houver. */
+  fonteUrl?: string;
+  temFonte: boolean;
+}

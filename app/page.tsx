@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Link from "next/link";
 import type { ResultadoAnalise } from "@/lib/types";
 import { UploadZone } from "@/components/upload-zone";
 import { ResultadoTabela } from "@/components/resultado-tabela";
@@ -10,7 +11,12 @@ export default function Home() {
 
   return (
     <main className="mx-auto max-w-5xl p-6">
-      <h1 className="mb-4 text-2xl font-bold">Fiscal de Mailings</h1>
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Fiscal de Mailings</h1>
+        <Link href="/grupos" className="text-sm underline">
+          Grupos cadastrados →
+        </Link>
+      </div>
       {!analise && <UploadZone onResultado={(r) => setAnalise(r as ResultadoAnalise)} />}
       {analise && (
         <div className="space-y-4">

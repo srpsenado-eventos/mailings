@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { buscarFontePrimaria } from "@/lib/supabase";
+import { buscarFontePrimaria, listarGruposComFonte } from "@/lib/supabase";
 
 interface LinhaFake {
   url: string;
@@ -58,5 +58,77 @@ describe("buscarFontePrimaria", () => {
       "STJ",
     );
     expect(url).toBeUndefined();
+  });
+});
+
+/** Cliente fake para listarGruposComFonte: ignora o builder e devolve as linhas de `grupos`. */
+function fakeClientGrupos(linhas: unknown[]) {
+  return {
+    from: () => ({
+      select: () => ({
+        order: () => Promise.resolve({ data: linhas, error: null }),
+      }),
+    }),
+  } as never;
+}
+
+describe("listarGruposComFonte", () => {
+  test("mapeia responsáveis e marca temFonte com a primeira fonte ativa", async () => {
+    const grupos = await listarGruposComFonte(
+      fakeClientGrupos([
+        {
+          nome: "Ministros do STF",
+          responsavel_1: "Ramena",
+          responsavel_2: "Daniela",
+          backup: "Maria Ines",
+          email_resp_1: "ramena@senado.leg.br",
+          email_resp_2: null,
+          email_backup: null,
+          fontes: [{ url: "https://stf.jus.br/x", ativo: true }],
+        },
+      ]),
+    );
+    expect(grupos).toHaveLength(1);
+    expect(grupos[0].responsavel1).toBe("Ramena");
+    expect(grupos[0].emailResp2).toBeUndefined();
+    expect(grupos[0].temFonte).toBe(true);
+    expect(grupos[0].fonteUrl).toBe("https://stf.jus.br/x");
+  });
+
+  test("ignora fontes inativas: temFonte falso e fonteUrl indefinida", async () => {
+    const grupos = await listarGruposComFonte(
+      fakeClientGrupos([
+        {
+          nome: "Governadores",
+          responsavel_1: "Marcus",
+          responsavel_2: null,
+          backup: null,
+          email_resp_1: null,
+          email_resp_2: null,
+          email_backup: null,
+          fontes: [{ url: "https://antiga.gov.br", ativo: false }],
+        },
+      ]),
+    );
+    expect(grupos[0].temFonte).toBe(false);
+    expect(grupos[0].fonteUrl).toBeUndefined();
+  });
+
+  test("grupo sem fontes resulta em temFonte falso", async () => {
+    const grupos = await listarGruposComFonte(
+      fakeClientGrupos([
+        {
+          nome: "Ex-Senadores",
+          responsavel_1: "Fernanda",
+          responsavel_2: null,
+          backup: null,
+          email_resp_1: null,
+          email_resp_2: null,
+          email_backup: null,
+          fontes: null,
+        },
+      ]),
+    );
+    expect(grupos[0].temFonte).toBe(false);
   });
 });

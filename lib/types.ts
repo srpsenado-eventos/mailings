@@ -14,22 +14,22 @@ export interface ContatoPlanilha {
   grupo: string;
 }
 
-/** Uma pessoa extraída do site oficial. */
+/** Uma pessoa extraída (estruturada) da fonte oficial. */
 export interface PessoaSite {
-  nomeCompleto?: string;
-  /** Nome em destaque (negrito) — geralmente o nome político. */
-  nomePolitico?: string;
+  nome: string;
   cargo?: string;
-  /** Trecho de texto bruto onde a pessoa foi encontrada. */
-  contexto: string;
+  /** Trecho de origem (para depuração). */
+  contexto?: string;
 }
 
 /** Conteúdo limpo de uma página oficial. */
 export interface ConteudoFonte {
   url: string;
   textoLimpo: string;
-  /** Strings encontradas dentro de <strong>/<b>. */
+  /** Strings em <strong>/<b> já filtradas (dica de nomes). */
   destaques: string[];
+  /** Pessoas estruturadas extraídas da página. */
+  pessoas: PessoaSite[];
 }
 
 export type Semaforo = "verde" | "amarelo" | "vermelho" | "novo" | "indeterminado";
@@ -41,10 +41,23 @@ export interface CampoDivergente {
   valorEncontrado?: string;
 }
 
+export type SituacaoCampo = "confere" | "divergente" | "fonte_nao_informa";
+
+export interface ComparacaoCampo {
+  campo: string;
+  valorPlanilha: string;
+  /** Valor correto vindo do site (ausente quando a fonte não informa). */
+  valorSite?: string;
+  situacao: SituacaoCampo;
+}
+
 export interface ResultadoContato {
   contato: ContatoPlanilha;
   semaforo: Semaforo;
   score: number;
+  /** Auditoria campo a campo (fonte da verdade para as colunas planilha×site). */
+  comparacoes: ComparacaoCampo[];
+  /** Subconjunto de `comparacoes` com situacao "divergente" (compat/badge). */
   camposDivergentes: CampoDivergente[];
   origem: OrigemVeredito;
   fonteUrl?: string;

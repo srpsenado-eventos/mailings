@@ -6,16 +6,15 @@ import type {
   ResultadoContato,
   ResultadoGrupo,
   CampoDivergente,
+  ComparacaoCampo,
+  SituacaoCampo,
   OrigemVeredito,
   Semaforo,
 } from "@/lib/types";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 
-const LIMIAR_FORTE = 0.85;
-const LIMIAR_FRACO = 0.6;
-const BONUS_CONTENCAO = 0.9;
-const MIN_TAMANHO_FRASE = 2;
-const TAMANHO_CONTEXTO = 200;
+const LIMIAR_PESSOA = 0.6;
+const LIMIAR_TOKEN = 0.85;
 const LIMIAR_SUGESTAO = 0.4;
 const MAX_SUGESTOES = 3;
 
@@ -46,64 +45,100 @@ export function sugerirGrupos(
     .map((r) => r.nome);
 }
 
-/** Quebra texto em frases curtas para comparação granular. */
-function quebrarEmFrases(texto: string): string[] {
-  return texto
-    .split(/[.;,\n]/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > MIN_TAMANHO_FRASE);
+/** Campos auditados contra a fonte. `site` devolve undefined quando a fonte não tem o dado. */
+interface CampoAuditado {
+  campo: string;
+  planilha: (c: ContatoPlanilha) => string | undefined;
+  site: (p: PessoaSite) => string | undefined;
 }
 
-interface CorrespondenciaNome {
-  score: number;
-  /** Frase da fonte onde o nome mais se aproximou (para conferir campos secundários). */
-  frase: string;
+const CAMPOS_AUDITADOS: CampoAuditado[] = [
+  { campo: "cargo", planilha: (c) => c.cargo, site: (p) => p.cargo },
+  { campo: "endereco", planilha: (c) => c.endereco, site: () => undefined },
+  { campo: "telefone", planilha: (c) => c.telefone, site: () => undefined },
+  { campo: "email", planilha: (c) => c.email, site: () => undefined },
+];
+
+function tokensNome(nome: string): string[] {
+  return normalizarNome(nome)
+    .split(" ")
+    .filter((t) => t.length > 1);
 }
 
 /**
- * Melhor correspondência do nome contra qualquer trecho/destaque da fonte.
- * Devolve o score e a frase onde a pessoa foi localizada, para que os campos
- * secundários (cargo, endereço) sejam conferidos no contexto certo — e não em
- * qualquer parte do documento, que pertenceria a outra pessoa.
+ * Pontua a semelhança entre dois nomes por sobreposição de tokens (não string
+ * inteira), para casar variações como "Sívio Roberto Oliveira de Amorim Júnior"
+ * com "Silvio Amorim Junior". Conta tokens com correspondência forte e divide
+ * pelo menor conjunto — exige ≥2 tokens alinhados quando ambos têm ≥2 tokens.
  */
-function melhorCorrespondencia(nome: string, fonte: ConteudoFonte): CorrespondenciaNome {
-  const alvo = normalizarNome(nome);
-  if (!alvo) return { score: 0, frase: "" };
-
-  const frases = quebrarEmFrases(fonte.textoLimpo);
-  const candidatos = [
-    ...fonte.destaques.map((d) => ({ original: d, norm: normalizarNome(d) })),
-    ...frases.map((f) => ({ original: f, norm: normalizarNome(f) })),
-  ].filter((c) => c.norm.length > 0);
-  if (candidatos.length === 0) return { score: 0, frase: "" };
-
-  // bônus: contenção direta do nome normalizado em alguma frase
-  const fraseContida = frases.find((f) => normalizarTexto(f).includes(alvo));
-
-  const ratings = stringSimilarity.findBestMatch(
-    alvo,
-    candidatos.map((c) => c.norm),
-  );
-  const melhorIdx = ratings.bestMatchIndex;
-  const scoreSim = ratings.bestMatch.rating;
-
-  if (fraseContida && BONUS_CONTENCAO >= scoreSim) {
-    return { score: BONUS_CONTENCAO, frase: fraseContida };
+export function pontuarPessoa(nomePlanilha: string, nomeSite: string): number {
+  const a = tokensNome(nomePlanilha);
+  const b = tokensNome(nomeSite);
+  if (a.length === 0 || b.length === 0) return 0;
+  let fortes = 0;
+  for (const ta of a) {
+    const melhor = Math.max(...b.map((tb) => stringSimilarity.compareTwoStrings(ta, tb)));
+    if (melhor >= LIMIAR_TOKEN) fortes += 1;
   }
-  return { score: scoreSim, frase: candidatos[melhorIdx].original };
+  return fortes / Math.min(a.length, b.length);
 }
 
-/**
- * Verifica se o valor da planilha aparece no contexto onde o nome foi localizado.
- * Restringe a comparação à frase correspondente para não confundir o cargo de
- * uma autoridade com o de outra que apareça em outro ponto do documento.
- */
-function campoBate(
-  valorPlanilha: string | undefined,
-  contexto: string,
-): boolean {
-  if (!valorPlanilha) return true; // nada a comparar
-  return normalizarTexto(contexto).includes(normalizarTexto(valorPlanilha));
+function melhorPessoa(nome: string, pessoas: PessoaSite[]): { indice: number; score: number } {
+  let indice = -1;
+  let score = 0;
+  pessoas.forEach((p, i) => {
+    const s = pontuarPessoa(nome, p.nome);
+    if (s > score) {
+      score = s;
+      indice = i;
+    }
+  });
+  return { indice, score };
+}
+
+function situacaoCampo(valorPlanilha: string, valorSite?: string): SituacaoCampo {
+  if (valorSite === undefined) return "fonte_nao_informa";
+  const p = normalizarTexto(valorPlanilha);
+  const s = normalizarTexto(valorSite);
+  return s.includes(p) || p.includes(s) ? "confere" : "divergente";
+}
+
+/** Monta o veredito de um contato contra a pessoa casada (ou nenhuma → vermelho). */
+function montarResultado(
+  contato: ContatoPlanilha,
+  pessoa: PessoaSite | undefined,
+  score: number,
+  origem: OrigemVeredito,
+  url?: string,
+): ResultadoContato {
+  if (!pessoa) {
+    return {
+      contato,
+      semaforo: "vermelho",
+      score,
+      comparacoes: [],
+      camposDivergentes: [{ campo: "nome", valorPlanilha: contato.nome }],
+      origem,
+      fonteUrl: url,
+    };
+  }
+  const comparacoes: ComparacaoCampo[] = [];
+  for (const campo of CAMPOS_AUDITADOS) {
+    const valorPlanilha = campo.planilha(contato);
+    if (!valorPlanilha) continue; // nada a auditar neste campo
+    const valorSite = campo.site(pessoa);
+    comparacoes.push({
+      campo: campo.campo,
+      valorPlanilha,
+      valorSite,
+      situacao: situacaoCampo(valorPlanilha, valorSite),
+    });
+  }
+  const camposDivergentes: CampoDivergente[] = comparacoes
+    .filter((c) => c.situacao === "divergente")
+    .map((c) => ({ campo: c.campo, valorPlanilha: c.valorPlanilha, valorEncontrado: c.valorSite }));
+  const semaforo: Semaforo = camposDivergentes.length > 0 ? "amarelo" : "verde";
+  return { contato, semaforo, score, comparacoes, camposDivergentes, origem, fonteUrl: url };
 }
 
 export function compararContato(
@@ -111,59 +146,9 @@ export function compararContato(
   fonte: ConteudoFonte,
   origem: OrigemVeredito = "oficial",
 ): ResultadoContato {
-  const { score, frase } = melhorCorrespondencia(contato.nome, fonte);
-  const camposDivergentes: CampoDivergente[] = [];
-
-  let semaforo: Semaforo;
-  if (score < LIMIAR_FRACO) {
-    semaforo = "vermelho";
-    camposDivergentes.push({ campo: "nome", valorPlanilha: contato.nome });
-  } else {
-    // nome encontrado — conferir campos secundários no contexto da pessoa
-    if (!campoBate(contato.cargo, frase)) {
-      camposDivergentes.push({ campo: "cargo", valorPlanilha: contato.cargo });
-    }
-    if (!campoBate(contato.endereco, frase)) {
-      camposDivergentes.push({ campo: "endereco", valorPlanilha: contato.endereco });
-    }
-    if (score >= LIMIAR_FORTE && camposDivergentes.length === 0) {
-      semaforo = "verde";
-    } else {
-      semaforo = "amarelo";
-    }
-  }
-
-  return {
-    contato,
-    semaforo,
-    score,
-    camposDivergentes,
-    origem,
-    fonteUrl: fonte.url,
-  };
-}
-
-/** Destaques da fonte que não casaram com nenhum contato → possíveis novos. */
-function detectarNovos(
-  contatos: ContatoPlanilha[],
-  fonte: ConteudoFonte,
-): PessoaSite[] {
-  const nomesPlanilha = contatos.map((c) => normalizarNome(c.nome)).filter(Boolean);
-  const novos: PessoaSite[] = [];
-  for (const destaque of fonte.destaques) {
-    const alvo = normalizarNome(destaque);
-    if (!alvo) continue;
-    const casou = nomesPlanilha.some(
-      (n) => stringSimilarity.compareTwoStrings(alvo, n) >= LIMIAR_FRACO,
-    );
-    if (!casou) {
-      novos.push({
-        nomePolitico: destaque,
-        contexto: fonte.textoLimpo.slice(0, TAMANHO_CONTEXTO),
-      });
-    }
-  }
-  return novos;
+  const { indice, score } = melhorPessoa(contato.nome, fonte.pessoas);
+  const casou = indice >= 0 && score >= LIMIAR_PESSOA;
+  return montarResultado(contato, casou ? fonte.pessoas[indice] : undefined, score, origem, fonte.url);
 }
 
 /**
@@ -187,6 +172,7 @@ export function marcarFonteInacessivel(
       contato: c,
       semaforo: "indeterminado" as Semaforo,
       score: 0,
+      comparacoes: [],
       camposDivergentes: [],
       origem: "oficial" as const,
       fonteUrl: url,
@@ -210,6 +196,7 @@ export function compararGrupo(
         contato: c,
         semaforo: "vermelho" as Semaforo,
         score: 0,
+        comparacoes: [],
         camposDivergentes: [{ campo: "fonte", valorPlanilha: "sem URL cadastrada" }],
         origem: "oficial" as const,
         observacao: "Grupo sem fonte oficial cadastrada",
@@ -217,13 +204,16 @@ export function compararGrupo(
       novos: [],
     };
   }
-  return {
-    grupo,
-    fonteUrl: fonte.url,
-    semFonte: false,
-    contatos: contatos.map((c) => compararContato(c, fonte, origem)),
-    novos: detectarNovos(contatos, fonte),
-  };
+  // Casa contatos a pessoas e marca as usadas, para "novos" = pessoas não casadas.
+  const usados = new Set<number>();
+  const resultados = contatos.map((c) => {
+    const { indice, score } = melhorPessoa(c.nome, fonte.pessoas);
+    const casou = indice >= 0 && score >= LIMIAR_PESSOA;
+    if (casou) usados.add(indice);
+    return montarResultado(c, casou ? fonte.pessoas[indice] : undefined, score, origem, fonte.url);
+  });
+  const novos = fonte.pessoas.filter((_, i) => !usados.has(i));
+  return { grupo, fonteUrl: fonte.url, semFonte: false, contatos: resultados, novos };
 }
 
 /**

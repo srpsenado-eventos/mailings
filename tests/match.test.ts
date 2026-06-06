@@ -4,56 +4,85 @@ import {
   compararGrupo,
   compararGrupoAmplo,
   marcarFonteInacessivel,
+  pontuarPessoa,
   sugerirGrupos,
 } from "@/lib/match";
 import type { ContatoPlanilha, ConteudoFonte } from "@/lib/types";
 
 const fonte: ConteudoFonte = {
   url: "https://orgao.gov.br",
-  textoLimpo:
-    "Autoridades do Órgão. Ana Maria Política Completa, Presidente. João Carlos Destaque, Diretor.",
-  destaques: ["Ana Política", "João Destaque"],
+  textoLimpo: "Ana Maria Política Completa Presidente. João Carlos Destaque Diretor.",
+  destaques: [],
+  pessoas: [
+    { nome: "Ana Maria Política Completa", cargo: "Presidente" },
+    { nome: "João Carlos Destaque", cargo: "Diretor" },
+  ],
 };
 
 function contato(p: Partial<ContatoPlanilha>): ContatoPlanilha {
   return { nome: "", grupo: "ORG", ...p };
 }
 
-describe("compararContato", () => {
-  test("nome presente no texto → verde", () => {
-    const r = compararContato(contato({ nome: "Ana Maria Política Completa" }), fonte);
+describe("pontuarPessoa", () => {
+  test("casa variação de nome (sobrenomes em comum)", () => {
+    expect(
+      pontuarPessoa("Sívio Roberto Oliveira de Amorim Júnior", "Silvio Amorim Junior"),
+    ).toBeGreaterThanOrEqual(0.6);
+  });
+
+  test("nomes sem relação não casam", () => {
+    expect(pontuarPessoa("Ana Maria Política", "Carlos Eduardo Souza")).toBeLessThan(0.6);
+  });
+});
+
+describe("compararContato (por campo)", () => {
+  test("cargo igual ao site → confere, semáforo verde", () => {
+    const r = compararContato(
+      contato({ nome: "Ana Maria Política Completa", cargo: "Presidente" }),
+      fonte,
+    );
     expect(r.semaforo).toBe("verde");
-    expect(r.score).toBeGreaterThanOrEqual(0.85);
+    expect(r.comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("confere");
   });
 
-  test("nome ausente → vermelho (possível saída)", () => {
-    const r = compararContato(contato({ nome: "Pessoa Inexistente Qualquer" }), fonte);
-    expect(r.semaforo).toBe("vermelho");
-  });
-
-  test("match parcial vira amarelo e lista campo divergente", () => {
+  test("cargo diferente → divergente com valorSite preenchido", () => {
     const r = compararContato(
       contato({ nome: "João Carlos Destaque", cargo: "Presidente" }),
       fonte,
     );
-    expect(r.semaforo).toBe("amarelo");
+    const cargo = r.comparacoes.find((c) => c.campo === "cargo");
+    expect(cargo?.situacao).toBe("divergente");
+    expect(cargo?.valorSite).toBe("Diretor");
     expect(r.camposDivergentes.some((c) => c.campo === "cargo")).toBe(true);
+    expect(r.semaforo).toBe("amarelo");
   });
 
-  test("origem é sempre oficial na camada A", () => {
+  test("endereço da planilha → fonte_nao_informa (não vira divergência)", () => {
+    const r = compararContato(
+      contato({ nome: "Ana Maria Política Completa", endereco: "Praça X" }),
+      fonte,
+    );
+    const end = r.comparacoes.find((c) => c.campo === "endereco");
+    expect(end?.situacao).toBe("fonte_nao_informa");
+    expect(r.camposDivergentes.some((c) => c.campo === "endereco")).toBe(false);
+  });
+
+  test("nome ausente nas pessoas → vermelho", () => {
+    const r = compararContato(contato({ nome: "Pessoa Inexistente Qualquer" }), fonte);
+    expect(r.semaforo).toBe("vermelho");
+  });
+
+  test("origem é oficial por padrão", () => {
     const r = compararContato(contato({ nome: "Ana Maria Política Completa" }), fonte);
     expect(r.origem).toBe("oficial");
   });
 });
 
 describe("compararGrupo", () => {
-  test("detecta possíveis novos (destaque sem contato correspondente)", () => {
-    const r = compararGrupo(
-      "ORG",
-      [contato({ nome: "Ana Maria Política Completa" })],
-      fonte,
-    );
-    expect(r.novos.some((n) => n.nomePolitico === "João Destaque")).toBe(true);
+  test("pessoa casada sai do pool de novos (sem duplo-cont)", () => {
+    const r = compararGrupo("ORG", [contato({ nome: "Ana Maria Política Completa" })], fonte);
+    expect(r.novos.map((n) => n.nome)).toEqual(["João Carlos Destaque"]);
+    expect(r.novos.map((n) => n.nome)).not.toContain("Ana Maria Política Completa");
   });
 
   test("grupo sem fonte marca semFonte=true e não derruba", () => {

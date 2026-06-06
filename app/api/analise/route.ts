@@ -3,7 +3,12 @@ import { analisar, type Dependencias } from "@/lib/analise";
 import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload";
 import { criarClienteServidor, resolverGrupoEFonte } from "@/lib/supabase";
 import { raspar } from "@/lib/scrape";
-import { refinarComGemini, pesquisarFonteAmpla, extrairComposicaoGemini } from "@/lib/gemini";
+import {
+  refinarComGemini,
+  pesquisarFonteAmpla,
+  extrairComposicaoGemini,
+  geminiDisponivel,
+} from "@/lib/gemini";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -37,7 +42,8 @@ export async function POST(req: NextRequest) {
     };
 
     const resultado = await analisar(arquivoNome, contatos, deps);
-    return NextResponse.json({ ok: true, resultado });
+    // diag: flag seguro (sem expor a chave) para confirmar se o Gemini está ativo.
+    return NextResponse.json({ ok: true, resultado, diag: { geminiDisponivel: geminiDisponivel() } });
   } catch (err) {
     if (err instanceof PayloadInvalidoError) {
       return NextResponse.json({ ok: false, message: err.message }, { status: 422 });

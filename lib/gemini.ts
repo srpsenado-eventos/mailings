@@ -28,7 +28,7 @@ export async function refinarComGemini(
   if (ambiguos.length === 0) return grupo;
 
   try {
-    const gemini = cliente ?? (await criarClientePadrao());
+    const gemini = cliente ?? (await criarCliente(true));
     const prompt = montarPrompt(
       fonte,
       ambiguos.map((a) => a.contato.nome),
@@ -56,7 +56,7 @@ export async function pesquisarFonteAmpla(
 ): Promise<ConteudoFonte | undefined> {
   if (!geminiDisponivel() && !cliente) return undefined;
   try {
-    const gemini = cliente ?? (await criarClientePadrao());
+    const gemini = cliente ?? (await criarCliente(true));
     const resposta = await gemini.gerarJson(montarPromptComposicao(grupoCanonico));
     const pessoas = parsePessoas(resposta);
     if (pessoas.length === 0) return undefined;
@@ -84,7 +84,7 @@ export async function extrairComposicaoGemini(
 ): Promise<PessoaSite[]> {
   if (!geminiDisponivel() && !cliente) return [];
   try {
-    const gemini = cliente ?? (await criarClientePadrao());
+    const gemini = cliente ?? (await criarCliente(false));
     const prompt = [
       "Extraia a composição atual (pessoas e cargos) a partir do texto a seguir.",
       "Ignore itens de menu/navegação e seções; inclua apenas pessoas reais.",
@@ -176,18 +176,25 @@ function aplicarRefinamento(
   };
 }
 
-async function criarClientePadrao(): Promise<GeminiCliente> {
+/**
+ * Cliente Gemini. `comBusca=true` ativa o grounding (Google Search) — usado
+ * quando precisamos ir à web (refino e pesquisa ampla). `comBusca=false` pede
+ * JSON puro (responseMimeType) — usado na extração a partir de texto já raspado,
+ * onde o grounding atrapalharia. As duas configs são exclusivas: a API rejeita
+ * googleSearch + responseMimeType juntos.
+ */
+async function criarCliente(comBusca: boolean): Promise<GeminiCliente> {
   const { GoogleGenAI } = await import("@google/genai");
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
   return {
     async gerarJson(prompt: string) {
+      const config = comBusca
+        ? { tools: [{ googleSearch: {} }] }
+        : { responseMimeType: "application/json" };
       const resp = await ai.models.generateContent({
         model: "gemini-2.0-flash",
         contents: prompt,
-        // NÃO forçar responseMimeType junto com googleSearch: a API rejeita a
-        // combinação grounding + JSON schema. Pedimos JSON no prompt e fazemos
-        // parse tolerante do texto (que pode vir com cercas ```json).
-        config: { tools: [{ googleSearch: {} }] },
+        config,
       });
       return extrairJson(resp.text ?? "[]");
     },

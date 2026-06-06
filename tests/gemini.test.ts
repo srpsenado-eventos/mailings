@@ -3,6 +3,7 @@ import {
   refinarComGemini,
   geminiDisponivel,
   pesquisarFonteAmpla,
+  extrairComposicaoGemini,
   extrairJson,
 } from "@/lib/gemini";
 import type { ResultadoGrupo } from "@/lib/types";
@@ -122,5 +123,28 @@ describe("pesquisarFonteAmpla", () => {
   test("falha do cliente → undefined (degrada)", async () => {
     const cliente = { gerarJson: vi.fn().mockRejectedValue(new Error("cota")) };
     expect(await pesquisarFonteAmpla("X", cliente)).toBeUndefined();
+  });
+});
+
+describe("extrairComposicaoGemini", () => {
+  beforeEach(() => {
+    delete process.env.GEMINI_API_KEY;
+  });
+
+  test("converte texto raspado em pessoas estruturadas", async () => {
+    const cliente = {
+      gerarJson: vi.fn().mockResolvedValue([{ nome: "Ana Lima", cargo: "Conselheira" }]),
+    };
+    const pessoas = await extrairComposicaoGemini("...texto bagunçado...", cliente);
+    expect(pessoas).toEqual([{ nome: "Ana Lima", cargo: "Conselheira" }]);
+  });
+
+  test("sem chave e sem cliente → []", async () => {
+    expect(await extrairComposicaoGemini("x")).toEqual([]);
+  });
+
+  test("falha do cliente → [] (degrada)", async () => {
+    const cliente = { gerarJson: vi.fn().mockRejectedValue(new Error("cota")) };
+    expect(await extrairComposicaoGemini("x", cliente)).toEqual([]);
   });
 });

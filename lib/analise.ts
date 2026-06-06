@@ -20,6 +20,8 @@ export interface Dependencias {
   raspar: (url: string) => Promise<ConteudoFonte>;
   /** 2ª etapa (§7.3): composição atual via pesquisa ampla. `undefined` = indisponível. */
   pesquisarAmpla: (grupoCanonico: string) => Promise<ConteudoFonte | undefined>;
+  /** Fase 2 (opcional): substitui as `pessoas` determinísticas por extração estruturada (Gemini). */
+  enriquecerPessoas?: (fonte: ConteudoFonte) => Promise<ConteudoFonte>;
   refinar: (grupo: ResultadoGrupo, fonte: ConteudoFonte) => Promise<ResultadoGrupo>;
 }
 
@@ -61,6 +63,16 @@ async function analisarGrupo(
     const ampla = await deps.pesquisarAmpla(resolvida.grupoCanonico);
     if (ampla) return compararGrupoAmplo(grupo, contatos, ampla, resolvida.url);
     return marcarFonteInacessivel(grupo, contatos, resolvida.url, motivoDaFalha(err));
+  }
+
+  // Fase 2 (opcional): troca as pessoas determinísticas pela extração estruturada
+  // do Gemini. Falha/ausência → mantém o determinístico (degrada em silêncio).
+  if (deps.enriquecerPessoas) {
+    try {
+      fonte = await deps.enriquecerPessoas(fonte);
+    } catch {
+      // mantém as pessoas determinísticas
+    }
   }
 
   const base = compararGrupo(grupo, contatos, fonte);

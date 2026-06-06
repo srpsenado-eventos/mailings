@@ -1,4 +1,4 @@
-import type { ConteudoFonte, ResultadoGrupo, Semaforo } from "@/lib/types";
+import type { ConteudoFonte, PessoaSite, ResultadoGrupo, Semaforo } from "@/lib/types";
 
 export function geminiDisponivel(): boolean {
   return Boolean(process.env.GEMINI_API_KEY);
@@ -70,6 +70,30 @@ export async function pesquisarFonteAmpla(
     };
   } catch {
     return undefined;
+  }
+}
+
+/**
+ * Camada B (Fase 2): extrai pessoas estruturadas e limpas a partir do texto já
+ * raspado, em qualquer layout. Substitui as `pessoas` determinísticas (que
+ * chutam cargo por proximidade) por uma composição correta. Sem chave → `[]`.
+ */
+export async function extrairComposicaoGemini(
+  textoLimpo: string,
+  cliente?: GeminiCliente,
+): Promise<PessoaSite[]> {
+  if (!geminiDisponivel() && !cliente) return [];
+  try {
+    const gemini = cliente ?? (await criarClientePadrao());
+    const prompt = [
+      "Extraia a composição atual (pessoas e cargos) a partir do texto a seguir.",
+      "Ignore itens de menu/navegação e seções; inclua apenas pessoas reais.",
+      'Responda APENAS um array JSON [{"nome": string, "cargo": string}], sem texto extra.',
+      textoLimpo.slice(0, 8000),
+    ].join("\n\n");
+    return parsePessoas(await gemini.gerarJson(prompt)).map((p) => ({ nome: p.nome, cargo: p.cargo }));
+  } catch {
+    return [];
   }
 }
 

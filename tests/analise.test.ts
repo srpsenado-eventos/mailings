@@ -115,6 +115,25 @@ describe("analisar", () => {
     expect(g.sugestoesCadastro).toEqual(["Conselho Nacional de Justiça (CNJ)"]);
   });
 
+  test("enriquecerPessoas (Fase 2) substitui as pessoas usadas no matching", async () => {
+    const depsEnriq: Dependencias = {
+      ...deps,
+      raspar: async () => ({
+        url: "https://orgao.gov.br",
+        textoLimpo: "ruído determinístico",
+        destaques: [],
+        pessoas: [{ nome: "Pessoa Errada Extraída" }],
+      }),
+      enriquecerPessoas: async (f) => ({
+        ...f,
+        pessoas: [{ nome: "Ana Maria Política Completa", cargo: "Presidente" }],
+      }),
+    };
+    const r = await analisar("c.xlsx", [contatos[0]], depsEnriq);
+    // sem enriquecer, "Ana" não casaria "Pessoa Errada"; com Gemini, casa → verde.
+    expect(r.grupos[0].contatos[0].semaforo).toBe("verde");
+  });
+
   test("falha do refinador (Camada B) degrada para o veredito da Camada A sem derrubar", async () => {
     const depsRefinarQuebrado: Dependencias = {
       ...deps,

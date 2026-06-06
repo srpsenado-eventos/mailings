@@ -46,6 +46,46 @@ describe("lerPlanilha", () => {
     ]);
     expect(lerPlanilha(buf)).toHaveLength(1);
   });
+
+  test("planilha pesada de um único grupo com muitas linhas é lida só como texto", () => {
+    // Simula o caso CNJ: 1 grupo, muitas linhas, coluna Foto preenchida (no real seriam imagens
+    // embutidas, que o sheet_to_json ignora; aqui garantimos que texto na coluna Foto não derruba).
+    const linhas = Array.from({ length: 500 }, (_, i) => ({
+      Nome: `Conselheiro ${i}`,
+      Grupo: "CNJ",
+      Foto: "https://cnj.jus.br/fotos/foto-longa-placeholder.jpg",
+      Cargo: "Conselheiro do CNJ",
+    }));
+    const buf = montarXlsx(linhas);
+
+    const contatos = lerPlanilha(buf);
+
+    expect(contatos).toHaveLength(500);
+    const mapa = agruparPorGrupo(contatos);
+    expect(mapa.size).toBe(1);
+    expect(mapa.get("CNJ")).toHaveLength(500);
+  });
+
+  test("lê CSV com as mesmas colunas igual ao .xlsx", () => {
+    const csv = "Nome,Grupo,Cargo,E-mail\nAna Lima,CNJ,Conselheira,ana@cnj.br\nBruno Sá,CNJ,Conselheiro,bruno@cnj.br\n";
+    const buf = new TextEncoder().encode(csv).buffer;
+
+    const contatos = lerPlanilha(buf);
+
+    expect(contatos).toHaveLength(2);
+    expect(contatos[0]).toMatchObject({ nome: "Ana Lima", grupo: "CNJ", cargo: "Conselheira", email: "ana@cnj.br" });
+    expect(agruparPorGrupo(contatos).get("CNJ")).toHaveLength(2);
+  });
+
+  test("lê CSV com separador ponto-e-vírgula (Excel pt-BR)", () => {
+    const csv = "Nome;Grupo;Cargo\nAna Lima;CNJ;Conselheira\n";
+    const buf = new TextEncoder().encode(csv).buffer;
+
+    const contatos = lerPlanilha(buf);
+
+    expect(contatos).toHaveLength(1);
+    expect(contatos[0]).toMatchObject({ nome: "Ana Lima", grupo: "CNJ", cargo: "Conselheira" });
+  });
 });
 
 describe("agruparPorGrupo", () => {

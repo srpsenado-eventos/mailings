@@ -44,6 +44,7 @@ docs/superpowers/specs/  ← decisões arquiteturais datadas
 - **Erros explícitos.** Funções de `lib/` lançam erro tipado quando dado de entrada é inválido. Server Actions capturam e devolvem `{ ok: false, message }` para o cliente.
 - **Sem `any`.** Use `unknown` + narrowing, ou defina o tipo.
 - **Schema do XLSX** validado na entrada de `lib/planilha.ts`. Colunas esperadas (case-insensitive, com normalização): `Foto`, `Tratamento`, `Endereçamento`, `Nome`, `Telefone`, `E-mail`, `Rede Social`, `Endereço`, `Órgão`, `Cargo`, `Departamento`, `Grupo`. Coluna ausente = erro claro pro usuário, não fallback silencioso.
+- **Upload com parse no cliente.** A planilha é lida **no navegador** (`lerPlanilha` é pura/isomórfica) e só o texto (`ContatoPlanilha[]`) viaja. O app aceita **`.xlsx` e `.csv`**; o `/api/analise` recebe **JSON** `{ arquivoNome, contatos }`, não mais arquivo. Isso evita o limite de ~4,5 MB de corpo da plataforma (fotos embutidas não trafegam). Ver `docs/superpowers/specs/2026-06-06-upload-no-cliente-e-resiliencia.md`.
 
 ## Testes
 

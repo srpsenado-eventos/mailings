@@ -12,7 +12,10 @@ const analise: ResultadoAnalise = {
         {
           contato: { nome: "Ana", grupo: "ORG", cargo: "Presidente" },
           semaforo: "amarelo", score: 0.7,
-          camposDivergentes: [{ campo: "cargo", valorPlanilha: "Presidente" }],
+          comparacoes: [
+            { campo: "cargo", valorPlanilha: "Presidente", valorSite: "Diretor", situacao: "divergente" },
+          ],
+          camposDivergentes: [{ campo: "cargo", valorPlanilha: "Presidente", valorEncontrado: "Diretor" }],
           origem: "oficial", fonteUrl: "https://orgao.gov.br",
         },
       ],
@@ -26,11 +29,12 @@ const analise: ResultadoAnalise = {
 };
 
 describe("resultadoParaLinhas", () => {
-  test("achata o resultado em linhas com colunas extras", () => {
+  test("achata em colunas planilha×site por campo", () => {
     const linhas = resultadoParaLinhas(analise);
     expect(linhas[0]).toMatchObject({
       Grupo: "ORG", Nome: "Ana", Status: "amarelo",
       Fonte: "https://orgao.gov.br", Origem: "oficial",
+      "Cargo (planilha)": "Presidente", "Cargo (site)": "Diretor",
     });
     expect(linhas[0].Divergencias).toContain("cargo");
   });

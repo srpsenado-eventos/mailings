@@ -1,43 +1,59 @@
 import * as XLSX from "xlsx";
-import type { ResultadoAnalise } from "@/lib/types";
+import type { ResultadoAnalise, ResultadoContato } from "@/lib/types";
 
-export interface LinhaExport {
-  Grupo: string;
-  Nome: string;
-  Cargo: string;
-  Status: string;
-  Divergencias: string;
-  Origem: string;
-  Fonte: string;
-  Observacao: string;
+/** Campos mostrados em pares de colunas planilha×site. */
+const CAMPOS = [
+  { campo: "cargo", rotulo: "Cargo" },
+  { campo: "endereco", rotulo: "Endereço" },
+  { campo: "telefone", rotulo: "Telefone" },
+  { campo: "email", rotulo: "E-mail" },
+];
+
+/** Valor do site para um campo: o valor correto, "fonte não informa", ou vazio. */
+function valorSiteDe(c: ResultadoContato, campo: string): string {
+  const comp = c.comparacoes.find((x) => x.campo === campo);
+  if (!comp) return "";
+  return comp.situacao === "fonte_nao_informa" ? "fonte não informa" : comp.valorSite ?? "";
 }
 
-export function resultadoParaLinhas(analise: ResultadoAnalise): LinhaExport[] {
-  const linhas: LinhaExport[] = [];
+function valorPlanilhaDe(c: ResultadoContato, campo: string): string {
+  return c.comparacoes.find((x) => x.campo === campo)?.valorPlanilha ?? "";
+}
+
+export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, string>[] {
+  const linhas: Record<string, string>[] = [];
   for (const g of analise.grupos) {
     for (const c of g.contatos) {
-      linhas.push({
+      const linha: Record<string, string> = {
         Grupo: g.grupo,
         Nome: c.contato.nome,
-        Cargo: c.contato.cargo ?? "",
         Status: c.semaforo,
         Divergencias: c.camposDivergentes.map((d) => d.campo).join(", "),
         Origem: c.origem,
         Fonte: c.fonteUrl ?? "",
         Observacao: c.observacao ?? "",
-      });
+      };
+      for (const f of CAMPOS) {
+        linha[`${f.rotulo} (planilha)`] = valorPlanilhaDe(c, f.campo);
+        linha[`${f.rotulo} (site)`] = valorSiteDe(c, f.campo);
+      }
+      linhas.push(linha);
     }
     for (const novo of g.novos) {
-      linhas.push({
+      const linha: Record<string, string> = {
         Grupo: g.grupo,
-        Nome: novo.nomePolitico ?? novo.nomeCompleto ?? "",
-        Cargo: novo.cargo ?? "",
+        Nome: novo.nome,
         Status: "novo",
         Divergencias: "",
         Origem: "oficial",
         Fonte: g.fonteUrl ?? "",
         Observacao: "Pessoa no site sem correspondência na planilha",
-      });
+      };
+      for (const f of CAMPOS) {
+        linha[`${f.rotulo} (planilha)`] = "";
+        linha[`${f.rotulo} (site)`] = f.campo === "cargo" ? novo.cargo ?? "" : "";
+      }
+      linhas.push(linha);
     }
   }
   return linhas;

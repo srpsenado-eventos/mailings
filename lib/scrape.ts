@@ -127,6 +127,9 @@ function segmentarPessoas(linhas: string[]): PessoaSite[] {
 export function extrairConteudo(html: string, url: string): ConteudoFonte {
   const $ = cheerio.load(html);
   $("script, style, noscript").remove();
+  // Remove navegação/cabeçalho/rodapé: links de menu (Title Case, multi-palavra)
+  // entravam como falsas "pessoas". O conteúdo de composição fica no corpo.
+  $("nav, header, footer, aside, [role=navigation], [role=banner], [role=contentinfo]").remove();
 
   // destaques ANTES de mutar o DOM (extrairLinhas insere "\n").
   const destaquesBrutos: string[] = [];

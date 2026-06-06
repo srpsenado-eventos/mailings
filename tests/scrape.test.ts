@@ -70,6 +70,17 @@ describe("extrairConteudo (estruturado)", () => {
     expect(nomes).not.toContain("Conselheiro");
     expect(nomes.some((n) => n.includes("Nascimento"))).toBe(false);
   });
+
+  test("ignora itens de menu em nav/header (links de navegação)", () => {
+    const c = extrairConteudo(htmlCnj, "https://cnj");
+    const nomes = c.pessoas.map((p) => p.nome);
+    expect(nomes).not.toContain("Transparência e Prestação de Contas");
+    expect(nomes).not.toContain("Atos Normativos");
+    expect(nomes).not.toContain("Composição Atual");
+    // as pessoas reais continuam
+    expect(nomes).toContain("Luiz Edson Fachin");
+    expect(nomes).toContain("Silvio Amorim Junior");
+  });
 });
 
 describe("raspar", () => {

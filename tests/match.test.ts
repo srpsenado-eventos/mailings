@@ -57,6 +57,21 @@ describe("compararContato (por campo)", () => {
     expect(r.semaforo).toBe("amarelo");
   });
 
+  test("cargo com fragmento entre parênteses confere por tokens (não é divergência)", () => {
+    const f: ConteudoFonte = {
+      url: "https://stf",
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [{ nome: "Edson Fachin", cargo: "(Presidente)" }],
+    };
+    const r = compararContato(
+      contato({ nome: "Edson Fachin", cargo: "Presidente do Supremo Tribunal Federal" }),
+      f,
+    );
+    expect(r.comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("confere");
+    expect(r.semaforo).toBe("verde");
+  });
+
   test("endereço da planilha → fonte_nao_informa (não vira divergência)", () => {
     const r = compararContato(
       contato({ nome: "Ana Maria Política Completa", endereco: "Praça X" }),
@@ -89,6 +104,20 @@ describe("compararGrupo", () => {
     const r = compararGrupo("ORG", [contato({ nome: "Ana" })], undefined);
     expect(r.semFonte).toBe(true);
     expect(r.contatos[0].semaforo).toBe("vermelho");
+  });
+
+  test("novos exige cargo: item de menu (sem cargo) não vira novo", () => {
+    const f: ConteudoFonte = {
+      url: "https://x",
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [
+        { nome: "Mapa do Site" }, // item de menu, sem cargo
+        { nome: "Ana Maria Política Completa", cargo: "Presidente" },
+      ],
+    };
+    const r = compararGrupo("ORG", [contato({ nome: "Zzz Inexistente Pessoa" })], f);
+    expect(r.novos.map((n) => n.nome)).toEqual(["Ana Maria Política Completa"]);
   });
 });
 

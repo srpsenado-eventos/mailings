@@ -96,11 +96,28 @@ function melhorPessoa(nome: string, pessoas: PessoaSite[]): { indice: number; sc
   return { indice, score };
 }
 
+/** Tokens significativos (sem acento, sem pontuação, sem palavras de 1 letra). */
+function tokensSignificativos(valor: string): string[] {
+  return normalizarTexto(valor)
+    .replace(/[^a-z0-9 ]/g, " ")
+    .split(" ")
+    .filter((t) => t.length > 1);
+}
+
+/**
+ * Compara cargo planilha × site por sobreposição de tokens (tolerante a
+ * fragmentos e pontuação): "(Presidente)" confere com "Presidente do Supremo
+ * Tribunal Federal". `confere` quando os tokens do menor cabem no maior.
+ */
 function situacaoCampo(valorPlanilha: string, valorSite?: string): SituacaoCampo {
   if (valorSite === undefined) return "fonte_nao_informa";
-  const p = normalizarTexto(valorPlanilha);
-  const s = normalizarTexto(valorSite);
-  return s.includes(p) || p.includes(s) ? "confere" : "divergente";
+  const p = tokensSignificativos(valorPlanilha);
+  const s = tokensSignificativos(valorSite);
+  if (p.length === 0 || s.length === 0) {
+    return normalizarTexto(valorPlanilha) === normalizarTexto(valorSite) ? "confere" : "divergente";
+  }
+  const [menor, maior] = p.length <= s.length ? [p, s] : [s, p];
+  return menor.every((t) => maior.includes(t)) ? "confere" : "divergente";
 }
 
 /** Monta o veredito de um contato contra a pessoa casada (ou nenhuma → vermelho). */
@@ -212,7 +229,9 @@ export function compararGrupo(
     if (casou) usados.add(indice);
     return montarResultado(c, casou ? fonte.pessoas[indice] : undefined, score, origem, fonte.url);
   });
-  const novos = fonte.pessoas.filter((_, i) => !usados.has(i));
+  // "novos" só pessoas com cargo de autoridade — item de menu não tem cargo,
+  // então fica de fora (reduz drasticamente o ruído de navegação).
+  const novos = fonte.pessoas.filter((p, i) => !usados.has(i) && Boolean(p.cargo));
   return { grupo, fonteUrl: fonte.url, semFonte: false, contatos: resultados, novos };
 }
 

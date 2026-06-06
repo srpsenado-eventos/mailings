@@ -9,7 +9,22 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
           <h2 className="mb-2 font-semibold">
             {g.grupo}{" "}
             {g.semFonte ? (
-              <span className="text-sm text-red-600">(sem fonte cadastrada)</span>
+              <span className="text-sm text-red-600">
+                (sem fonte cadastrada
+                {g.sugestoesCadastro && g.sugestoesCadastro.length > 0 ? (
+                  <>
+                    {" "}— você quis dizer:{" "}
+                    <span className="font-medium">{g.sugestoesCadastro.join(" · ")}</span>?
+                  </>
+                ) : (
+                  ""
+                )}
+                {" "}·{" "}
+                <a href="/grupos" className="underline">
+                  grupos cadastrados
+                </a>
+                )
+              </span>
             ) : g.fonteInacessivel ? (
               <span className="text-sm text-amber-600">
                 (fonte inacessível — verifique manualmente:{" "}

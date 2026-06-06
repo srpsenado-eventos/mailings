@@ -15,7 +15,9 @@ const fonte: ConteudoFonte = {
 
 const deps: Dependencias = {
   resolverFonte: async (grupo) =>
-    grupo === "ORG" ? { grupoCanonico: "ORG", url: "https://orgao.gov.br" } : undefined,
+    grupo === "ORG"
+      ? { grupoCanonico: "ORG", url: "https://orgao.gov.br", sugestoes: [] }
+      : { sugestoes: [] },
   raspar: async () => fonte,
   pesquisarAmpla: async () => undefined,
   refinar: async (g) => g,
@@ -92,12 +94,23 @@ describe("analisar", () => {
   test("grupo casado sem URL oficial + pesquisa ampla → via pesquisa ampla", async () => {
     const depsSemUrl: Dependencias = {
       ...deps,
-      resolverFonte: async () => ({ grupoCanonico: "ORG" }), // casou, mas sem URL cadastrada
+      resolverFonte: async () => ({ grupoCanonico: "ORG", sugestoes: [] }), // casou, sem URL
       pesquisarAmpla: async () => fonteAmpla,
     };
     const r = await analisar("c.xlsx", [contatos[0]], depsSemUrl);
     expect(r.grupos[0].viaPesquisaAmpla).toBe(true);
     expect(r.grupos[0].contatos[0].origem).toBe("pesquisa_ampla");
+  });
+
+  test("grupo desconhecido com sugestões → semFonte + sugestoesCadastro", async () => {
+    const depsSug: Dependencias = {
+      ...deps,
+      resolverFonte: async () => ({ sugestoes: ["Conselho Nacional de Justiça (CNJ)"] }),
+    };
+    const r = await analisar("c.xlsx", [contatos[1]], depsSug);
+    const g = r.grupos[0];
+    expect(g.semFonte).toBe(true);
+    expect(g.sugestoesCadastro).toEqual(["Conselho Nacional de Justiça (CNJ)"]);
   });
 
   test("falha do refinador (Camada B) degrada para o veredito da Camada A sem derrubar", async () => {

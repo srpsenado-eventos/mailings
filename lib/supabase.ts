@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { normalizarTexto } from "@/lib/normalize";
+import { sugerirGrupos } from "@/lib/match";
 import type { GrupoCadastro } from "@/lib/types";
 
 export function criarClienteServidor(): SupabaseClient {
@@ -74,33 +75,39 @@ export async function buscarFontePrimaria(
   return fontePrimariaDe(gruposQueCasam(grupos, segmentos))?.url;
 }
 
-/** Resolução de grupo: nome canônico cadastrado + URL oficial primária (se houver). */
+/** Resolução de grupo: casamento com o cadastro + fonte oficial + sugestões. */
 export interface FonteResolvida {
-  /** Nome do grupo como cadastrado (ex.: "Conselho Nacional de Justiça (CNJ)"). */
-  grupoCanonico: string;
+  /** Nome do grupo como cadastrado. `undefined` quando nenhum grupo casa. */
+  grupoCanonico?: string;
   /** URL oficial primária ativa, se o grupo casado tiver fonte cadastrada. */
   url?: string;
+  /** Quando nada casa: nomes cadastrados mais próximos, para orientar o usuário. */
+  sugestoes: string[];
 }
 
 /**
  * Resolve o rótulo da planilha para o grupo cadastrado e sua fonte oficial.
- * Devolve o nome canônico (necessário para a 2ª etapa de pesquisa ampla) mesmo
- * quando o grupo casado não tem URL. `undefined` só quando nenhum grupo casa.
+ * Sempre devolve um objeto: com `grupoCanonico` quando casa (e `url` se houver
+ * fonte), ou só com `sugestoes` (nomes próximos) quando nenhum grupo casa — para
+ * a UI orientar o usuário a alinhar a planilha em vez de um beco sem saída.
  */
 export async function resolverGrupoEFonte(
   client: SupabaseClient,
   grupoNome: string,
-): Promise<FonteResolvida | undefined> {
+): Promise<FonteResolvida> {
   const segmentos = segmentarGrupo(grupoNome);
-  if (segmentos.length === 0) return undefined;
+  const grupos = await carregarGruposComFonte(client);
+  if (segmentos.length === 0) return { sugestoes: [] };
 
-  const casados = gruposQueCasam(await carregarGruposComFonte(client), segmentos);
-  if (casados.length === 0) return undefined;
+  const casados = gruposQueCasam(grupos, segmentos);
+  if (casados.length === 0) {
+    return { sugestoes: sugerirGrupos(segmentos, grupos.map((g) => g.nome)) };
+  }
 
   const primaria = fontePrimariaDe(casados);
   // Prefere o nome do grupo que de fato fornece a fonte primária; senão, o 1º casado.
   const canonico = casados.find((g) => (g.fontes ?? []).some((f) => f.ativo && f.url === primaria?.url));
-  return { grupoCanonico: (canonico ?? casados[0]).nome, url: primaria?.url };
+  return { grupoCanonico: (canonico ?? casados[0]).nome, url: primaria?.url, sugestoes: [] };
 }
 
 async function carregarGruposComFonte(client: SupabaseClient): Promise<GrupoComFonteUrl[]> {

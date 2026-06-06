@@ -44,6 +44,26 @@ silenciosamente mesmo com chave). Agora não se força `responseMimeType` com gr
 prompt e faz-se parse tolerante (`extrairJson`, remove cercas ```` ```json ````). Vale para `refinarComGemini`
 e `pesquisarFonteAmpla`.
 
+## Rede de segurança: "você quis dizer…" quando nada casa
+
+O matching por nome é heurístico e sempre haverá rótulos de planilha que não casam nenhum cadastro
+(ex.: sigla "DPU" sem sobreposição com "Defensor Público Geral da União"). Antes, isso dava um beco
+sem saída ("sem fonte cadastrada" 🔴). Agora, quando **nenhum** grupo casa, o resolvedor devolve
+**sugestões** (nomes cadastrados mais próximos por similaridade) e a UI orienta:
+"(sem fonte cadastrada — você quis dizer: X · Y? · grupos cadastrados)".
+
+- `resolverGrupoEFonte` passou a **sempre** devolver `FonteResolvida` (com `grupoCanonico` quando casa,
+  ou só `sugestoes` quando não), numa única consulta — sem becos sem saída.
+- `sugerirGrupos` (`lib/match.ts`, puro) ranqueia por `string-similarity` com limiar; siglas "secas"
+  sem letras em comum não geram sugestão fraca — o link para **/grupos** cobre esse caso.
+- Novo campo `ResultadoGrupo.sugestoesCadastro?`.
+
+### Follow-up planejado: apelidos no banco (decisão "combinar")
+Solução **permanente** para o mismatch de nomes: coluna de apelidos em `grupos` (ex.: `apelidos text[]`)
+para o Clovis mapear siglas → nome oficial de uma vez (ex.: "DPU" → "Defensor Público Geral da União"),
+e o match passa a considerar apelidos como nomes exatos. Mexe em schema/seed + matching; fica para a
+próxima rodada.
+
 ## Config
 `GEMINI_API_KEY` definida **server-side** na Vercel (nunca commitar; nunca em `NEXT_PUBLIC_`).
 

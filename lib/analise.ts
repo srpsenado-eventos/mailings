@@ -16,7 +16,7 @@ import type { FonteResolvida } from "@/lib/supabase";
  * (2ª etapa) e o refino por IA são fornecidos de fora.
  */
 export interface Dependencias {
-  resolverFonte: (grupo: string) => Promise<FonteResolvida | undefined>;
+  resolverFonte: (grupo: string) => Promise<FonteResolvida>;
   raspar: (url: string) => Promise<ConteudoFonte>;
   /** 2ª etapa (§7.3): composição atual via pesquisa ampla. `undefined` = indisponível. */
   pesquisarAmpla: (grupoCanonico: string) => Promise<ConteudoFonte | undefined>;
@@ -35,8 +35,14 @@ async function analisarGrupo(
   deps: Dependencias,
 ): Promise<ResultadoGrupo> {
   const resolvida = await deps.resolverFonte(grupo);
-  // Grupo desconhecido (nenhum cadastro casa) → sem fonte, sem o que pesquisar.
-  if (!resolvida) return compararGrupo(grupo, contatos, undefined);
+  // Grupo desconhecido (nenhum cadastro casa) → sem fonte; orienta com sugestões
+  // (nomes cadastrados mais próximos) em vez de um beco sem saída.
+  if (!resolvida.grupoCanonico) {
+    const base = compararGrupo(grupo, contatos, undefined);
+    return resolvida.sugestoes.length > 0
+      ? { ...base, sugestoesCadastro: resolvida.sugestoes }
+      : base;
+  }
 
   // Grupo casado mas sem URL oficial → tenta direto a 2ª etapa (pesquisa ampla).
   if (!resolvida.url) {

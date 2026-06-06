@@ -4,6 +4,7 @@ import {
   compararGrupo,
   compararGrupoAmplo,
   marcarFonteInacessivel,
+  sugerirGrupos,
 } from "@/lib/match";
 import type { ContatoPlanilha, ConteudoFonte } from "@/lib/types";
 
@@ -100,5 +101,32 @@ describe("compararGrupoAmplo", () => {
     const r = compararGrupoAmplo("ORG", [contato({ nome: "Ana Maria Política Completa" })], fonte);
     expect(r.fonteUrl).toBe(fonte.url);
     expect(r.viaPesquisaAmpla).toBe(true);
+  });
+});
+
+describe("sugerirGrupos", () => {
+  const cadastrados = [
+    "Governadores",
+    "Ministros do STF",
+    "Conselho Nacional de Justiça (CNJ)",
+  ];
+
+  test("sugere o nome cadastrado mais próximo de um rótulo parecido", () => {
+    const s = sugerirGrupos(["governador de sao paulo"], cadastrados);
+    expect(s[0]).toBe("Governadores");
+  });
+
+  test("ordena por proximidade e respeita o limite", () => {
+    const s = sugerirGrupos(["ministros do stf"], cadastrados, 1);
+    expect(s).toEqual(["Ministros do STF"]);
+  });
+
+  test("rótulo sem semelhança nenhuma não gera sugestão fraca", () => {
+    const s = sugerirGrupos(["xpto zzz"], cadastrados);
+    expect(s).toHaveLength(0);
+  });
+
+  test("segmentos vazios → sem sugestões", () => {
+    expect(sugerirGrupos([], cadastrados)).toHaveLength(0);
   });
 });

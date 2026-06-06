@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { buscarFontePrimaria, listarGruposComFonte } from "@/lib/supabase";
+import { buscarFontePrimaria, resolverGrupoEFonte, listarGruposComFonte } from "@/lib/supabase";
 
 interface FonteFake {
   url: string;
@@ -149,6 +149,36 @@ describe("buscarFontePrimaria", () => {
       "PR",
     );
     expect(url).toBeUndefined();
+  });
+});
+
+describe("resolverGrupoEFonte", () => {
+  test("grupo casado devolve nome canônico, URL e sem sugestões", async () => {
+    const r = await resolverGrupoEFonte(
+      fakeClient([grupoComFonte("Conselho Nacional de Justiça (CNJ)", "https://cnj")]),
+      "CNJ; MAILING RP - Sessão Especial",
+    );
+    expect(r.grupoCanonico).toBe("Conselho Nacional de Justiça (CNJ)");
+    expect(r.url).toBe("https://cnj");
+    expect(r.sugestoes).toHaveLength(0);
+  });
+
+  test("grupo casado sem fonte ativa devolve canônico com url indefinida", async () => {
+    const r = await resolverGrupoEFonte(
+      fakeClient([{ nome: "Defensor Público Geral da União", fontes: null }]),
+      "Defensor Público Geral da União",
+    );
+    expect(r.grupoCanonico).toBe("Defensor Público Geral da União");
+    expect(r.url).toBeUndefined();
+  });
+
+  test("nenhum grupo casa → sem canônico, com sugestões próximas", async () => {
+    const r = await resolverGrupoEFonte(
+      fakeClient([grupoComFonte("Governadores", "https://gov")]),
+      "Governador de São Paulo",
+    );
+    expect(r.grupoCanonico).toBeUndefined();
+    expect(r.sugestoes).toContain("Governadores");
   });
 });
 

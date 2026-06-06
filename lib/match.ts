@@ -16,6 +16,35 @@ const LIMIAR_FRACO = 0.6;
 const BONUS_CONTENCAO = 0.9;
 const MIN_TAMANHO_FRASE = 2;
 const TAMANHO_CONTEXTO = 200;
+const LIMIAR_SUGESTAO = 0.4;
+const MAX_SUGESTOES = 3;
+
+/**
+ * Quando o rótulo da planilha não casa nenhum grupo cadastrado, sugere os nomes
+ * cadastrados mais próximos (por similaridade) para o usuário alinhar a planilha.
+ * Best-effort: para siglas "secas" sem letras em comum a similaridade é baixa e
+ * nada é sugerido — a UI complementa com o link para a lista de grupos.
+ */
+export function sugerirGrupos(
+  segmentos: string[],
+  nomesCadastrados: string[],
+  max = MAX_SUGESTOES,
+): string[] {
+  const segs = segmentos.map(normalizarTexto).filter((s) => s.length > 0);
+  if (segs.length === 0) return [];
+  return nomesCadastrados
+    .map((nome) => {
+      const nomeNorm = normalizarTexto(nome);
+      const score = Math.max(
+        ...segs.map((s) => stringSimilarity.compareTwoStrings(s, nomeNorm)),
+      );
+      return { nome, score };
+    })
+    .filter((r) => r.score >= LIMIAR_SUGESTAO)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, max)
+    .map((r) => r.nome);
+}
 
 /** Quebra texto em frases curtas para comparação granular. */
 function quebrarEmFrases(texto: string): string[] {

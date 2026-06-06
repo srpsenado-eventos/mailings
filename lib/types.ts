@@ -69,6 +69,11 @@ export interface ResultadoGrupo {
    * não oficial — sinalizado ao usuário.
    */
   viaPesquisaAmpla?: boolean;
+  /**
+   * Quando o rótulo da planilha não casa nenhum grupo cadastrado (semFonte),
+   * nomes cadastrados mais próximos para orientar o usuário a alinhar a planilha.
+   */
+  sugestoesCadastro?: string[];
   contatos: ResultadoContato[];
   /** Pessoas no site sem correspondência na planilha. */
   novos: PessoaSite[];

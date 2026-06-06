@@ -108,16 +108,6 @@ export async function extrairComposicaoGemini(
   }
 }
 
-/** Diagnóstico temporário: roda a extração e devolve a contagem + o erro técnico (sem PII). */
-export async function diagnosticarExtracao(textoLimpo: string): Promise<{ n: number; erro?: string }> {
-  if (!geminiDisponivel()) return { n: 0, erro: "sem chave" };
-  try {
-    const p = await extrairComposicaoCore(textoLimpo);
-    return { n: p.length };
-  } catch (e) {
-    return { n: 0, erro: e instanceof Error ? e.message : "erro desconhecido" };
-  }
-}
 
 function montarPromptComposicao(grupoCanonico: string): string {
   return [

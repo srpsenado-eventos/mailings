@@ -16,6 +16,7 @@ const grupoBase: ResultadoGrupo = {
       contato: { nome: "Ana", grupo: "ORG" },
       semaforo: "amarelo",
       score: 0.7,
+      comparacoes: [],
       camposDivergentes: [],
       origem: "oficial",
       fonteUrl: "https://orgao.gov.br",
@@ -49,6 +50,7 @@ describe("refinarComGemini", () => {
       textoLimpo: "",
       url: "",
       destaques: [],
+      pessoas: [],
     });
     expect(r).toEqual(grupoBase);
   });
@@ -60,7 +62,7 @@ describe("refinarComGemini", () => {
     };
     const r = await refinarComGemini(
       grupoBase,
-      { textoLimpo: "", url: "", destaques: [] },
+      { textoLimpo: "", url: "", destaques: [], pessoas: [] },
       clienteQuebrado,
     );
     expect(r.contatos[0].semaforo).toBe("amarelo");
@@ -106,6 +108,10 @@ describe("pesquisarFonteAmpla", () => {
     expect(fonte.destaques).toEqual(["Ana Lima", "Bruno Sá"]);
     expect(fonte.textoLimpo).toContain("Ana Lima, Conselheira.");
     expect(fonte.textoLimpo).toContain("Bruno Sá.");
+    expect(fonte.pessoas).toEqual([
+      { nome: "Ana Lima", cargo: "Conselheira" },
+      { nome: "Bruno Sá", cargo: undefined },
+    ]);
   });
 
   test("resposta sem pessoas → undefined", async () => {

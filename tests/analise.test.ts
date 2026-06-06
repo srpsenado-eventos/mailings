@@ -11,6 +11,7 @@ const fonte: ConteudoFonte = {
   url: "https://orgao.gov.br",
   textoLimpo: "Ana Maria Política Completa, Presidente.",
   destaques: ["Ana Política"],
+  pessoas: [{ nome: "Ana Maria Política Completa", cargo: "Presidente" }],
 };
 
 const deps: Dependencias = {
@@ -27,6 +28,7 @@ const fonteAmpla: ConteudoFonte = {
   url: "pesquisa-ampla://gemini+google-search",
   textoLimpo: "Ana Maria Política Completa, Presidente.",
   destaques: ["Ana Maria Política Completa"],
+  pessoas: [{ nome: "Ana Maria Política Completa", cargo: "Presidente" }],
 };
 
 describe("analisar", () => {

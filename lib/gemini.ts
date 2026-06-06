@@ -66,6 +66,7 @@ export async function pesquisarFonteAmpla(
         .map((p) => `${p.nome}${p.cargo ? `, ${p.cargo}` : ""}.`)
         .join(" "),
       destaques: pessoas.map((p) => p.nome),
+      pessoas: pessoas.map((p) => ({ nome: p.nome, cargo: p.cargo })),
     };
   } catch {
     return undefined;

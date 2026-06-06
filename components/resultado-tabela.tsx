@@ -68,14 +68,23 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
                 <tr key={i} className="border-t">
                   <td>{c.contato.nome}</td>
                   <td>{c.contato.cargo ?? "—"}</td>
-                  <td>{c.camposDivergentes.map((d) => d.campo).join(", ") || "—"}</td>
+                  <td>
+                    {c.camposDivergentes.length === 0
+                      ? "—"
+                      : c.camposDivergentes
+                          .map(
+                            (d) =>
+                              `${d.campo}: ${d.valorPlanilha ?? "—"} → ${d.valorEncontrado ?? "fonte não informa"}`,
+                          )
+                          .join("; ")}
+                  </td>
                   <td>{c.origem === "pesquisa_ampla" ? "pesquisa ampla" : "oficial"}</td>
                   <td><SemaforoBadge status={c.semaforo} /></td>
                 </tr>
               ))}
               {g.novos.map((n, i) => (
                 <tr key={`novo-${i}`} className="border-t">
-                  <td>{n.nomePolitico ?? n.nomeCompleto}</td>
+                  <td>{n.nome}</td>
                   <td>{n.cargo ?? "—"}</td><td>—</td><td>oficial</td>
                   <td><SemaforoBadge status="novo" /></td>
                 </tr>

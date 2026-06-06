@@ -14,9 +14,17 @@ const fonte: ConteudoFonte = {
 };
 
 const deps: Dependencias = {
-  resolverFonte: async (grupo) => (grupo === "ORG" ? "https://orgao.gov.br" : undefined),
+  resolverFonte: async (grupo) =>
+    grupo === "ORG" ? { grupoCanonico: "ORG", url: "https://orgao.gov.br" } : undefined,
   raspar: async () => fonte,
+  pesquisarAmpla: async () => undefined,
   refinar: async (g) => g,
+};
+
+const fonteAmpla: ConteudoFonte = {
+  url: "pesquisa-ampla://gemini+google-search",
+  textoLimpo: "Ana Maria Política Completa, Presidente.",
+  destaques: ["Ana Maria Política Completa"],
 };
 
 describe("analisar", () => {
@@ -61,6 +69,35 @@ describe("analisar", () => {
     expect(r.resumo.gruposFonteInacessivel).toBe(1);
     expect(r.resumo.gruposSemFonte).toBe(1);
     expect(r.resumo.indeterminado).toBe(1);
+  });
+
+  test("fonte inacessível + pesquisa ampla com conteúdo → grupo via pesquisa ampla", async () => {
+    const depsAmpla: Dependencias = {
+      ...deps,
+      raspar: async () => {
+        throw new Error("HTTP 403");
+      },
+      pesquisarAmpla: async () => fonteAmpla,
+    };
+    const r = await analisar("c.xlsx", [contatos[0]], depsAmpla);
+    const g = r.grupos[0];
+    expect(g.viaPesquisaAmpla).toBe(true);
+    expect(g.fonteInacessivel).toBeFalsy();
+    expect(g.fonteUrl).toBe("https://orgao.gov.br"); // preserva a URL oficial para conferência
+    expect(g.contatos[0].origem).toBe("pesquisa_ampla");
+    expect(g.contatos[0].semaforo).toBe("verde");
+    expect(r.resumo.gruposViaPesquisaAmpla).toBe(1);
+  });
+
+  test("grupo casado sem URL oficial + pesquisa ampla → via pesquisa ampla", async () => {
+    const depsSemUrl: Dependencias = {
+      ...deps,
+      resolverFonte: async () => ({ grupoCanonico: "ORG" }), // casou, mas sem URL cadastrada
+      pesquisarAmpla: async () => fonteAmpla,
+    };
+    const r = await analisar("c.xlsx", [contatos[0]], depsSemUrl);
+    expect(r.grupos[0].viaPesquisaAmpla).toBe(true);
+    expect(r.grupos[0].contatos[0].origem).toBe("pesquisa_ampla");
   });
 
   test("falha do refinador (Camada B) degrada para o veredito da Camada A sem derrubar", async () => {

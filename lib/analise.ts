@@ -6,18 +6,27 @@ import type {
   ResumoAnalise,
 } from "@/lib/types";
 import { agruparPorGrupo } from "@/lib/planilha";
-import { compararGrupo, marcarFonteInacessivel } from "@/lib/match";
+import { compararGrupo, compararGrupoAmplo, marcarFonteInacessivel } from "@/lib/match";
 import { ScrapeError } from "@/lib/scrape";
+import type { FonteResolvida } from "@/lib/supabase";
 
 /**
  * Dependências injetadas no orquestrador. Permitem testar o pipeline sem rede
- * real e manter `lib/*` puro: a resolução de URL, o scraping e o refino por IA
- * são fornecidos de fora.
+ * real e manter `lib/*` puro: a resolução de URL, o scraping, a pesquisa ampla
+ * (2ª etapa) e o refino por IA são fornecidos de fora.
  */
 export interface Dependencias {
-  resolverFonte: (grupo: string) => Promise<string | undefined>;
+  resolverFonte: (grupo: string) => Promise<FonteResolvida | undefined>;
   raspar: (url: string) => Promise<ConteudoFonte>;
+  /** 2ª etapa (§7.3): composição atual via pesquisa ampla. `undefined` = indisponível. */
+  pesquisarAmpla: (grupoCanonico: string) => Promise<ConteudoFonte | undefined>;
   refinar: (grupo: ResultadoGrupo, fonte: ConteudoFonte) => Promise<ResultadoGrupo>;
+}
+
+function motivoDaFalha(err: unknown): string {
+  if (err instanceof ScrapeError) return err.motivo;
+  if (err instanceof Error) return err.message;
+  return "erro desconhecido";
 }
 
 async function analisarGrupo(
@@ -25,23 +34,27 @@ async function analisarGrupo(
   contatos: ContatoPlanilha[],
   deps: Dependencias,
 ): Promise<ResultadoGrupo> {
-  const url = await deps.resolverFonte(grupo);
-  if (!url) return compararGrupo(grupo, contatos, undefined);
+  const resolvida = await deps.resolverFonte(grupo);
+  // Grupo desconhecido (nenhum cadastro casa) → sem fonte, sem o que pesquisar.
+  if (!resolvida) return compararGrupo(grupo, contatos, undefined);
+
+  // Grupo casado mas sem URL oficial → tenta direto a 2ª etapa (pesquisa ampla).
+  if (!resolvida.url) {
+    const ampla = await deps.pesquisarAmpla(resolvida.grupoCanonico);
+    return ampla
+      ? compararGrupoAmplo(grupo, contatos, ampla)
+      : compararGrupo(grupo, contatos, undefined);
+  }
 
   let fonte: ConteudoFonte;
   try {
-    fonte = await deps.raspar(url);
+    fonte = await deps.raspar(resolvida.url);
   } catch (err) {
     // Fonte cadastrada, mas inacessível (TLS, WAF, timeout, bloqueio de IP).
-    // NÃO é "sem fonte": preserva a URL e o motivo, marca como "indeterminado",
-    // sem derrubar a análise dos demais grupos.
-    const motivo =
-      err instanceof ScrapeError
-        ? err.motivo
-        : err instanceof Error
-          ? err.message
-          : "erro desconhecido";
-    return marcarFonteInacessivel(grupo, contatos, url, motivo);
+    // 2ª etapa: tenta a composição atual por pesquisa ampla antes de desistir.
+    const ampla = await deps.pesquisarAmpla(resolvida.grupoCanonico);
+    if (ampla) return compararGrupoAmplo(grupo, contatos, ampla, resolvida.url);
+    return marcarFonteInacessivel(grupo, contatos, resolvida.url, motivoDaFalha(err));
   }
 
   const base = compararGrupo(grupo, contatos, fonte);
@@ -63,10 +76,12 @@ function resumir(grupos: ResultadoGrupo[]): ResumoAnalise {
     indeterminado: 0,
     gruposSemFonte: 0,
     gruposFonteInacessivel: 0,
+    gruposViaPesquisaAmpla: 0,
   };
   for (const g of grupos) {
     if (g.semFonte) resumo.gruposSemFonte += 1;
     if (g.fonteInacessivel) resumo.gruposFonteInacessivel += 1;
+    if (g.viaPesquisaAmpla) resumo.gruposViaPesquisaAmpla += 1;
     resumo.novo += g.novos.length;
     for (const c of g.contatos) {
       resumo.total += 1;

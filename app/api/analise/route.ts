@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analisar, type Dependencias } from "@/lib/analise";
 import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload";
-import { criarClienteServidor, buscarFontePrimaria } from "@/lib/supabase";
+import { criarClienteServidor, resolverGrupoEFonte } from "@/lib/supabase";
 import { raspar } from "@/lib/scrape";
-import { refinarComGemini } from "@/lib/gemini";
+import { refinarComGemini, pesquisarFonteAmpla } from "@/lib/gemini";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -26,8 +26,9 @@ export async function POST(req: NextRequest) {
 
     const supabase = criarClienteServidor();
     const deps: Dependencias = {
-      resolverFonte: (grupo) => buscarFontePrimaria(supabase, grupo),
+      resolverFonte: (grupo) => resolverGrupoEFonte(supabase, grupo),
       raspar,
+      pesquisarAmpla: (grupoCanonico) => pesquisarFonteAmpla(grupoCanonico),
       refinar: (grupo, fonte) => refinarComGemini(grupo, fonte),
     };
 

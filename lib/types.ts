@@ -63,6 +63,12 @@ export interface ResultadoGrupo {
   fonteInacessivel?: boolean;
   /** Motivo técnico da falha de acesso (ex.: "HTTP 403"). Sem PII. */
   erroFonte?: string;
+  /**
+   * A verificação veio da 2ª etapa (pesquisa ampla via Gemini + Google Search),
+   * porque a fonte oficial estava inacessível ou ausente. Veredito complementar,
+   * não oficial — sinalizado ao usuário.
+   */
+  viaPesquisaAmpla?: boolean;
   contatos: ResultadoContato[];
   /** Pessoas no site sem correspondência na planilha. */
   novos: PessoaSite[];
@@ -77,6 +83,8 @@ export interface ResumoAnalise {
   indeterminado: number;
   gruposSemFonte: number;
   gruposFonteInacessivel: number;
+  /** Grupos verificados pela 2ª etapa (pesquisa ampla via Gemini). */
+  gruposViaPesquisaAmpla: number;
 }
 
 export interface ResultadoAnalise {

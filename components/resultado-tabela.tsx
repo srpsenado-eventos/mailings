@@ -18,6 +18,21 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
                 </a>
                 {g.erroFonte ? ` · ${g.erroFonte}` : ""})
               </span>
+            ) : g.viaPesquisaAmpla ? (
+              <span className="text-sm text-amber-700">
+                (verificado por pesquisa ampla — Gemini + Google Search; fonte oficial não acessível
+                {g.fonteUrl && g.fonteUrl.startsWith("http") ? (
+                  <>
+                    {" "}·{" "}
+                    <a href={g.fonteUrl} className="underline" target="_blank" rel="noreferrer">
+                      conferir oficial
+                    </a>
+                  </>
+                ) : (
+                  ""
+                )}
+                )
+              </span>
             ) : (
               <a
                 href={g.fonteUrl}

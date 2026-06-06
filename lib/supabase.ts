@@ -30,6 +30,28 @@ interface GrupoComFonteUrl {
   fontes: { url: string; ativo: boolean; created_at: string }[] | null;
 }
 
+const TAMANHO_MIN_SEGMENTO = 3;
+
+/** Casa um nome de grupo normalizado contra um segmento da planilha. */
+function casaSegmento(nomeNorm: string, seg: string): boolean {
+  // Contenção: a sigla curta da planilha ("cnj") cabe no nome formal cadastrado
+  // ("conselho nacional de justica (cnj)"). Guarda de tamanho evita que pedaços
+  // de 1-2 letras casem grupos longos por engano (ex.: "pr" em "presidente...").
+  return seg.length >= TAMANHO_MIN_SEGMENTO && (nomeNorm === seg || nomeNorm.includes(seg));
+}
+
+/**
+ * Filtra os grupos que casam com algum segmento da planilha.
+ * Exato-primeiro: se algum grupo casa exatamente um segmento, só esses contam
+ * (preserva casos já corretos, como "Ministros do STF"). Só quando não há
+ * nenhum exato cai para a contenção (sigla curta dentro do nome formal).
+ */
+function gruposQueCasam<T extends { nome: string }>(grupos: T[], segmentos: string[]): T[] {
+  const exatos = grupos.filter((g) => segmentos.includes(normalizarTexto(g.nome)));
+  if (exatos.length > 0) return exatos;
+  return grupos.filter((g) => segmentos.some((seg) => casaSegmento(normalizarTexto(g.nome), seg)));
+}
+
 /**
  * Busca a URL oficial primária (fonte ativa mais antiga) de um grupo.
  * A junção planilha↔fontes é por grupos.nome. A comparação é feita sobre o
@@ -48,21 +70,53 @@ export async function buscarFontePrimaria(
   const segmentos = segmentarGrupo(grupoNome);
   if (segmentos.length === 0) return undefined;
 
+  const grupos = await carregarGruposComFonte(client);
+  return fontePrimariaDe(gruposQueCasam(grupos, segmentos))?.url;
+}
+
+/** Resolução de grupo: nome canônico cadastrado + URL oficial primária (se houver). */
+export interface FonteResolvida {
+  /** Nome do grupo como cadastrado (ex.: "Conselho Nacional de Justiça (CNJ)"). */
+  grupoCanonico: string;
+  /** URL oficial primária ativa, se o grupo casado tiver fonte cadastrada. */
+  url?: string;
+}
+
+/**
+ * Resolve o rótulo da planilha para o grupo cadastrado e sua fonte oficial.
+ * Devolve o nome canônico (necessário para a 2ª etapa de pesquisa ampla) mesmo
+ * quando o grupo casado não tem URL. `undefined` só quando nenhum grupo casa.
+ */
+export async function resolverGrupoEFonte(
+  client: SupabaseClient,
+  grupoNome: string,
+): Promise<FonteResolvida | undefined> {
+  const segmentos = segmentarGrupo(grupoNome);
+  if (segmentos.length === 0) return undefined;
+
+  const casados = gruposQueCasam(await carregarGruposComFonte(client), segmentos);
+  if (casados.length === 0) return undefined;
+
+  const primaria = fontePrimariaDe(casados);
+  // Prefere o nome do grupo que de fato fornece a fonte primária; senão, o 1º casado.
+  const canonico = casados.find((g) => (g.fontes ?? []).some((f) => f.ativo && f.url === primaria?.url));
+  return { grupoCanonico: (canonico ?? casados[0]).nome, url: primaria?.url };
+}
+
+async function carregarGruposComFonte(client: SupabaseClient): Promise<GrupoComFonteUrl[]> {
   const { data, error } = await client
     .from("grupos")
     .select("nome, fontes(url, ativo, created_at)");
   if (error) throw new Error(`Erro ao buscar fonte: ${error.message}`);
-  if (!data) return undefined;
+  return (data as GrupoComFonteUrl[] | null) ?? [];
+}
 
-  const grupos = data as GrupoComFonteUrl[];
-  // Junta as fontes ativas de todo grupo cujo nome casa com algum segmento e
-  // escolhe a primária (created_at mais antigo).
-  const ativas = grupos
-    .filter((g) => segmentos.includes(normalizarTexto(g.nome)))
+/** Fonte ativa mais antiga (primária) dentre os grupos casados. */
+function fontePrimariaDe(grupos: GrupoComFonteUrl[]): { url: string; created_at: string } | undefined {
+  return grupos
     .flatMap((g) => g.fontes ?? [])
     .filter((f) => f.ativo)
-    .sort((a, b) => a.created_at.localeCompare(b.created_at));
-  return ativas[0]?.url;
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
 }
 
 /** Linha de `grupos` com responsáveis e fontes via join (para a tela de visualização). */

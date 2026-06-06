@@ -109,6 +109,47 @@ describe("buscarFontePrimaria", () => {
     );
     expect(url).toBe("https://stf.jus.br/min");
   });
+
+  test("sigla curta da planilha casa o nome formal cadastrado (contenção)", async () => {
+    // Planilha manda "CNJ"; cadastro tem o nome completo "Conselho Nacional de Justiça (CNJ)".
+    const url = await buscarFontePrimaria(
+      fakeClient([grupoComFonte("Conselho Nacional de Justiça (CNJ)", "https://www.cnj.jus.br/composicao-atual/")]),
+      "CNJ; MAILING RP - Sessão Especial; MAILING RP - Sessão Solene",
+    );
+    expect(url).toBe("https://www.cnj.jus.br/composicao-atual/");
+  });
+
+  test("contenção não confunde siglas parecidas (CNJ ≠ CNMP)", async () => {
+    const url = await buscarFontePrimaria(
+      fakeClient([
+        grupoComFonte("Conselho Nacional do Ministério Público (CNMP)", "https://cnmp"),
+        grupoComFonte("Conselho Nacional de Justiça (CNJ)", "https://cnj"),
+      ]),
+      "CNJ",
+    );
+    expect(url).toBe("https://cnj");
+  });
+
+  test("match exato tem precedência sobre contenção", async () => {
+    // "Ministros do STF" casa exatamente; não deve ser ofuscado por contenção em outro grupo.
+    const url = await buscarFontePrimaria(
+      fakeClient([
+        grupoComFonte("Ministros do STM", "https://stm"),
+        grupoComFonte("Ministros do STF", "https://stf"),
+      ]),
+      "MAILING RP - Sessão Solene; Ministros do STF",
+    );
+    expect(url).toBe("https://stf");
+  });
+
+  test("segmento curto demais (<3) não casa por contenção", async () => {
+    // "PR" (2 letras) não pode casar "Presidente da República" só porque cabe dentro.
+    const url = await buscarFontePrimaria(
+      fakeClient([grupoComFonte("Presidente da República", "https://planalto")]),
+      "PR",
+    );
+    expect(url).toBeUndefined();
+  });
 });
 
 /** Cliente fake para listarGruposComFonte: ignora o builder e devolve as linhas de `grupos`. */

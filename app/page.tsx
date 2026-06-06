@@ -28,6 +28,11 @@ export default function Home() {
                   {" "}· {analise.resumo.gruposFonteInacessivel} grupo(s) com fonte inacessível
                 </span>
               )}
+              {analise.resumo.gruposViaPesquisaAmpla > 0 && (
+                <span className="text-amber-700">
+                  {" "}· {analise.resumo.gruposViaPesquisaAmpla} grupo(s) por pesquisa ampla
+                </span>
+              )}
             </p>
             <div className="flex gap-2">
               <ExportButtons analise={analise} />

@@ -21,7 +21,7 @@ const analise: ResultadoAnalise = {
   ],
   resumo: {
     total: 1, verde: 0, amarelo: 1, vermelho: 0, novo: 0, indeterminado: 0,
-    gruposSemFonte: 0, gruposFonteInacessivel: 0,
+    gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
   },
 };
 

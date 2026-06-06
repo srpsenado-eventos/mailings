@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { compararContato, compararGrupo, marcarFonteInacessivel } from "@/lib/match";
+import {
+  compararContato,
+  compararGrupo,
+  compararGrupoAmplo,
+  marcarFonteInacessivel,
+} from "@/lib/match";
 import type { ContatoPlanilha, ConteudoFonte } from "@/lib/types";
 
 const fonte: ConteudoFonte = {
@@ -73,5 +78,27 @@ describe("marcarFonteInacessivel", () => {
     expect(r.contatos.every((c) => c.semaforo === "indeterminado")).toBe(true);
     expect(r.contatos[0].camposDivergentes).toHaveLength(0);
     expect(r.novos).toHaveLength(0);
+  });
+});
+
+describe("compararGrupoAmplo", () => {
+  test("marca viaPesquisaAmpla, origem pesquisa_ampla e preserva a URL oficial", () => {
+    const r = compararGrupoAmplo(
+      "ORG",
+      [contato({ nome: "Ana Maria Política Completa" })],
+      fonte,
+      "https://oficial.gov.br",
+    );
+    expect(r.viaPesquisaAmpla).toBe(true);
+    expect(r.semFonte).toBe(false);
+    expect(r.fonteUrl).toBe("https://oficial.gov.br");
+    expect(r.contatos[0].origem).toBe("pesquisa_ampla");
+    expect(r.contatos[0].semaforo).toBe("verde");
+  });
+
+  test("sem URL oficial, mantém a URL da fonte ampla", () => {
+    const r = compararGrupoAmplo("ORG", [contato({ nome: "Ana Maria Política Completa" })], fonte);
+    expect(r.fonteUrl).toBe(fonte.url);
+    expect(r.viaPesquisaAmpla).toBe(true);
   });
 });

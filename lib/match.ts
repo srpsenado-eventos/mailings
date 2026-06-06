@@ -6,6 +6,7 @@ import type {
   ResultadoContato,
   ResultadoGrupo,
   CampoDivergente,
+  OrigemVeredito,
   Semaforo,
 } from "@/lib/types";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
@@ -79,6 +80,7 @@ function campoBate(
 export function compararContato(
   contato: ContatoPlanilha,
   fonte: ConteudoFonte,
+  origem: OrigemVeredito = "oficial",
 ): ResultadoContato {
   const { score, frase } = melhorCorrespondencia(contato.nome, fonte);
   const camposDivergentes: CampoDivergente[] = [];
@@ -107,7 +109,7 @@ export function compararContato(
     semaforo,
     score,
     camposDivergentes,
-    origem: "oficial",
+    origem,
     fonteUrl: fonte.url,
   };
 }
@@ -169,6 +171,7 @@ export function compararGrupo(
   grupo: string,
   contatos: ContatoPlanilha[],
   fonte: ConteudoFonte | undefined,
+  origem: OrigemVeredito = "oficial",
 ): ResultadoGrupo {
   if (!fonte) {
     return {
@@ -189,7 +192,23 @@ export function compararGrupo(
     grupo,
     fonteUrl: fonte.url,
     semFonte: false,
-    contatos: contatos.map((c) => compararContato(c, fonte)),
+    contatos: contatos.map((c) => compararContato(c, fonte, origem)),
     novos: detectarNovos(contatos, fonte),
   };
+}
+
+/**
+ * Compara o grupo contra a composição obtida pela 2ª etapa (pesquisa ampla via
+ * Gemini), quando a fonte oficial estava inacessível/ausente. Marca o grupo e
+ * cada veredito como `pesquisa_ampla` (complementar, não oficial) e preserva a
+ * URL oficial (se houver) para o usuário conferir manualmente.
+ */
+export function compararGrupoAmplo(
+  grupo: string,
+  contatos: ContatoPlanilha[],
+  fonteAmpla: ConteudoFonte,
+  urlOficial?: string,
+): ResultadoGrupo {
+  const base = compararGrupo(grupo, contatos, fonteAmpla, "pesquisa_ampla");
+  return { ...base, viaPesquisaAmpla: true, fonteUrl: urlOficial ?? base.fonteUrl };
 }

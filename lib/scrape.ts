@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import { Agent } from "undici";
-import type { ConteudoFonte } from "@/lib/types";
+import { normalizarTexto } from "@/lib/normalize";
+import type { ConteudoFonte, PessoaSite } from "@/lib/types";
 
 export class ScrapeError extends Error {
   constructor(
@@ -54,24 +55,91 @@ function ehErroDeCertificado(err: unknown): boolean {
   return /certificate|self.signed|leaf signature/i.test(`${msg} ${msgCausa}`);
 }
 
-/** Extrai texto limpo + destaques (negrito) de um HTML já baixado. Função pura. */
+type RaizCheerio = ReturnType<typeof cheerio.load>;
+
+/** Tags cujo fim recebe quebra de linha, para o texto não "grudar" entre elementos. */
+const TAGS_SEPARAR =
+  "p,li,div,tr,td,th,h1,h2,h3,h4,h5,h6,section,article,dt,dd,span,strong,b,a";
+
+const CARGOS = [
+  "presidente", "vice-presidente", "corregedor", "corregedora",
+  "conselheiro", "conselheira", "ministro", "ministra",
+  "secretario", "secretaria", "diretor", "diretora",
+  "procurador", "procuradora", "defensor", "defensora",
+  "governador", "governadora", "senador", "senadora",
+  "deputado", "deputada", "embaixador", "embaixadora",
+  "prefeito", "prefeita", "desembargador", "desembargadora",
+];
+
+function ehRotulo(linha: string): boolean {
+  return linha.endsWith(":") || /^(nascimento|ingresso|vaga|cep|telefone|cnpj|endere)/i.test(linha);
+}
+
+function ehCargo(linha: string): boolean {
+  const norm = normalizarTexto(linha);
+  if (norm.split(" ").length > 8) return false;
+  return CARGOS.some((c) => norm.includes(c));
+}
+
+function ehNome(linha: string): boolean {
+  if (linha.length < 5 || linha.length > 70) return false;
+  if (linha.includes(":") || /\d/.test(linha)) return false;
+  if (ehRotulo(linha) || ehCargo(linha)) return false;
+  const tokens = linha.split(" ").filter(Boolean);
+  if (tokens.length < 2) return false;
+  const conector = /^(de|da|do|das|dos|e)$/i;
+  const significativos = tokens.filter((t) => !conector.test(t));
+  return significativos.length >= 2 && significativos.every((t) => /^[A-ZÀ-Ý]/.test(t));
+}
+
+/** Quebra o corpo em linhas limpas, inserindo separador entre blocos antes do .text(). */
+function extrairLinhas($: RaizCheerio): string[] {
+  $("br").replaceWith("\n");
+  $(TAGS_SEPARAR).each((_, el) => {
+    $(el).append("\n");
+  });
+  return $("body")
+    .text()
+    .split("\n")
+    .map((l) => l.replace(/\s+/g, " ").trim())
+    .filter((l) => l.length > 0);
+}
+
+/** Segmenta linhas em pessoas: linha-nome + cargo adjacente (janela curta). */
+function segmentarPessoas(linhas: string[]): PessoaSite[] {
+  const pessoas: PessoaSite[] = [];
+  for (let i = 0; i < linhas.length; i++) {
+    if (!ehNome(linhas[i])) continue;
+    let cargo: string | undefined;
+    for (let j = i + 1; j < Math.min(i + 3, linhas.length); j++) {
+      if (ehCargo(linhas[j])) {
+        cargo = linhas[j];
+        break;
+      }
+      if (ehNome(linhas[j])) break;
+    }
+    pessoas.push({ nome: linhas[i], cargo, contexto: linhas[i] });
+  }
+  return pessoas;
+}
+
+/** Extrai texto limpo + destaques + pessoas estruturadas de um HTML já baixado. Função pura. */
 export function extrairConteudo(html: string, url: string): ConteudoFonte {
   const $ = cheerio.load(html);
   $("script, style, noscript").remove();
 
-  const destaques: string[] = [];
+  // destaques ANTES de mutar o DOM (extrairLinhas insere "\n").
+  const destaquesBrutos: string[] = [];
   $("strong, b").each((_, el) => {
     const txt = $(el).text().replace(/\s+/g, " ").trim();
-    if (txt) destaques.push(txt);
+    if (txt) destaquesBrutos.push(txt);
   });
 
-  const textoLimpo = $("body").text().replace(/\s+/g, " ").trim();
+  const linhas = extrairLinhas($);
+  const pessoas = segmentarPessoas(linhas);
+  const destaques = [...new Set(destaquesBrutos.filter(ehNome))];
 
-  return {
-    url,
-    textoLimpo,
-    destaques: [...new Set(destaques)],
-  };
+  return { url, textoLimpo: linhas.join(" "), destaques, pessoas };
 }
 
 /**

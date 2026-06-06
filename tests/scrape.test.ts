@@ -45,6 +45,33 @@ describe("extrairConteudo", () => {
   });
 });
 
+describe("extrairConteudo (estruturado)", () => {
+  const htmlCnj = readFileSync(resolve(__dirname, "fixtures/cnj-grudado.html"), "utf-8");
+
+  test("separa blocos: não gruda nome com cargo/rótulo", () => {
+    const c = extrairConteudo(htmlCnj, "https://cnj");
+    expect(c.textoLimpo).not.toContain("MarquesCorregedor");
+    expect(c.textoLimpo).toContain("Mauro Campbell Marques");
+  });
+
+  test("extrai pessoas com nome + cargo", () => {
+    const c = extrairConteudo(htmlCnj, "https://cnj");
+    const fachin = c.pessoas.find((p) => p.nome.includes("Fachin"));
+    expect(fachin?.cargo).toMatch(/Presidente/);
+    const silvio = c.pessoas.find((p) => p.nome === "Silvio Amorim Junior");
+    expect(silvio?.cargo).toBe("Conselheiro");
+  });
+
+  test("filtra rótulos e cargos soltos (não viram pessoa)", () => {
+    const c = extrairConteudo(htmlCnj, "https://cnj");
+    const nomes = c.pessoas.map((p) => p.nome);
+    expect(nomes).not.toContain("Nascimento:");
+    expect(nomes).not.toContain("CEP:");
+    expect(nomes).not.toContain("Conselheiro");
+    expect(nomes.some((n) => n.includes("Nascimento"))).toBe(false);
+  });
+});
+
 describe("raspar", () => {
   afterEach(() => vi.unstubAllGlobals());
 

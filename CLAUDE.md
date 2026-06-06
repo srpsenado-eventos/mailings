@@ -45,6 +45,7 @@ docs/superpowers/specs/  ← decisões arquiteturais datadas
 - **Sem `any`.** Use `unknown` + narrowing, ou defina o tipo.
 - **Schema do XLSX** validado na entrada de `lib/planilha.ts`. Colunas esperadas (case-insensitive, com normalização): `Foto`, `Tratamento`, `Endereçamento`, `Nome`, `Telefone`, `E-mail`, `Rede Social`, `Endereço`, `Órgão`, `Cargo`, `Departamento`, `Grupo`. Coluna ausente = erro claro pro usuário, não fallback silencioso.
 - **Upload com parse no cliente.** A planilha é lida **no navegador** (`lerPlanilha` é pura/isomórfica) e só o texto (`ContatoPlanilha[]`) viaja. O app aceita **`.xlsx` e `.csv`**; o `/api/analise` recebe **JSON** `{ arquivoNome, contatos }`, não mais arquivo. Isso evita o limite de ~4,5 MB de corpo da plataforma (fotos embutidas não trafegam). Ver `docs/superpowers/specs/2026-06-06-upload-no-cliente-e-resiliencia.md`.
+- **Raspagem estruturada + auditoria por campo.** `extrairConteudo` produz `ConteudoFonte.pessoas: PessoaSite[]` (não um blob): insere separadores entre blocos e filtra rótulos. O matching casa contato↔pessoa por **tokens de nome** e compara campo a campo (`ComparacaoCampo`: `confere`/`divergente`/`fonte_nao_informa`), preenchendo o valor correto do site; pessoa casada sai do pool → "novos" limpos. Ver `docs/superpowers/specs/2026-06-06-extracao-estruturada-auditoria-por-campo-design.md`.
 
 ## Testes
 

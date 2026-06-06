@@ -78,22 +78,44 @@ export async function pesquisarFonteAmpla(
  * raspado, em qualquer layout. Substitui as `pessoas` determinísticas (que
  * chutam cargo por proximidade) por uma composição correta. Sem chave → `[]`.
  */
+function promptComposicao(textoLimpo: string): string {
+  return [
+    "Extraia a composição atual (pessoas e cargos) a partir do texto a seguir.",
+    "Ignore itens de menu/navegação e seções; inclua apenas pessoas reais.",
+    'Responda APENAS um array JSON [{"nome": string, "cargo": string}], sem texto extra.',
+    textoLimpo.slice(0, 8000),
+  ].join("\n\n");
+}
+
+async function extrairComposicaoCore(
+  textoLimpo: string,
+  cliente?: GeminiCliente,
+): Promise<PessoaSite[]> {
+  const gemini = cliente ?? (await criarCliente(false));
+  const resposta = await gemini.gerarJson(promptComposicao(textoLimpo));
+  return parsePessoas(resposta).map((p) => ({ nome: p.nome, cargo: p.cargo }));
+}
+
 export async function extrairComposicaoGemini(
   textoLimpo: string,
   cliente?: GeminiCliente,
 ): Promise<PessoaSite[]> {
   if (!geminiDisponivel() && !cliente) return [];
   try {
-    const gemini = cliente ?? (await criarCliente(false));
-    const prompt = [
-      "Extraia a composição atual (pessoas e cargos) a partir do texto a seguir.",
-      "Ignore itens de menu/navegação e seções; inclua apenas pessoas reais.",
-      'Responda APENAS um array JSON [{"nome": string, "cargo": string}], sem texto extra.',
-      textoLimpo.slice(0, 8000),
-    ].join("\n\n");
-    return parsePessoas(await gemini.gerarJson(prompt)).map((p) => ({ nome: p.nome, cargo: p.cargo }));
+    return await extrairComposicaoCore(textoLimpo, cliente);
   } catch {
     return [];
+  }
+}
+
+/** Diagnóstico temporário: roda a extração e devolve a contagem + o erro técnico (sem PII). */
+export async function diagnosticarExtracao(textoLimpo: string): Promise<{ n: number; erro?: string }> {
+  if (!geminiDisponivel()) return { n: 0, erro: "sem chave" };
+  try {
+    const p = await extrairComposicaoCore(textoLimpo);
+    return { n: p.length };
+  } catch (e) {
+    return { n: 0, erro: e instanceof Error ? e.message : "erro desconhecido" };
   }
 }
 

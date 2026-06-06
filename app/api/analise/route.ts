@@ -8,6 +8,7 @@ import {
   pesquisarFonteAmpla,
   extrairComposicaoGemini,
   geminiDisponivel,
+  diagnosticarExtracao,
 } from "@/lib/gemini";
 
 export const runtime = "nodejs";
@@ -42,8 +43,14 @@ export async function POST(req: NextRequest) {
     };
 
     const resultado = await analisar(arquivoNome, contatos, deps);
-    // diag: flag seguro (sem expor a chave) para confirmar se o Gemini está ativo.
-    return NextResponse.json({ ok: true, resultado, diag: { geminiDisponivel: geminiDisponivel() } });
+    // diag temporário: confirma chave + revela o erro técnico da extração Gemini (sem PII).
+    const diag = {
+      geminiDisponivel: geminiDisponivel(),
+      extracao: await diagnosticarExtracao(
+        "Fulano de Tal, Conselheiro do CNJ. Beltrano de Tal, Conselheiro do CNJ.",
+      ),
+    };
+    return NextResponse.json({ ok: true, resultado, diag });
   } catch (err) {
     if (err instanceof PayloadInvalidoError) {
       return NextResponse.json({ ok: false, message: err.message }, { status: 422 });

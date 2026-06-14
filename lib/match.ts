@@ -12,6 +12,7 @@ import type {
   Semaforo,
 } from "@/lib/types";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
+import { CARGOS } from "@/lib/cargos";
 
 const LIMIAR_PESSOA = 0.6;
 const LIMIAR_TOKEN = 0.85;
@@ -106,22 +107,40 @@ function tokensSignificativos(valor: string): string[] {
     .filter((t) => t.length > 1);
 }
 
+/** Papéis de autoridade (do léxico) presentes no valor, por token exato. */
+function rolesDe(valor: string): string[] {
+  return tokensSignificativos(valor).filter((t) => CARGOS.includes(t));
+}
+
 /**
- * Compara cargo planilha × site por sobreposição de tokens (tolerante a
- * fragmentos e pontuação): "(Presidente)" confere com "Presidente do Supremo
- * Tribunal Federal". `confere` quando os tokens do menor cabem no maior.
+ * Compara cargo planilha × site com foco no objetivo da auditoria: confirmar o
+ * PAPEL declarado na planilha, ignorando qualificadores extras da fonte
+ * ("Ministro (Decano)" confirma "Ministro do STF"), mas ainda flagrando mudança
+ * real de papel (Ministro→Presidente), gênero (Ministro≠Ministra) e prefixo
+ * (Presidente≠Vice-Presidente, Senador≠Ex-Senador). Sem palavra-chave de cargo,
+ * cai na comparação por tokens.
  */
 function situacaoCampo(valorPlanilha: string, valorSite?: string): SituacaoCampo {
   if (valorSite === undefined) return "fonte_nao_informa";
-  const p = tokensSignificativos(valorPlanilha);
-  const s = tokensSignificativos(valorSite);
-  if (p.length === 0 || s.length === 0) {
+  const tp = tokensSignificativos(valorPlanilha);
+  const ts = tokensSignificativos(valorSite);
+  const rolesP = rolesDe(valorPlanilha);
+
+  if (rolesP.length > 0) {
+    const rolesS = rolesDe(valorSite);
+    // todo papel da planilha precisa estar confirmado na fonte
+    if (!rolesP.every((r) => rolesS.includes(r))) return "divergente";
+    // prefixo negante presente em só um dos lados → papéis diferentes
+    if (PREFIXOS_NEGANTES.some((x) => tp.includes(x) !== ts.includes(x))) return "divergente";
+    return "confere";
+  }
+
+  // cargo sem papel conhecido → comparação por tokens (tolerante a fragmentos)
+  if (tp.length === 0 || ts.length === 0) {
     return normalizarTexto(valorPlanilha) === normalizarTexto(valorSite) ? "confere" : "divergente";
   }
-  const [menor, maior] = p.length <= s.length ? [p, s] : [s, p];
+  const [menor, maior] = tp.length <= ts.length ? [tp, ts] : [ts, tp];
   if (!menor.every((t) => maior.includes(t))) return "divergente";
-  // Cargo de 1 token só confere se o maior não tem prefixo negante
-  // ("Presidente" ⊄ "Vice-Presidente do…").
   if (menor.length === 1 && maior.some((t) => PREFIXOS_NEGANTES.includes(t))) return "divergente";
   return "confere";
 }

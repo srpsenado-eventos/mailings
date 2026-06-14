@@ -84,6 +84,51 @@ describe("compararContato (por campo)", () => {
     expect(r.semaforo).toBe("amarelo");
   });
 
+  test("cargo enriquecido pela fonte confirma o papel da planilha (Ministro (Decano))", () => {
+    const f: ConteudoFonte = {
+      url: "https://stf",
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [{ nome: "Gilmar Mendes", cargo: "Ministro (Decano)" }],
+    };
+    const r = compararContato(
+      contato({ nome: "Gilmar Mendes", cargo: "Ministro do Supremo Tribunal Federal" }),
+      f,
+    );
+    expect(r.comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("confere");
+    expect(r.semaforo).toBe("verde");
+  });
+
+  test("papel da planilha confirmado mesmo com papel extra na fonte (Presidente)", () => {
+    const f: ConteudoFonte = {
+      url: "https://stf",
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [{ nome: "Edson Fachin", cargo: "Ministro (Presidente)" }],
+    };
+    const r = compararContato(
+      contato({ nome: "Edson Fachin", cargo: "Presidente do Supremo Tribunal Federal" }),
+      f,
+    );
+    expect(r.comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("confere");
+    expect(r.semaforo).toBe("verde");
+  });
+
+  test("mudança real de papel (promoção Ministro→Presidente) ainda é divergente", () => {
+    const f: ConteudoFonte = {
+      url: "https://stf",
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [{ nome: "Fulano Promovido", cargo: "Presidente do Supremo Tribunal Federal" }],
+    };
+    const r = compararContato(
+      contato({ nome: "Fulano Promovido", cargo: "Ministro do Supremo Tribunal Federal" }),
+      f,
+    );
+    expect(r.comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("divergente");
+    expect(r.semaforo).toBe("amarelo");
+  });
+
   test("endereço da planilha → fonte_nao_informa (não vira divergência)", () => {
     const r = compararContato(
       contato({ nome: "Ana Maria Política Completa", endereco: "Praça X" }),

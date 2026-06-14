@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import { Agent } from "undici";
 import { normalizarTexto } from "@/lib/normalize";
+import { CARGOS } from "@/lib/cargos";
 import type { ConteudoFonte, PessoaSite } from "@/lib/types";
 
 export class ScrapeError extends Error {
@@ -60,16 +61,6 @@ type RaizCheerio = ReturnType<typeof cheerio.load>;
 /** Tags cujo fim recebe quebra de linha, para o texto não "grudar" entre elementos. */
 const TAGS_SEPARAR =
   "p,li,div,tr,td,th,h1,h2,h3,h4,h5,h6,section,article,dt,dd,span,strong,b,a";
-
-const CARGOS = [
-  "presidente", "vice-presidente", "corregedor", "corregedora",
-  "conselheiro", "conselheira", "ministro", "ministra",
-  "secretario", "secretaria", "diretor", "diretora",
-  "procurador", "procuradora", "defensor", "defensora",
-  "governador", "governadora", "senador", "senadora",
-  "deputado", "deputada", "embaixador", "embaixadora",
-  "prefeito", "prefeita", "desembargador", "desembargadora",
-];
 
 function ehRotulo(linha: string): boolean {
   return linha.endsWith(":") || /^(nascimento|ingresso|vaga|cep|telefone|cnpj|endere)/i.test(linha);

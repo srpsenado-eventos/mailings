@@ -18,7 +18,7 @@ Ferramenta interna do Senado Federal para auditar a base de autoridades do **Sis
 - **Banco:** Supabase (Postgres) — apenas catálogo de órgãos e URLs oficiais; **sem histórico de análises**
 - **Planilha:** SheetJS
 - **Scraping:** `fetch` + `cheerio` + `@mozilla/readability` + `jsdom`
-- **Matching:** `fuse.js` + `string-similarity` (camada determinística) · `@google/genai` Gemini Flash (camada opcional para casos ambíguos)
+- **Matching:** `fuse.js` + `string-similarity` (camada determinística) · Anthropic Claude Haiku (Camada B opcional: extração estruturada da composição)
 - **Testes:** Vitest
 
 ## Setup local
@@ -62,7 +62,7 @@ Ver [.env.example](.env.example). Resumo:
 | `NEXT_PUBLIC_SUPABASE_URL` | sim | URL do projeto Supabase |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | sim | Chave pública do Supabase |
 | `SUPABASE_SERVICE_ROLE_KEY` | sim (server) | Chave de serviço para queries server-side |
-| `GEMINI_API_KEY` | não | Ativa a camada B de matching (Gemini Flash). Sem ela, só a camada determinística roda. |
+| `ANTHROPIC_API_KEY` | não | Ativa a Camada B (Claude Haiku): extração estruturada da composição. Sem ela, só a camada determinística roda. |
 
 ## Cadastro de URLs oficiais
 

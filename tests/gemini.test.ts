@@ -1,23 +1,23 @@
 import { describe, expect, test, vi, beforeEach } from "vitest";
 import {
-  geminiDisponivel,
+  iaDisponivel,
   pesquisarFonteAmpla,
   extrairComposicaoGemini,
   extrairJson,
 } from "@/lib/gemini";
 
-describe("geminiDisponivel", () => {
+describe("iaDisponivel", () => {
   beforeEach(() => {
-    delete process.env.GEMINI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
   });
 
   test("false quando não há chave", () => {
-    expect(geminiDisponivel()).toBe(false);
+    expect(iaDisponivel()).toBe(false);
   });
 
   test("true quando há chave", () => {
-    process.env.GEMINI_API_KEY = "x";
-    expect(geminiDisponivel()).toBe(true);
+    process.env.ANTHROPIC_API_KEY = "x";
+    expect(iaDisponivel()).toBe(true);
   });
 });
 
@@ -41,7 +41,7 @@ describe("extrairJson", () => {
 
 describe("pesquisarFonteAmpla", () => {
   beforeEach(() => {
-    delete process.env.GEMINI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
   });
 
   test("sem chave e sem cliente → undefined", async () => {
@@ -79,7 +79,7 @@ describe("pesquisarFonteAmpla", () => {
 
 describe("extrairComposicaoGemini", () => {
   beforeEach(() => {
-    delete process.env.GEMINI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
   });
 
   test("converte texto raspado em pessoas estruturadas", async () => {

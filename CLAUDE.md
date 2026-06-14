@@ -10,7 +10,7 @@ Especificação aprovada: [docs/superpowers/specs/2026-06-04-fiscal-de-mailings-
 
 ## Stack (fixa)
 
-Next.js 15 (App Router) + TypeScript + Tailwind + shadcn/ui · Supabase (Postgres) · SheetJS · cheerio + readability + jsdom · fuse.js + string-similarity · @google/genai (opcional) · Vitest · Vercel.
+Next.js 15 (App Router) + TypeScript + Tailwind + shadcn/ui · Supabase (Postgres) · SheetJS · cheerio + readability + jsdom · fuse.js + string-similarity · Anthropic Claude Haiku (Camada B opcional, via `fetch` na Messages API) · Vitest · Vercel.
 
 Não trocar dependências sem registrar a decisão num novo doc em `docs/superpowers/specs/`.
 
@@ -20,8 +20,8 @@ Não trocar dependências sem registrar a decisão num novo doc em `docs/superpo
 - **UI sem lógica de negócio.** Componentes em `components/` só renderizam e disparam Server Actions.
 - **Server Components por padrão.** Marcar `"use client"` só quando exigir estado/efeito real.
 - **Sem PII no log.** Nomes, telefones, e-mails das autoridades nunca aparecem em `console.log`, Sentry, ou prompt do Gemini sem necessidade — quando aparecem, é mínimo e justificado.
-- **Camada A antes da B.** O motor determinístico tem que rodar sempre. Gemini é opcional e degrada silenciosamente se faltar `GEMINI_API_KEY` ou se a chamada falhar.
-- **Fonte primária antes da ampla.** 1ª etapa = URL oficial cadastrada (sempre). 2ª etapa = pesquisa ampla complementar via grounding Google Search do Gemini, só para casos não resolvidos e só com `GEMINI_API_KEY`. Ver §7.3 do spec.
+- **Camada A antes da B.** O motor determinístico tem que rodar sempre. A IA (Claude Haiku) é opcional e degrada silenciosamente se faltar `ANTHROPIC_API_KEY` ou se a chamada falhar. Ver `docs/superpowers/specs/2026-06-14-camada-b-anthropic-haiku.md`.
+- **Fonte primária antes da ampla.** 1ª etapa = URL oficial cadastrada (sempre, raspada e enriquecida pelo Haiku quando há chave). 2ª etapa = pesquisa ampla complementar (Haiku, pelo conhecimento do modelo — sem grounding ao vivo), só para casos não resolvidos e só com `ANTHROPIC_API_KEY`; resultado rotulado como "pesquisa ampla" (não oficial). Ver §7.3 do spec.
 - **Sem histórico no banco.** Não criar tabelas tipo `analises`, `uploads`, `runs`. Resultado da análise vive em memória durante a request e é devolvido ao cliente.
 - **Fontes cadastradas manualmente** em `data/seed-orgaos.sql` e em novas migrations. Não implementar **cadastro/descoberta automática de URLs** — a pesquisa ampla da 2ª etapa é leitura efêmera e nunca persiste URLs.
 

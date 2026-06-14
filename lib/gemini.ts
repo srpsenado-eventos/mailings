@@ -1,13 +1,14 @@
 import type { ConteudoFonte, PessoaSite } from "@/lib/types";
 
-export function geminiDisponivel(): boolean {
-  return Boolean(process.env.GEMINI_API_KEY);
+/** True quando há chave de IA configurada (Camada B opcional, via Anthropic). */
+export function iaDisponivel(): boolean {
+  return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
 /** URL sentinela para conteúdo obtido por pesquisa ampla (não é uma fonte oficial). */
-export const URL_PESQUISA_AMPLA = "pesquisa-ampla://gemini+google-search";
+export const URL_PESQUISA_AMPLA = "pesquisa-ampla://anthropic-haiku";
 
-/** Abstração mínima do cliente — facilita teste e troca de modelo. */
+/** Abstração mínima do cliente de IA — facilita teste e troca de modelo/provedor. */
 export interface GeminiCliente {
   gerarJson(prompt: string): Promise<unknown>;
 }
@@ -25,10 +26,10 @@ export async function pesquisarFonteAmpla(
   grupoCanonico: string,
   cliente?: GeminiCliente,
 ): Promise<ConteudoFonte | undefined> {
-  if (!geminiDisponivel() && !cliente) return undefined;
+  if (!iaDisponivel() && !cliente) return undefined;
   try {
-    const gemini = cliente ?? (await criarCliente(true));
-    const resposta = await gemini.gerarJson(montarPromptComposicao(grupoCanonico));
+    const ia = cliente ?? (await criarCliente());
+    const resposta = await ia.gerarJson(montarPromptComposicao(grupoCanonico));
     const pessoas = parsePessoas(resposta);
     if (pessoas.length === 0) return undefined;
     return {
@@ -57,8 +58,8 @@ async function extrairComposicaoCore(
   textoLimpo: string,
   cliente?: GeminiCliente,
 ): Promise<PessoaSite[]> {
-  const gemini = cliente ?? (await criarCliente(false));
-  const resposta = await gemini.gerarJson(promptComposicao(textoLimpo));
+  const ia = cliente ?? (await criarCliente());
+  const resposta = await ia.gerarJson(promptComposicao(textoLimpo));
   return parsePessoas(resposta).map((p) => ({ nome: p.nome, cargo: p.cargo }));
 }
 
@@ -71,7 +72,7 @@ export async function extrairComposicaoGemini(
   textoLimpo: string,
   cliente?: GeminiCliente,
 ): Promise<PessoaSite[]> {
-  if (!geminiDisponivel() && !cliente) return [];
+  if (!iaDisponivel() && !cliente) return [];
   try {
     return await extrairComposicaoCore(textoLimpo, cliente);
   } catch {
@@ -81,9 +82,9 @@ export async function extrairComposicaoGemini(
 
 function montarPromptComposicao(grupoCanonico: string): string {
   return [
-    "Você lista a composição ATUAL de órgãos e cargos públicos brasileiros.",
+    "Você lista a composição atual conhecida de órgãos e cargos públicos brasileiros.",
     `Liste os membros atuais de: ${grupoCanonico}.`,
-    "Use a busca para garantir que a informação está atualizada hoje.",
+    "Use apenas pessoas reais; se não souber com confiança, devolva uma lista vazia.",
     'Responda APENAS um array JSON no formato [{"nome": string, "cargo": string}], sem texto extra.',
   ].join("\n\n");
 }
@@ -108,27 +109,40 @@ function parsePessoas(resposta: unknown): PessoaComposicao[] {
   return pessoas;
 }
 
+const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+const MODELO_IA = "claude-haiku-4-5";
+
+interface RespostaAnthropic {
+  content?: { type: string; text?: string }[];
+}
+
 /**
- * Cliente Gemini. `comBusca=true` ativa o grounding (Google Search) — usado
- * quando precisamos ir à web (refino e pesquisa ampla). `comBusca=false` pede
- * JSON puro (responseMimeType) — usado na extração a partir de texto já raspado,
- * onde o grounding atrapalharia. As duas configs são exclusivas: a API rejeita
- * googleSearch + responseMimeType juntos.
+ * Cliente de IA (Anthropic Claude Haiku via Messages API, sem SDK — só `fetch`).
+ * `gerarJson` devolve o conteúdo já parseado com tolerância (`extrairJson`).
+ * Lança em falta de chave ou HTTP não-OK; os chamadores degradam graciosamente.
  */
-async function criarCliente(comBusca: boolean): Promise<GeminiCliente> {
-  const { GoogleGenAI } = await import("@google/genai");
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+async function criarCliente(): Promise<GeminiCliente> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY ausente");
   return {
     async gerarJson(prompt: string) {
-      const config = comBusca
-        ? { tools: [{ googleSearch: {} }] }
-        : { responseMimeType: "application/json" };
-      const resp = await ai.models.generateContent({
-        model: "gemini-2.0-flash",
-        contents: prompt,
-        config,
+      const resp = await fetch(ANTHROPIC_URL, {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: MODELO_IA,
+          max_tokens: 4096,
+          messages: [{ role: "user", content: prompt }],
+        }),
       });
-      return extrairJson(resp.text ?? "[]");
+      if (!resp.ok) throw new Error(`Anthropic HTTP ${resp.status}`);
+      const data = (await resp.json()) as RespostaAnthropic;
+      const texto = data.content?.find((b) => b.type === "text")?.text ?? "[]";
+      return extrairJson(texto);
     },
   };
 }

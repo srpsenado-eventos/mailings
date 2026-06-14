@@ -3,7 +3,7 @@ import { analisar, type Dependencias } from "@/lib/analise";
 import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload";
 import { criarClienteServidor, resolverGrupoEFonte } from "@/lib/supabase";
 import { raspar } from "@/lib/scrape";
-import { refinarComGemini, pesquisarFonteAmpla, extrairComposicaoGemini } from "@/lib/gemini";
+import { pesquisarFonteAmpla, extrairComposicaoGemini } from "@/lib/gemini";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -33,7 +33,6 @@ export async function POST(req: NextRequest) {
         const pessoas = await extrairComposicaoGemini(fonte.textoLimpo);
         return pessoas.length > 0 ? { ...fonte, pessoas } : fonte;
       },
-      refinar: (grupo, fonte) => refinarComGemini(grupo, fonte),
     };
 
     const resultado = await analisar(arquivoNome, contatos, deps);

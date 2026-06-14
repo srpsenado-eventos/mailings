@@ -72,6 +72,18 @@ describe("compararContato (por campo)", () => {
     expect(r.semaforo).toBe("verde");
   });
 
+  test("cargo de 1 token não confere com prefixo negante (Presidente ≠ Vice-Presidente)", () => {
+    const f: ConteudoFonte = {
+      url: "https://stf",
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [{ nome: "Alexandre de Moraes", cargo: "Vice-Presidente do Supremo Tribunal Federal" }],
+    };
+    const r = compararContato(contato({ nome: "Alexandre de Moraes", cargo: "Presidente" }), f);
+    expect(r.comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("divergente");
+    expect(r.semaforo).toBe("amarelo");
+  });
+
   test("endereço da planilha → fonte_nao_informa (não vira divergência)", () => {
     const r = compararContato(
       contato({ nome: "Ana Maria Política Completa", endereco: "Praça X" }),

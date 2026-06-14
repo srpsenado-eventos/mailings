@@ -21,7 +21,6 @@ const deps: Dependencias = {
       : { sugestoes: [] },
   raspar: async () => fonte,
   pesquisarAmpla: async () => undefined,
-  refinar: async (g) => g,
 };
 
 const fonteAmpla: ConteudoFonte = {
@@ -134,15 +133,22 @@ describe("analisar", () => {
     expect(r.grupos[0].contatos[0].semaforo).toBe("verde");
   });
 
-  test("falha do refinador (Camada B) degrada para o veredito da Camada A sem derrubar", async () => {
-    const depsRefinarQuebrado: Dependencias = {
+  test("enriquecimento (Camada B) não mascara divergência: cargo diferente continua amarelo", async () => {
+    const depsEnriq: Dependencias = {
       ...deps,
-      refinar: async () => {
-        throw new Error("cota do Gemini esgotada");
-      },
+      enriquecerPessoas: async (f) => ({
+        ...f,
+        pessoas: [{ nome: "Ana Maria Política Completa", cargo: "Diretora" }],
+      }),
     };
-    const r = await analisar("c.xlsx", [contatos[0]], depsRefinarQuebrado);
-    expect(r.grupos[0].contatos[0].semaforo).toBe("verde");
-    expect(r.grupos[0].contatos[0].origem).toBe("oficial");
+    const r = await analisar(
+      "c.xlsx",
+      [{ nome: "Ana Maria Política Completa", grupo: "ORG", cargo: "Presidente" }],
+      depsEnriq,
+    );
+    const c = r.grupos[0].contatos[0];
+    expect(c.semaforo).toBe("amarelo"); // divergência de cargo NÃO vira verde
+    expect(c.origem).toBe("oficial"); // veio da fonte oficial, não de pesquisa ampla
+    expect(c.comparacoes.find((x) => x.campo === "cargo")?.situacao).toBe("divergente");
   });
 });

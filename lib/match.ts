@@ -17,6 +17,8 @@ const LIMIAR_PESSOA = 0.6;
 const LIMIAR_TOKEN = 0.85;
 const LIMIAR_SUGESTAO = 0.4;
 const MAX_SUGESTOES = 3;
+/** Prefixos que mudam o sentido de um cargo de 1 token (ex.: "Presidente" ≠ "Vice-Presidente"). */
+const PREFIXOS_NEGANTES = ["vice", "ex", "sub", "adjunto", "interino", "substituto"];
 
 /**
  * Quando o rótulo da planilha não casa nenhum grupo cadastrado, sugere os nomes
@@ -117,7 +119,11 @@ function situacaoCampo(valorPlanilha: string, valorSite?: string): SituacaoCampo
     return normalizarTexto(valorPlanilha) === normalizarTexto(valorSite) ? "confere" : "divergente";
   }
   const [menor, maior] = p.length <= s.length ? [p, s] : [s, p];
-  return menor.every((t) => maior.includes(t)) ? "confere" : "divergente";
+  if (!menor.every((t) => maior.includes(t))) return "divergente";
+  // Cargo de 1 token só confere se o maior não tem prefixo negante
+  // ("Presidente" ⊄ "Vice-Presidente do…").
+  if (menor.length === 1 && maior.some((t) => PREFIXOS_NEGANTES.includes(t))) return "divergente";
+  return "confere";
 }
 
 /** Monta o veredito de um contato contra a pessoa casada (ou nenhuma → vermelho). */

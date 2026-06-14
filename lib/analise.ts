@@ -22,7 +22,6 @@ export interface Dependencias {
   pesquisarAmpla: (grupoCanonico: string) => Promise<ConteudoFonte | undefined>;
   /** Fase 2 (opcional): substitui as `pessoas` determinísticas por extração estruturada (Gemini). */
   enriquecerPessoas?: (fonte: ConteudoFonte) => Promise<ConteudoFonte>;
-  refinar: (grupo: ResultadoGrupo, fonte: ConteudoFonte) => Promise<ResultadoGrupo>;
 }
 
 function motivoDaFalha(err: unknown): string {
@@ -75,13 +74,9 @@ async function analisarGrupo(
     }
   }
 
-  const base = compararGrupo(grupo, contatos, fonte);
-  try {
-    return await deps.refinar(base, fonte);
-  } catch {
-    // Camada B (Gemini) é opcional: qualquer falha mantém o veredito determinístico.
-    return base;
-  }
+  // A extração estruturada (Camada A + enriquecimento Gemini) já produz a comparação
+  // por campo definitiva; não há refino pós-comparação (ele mascarava divergências).
+  return compararGrupo(grupo, contatos, fonte);
 }
 
 function resumir(grupos: ResultadoGrupo[]): ResumoAnalise {

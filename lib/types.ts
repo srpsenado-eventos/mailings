@@ -14,10 +14,16 @@ export interface ContatoPlanilha {
   grupo: string;
 }
 
+/** Proveniência de um dado vindo da Camada B: lido da página ou do conhecimento do modelo. */
+export type OrigemDado = "pagina" | "conhecimento";
+
 /** Uma pessoa extraída (estruturada) da fonte oficial. */
 export interface PessoaSite {
   nome: string;
   cargo?: string;
+  endereco?: string;
+  /** De onde veio o registro (página oficial vs conhecimento da IA). */
+  origem?: OrigemDado;
   /** Trecho de origem (para depuração). */
   contexto?: string;
 }
@@ -49,6 +55,8 @@ export interface ComparacaoCampo {
   /** Valor correto vindo do site (ausente quando a fonte não informa). */
   valorSite?: string;
   situacao: SituacaoCampo;
+  /** Proveniência do valor do site (página oficial vs conhecimento da IA). */
+  origemValor?: OrigemDado;
 }
 
 export interface ResultadoContato {
@@ -59,6 +67,8 @@ export interface ResultadoContato {
   comparacoes: ComparacaoCampo[];
   /** Subconjunto de `comparacoes` com situacao "divergente" (compat/badge). */
   camposDivergentes: CampoDivergente[];
+  /** Contato não encontrado na fonte (possível saída) — distinto de "campo ausente". */
+  possivelSaida?: boolean;
   origem: OrigemVeredito;
   fonteUrl?: string;
   observacao?: string;

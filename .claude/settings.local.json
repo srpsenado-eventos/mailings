@@ -2,7 +2,20 @@
   "permissions": {
     "allow": [
       "Bash(ls -la \"C:/Users/Clovis Sabino/Projetos/Senado Federal/\" 2>&1)",
-      "Bash(ls -la \"C:\\\\Users\\\\limaj\\\\.claude\\\\projects\\\\C--Users-Clovis-Sabino-Projetos-Senado-Federal-Fiscal-de-Mailings\\\\\" 2>&1 | head -20)"
+      "Bash(ls -la \"C:\\\\Users\\\\limaj\\\\.claude\\\\projects\\\\C--Users-Clovis-Sabino-Projetos-Senado-Federal-Fiscal-de-Mailings\\\\\" 2>&1 | head -20)",
+      "Bash(pnpm --version)",
+      "Bash(git --version)",
+      "PowerShell($node = \\(Get-Command node -ErrorAction SilentlyContinue\\).Source; $pnpm = \\(Get-Command pnpm -ErrorAction SilentlyContinue\\).Source; $git = \\(Get-Command git -ErrorAction SilentlyContinue\\).Source; $npm = \\(Get-Command npm -ErrorAction SilentlyContinue\\).Source; $corepack = \\(Get-Command corepack -ErrorAction SilentlyContinue\\).Source; Write-Output \"node=$node\"; Write-Output \"npm=$npm\"; Write-Output \"pnpm=$pnpm\"; Write-Output \"git=$git\"; Write-Output \"corepack=$corepack\"; if \\($node\\) { Write-Output \\(\"node_version=\" + \\(node --version\\)\\) }; if \\($pnpm\\) { Write-Output \\(\"pnpm_version=\" + \\(pnpm --version\\)\\) }; if \\($npm\\) { Write-Output \\(\"npm_version=\" + \\(npm --version\\)\\) }; if \\($git\\) { Write-Output \\(\"git_version=\" + \\(git --version\\)\\) })",
+      "PowerShell(corepack enable pnpm 2>&1)",
+      "PowerShell(corepack prepare pnpm@latest --activate 2>&1)",
+      "PowerShell(pnpm --version 2>&1)",
+      "Bash(git init *)",
+      "Bash(git config *)",
+      "Bash(npm run *)",
+      "Bash(npm test *)",
+      "PowerShell(cd \"C:/Users/Clovis Sabino/Projetos/Senado Federal/Fiscal de Mailings\"; $env:DATABASE_URL = 'postgresql://postgres:%23Eventos2026@db.evefgtdebjxqpxwixuix.supabase.co:5432/postgres'; node scripts/apply-migrations.mjs 2>&1 | Out-String)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ]
   }
 }

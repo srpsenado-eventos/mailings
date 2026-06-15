@@ -3,10 +3,11 @@ import {
   compararContato,
   compararGrupo,
   marcarFonteInacessivel,
+  mesclarComposicao,
   pontuarPessoa,
   sugerirGrupos,
 } from "@/lib/match";
-import type { ContatoPlanilha, ConteudoFonte } from "@/lib/types";
+import type { ContatoPlanilha, ConteudoFonte, PessoaSite } from "@/lib/types";
 
 const fonte: ConteudoFonte = {
   url: "https://orgao.gov.br",
@@ -230,6 +231,49 @@ describe("auditoria por campo (IA-first)", () => {
     expect(r.possivelSaida).toBe(true);
     expect(r.semaforo).toBe("vermelho");
     expect(r.observacao).toMatch(/possível saída/i);
+  });
+});
+
+describe("mesclarComposicao (Camada 1 base + resgate da IA)", () => {
+  const alvo = [contato({ nome: "Bruno Dantas Nascimento" })];
+  const ia: PessoaSite[] = [
+    { nome: "Bruno Dantas Nascimento", cargo: "Ministro", origem: "conhecimento" },
+  ];
+
+  test("página ilegível (sem pessoas) → usa a composição da IA (cobertura)", () => {
+    expect(mesclarComposicao([], ia, alvo)).toEqual(ia);
+  });
+
+  test("página legível → base oficial + resgate de contato que a página não trouxe", () => {
+    const pagina: PessoaSite[] = [
+      { nome: "Walton Alencar Rodrigues", cargo: "Ministro", origem: "pagina" },
+    ];
+    const r = mesclarComposicao(pagina, ia, alvo);
+    expect(r.map((p) => p.nome)).toEqual([
+      "Walton Alencar Rodrigues",
+      "Bruno Dantas Nascimento",
+    ]);
+  });
+
+  test("página legível → NÃO anexa pessoa da IA que nenhum contato casa (sem ruído)", () => {
+    const pagina: PessoaSite[] = [
+      { nome: "Walton Alencar Rodrigues", cargo: "Ministro", origem: "pagina" },
+    ];
+    const iaInventada: PessoaSite[] = [
+      { nome: "Pessoa Aleatoria Inventada", cargo: "Ministro", origem: "conhecimento" },
+    ];
+    expect(mesclarComposicao(pagina, iaInventada, alvo).map((p) => p.nome)).toEqual([
+      "Walton Alencar Rodrigues",
+    ]);
+  });
+
+  test("página legível → NÃO duplica quem a IA repete e a página já tem", () => {
+    const pagina: PessoaSite[] = [
+      { nome: "Bruno Dantas Nascimento", cargo: "Ministro", origem: "pagina" },
+    ];
+    const r = mesclarComposicao(pagina, ia, alvo);
+    expect(r.map((p) => p.nome)).toEqual(["Bruno Dantas Nascimento"]);
+    expect(r[0].origem).toBe("pagina"); // a página vence (oficial)
   });
 });
 

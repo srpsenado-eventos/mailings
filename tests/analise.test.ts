@@ -121,11 +121,18 @@ describe("analisar", () => {
     expect(g.sugestoesCadastro).toEqual(["Conselho Nacional de Justiça (CNJ)"]);
   });
 
-  test("IA não mascara divergência: cargo diferente continua amarelo", async () => {
+  test("IA não mascara divergência: página legível manda no veredito (continua amarelo)", async () => {
     const depsIa: Dependencias = {
       ...deps,
+      raspar: async () => ({
+        url: "https://orgao.gov.br",
+        textoLimpo: "Ana Maria Política Completa, Diretora.",
+        destaques: [],
+        pessoas: [{ nome: "Ana Maria Política Completa", cargo: "Diretora", origem: "pagina" }],
+      }),
+      // A IA "corrige" para Presidente — mas a página é a base e não pode ser mascarada.
       extrairComposicao: async () => [
-        { nome: "Ana Maria Política Completa", cargo: "Diretora", origem: "pagina" },
+        { nome: "Ana Maria Política Completa", cargo: "Presidente", origem: "pagina" },
       ],
     };
     const r = await analisar(
@@ -137,5 +144,39 @@ describe("analisar", () => {
     expect(c.semaforo).toBe("amarelo");
     expect(c.origem).toBe("oficial"); // pessoa veio da página → veredito oficial
     expect(c.comparacoes.find((x) => x.campo === "cargo")?.situacao).toBe("divergente");
+  });
+
+  test("página ilegível (JS, 0 pessoas) + IA vazia → 'não verificado', NUNCA 'saída'", async () => {
+    const depsVazio: Dependencias = {
+      ...deps,
+      raspar: async () => ({ url: "https://tcu", textoLimpo: "", destaques: [], pessoas: [] }),
+      extrairComposicao: async () => [],
+    };
+    const r = await analisar("c.xlsx", [contatos[0]], depsVazio);
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBe(true);
+    expect(g.contatos[0].semaforo).toBe("indeterminado");
+    expect(g.contatos[0].possivelSaida).toBeFalsy();
+    expect(g.erroFonte).toMatch(/conteúdo legível/);
+  });
+
+  test("página legível que escapou um nome: a IA resgata o contato (não vira 'saída')", async () => {
+    const depsResgate: Dependencias = {
+      ...deps,
+      raspar: async () => ({
+        url: "https://orgao.gov.br",
+        textoLimpo: "Outra Pessoa Qualquer, Diretor.",
+        destaques: [],
+        pessoas: [{ nome: "Outra Pessoa Qualquer", cargo: "Diretor", origem: "pagina" }],
+      }),
+      extrairComposicao: async () => [
+        { nome: "Ana Maria Política Completa", cargo: "Presidente", origem: "conhecimento" },
+      ],
+    };
+    const r = await analisar("c.xlsx", [contatos[0]], depsResgate);
+    const c = r.grupos[0].contatos[0];
+    expect(c.semaforo).toBe("verde");
+    expect(c.possivelSaida).toBeFalsy();
+    expect(c.origem).toBe("pesquisa_ampla"); // resgatado pela IA
   });
 });

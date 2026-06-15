@@ -14,14 +14,19 @@ export interface GeminiCliente {
 }
 
 function promptComposicao(grupoCanonico: string, textoLimpo: string): string {
+  const temTexto = textoLimpo.trim().length > 0;
   return [
     `Você audita a composição ATUAL de "${grupoCanonico}" (órgão/cargo público brasileiro).`,
-    "Texto da página oficial (pode estar vazio/incompleto se a página usa JavaScript):",
-    textoLimpo.slice(0, 8000) || "(a página não retornou conteúdo legível)",
+    temTexto
+      ? "Texto da página oficial (fonte preferencial — extraia as pessoas DELE):"
+      : "A página oficial não retornou conteúdo legível (provável JavaScript).",
+    temTexto
+      ? textoLimpo.slice(0, 8000)
+      : "Liste os MEMBROS ATUAIS deste órgão pelo seu conhecimento, priorizando precisão.",
     "Liste APENAS pessoas reais (ignore menus, seções e links). Para cada uma devolva:",
-    "- nome (como aparece no site/oficial), cargo, endereco (institucional, se souber), origem.",
-    'origem = "pagina" se o dado veio do texto acima; "conhecimento" se veio do seu conhecimento.',
-    "Se não souber a composição com confiança, devolva [].",
+    "- nome (como aparece oficialmente), cargo, endereco (institucional, se souber), origem.",
+    'origem = "pagina" se o dado veio do texto acima; "conhecimento" se veio do seu conhecimento do órgão.',
+    "Só devolva [] se você realmente não conhece a composição deste órgão.",
     'Responda APENAS JSON: [{"nome":string,"cargo":string,"endereco":string,"origem":"pagina"|"conhecimento"}].',
   ].join("\n\n");
 }
@@ -62,6 +67,27 @@ export async function extrairComposicao(
     return parsePessoasComposicao(resposta);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Diagnóstico TEMPORÁRIO (não-PII): a Camada B realmente dispara em produção? Faz UMA chamada
+ * de teste com grupo conhecido + texto vazio (sem contatos). Remover após confirmar o TCU.
+ */
+export async function diagnosticarIa(): Promise<{
+  disponivel: boolean;
+  ok: boolean;
+  count: number;
+  erro?: string;
+}> {
+  const disponivel = iaDisponivel();
+  if (!disponivel) return { disponivel, ok: false, count: 0, erro: "sem ANTHROPIC_API_KEY" };
+  try {
+    const ia = await criarCliente();
+    const resp = await ia.gerarJson(promptComposicao("Ministros do TCU", ""));
+    return { disponivel, ok: true, count: parsePessoasComposicao(resp).length };
+  } catch (e) {
+    return { disponivel, ok: false, count: 0, erro: e instanceof Error ? e.message : "erro" };
   }
 }
 

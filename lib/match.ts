@@ -72,6 +72,28 @@ export function pontuarPessoa(nomePlanilha: string, nomeSite: string): number {
   return fortes / Math.min(a.length, b.length);
 }
 
+/**
+ * Compõe a lista final de pessoas a partir da Camada 1 (página) e da Camada 2 (IA):
+ * - Página ilegível (sem pessoas) → usa a composição da IA (cobertura, ex.: TCU/JS).
+ * - Página legível → base oficial + RESGATE: anexa só as pessoas da IA que casam algum
+ *   contato da planilha E ainda não estão na página. Evita o falso "possível saída" quando
+ *   a extração escapou um nome, sem poluir "novos" com gente que a IA imaginou.
+ * A página sempre vence em caso de empate (mantém a proveniência oficial).
+ */
+export function mesclarComposicao(
+  pessoasPagina: PessoaSite[],
+  pessoasIA: PessoaSite[],
+  contatos: ContatoPlanilha[],
+): PessoaSite[] {
+  if (pessoasPagina.length === 0) return [...pessoasIA];
+  const resgates = pessoasIA.filter(
+    (ia) =>
+      contatos.some((c) => pontuarPessoa(c.nome, ia.nome) >= LIMIAR_PESSOA) &&
+      !pessoasPagina.some((p) => pontuarPessoa(p.nome, ia.nome) >= LIMIAR_PESSOA),
+  );
+  return [...pessoasPagina, ...resgates];
+}
+
 function melhorPessoa(nome: string, pessoas: PessoaSite[]): { indice: number; score: number } {
   let indice = -1;
   let score = 0;

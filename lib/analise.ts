@@ -7,7 +7,7 @@ import type {
   ResumoAnalise,
 } from "@/lib/types";
 import { agruparPorGrupo } from "@/lib/planilha";
-import { compararGrupo, marcarFonteInacessivel } from "@/lib/match";
+import { compararGrupo, marcarFonteInacessivel, mesclarComposicao } from "@/lib/match";
 import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { ScrapeError } from "@/lib/scrape";
 import type { FonteResolvida } from "@/lib/supabase";
@@ -43,7 +43,7 @@ async function analisarGrupo(
       : base;
   }
 
-  // 1. Tenta raspar a URL oficial (se houver); falha → texto vazio (a IA completa).
+  // 1. Camada 1 (base): tenta raspar a URL oficial. Falha → texto vazio (a IA cobre).
   let fonteRaspada: ConteudoFonte | undefined;
   let motivoFalha = "fonte inacessível";
   if (resolvida.url) {
@@ -54,30 +54,35 @@ async function analisarGrupo(
     }
   }
   const textoLimpo = fonteRaspada?.textoLimpo ?? "";
+  const pessoasPagina = fonteRaspada?.pessoas ?? [];
 
-  // 2. Camada B: composição via IA (texto + conhecimento). Sem chave → [].
-  const pessoas = await deps.extrairComposicao(resolvida.grupoCanonico, textoLimpo);
-  if (pessoas.length > 0) {
-    const fonte: ConteudoFonte = {
-      url: resolvida.url ?? URL_PESQUISA_AMPLA,
-      textoLimpo,
-      destaques: [],
-      pessoas,
-    };
-    const r = compararGrupo(grupo, contatos, fonte);
-    // Marca o grupo quando a composição dependeu do conhecimento (não 100% oficial).
-    const usouConhecimento = pessoas.some((p) => p.origem === "conhecimento");
-    return usouConhecimento || !resolvida.url ? { ...r, viaPesquisaAmpla: true } : r;
+  // 2. Camada 2 (refinamento/cobertura): composição via IA. Sem chave → [].
+  const pessoasIA = await deps.extrairComposicao(resolvida.grupoCanonico, textoLimpo);
+  const composicao = mesclarComposicao(pessoasPagina, pessoasIA, contatos);
+
+  // 3. Sem composição (página ilegível E IA vazia): NUNCA "saída" — "não verificado".
+  if (composicao.length === 0) {
+    if (resolvida.url) {
+      // Diferencia scrape que lançou erro de página que veio sem conteúdo legível (JS).
+      const motivo = fonteRaspada
+        ? "página não retornou conteúdo legível (provável JavaScript)"
+        : motivoFalha;
+      return marcarFonteInacessivel(grupo, contatos, resolvida.url, motivo);
+    }
+    return compararGrupo(grupo, contatos, undefined); // sem URL → sem fonte
   }
 
-  // 3. Sem IA (ou IA vazia): usa o determinístico do scrape, se houve.
-  if (fonteRaspada) return compararGrupo(grupo, contatos, fonteRaspada);
-  // 4. Tinha URL mas não raspou e IA vazia → inacessível (com o motivo técnico).
-  if (resolvida.url) {
-    return marcarFonteInacessivel(grupo, contatos, resolvida.url, motivoFalha);
-  }
-  // 5. Sem URL e IA vazia → sem fonte.
-  return compararGrupo(grupo, contatos, undefined);
+  // 4. Compara contra a composição (página + resgates da IA, ou só IA na página ilegível).
+  const fonte: ConteudoFonte = {
+    url: resolvida.url ?? URL_PESQUISA_AMPLA,
+    textoLimpo,
+    destaques: [],
+    pessoas: composicao,
+  };
+  const r = compararGrupo(grupo, contatos, fonte);
+  // Marca o grupo quando a composição dependeu do conhecimento da IA (não 100% oficial).
+  const usouConhecimento = composicao.some((p) => p.origem === "conhecimento");
+  return usouConhecimento || !resolvida.url ? { ...r, viaPesquisaAmpla: true } : r;
 }
 
 function resumir(grupos: ResultadoGrupo[]): ResumoAnalise {

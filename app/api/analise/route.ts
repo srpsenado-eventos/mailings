@@ -3,7 +3,7 @@ import { analisar, type Dependencias } from "@/lib/analise";
 import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload";
 import { criarClienteServidor, resolverGrupoEFonte } from "@/lib/supabase";
 import { raspar } from "@/lib/scrape";
-import { extrairComposicao } from "@/lib/gemini";
+import { extrairComposicao, diagnosticarIa } from "@/lib/gemini";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -32,7 +32,10 @@ export async function POST(req: NextRequest) {
     };
 
     const resultado = await analisar(arquivoNome, contatos, deps);
-    return NextResponse.json({ ok: true, resultado });
+    // Diagnóstico temporário (não-PII): só roda com ?diag=1 (custo zero no fluxo normal).
+    const diag =
+      req.nextUrl.searchParams.get("diag") === "1" ? await diagnosticarIa() : undefined;
+    return NextResponse.json({ ok: true, resultado, ...(diag ? { diag } : {}) });
   } catch (err) {
     if (err instanceof PayloadInvalidoError) {
       return NextResponse.json({ ok: false, message: err.message }, { status: 422 });

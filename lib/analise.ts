@@ -1,33 +1,32 @@
 import type {
   ContatoPlanilha,
   ConteudoFonte,
+  PessoaSite,
   ResultadoAnalise,
   ResultadoGrupo,
   ResumoAnalise,
 } from "@/lib/types";
 import { agruparPorGrupo } from "@/lib/planilha";
-import { compararGrupo, compararGrupoAmplo, marcarFonteInacessivel } from "@/lib/match";
+import { compararGrupo, marcarFonteInacessivel } from "@/lib/match";
+import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { ScrapeError } from "@/lib/scrape";
 import type { FonteResolvida } from "@/lib/supabase";
-
-/**
- * Dependências injetadas no orquestrador. Permitem testar o pipeline sem rede
- * real e manter `lib/*` puro: a resolução de URL, o scraping, a pesquisa ampla
- * (2ª etapa) e o refino por IA são fornecidos de fora.
- */
-export interface Dependencias {
-  resolverFonte: (grupo: string) => Promise<FonteResolvida>;
-  raspar: (url: string) => Promise<ConteudoFonte>;
-  /** 2ª etapa (§7.3): composição atual via pesquisa ampla. `undefined` = indisponível. */
-  pesquisarAmpla: (grupoCanonico: string) => Promise<ConteudoFonte | undefined>;
-  /** Fase 2 (opcional): substitui as `pessoas` determinísticas por extração estruturada (Gemini). */
-  enriquecerPessoas?: (fonte: ConteudoFonte) => Promise<ConteudoFonte>;
-}
 
 function motivoDaFalha(err: unknown): string {
   if (err instanceof ScrapeError) return err.motivo;
   if (err instanceof Error) return err.message;
-  return "erro desconhecido";
+  return "fonte inacessível";
+}
+
+/**
+ * Dependências injetadas no orquestrador. Mantêm `lib/*` puro e testável: a
+ * resolução de URL, o scraping e a composição via IA (Camada B) vêm de fora.
+ */
+export interface Dependencias {
+  resolverFonte: (grupo: string) => Promise<FonteResolvida>;
+  raspar: (url: string) => Promise<ConteudoFonte>;
+  /** Camada B: composição via IA (texto raspado + conhecimento). `[]` = indisponível. */
+  extrairComposicao: (grupoCanonico: string, textoLimpo: string) => Promise<PessoaSite[]>;
 }
 
 async function analisarGrupo(
@@ -36,8 +35,7 @@ async function analisarGrupo(
   deps: Dependencias,
 ): Promise<ResultadoGrupo> {
   const resolvida = await deps.resolverFonte(grupo);
-  // Grupo desconhecido (nenhum cadastro casa) → sem fonte; orienta com sugestões
-  // (nomes cadastrados mais próximos) em vez de um beco sem saída.
+  // Grupo desconhecido (nenhum cadastro casa) → sem fonte; orienta com sugestões.
   if (!resolvida.grupoCanonico) {
     const base = compararGrupo(grupo, contatos, undefined);
     return resolvida.sugestoes.length > 0
@@ -45,38 +43,41 @@ async function analisarGrupo(
       : base;
   }
 
-  // Grupo casado mas sem URL oficial → tenta direto a 2ª etapa (pesquisa ampla).
-  if (!resolvida.url) {
-    const ampla = await deps.pesquisarAmpla(resolvida.grupoCanonico);
-    return ampla
-      ? compararGrupoAmplo(grupo, contatos, ampla)
-      : compararGrupo(grupo, contatos, undefined);
-  }
-
-  let fonte: ConteudoFonte;
-  try {
-    fonte = await deps.raspar(resolvida.url);
-  } catch (err) {
-    // Fonte cadastrada, mas inacessível (TLS, WAF, timeout, bloqueio de IP).
-    // 2ª etapa: tenta a composição atual por pesquisa ampla antes de desistir.
-    const ampla = await deps.pesquisarAmpla(resolvida.grupoCanonico);
-    if (ampla) return compararGrupoAmplo(grupo, contatos, ampla, resolvida.url);
-    return marcarFonteInacessivel(grupo, contatos, resolvida.url, motivoDaFalha(err));
-  }
-
-  // Fase 2 (opcional): troca as pessoas determinísticas pela extração estruturada
-  // do Gemini. Falha/ausência → mantém o determinístico (degrada em silêncio).
-  if (deps.enriquecerPessoas) {
+  // 1. Tenta raspar a URL oficial (se houver); falha → texto vazio (a IA completa).
+  let fonteRaspada: ConteudoFonte | undefined;
+  let motivoFalha = "fonte inacessível";
+  if (resolvida.url) {
     try {
-      fonte = await deps.enriquecerPessoas(fonte);
-    } catch {
-      // mantém as pessoas determinísticas
+      fonteRaspada = await deps.raspar(resolvida.url);
+    } catch (err) {
+      motivoFalha = motivoDaFalha(err);
     }
   }
+  const textoLimpo = fonteRaspada?.textoLimpo ?? "";
 
-  // A extração estruturada (Camada A + enriquecimento Gemini) já produz a comparação
-  // por campo definitiva; não há refino pós-comparação (ele mascarava divergências).
-  return compararGrupo(grupo, contatos, fonte);
+  // 2. Camada B: composição via IA (texto + conhecimento). Sem chave → [].
+  const pessoas = await deps.extrairComposicao(resolvida.grupoCanonico, textoLimpo);
+  if (pessoas.length > 0) {
+    const fonte: ConteudoFonte = {
+      url: resolvida.url ?? URL_PESQUISA_AMPLA,
+      textoLimpo,
+      destaques: [],
+      pessoas,
+    };
+    const r = compararGrupo(grupo, contatos, fonte);
+    // Marca o grupo quando a composição dependeu do conhecimento (não 100% oficial).
+    const usouConhecimento = pessoas.some((p) => p.origem === "conhecimento");
+    return usouConhecimento || !resolvida.url ? { ...r, viaPesquisaAmpla: true } : r;
+  }
+
+  // 3. Sem IA (ou IA vazia): usa o determinístico do scrape, se houve.
+  if (fonteRaspada) return compararGrupo(grupo, contatos, fonteRaspada);
+  // 4. Tinha URL mas não raspou e IA vazia → inacessível (com o motivo técnico).
+  if (resolvida.url) {
+    return marcarFonteInacessivel(grupo, contatos, resolvida.url, motivoFalha);
+  }
+  // 5. Sem URL e IA vazia → sem fonte.
+  return compararGrupo(grupo, contatos, undefined);
 }
 
 function resumir(grupos: ResultadoGrupo[]): ResumoAnalise {

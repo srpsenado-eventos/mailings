@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest";
 import {
   compararContato,
   compararGrupo,
-  compararGrupoAmplo,
   marcarFonteInacessivel,
   pontuarPessoa,
   sugerirGrupos,
@@ -197,25 +196,40 @@ describe("marcarFonteInacessivel", () => {
   });
 });
 
-describe("compararGrupoAmplo", () => {
-  test("marca viaPesquisaAmpla, origem pesquisa_ampla e preserva a URL oficial", () => {
-    const r = compararGrupoAmplo(
-      "ORG",
-      [contato({ nome: "Ana Maria Política Completa" })],
-      fonte,
-      "https://oficial.gov.br",
-    );
-    expect(r.viaPesquisaAmpla).toBe(true);
-    expect(r.semFonte).toBe(false);
-    expect(r.fonteUrl).toBe("https://oficial.gov.br");
-    expect(r.contatos[0].origem).toBe("pesquisa_ampla");
-    expect(r.contatos[0].semaforo).toBe("verde");
+describe("auditoria por campo (IA-first)", () => {
+  test("nome divergente do site é flagrado (site é parâmetro)", () => {
+    const f: ConteudoFonte = {
+      url: "https://x", textoLimpo: "", destaques: [],
+      pessoas: [{ nome: "Bruno Dantas", cargo: "Ministro", origem: "pagina" }],
+    };
+    const r = compararContato(contato({ nome: "Bruno Dantas Nascimento", cargo: "Ministro" }), f);
+    const nome = r.comparacoes.find((c) => c.campo === "nome");
+    expect(nome?.situacao).toBe("divergente");
+    expect(nome?.valorSite).toBe("Bruno Dantas");
+    expect(r.semaforo).toBe("amarelo");
   });
 
-  test("sem URL oficial, mantém a URL da fonte ampla", () => {
-    const r = compararGrupoAmplo("ORG", [contato({ nome: "Ana Maria Política Completa" })], fonte);
-    expect(r.fonteUrl).toBe(fonte.url);
-    expect(r.viaPesquisaAmpla).toBe(true);
+  test("endereço carrega a origem do dado (conhecimento → confira)", () => {
+    const f: ConteudoFonte = {
+      url: "https://x", textoLimpo: "", destaques: [],
+      pessoas: [{ nome: "Ana Lima", cargo: "Conselheira", endereco: "SAFS Q4", origem: "conhecimento" }],
+    };
+    const r = compararContato(contato({ nome: "Ana Lima", endereco: "Rua Antiga" }), f);
+    const end = r.comparacoes.find((c) => c.campo === "endereco");
+    expect(end?.situacao).toBe("divergente");
+    expect(end?.origemValor).toBe("conhecimento");
+    expect(r.origem).toBe("pesquisa_ampla"); // pessoa veio do conhecimento da IA
+  });
+
+  test("não casado → possivelSaida (não é 'fonte não informa')", () => {
+    const f: ConteudoFonte = {
+      url: "https://x", textoLimpo: "", destaques: [],
+      pessoas: [{ nome: "Outra Pessoa Qualquer", cargo: "X", origem: "pagina" }],
+    };
+    const r = compararContato(contato({ nome: "Zzz Inexistente Pessoa" }), f);
+    expect(r.possivelSaida).toBe(true);
+    expect(r.semaforo).toBe("vermelho");
+    expect(r.observacao).toMatch(/possível saída/i);
   });
 });
 

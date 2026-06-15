@@ -48,20 +48,6 @@ export function sugerirGrupos(
     .map((r) => r.nome);
 }
 
-/** Campos auditados contra a fonte. `site` devolve undefined quando a fonte não tem o dado. */
-interface CampoAuditado {
-  campo: string;
-  planilha: (c: ContatoPlanilha) => string | undefined;
-  site: (p: PessoaSite) => string | undefined;
-}
-
-const CAMPOS_AUDITADOS: CampoAuditado[] = [
-  { campo: "cargo", planilha: (c) => c.cargo, site: (p) => p.cargo },
-  { campo: "endereco", planilha: (c) => c.endereco, site: () => undefined },
-  { campo: "telefone", planilha: (c) => c.telefone, site: () => undefined },
-  { campo: "email", planilha: (c) => c.email, site: () => undefined },
-];
-
 function tokensNome(nome: string): string[] {
   return normalizarNome(nome)
     .split(" ")
@@ -145,12 +131,16 @@ function situacaoCampo(valorPlanilha: string, valorSite?: string): SituacaoCampo
   return "confere";
 }
 
-/** Monta o veredito de um contato contra a pessoa casada (ou nenhuma → vermelho). */
+/** Nome: o site é o parâmetro — confere só se igual normalizado. */
+function situacaoNome(planilha: string, site: string): SituacaoCampo {
+  return normalizarNome(planilha) === normalizarNome(site) ? "confere" : "divergente";
+}
+
+/** Monta o veredito de um contato contra a pessoa casada (ou nenhuma → possível saída). */
 function montarResultado(
   contato: ContatoPlanilha,
   pessoa: PessoaSite | undefined,
   score: number,
-  origem: OrigemVeredito,
   url?: string,
 ): ResultadoContato {
   if (!pessoa) {
@@ -160,21 +150,44 @@ function montarResultado(
       score,
       comparacoes: [],
       camposDivergentes: [{ campo: "nome", valorPlanilha: contato.nome }],
-      origem,
+      possivelSaida: true,
+      origem: "oficial",
       fonteUrl: url,
+      observacao: "Não consta na fonte (possível saída)",
     };
   }
-  const comparacoes: ComparacaoCampo[] = [];
-  for (const campo of CAMPOS_AUDITADOS) {
-    const valorPlanilha = campo.planilha(contato);
-    if (!valorPlanilha) continue; // nada a auditar neste campo
-    const valorSite = campo.site(pessoa);
+  const ov = pessoa.origem;
+  const origem: OrigemVeredito = pessoa.origem === "conhecimento" ? "pesquisa_ampla" : "oficial";
+  const comparacoes: ComparacaoCampo[] = [
+    {
+      campo: "nome",
+      valorPlanilha: contato.nome,
+      valorSite: pessoa.nome,
+      origemValor: ov,
+      situacao: situacaoNome(contato.nome, pessoa.nome),
+    },
+  ];
+  if (contato.cargo) {
     comparacoes.push({
-      campo: campo.campo,
-      valorPlanilha,
-      valorSite,
-      situacao: situacaoCampo(valorPlanilha, valorSite),
+      campo: "cargo",
+      valorPlanilha: contato.cargo,
+      valorSite: pessoa.cargo,
+      origemValor: ov,
+      situacao: situacaoCampo(contato.cargo, pessoa.cargo),
     });
+  }
+  if (contato.endereco) {
+    comparacoes.push({
+      campo: "endereco",
+      valorPlanilha: contato.endereco,
+      valorSite: pessoa.endereco,
+      origemValor: ov,
+      situacao: situacaoCampo(contato.endereco, pessoa.endereco),
+    });
+  }
+  for (const campo of ["telefone", "email"] as const) {
+    const v = contato[campo];
+    if (v) comparacoes.push({ campo, valorPlanilha: v, valorSite: undefined, situacao: "fonte_nao_informa" });
   }
   const camposDivergentes: CampoDivergente[] = comparacoes
     .filter((c) => c.situacao === "divergente")
@@ -183,14 +196,10 @@ function montarResultado(
   return { contato, semaforo, score, comparacoes, camposDivergentes, origem, fonteUrl: url };
 }
 
-export function compararContato(
-  contato: ContatoPlanilha,
-  fonte: ConteudoFonte,
-  origem: OrigemVeredito = "oficial",
-): ResultadoContato {
+export function compararContato(contato: ContatoPlanilha, fonte: ConteudoFonte): ResultadoContato {
   const { indice, score } = melhorPessoa(contato.nome, fonte.pessoas);
   const casou = indice >= 0 && score >= LIMIAR_PESSOA;
-  return montarResultado(contato, casou ? fonte.pessoas[indice] : undefined, score, origem, fonte.url);
+  return montarResultado(contato, casou ? fonte.pessoas[indice] : undefined, score, fonte.url);
 }
 
 /**
@@ -228,7 +237,6 @@ export function compararGrupo(
   grupo: string,
   contatos: ContatoPlanilha[],
   fonte: ConteudoFonte | undefined,
-  origem: OrigemVeredito = "oficial",
 ): ResultadoGrupo {
   if (!fonte) {
     return {
@@ -252,26 +260,10 @@ export function compararGrupo(
     const { indice, score } = melhorPessoa(c.nome, fonte.pessoas);
     const casou = indice >= 0 && score >= LIMIAR_PESSOA;
     if (casou) usados.add(indice);
-    return montarResultado(c, casou ? fonte.pessoas[indice] : undefined, score, origem, fonte.url);
+    return montarResultado(c, casou ? fonte.pessoas[indice] : undefined, score, fonte.url);
   });
   // "novos" só pessoas com cargo de autoridade — item de menu não tem cargo,
   // então fica de fora (reduz drasticamente o ruído de navegação).
   const novos = fonte.pessoas.filter((p, i) => !usados.has(i) && Boolean(p.cargo));
   return { grupo, fonteUrl: fonte.url, semFonte: false, contatos: resultados, novos };
-}
-
-/**
- * Compara o grupo contra a composição obtida pela 2ª etapa (pesquisa ampla via
- * Gemini), quando a fonte oficial estava inacessível/ausente. Marca o grupo e
- * cada veredito como `pesquisa_ampla` (complementar, não oficial) e preserva a
- * URL oficial (se houver) para o usuário conferir manualmente.
- */
-export function compararGrupoAmplo(
-  grupo: string,
-  contatos: ContatoPlanilha[],
-  fonteAmpla: ConteudoFonte,
-  urlOficial?: string,
-): ResultadoGrupo {
-  const base = compararGrupo(grupo, contatos, fonteAmpla, "pesquisa_ampla");
-  return { ...base, viaPesquisaAmpla: true, fonteUrl: urlOficial ?? base.fonteUrl };
 }

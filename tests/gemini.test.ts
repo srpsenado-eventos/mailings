@@ -1,10 +1,5 @@
 import { describe, expect, test, vi, beforeEach } from "vitest";
-import {
-  iaDisponivel,
-  pesquisarFonteAmpla,
-  extrairComposicaoGemini,
-  extrairJson,
-} from "@/lib/gemini";
+import { iaDisponivel, extrairComposicao, extrairJson } from "@/lib/gemini";
 
 describe("iaDisponivel", () => {
   beforeEach(() => {
@@ -39,63 +34,37 @@ describe("extrairJson", () => {
   });
 });
 
-describe("pesquisarFonteAmpla", () => {
+describe("extrairComposicao", () => {
   beforeEach(() => {
     delete process.env.ANTHROPIC_API_KEY;
   });
 
-  test("sem chave e sem cliente → undefined", async () => {
-    expect(await pesquisarFonteAmpla("CNJ")).toBeUndefined();
-  });
-
-  test("com cliente fake → ConteudoFonte com destaques e textoLimpo", async () => {
+  test("devolve pessoas com origem e endereço", async () => {
     const cliente = {
       gerarJson: vi.fn().mockResolvedValue([
-        { nome: "Ana Lima", cargo: "Conselheira" },
-        { nome: "Bruno Sá" },
+        { nome: "Ana Lima", cargo: "Conselheira", endereco: "Praça X", origem: "pagina" },
+        { nome: "Bruno Sá", cargo: "Conselheiro", origem: "conhecimento" },
       ]),
     };
-    const fonte = await pesquisarFonteAmpla("Conselho Nacional de Justiça (CNJ)", cliente);
-    if (!fonte) throw new Error("esperava ConteudoFonte");
-    expect(fonte.destaques).toEqual(["Ana Lima", "Bruno Sá"]);
-    expect(fonte.textoLimpo).toContain("Ana Lima, Conselheira.");
-    expect(fonte.textoLimpo).toContain("Bruno Sá.");
-    expect(fonte.pessoas).toEqual([
-      { nome: "Ana Lima", cargo: "Conselheira" },
-      { nome: "Bruno Sá", cargo: undefined },
+    const pessoas = await extrairComposicao("CNJ", "texto da página", cliente);
+    expect(pessoas).toEqual([
+      { nome: "Ana Lima", cargo: "Conselheira", endereco: "Praça X", origem: "pagina" },
+      { nome: "Bruno Sá", cargo: "Conselheiro", endereco: undefined, origem: "conhecimento" },
     ]);
   });
 
-  test("resposta sem pessoas → undefined", async () => {
-    const cliente = { gerarJson: vi.fn().mockResolvedValue([]) };
-    expect(await pesquisarFonteAmpla("X", cliente)).toBeUndefined();
-  });
-
-  test("falha do cliente → undefined (degrada)", async () => {
-    const cliente = { gerarJson: vi.fn().mockRejectedValue(new Error("cota")) };
-    expect(await pesquisarFonteAmpla("X", cliente)).toBeUndefined();
-  });
-});
-
-describe("extrairComposicaoGemini", () => {
-  beforeEach(() => {
-    delete process.env.ANTHROPIC_API_KEY;
-  });
-
-  test("converte texto raspado em pessoas estruturadas", async () => {
-    const cliente = {
-      gerarJson: vi.fn().mockResolvedValue([{ nome: "Ana Lima", cargo: "Conselheira" }]),
-    };
-    const pessoas = await extrairComposicaoGemini("...texto bagunçado...", cliente);
-    expect(pessoas).toEqual([{ nome: "Ana Lima", cargo: "Conselheira" }]);
+  test("origem inválida/ausente vira 'conhecimento'", async () => {
+    const cliente = { gerarJson: vi.fn().mockResolvedValue([{ nome: "Ana", cargo: "X" }]) };
+    const p = await extrairComposicao("G", "", cliente);
+    expect(p[0].origem).toBe("conhecimento");
   });
 
   test("sem chave e sem cliente → []", async () => {
-    expect(await extrairComposicaoGemini("x")).toEqual([]);
+    expect(await extrairComposicao("G", "txt")).toEqual([]);
   });
 
   test("falha do cliente → [] (degrada)", async () => {
     const cliente = { gerarJson: vi.fn().mockRejectedValue(new Error("cota")) };
-    expect(await extrairComposicaoGemini("x", cliente)).toEqual([]);
+    expect(await extrairComposicao("G", "txt", cliente)).toEqual([]);
   });
 });

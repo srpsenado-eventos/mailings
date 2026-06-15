@@ -3,20 +3,22 @@ import type { ResultadoAnalise, ResultadoContato } from "@/lib/types";
 
 /** Campos mostrados em pares de colunas planilha×site. */
 const CAMPOS = [
+  { campo: "nome", rotulo: "Nome" },
   { campo: "cargo", rotulo: "Cargo" },
   { campo: "endereco", rotulo: "Endereço" },
-  { campo: "telefone", rotulo: "Telefone" },
-  { campo: "email", rotulo: "E-mail" },
 ];
 
-/** Valor do site para um campo: o valor correto, "fonte não informa", ou vazio. */
+/** Valor do site para um campo: valor correto (com origem), "fonte não informa", ou vazio. */
 function valorSiteDe(c: ResultadoContato, campo: string): string {
   const comp = c.comparacoes.find((x) => x.campo === campo);
   if (!comp) return "";
-  return comp.situacao === "fonte_nao_informa" ? "fonte não informa" : comp.valorSite ?? "";
+  if (comp.situacao === "fonte_nao_informa") return "fonte não informa";
+  const v = comp.valorSite ?? "";
+  return v && comp.origemValor === "conhecimento" ? `${v} (via IA — confira)` : v;
 }
 
 function valorPlanilhaDe(c: ResultadoContato, campo: string): string {
+  if (campo === "nome") return c.contato.nome;
   return c.comparacoes.find((x) => x.campo === campo)?.valorPlanilha ?? "";
 }
 
@@ -26,8 +28,7 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
     for (const c of g.contatos) {
       const linha: Record<string, string> = {
         Grupo: g.grupo,
-        Nome: c.contato.nome,
-        Status: c.semaforo,
+        Status: c.possivelSaida ? "possível saída" : c.semaforo,
         Divergencias: c.camposDivergentes.map((d) => d.campo).join(", "),
         Origem: c.origem,
         Fonte: c.fonteUrl ?? "",
@@ -40,19 +41,26 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
       linhas.push(linha);
     }
     for (const novo of g.novos) {
+      const siteNome = novo.origem === "conhecimento" ? `${novo.nome} (via IA)` : novo.nome;
+      const siteCargo = novo.cargo
+        ? novo.origem === "conhecimento"
+          ? `${novo.cargo} (via IA)`
+          : novo.cargo
+        : "";
       const linha: Record<string, string> = {
         Grupo: g.grupo,
-        Nome: novo.nome,
         Status: "novo",
         Divergencias: "",
-        Origem: "oficial",
+        Origem: novo.origem === "conhecimento" ? "pesquisa_ampla" : "oficial",
         Fonte: g.fonteUrl ?? "",
-        Observacao: "Pessoa no site sem correspondência na planilha",
+        Observacao: "Pessoa na fonte sem correspondência na planilha",
+        "Nome (planilha)": "",
+        "Nome (site)": siteNome,
+        "Cargo (planilha)": "",
+        "Cargo (site)": siteCargo,
+        "Endereço (planilha)": "",
+        "Endereço (site)": novo.endereco ?? "",
       };
-      for (const f of CAMPOS) {
-        linha[`${f.rotulo} (planilha)`] = "";
-        linha[`${f.rotulo} (site)`] = f.campo === "cargo" ? novo.cargo ?? "" : "";
-      }
       linhas.push(linha);
     }
   }

@@ -10,12 +10,17 @@ const analise: ResultadoAnalise = {
       grupo: "ORG", fonteUrl: "https://orgao.gov.br", semFonte: false,
       contatos: [
         {
-          contato: { nome: "Ana", grupo: "ORG", cargo: "Presidente" },
+          contato: { nome: "Ana", grupo: "ORG", cargo: "Presidente", endereco: "Rua X" },
           semaforo: "amarelo", score: 0.7,
           comparacoes: [
-            { campo: "cargo", valorPlanilha: "Presidente", valorSite: "Diretor", situacao: "divergente" },
+            { campo: "nome", valorPlanilha: "Ana", valorSite: "Ana", situacao: "confere", origemValor: "pagina" },
+            { campo: "cargo", valorPlanilha: "Presidente", valorSite: "Diretor", situacao: "divergente", origemValor: "pagina" },
+            { campo: "endereco", valorPlanilha: "Rua X", valorSite: "SAFS Q4", situacao: "divergente", origemValor: "conhecimento" },
           ],
-          camposDivergentes: [{ campo: "cargo", valorPlanilha: "Presidente", valorEncontrado: "Diretor" }],
+          camposDivergentes: [
+            { campo: "cargo", valorPlanilha: "Presidente", valorEncontrado: "Diretor" },
+            { campo: "endereco", valorPlanilha: "Rua X", valorEncontrado: "SAFS Q4" },
+          ],
           origem: "oficial", fonteUrl: "https://orgao.gov.br",
         },
       ],
@@ -29,12 +34,15 @@ const analise: ResultadoAnalise = {
 };
 
 describe("resultadoParaLinhas", () => {
-  test("achata em colunas planilha×site por campo", () => {
+  test("achata em colunas planilha×site por campo (com origem do dado)", () => {
     const linhas = resultadoParaLinhas(analise);
     expect(linhas[0]).toMatchObject({
-      Grupo: "ORG", Nome: "Ana", Status: "amarelo",
+      Grupo: "ORG", Status: "amarelo",
       Fonte: "https://orgao.gov.br", Origem: "oficial",
+      "Nome (planilha)": "Ana", "Nome (site)": "Ana",
       "Cargo (planilha)": "Presidente", "Cargo (site)": "Diretor",
+      // endereço veio do conhecimento da IA → rotulado
+      "Endereço (planilha)": "Rua X", "Endereço (site)": "SAFS Q4 (via IA — confira)",
     });
     expect(linhas[0].Divergencias).toContain("cargo");
   });

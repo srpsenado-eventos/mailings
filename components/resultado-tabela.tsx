@@ -64,28 +64,42 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
               <th>Nome</th><th>Cargo</th><th>Divergências</th><th>Origem</th><th>Status</th>
             </tr></thead>
             <tbody>
-              {g.contatos.map((c, i) => (
-                <tr key={i} className="border-t">
-                  <td>{c.contato.nome}</td>
-                  <td>{c.contato.cargo ?? "—"}</td>
-                  <td>
-                    {c.camposDivergentes.length === 0
-                      ? "—"
-                      : c.camposDivergentes
-                          .map(
-                            (d) =>
-                              `${d.campo}: ${d.valorPlanilha ?? "—"} → ${d.valorEncontrado ?? "fonte não informa"}`,
-                          )
-                          .join("; ")}
-                  </td>
-                  <td>{c.origem === "pesquisa_ampla" ? "pesquisa ampla" : "oficial"}</td>
-                  <td><SemaforoBadge status={c.semaforo} /></td>
-                </tr>
-              ))}
+              {g.contatos.map((c, i) => {
+                const divs = c.comparacoes.filter((x) => x.situacao === "divergente");
+                return (
+                  <tr key={i} className="border-t">
+                    <td>{c.contato.nome}</td>
+                    <td>{c.contato.cargo ?? "—"}</td>
+                    <td>
+                      {c.possivelSaida
+                        ? "não consta na fonte"
+                        : divs.length === 0
+                          ? "—"
+                          : divs
+                              .map(
+                                (d) =>
+                                  `${d.campo}: ${d.valorPlanilha} → ${d.valorSite ?? "fonte não informa"}` +
+                                  (d.origemValor === "conhecimento" ? " (via IA — confira)" : ""),
+                              )
+                              .join("; ")}
+                    </td>
+                    <td>{c.origem === "pesquisa_ampla" ? "pesquisa ampla" : "oficial"}</td>
+                    <td>
+                      {c.possivelSaida ? (
+                        <span className="text-red-600">possível saída</span>
+                      ) : (
+                        <SemaforoBadge status={c.semaforo} />
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
               {g.novos.map((n, i) => (
                 <tr key={`novo-${i}`} className="border-t">
                   <td>{n.nome}</td>
-                  <td>{n.cargo ?? "—"}</td><td>—</td><td>oficial</td>
+                  <td>{n.cargo ?? "—"}</td>
+                  <td>—</td>
+                  <td>{n.origem === "conhecimento" ? "pesquisa ampla" : "oficial"}</td>
                   <td><SemaforoBadge status="novo" /></td>
                 </tr>
               ))}

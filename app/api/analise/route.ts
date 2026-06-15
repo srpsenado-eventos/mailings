@@ -3,7 +3,7 @@ import { analisar, type Dependencias } from "@/lib/analise";
 import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload";
 import { criarClienteServidor, resolverGrupoEFonte } from "@/lib/supabase";
 import { raspar } from "@/lib/scrape";
-import { pesquisarFonteAmpla, extrairComposicaoGemini } from "@/lib/gemini";
+import { extrairComposicao } from "@/lib/gemini";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -28,11 +28,7 @@ export async function POST(req: NextRequest) {
     const deps: Dependencias = {
       resolverFonte: (grupo) => resolverGrupoEFonte(supabase, grupo),
       raspar,
-      pesquisarAmpla: (grupoCanonico) => pesquisarFonteAmpla(grupoCanonico),
-      enriquecerPessoas: async (fonte) => {
-        const pessoas = await extrairComposicaoGemini(fonte.textoLimpo);
-        return pessoas.length > 0 ? { ...fonte, pessoas } : fonte;
-      },
+      extrairComposicao: (grupoCanonico, textoLimpo) => extrairComposicao(grupoCanonico, textoLimpo),
     };
 
     const resultado = await analisar(arquivoNome, contatos, deps);

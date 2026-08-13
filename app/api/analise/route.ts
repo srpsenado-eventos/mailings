@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analisar, type Dependencias } from "@/lib/analise";
 import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload";
-import { criarClienteServidor, resolverGrupoEFonte } from "@/lib/supabase";
+import { resolverGrupoEFonte } from "@/lib/catalogo";
 import { raspar } from "@/lib/scrape";
 import { extrairComposicao, diagnosticarIa } from "@/lib/gemini";
 
@@ -24,9 +24,8 @@ export async function POST(req: NextRequest) {
 
     const { arquivoNome, contatos } = parsePayloadAnalise(corpo);
 
-    const supabase = criarClienteServidor();
     const deps: Dependencias = {
-      resolverFonte: (grupo) => resolverGrupoEFonte(supabase, grupo),
+      resolverFonte: (grupo) => resolverGrupoEFonte(grupo),
       raspar,
       extrairComposicao: (grupoCanonico, textoLimpo) => extrairComposicao(grupoCanonico, textoLimpo),
     };

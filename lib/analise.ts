@@ -10,7 +10,7 @@ import { agruparPorGrupo } from "@/lib/planilha";
 import { compararGrupo, marcarFonteInacessivel, mesclarComposicao } from "@/lib/match";
 import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { ScrapeError } from "@/lib/scrape";
-import type { FonteResolvida } from "@/lib/supabase";
+import type { FonteResolvida } from "@/lib/catalogo";
 
 function motivoDaFalha(err: unknown): string {
   if (err instanceof ScrapeError) return err.motivo;
@@ -23,7 +23,8 @@ function motivoDaFalha(err: unknown): string {
  * resolução de URL, o scraping e a composição via IA (Camada B) vêm de fora.
  */
 export interface Dependencias {
-  resolverFonte: (grupo: string) => Promise<FonteResolvida>;
+  /** Resolve o rótulo da planilha para grupo canônico + URL oficial. Síncrono: lê o catálogo versionado. */
+  resolverFonte: (grupo: string) => FonteResolvida;
   raspar: (url: string) => Promise<ConteudoFonte>;
   /** Camada B: composição via IA (texto raspado + conhecimento). `[]` = indisponível. */
   extrairComposicao: (grupoCanonico: string, textoLimpo: string) => Promise<PessoaSite[]>;

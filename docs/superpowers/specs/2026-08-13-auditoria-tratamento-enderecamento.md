@@ -172,11 +172,11 @@ adição foi aditiva.
   geração de material, não auditoria — merece spec próprio.
 - **Aba "Tratamentos Convites"** (15 entradas). Fica disponível no XLSX para uma iteração
   futura que precise distinguir mailing de convite.
-- **`Regras de Atualizacao/e-mail orientacao.pdf`** — **não incorporado por não ter sido
-  lido**. É um PDF de imagem; o ambiente só dispõe de `pdftotext`, sem `pdfimages`/`pdftoppm`
-  para rasterizar as páginas. Se contiver regra que contradiga o que está aqui, este spec
-  precisa ser revisto. **Pendência com o Clovis:** colar o texto ou salvar as páginas como
-  imagem.
+- **`Regras de Atualizacao/e-mail orientacao.pdf`** — destina-se a outra finalidade, conforme
+  confirmado pelo Clovis em 2026-08-13. Não rege esta auditoria e não foi incorporado. (Nota
+  técnica, caso venha a ser necessário em outro contexto: é um PDF de imagem, e o ambiente só
+  dispõe de `pdftotext`, sem `pdfimages`/`pdftoppm` para rasterizar as páginas — ler o
+  conteúdo exigirá que o texto seja fornecido ou que as páginas venham como imagem.)
 
 ## Trade-offs aceitos
 

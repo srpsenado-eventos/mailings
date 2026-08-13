@@ -121,7 +121,7 @@ export interface ResultadoAnalise {
   resumo: ResumoAnalise;
 }
 
-/** Grupo cadastrado no Supabase com seus responsáveis e status de fonte (para a tela de visualização). */
+/** Grupo do catálogo com seus responsáveis e status de fonte (para a tela de visualização). */
 export interface GrupoCadastro {
   nome: string;
   responsavel1?: string;
@@ -133,4 +133,26 @@ export interface GrupoCadastro {
   /** URL oficial primária ativa, se houver. */
   fonteUrl?: string;
   temFonte: boolean;
+}
+
+/** Fonte oficial de um grupo no catálogo versionado (`data/catalogo.ts`). */
+export interface FonteCatalogo {
+  url: string;
+  ativo: boolean;
+}
+
+/**
+ * Grupo no catálogo versionado (`data/catalogo.ts`), com responsáveis internos
+ * e fontes oficiais. A **primeira fonte ativa da lista é a primária** — a ordem
+ * do array é significativa e substitui o `created_at` do antigo schema Postgres.
+ */
+export interface GrupoCatalogo {
+  nome: string;
+  responsavel1?: string;
+  responsavel2?: string;
+  backup?: string;
+  emailResp1?: string;
+  emailResp2?: string;
+  emailBackup?: string;
+  fontes: FonteCatalogo[];
 }

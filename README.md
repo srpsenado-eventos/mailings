@@ -15,7 +15,7 @@ Ferramenta interna do Senado Federal para auditar a base de autoridades do **Sis
 
 - **Frontend/runtime:** Next.js 15 (App Router) + TypeScript + Tailwind + shadcn/ui
 - **Hospedagem:** Vercel
-- **Banco:** Supabase (Postgres) — apenas catálogo de órgãos e URLs oficiais; **sem histórico de análises**
+- **Catálogo:** `data/catalogo.ts` — arquivo TypeScript versionado com os grupos e as URLs oficiais. **Sem banco de dados**; sem histórico de análises
 - **Planilha:** SheetJS
 - **Scraping:** `fetch` + `cheerio` + `@mozilla/readability` + `jsdom`
 - **Matching:** `fuse.js` + `string-similarity` (camada determinística) · Anthropic Claude Haiku (Camada B opcional: extração estruturada da composição)
@@ -23,34 +23,22 @@ Ferramenta interna do Senado Federal para auditar a base de autoridades do **Sis
 
 ## Setup local
 
-> Pré-requisitos: Node 20+, pnpm, conta Supabase, conta Vercel (para deploy).
+> Pré-requisitos: Node 20+.
 
 ```bash
-pnpm install
-cp .env.example .env.local
-# preencher .env.local com as chaves do Supabase
-```
-
-### Banco
-
-```bash
-# aplicar migrations e seed inicial de órgãos/URLs
-supabase db push
-psql "$DATABASE_URL" -f data/seed-orgaos.sql
-```
-
-### Dev
-
-```bash
-pnpm dev
+npm install
+npm run dev
 # abre em http://localhost:3000
 ```
+
+Não há banco para configurar nem variável de ambiente obrigatória.
 
 ### Testes
 
 ```bash
-pnpm test         # vitest watch
-pnpm test:ci      # uma rodada + cobertura
+npm test          # uma rodada
+npm run test:watch # vitest em watch
+npm run typecheck  # tsc --noEmit
 ```
 
 ## Variáveis de ambiente
@@ -59,16 +47,15 @@ Ver [.env.example](.env.example). Resumo:
 
 | Variável | Obrigatória? | Para que serve |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | sim | URL do projeto Supabase |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | sim | Chave pública do Supabase |
-| `SUPABASE_SERVICE_ROLE_KEY` | sim (server) | Chave de serviço para queries server-side |
 | `ANTHROPIC_API_KEY` | não | Ativa a Camada B (Claude Haiku): extração estruturada da composição. Sem ela, só a camada determinística roda. |
 
 ## Cadastro de URLs oficiais
 
-O cadastro das URLs por órgão é **manual**: o arquivo [data/seed-orgaos.sql](data/seed-orgaos.sql) é a fonte da verdade. Para adicionar um órgão novo, edite o seed (ou crie uma nova migration em `supabase/migrations/`) e aplique no banco.
+O cadastro das URLs por órgão é **manual**: o arquivo [data/catalogo.ts](data/catalogo.ts) é a fonte da verdade. Para adicionar um órgão novo, acrescente uma entrada no array e commite — o `tsc` valida no build. A primeira fonte com `ativo: true` é a primária do grupo.
 
 Por que manual? Cada URL oficial é checada antes de entrar — é o que garante que a comparação não vai trazer lixo de notícias, Wikipedia ou páginas antigas.
+
+> **Histórico:** `supabase/migrations/`, `data/*.sql` e `scripts/apply-migrations.mjs` são resquícios da fase em que o catálogo vivia num Postgres no Supabase. Ficam no repositório como registro de proveniência e **não fazem parte do caminho de execução**. Ver [o spec da migração](docs/superpowers/specs/2026-08-13-catalogo-em-arquivo-sem-banco.md).
 
 ## Escopo do MVP
 

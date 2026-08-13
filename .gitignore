@@ -8,3 +8,5 @@ coverage
 # Fixtures de teste sob tests/fixtures/ são permitidas.
 *.xlsx
 !tests/fixtures/*.xlsx
+# Tabela de protocolo: sem PII (só cargos e marcadores [Nome]); é a origem de data/tratamentos.ts
+!Regras de Atualizacao/Posse2027_TabelaTratamentos.xlsx

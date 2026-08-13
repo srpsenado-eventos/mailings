@@ -156,3 +156,19 @@ export interface GrupoCatalogo {
   emailBackup?: string;
   fontes: FonteCatalogo[];
 }
+
+/**
+ * Uma entrada da tabela de protocolo (`data/tratamentos.ts`), aba "Tratamentos Simplificado".
+ * Os textos são **padrões**, não valores literais: podem conter marcador de gênero `(a)`,
+ * alternativas ("ou", " / "), feminino por extenso entre parênteses e os placeholders
+ * `[Cargo]`, `[Patente]` e `[Nome]`. Ver lib/tratamento.ts para a expansão.
+ * `cargoDestinatario` é multilinha: a 1ª linha é o nome do cargo; as demais são notas
+ * entre parênteses ou listas de patentes ("- Almirante", "Ex.: Coronel, ...").
+ */
+export interface RegraTratamento {
+  cargoDestinatario: string;
+  nominata: string;
+  vocativo: string;
+  pronome: string;
+  enderecamento: string;
+}

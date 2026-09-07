@@ -29,7 +29,9 @@
 
 ## Estado de partida
 
-Branch `feat/mvp-fiscal`, commit `92cfae1`. Há mudanças não commitadas de uma sessão anterior que **fazem parte deste trabalho** e entram no commit da Task 2: `CLAUDE.md` reescrito, `.gitignore` ampliado, `.claude/settings.local.json` removido do índice (`git rm --cached`, já staged). Não reverter.
+Branch `feat/mvp-fiscal`, commit `6ca0fa6` (este plano). `.claude/settings.local.json` já saiu do controle de versão nesse commit. Há duas mudanças ainda não commitadas de uma sessão anterior que **fazem parte deste trabalho** e entram no commit da Task 2: `CLAUDE.md` reescrito e `.gitignore` ampliado. Não reverter.
+
+Pendência de segurança fora do escopo do plano: a senha do Postgres do Supabase antigo continua no histórico público do repositório. Rotacionar ou encerrar aquele projeto Supabase é decisão do Clovis.
 
 Suíte: 10 arquivos, 109 testes verdes. `npm run typecheck` limpo.
 
@@ -779,7 +781,7 @@ Expected: tudo verde. `tests/catalogo-dados.test.ts` passa com 34 grupos e 21 fo
 git add CLAUDE.md .gitignore lib/types.ts data/catalogo.ts lib/catalogo.ts lib/analise.ts app/grupos/page.tsx app/api/analise/route.ts tests/catalogo.test.ts tests/catalogo-dados.test.ts tests/analise.test.ts
 git commit -m "feat: catálogo com apelidos, faixa de país, grupo ignorado e várias fontes; responsáveis saem do repositório"
 ```
-(O `git rm --cached .claude/settings.local.json` já está staged e entra neste commit.)
+`CLAUDE.md` e `.gitignore` estão modificados desde a sessão anterior e entram aqui.
 
 ---
 

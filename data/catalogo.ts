@@ -192,7 +192,18 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp2: "agatha.assis@senado.leg.br",
     emailBackup: "thiago.pinto@senado.leg.br",
     fontes: [
-      { url: "https://www.gov.br/pt-br/orgaos-do-governo", ativo: true },
+      // Autorizada pelo Clovis em 2026-09-15, em troca de
+      // https://www.gov.br/pt-br/orgaos-do-governo, que lista MINISTÉRIOS e nunca teve
+      // os nomes: as 35 pastas passavam por composição real e os 38 ministros da
+      // planilha saíam todos como "possível saída".
+      //
+      // O caminho /planalto/ responde desafio antibot ao fetch do Node (HTTP 200 com
+      // CAPTCHA), embora o curl receba a página inteira do mesmo IP no mesmo minuto —
+      // impressão digital de cliente, como o Itamaraty. Até o Chromium da varredura
+      // entrar, o grupo sai "indeterminado / verificar à mão", que é o veredito
+      // honesto; o falso "possível saída" acabou. A página traz cargo numa linha e
+      // nome na seguinte, ordem coberta por tests/fixtures/ministros-estado.html.
+      { url: "https://www.gov.br/planalto/pt-br/conheca-a-presidencia/ministros-e-ministras", ativo: true },
     ],
   },
   {

@@ -78,7 +78,7 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
                           : divs
                               .map(
                                 (d) =>
-                                  `${d.campo}: ${d.valorPlanilha} → ${d.valorSite ?? "fonte não informa"}` +
+                                  `${d.campo}: ${d.valorPlanilha} → ${d.valorEsperado ?? "fonte não informa"}` +
                                   (d.origemValor === "conhecimento" ? " (via IA — confira)" : ""),
                               )
                               .join("; ")}

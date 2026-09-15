@@ -45,14 +45,14 @@ describe("compararContato (por campo)", () => {
     expect(r.comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("confere");
   });
 
-  test("cargo diferente → divergente com valorSite preenchido", () => {
+  test("cargo diferente → divergente com valorEsperado preenchido", () => {
     const r = compararContato(
       contato({ nome: "João Carlos Destaque", cargo: "Presidente" }),
       fonte,
     );
     const cargo = r.comparacoes.find((c) => c.campo === "cargo");
     expect(cargo?.situacao).toBe("divergente");
-    expect(cargo?.valorSite).toBe("Diretor");
+    expect(cargo?.valorEsperado).toBe("Diretor");
     expect(r.camposDivergentes.some((c) => c.campo === "cargo")).toBe(true);
     expect(r.semaforo).toBe("amarelo");
   });
@@ -206,7 +206,7 @@ describe("auditoria por campo (IA-first)", () => {
     const r = compararContato(contato({ nome: "Bruno Dantas Nascimento", cargo: "Ministro" }), f);
     const nome = r.comparacoes.find((c) => c.campo === "nome");
     expect(nome?.situacao).toBe("divergente");
-    expect(nome?.valorSite).toBe("Bruno Dantas");
+    expect(nome?.valorEsperado).toBe("Bruno Dantas");
     expect(r.semaforo).toBe("amarelo");
   });
 

@@ -13,9 +13,9 @@ const analise: ResultadoAnalise = {
           contato: { nome: "Ana", grupo: "ORG", cargo: "Presidente", endereco: "Rua X" },
           semaforo: "amarelo", score: 0.7,
           comparacoes: [
-            { campo: "nome", valorPlanilha: "Ana", valorSite: "Ana", situacao: "confere", origemValor: "pagina" },
-            { campo: "cargo", valorPlanilha: "Presidente", valorSite: "Diretor", situacao: "divergente", origemValor: "pagina" },
-            { campo: "endereco", valorPlanilha: "Rua X", valorSite: "SAFS Q4", situacao: "divergente", origemValor: "conhecimento" },
+            { campo: "nome", valorPlanilha: "Ana", valorEsperado: "Ana", situacao: "confere", origemValor: "pagina" },
+            { campo: "cargo", valorPlanilha: "Presidente", valorEsperado: "Diretor", situacao: "divergente", origemValor: "pagina" },
+            { campo: "endereco", valorPlanilha: "Rua X", valorEsperado: "SAFS Q4", situacao: "divergente", origemValor: "conhecimento" },
           ],
           camposDivergentes: [
             { campo: "cargo", valorPlanilha: "Presidente", valorEncontrado: "Diretor" },

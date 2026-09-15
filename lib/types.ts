@@ -14,8 +14,8 @@ export interface ContatoPlanilha {
   grupo: string;
 }
 
-/** Proveniência de um dado vindo da Camada B: lido da página ou do conhecimento do modelo. */
-export type OrigemDado = "pagina" | "conhecimento";
+/** Procedência do valor esperado: página oficial, conhecimento da IA, ou tabela de protocolo. */
+export type OrigemDado = "pagina" | "conhecimento" | "protocolo";
 
 /** Uma pessoa extraída (estruturada) da fonte oficial. */
 export interface PessoaSite {
@@ -47,15 +47,21 @@ export interface CampoDivergente {
   valorEncontrado?: string;
 }
 
-export type SituacaoCampo = "confere" | "divergente" | "fonte_nao_informa";
+/**
+ * `fonte_nao_informa` = o site não publica esse campo.
+ * `sem_regra` = não há regra de protocolo aplicável (cargo não mapeado, ou contato sem cargo).
+ * São coisas diferentes: a primeira é limite da fonte, a segunda é limite do cadastro de regras.
+ * Nenhuma das duas é divergência.
+ */
+export type SituacaoCampo = "confere" | "divergente" | "fonte_nao_informa" | "sem_regra";
 
 export interface ComparacaoCampo {
   campo: string;
   valorPlanilha: string;
-  /** Valor correto vindo do site (ausente quando a fonte não informa). */
-  valorSite?: string;
+  /** Valor correto — do site, da IA ou da tabela de protocolo. Ausente quando não há referência. */
+  valorEsperado?: string;
   situacao: SituacaoCampo;
-  /** Proveniência do valor do site (página oficial vs conhecimento da IA). */
+  /** Procedência do valor esperado (página oficial, conhecimento da IA ou tabela de protocolo). */
   origemValor?: OrigemDado;
 }
 

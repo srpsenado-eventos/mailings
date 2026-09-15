@@ -128,14 +128,14 @@ function rolesDe(valor: string): string[] {
  * (Presidente≠Vice-Presidente, Senador≠Ex-Senador). Sem palavra-chave de cargo,
  * cai na comparação por tokens.
  */
-function situacaoCampo(valorPlanilha: string, valorSite?: string): SituacaoCampo {
-  if (valorSite === undefined) return "fonte_nao_informa";
+function situacaoCampo(valorPlanilha: string, valorEsperado?: string): SituacaoCampo {
+  if (valorEsperado === undefined) return "fonte_nao_informa";
   const tp = tokensSignificativos(valorPlanilha);
-  const ts = tokensSignificativos(valorSite);
+  const ts = tokensSignificativos(valorEsperado);
   const rolesP = rolesDe(valorPlanilha);
 
   if (rolesP.length > 0) {
-    const rolesS = rolesDe(valorSite);
+    const rolesS = rolesDe(valorEsperado);
     // todo papel da planilha precisa estar confirmado na fonte
     if (!rolesP.every((r) => rolesS.includes(r))) return "divergente";
     // prefixo negante presente em só um dos lados → papéis diferentes
@@ -145,7 +145,7 @@ function situacaoCampo(valorPlanilha: string, valorSite?: string): SituacaoCampo
 
   // cargo sem papel conhecido → comparação por tokens (tolerante a fragmentos)
   if (tp.length === 0 || ts.length === 0) {
-    return normalizarTexto(valorPlanilha) === normalizarTexto(valorSite) ? "confere" : "divergente";
+    return normalizarTexto(valorPlanilha) === normalizarTexto(valorEsperado) ? "confere" : "divergente";
   }
   const [menor, maior] = tp.length <= ts.length ? [tp, ts] : [ts, tp];
   if (!menor.every((t) => maior.includes(t))) return "divergente";
@@ -184,7 +184,7 @@ function montarResultado(
     {
       campo: "nome",
       valorPlanilha: contato.nome,
-      valorSite: pessoa.nome,
+      valorEsperado: pessoa.nome,
       origemValor: ov,
       situacao: situacaoNome(contato.nome, pessoa.nome),
     },
@@ -193,7 +193,7 @@ function montarResultado(
     comparacoes.push({
       campo: "cargo",
       valorPlanilha: contato.cargo,
-      valorSite: pessoa.cargo,
+      valorEsperado: pessoa.cargo,
       origemValor: ov,
       situacao: situacaoCampo(contato.cargo, pessoa.cargo),
     });
@@ -202,18 +202,18 @@ function montarResultado(
     comparacoes.push({
       campo: "endereco",
       valorPlanilha: contato.endereco,
-      valorSite: pessoa.endereco,
+      valorEsperado: pessoa.endereco,
       origemValor: ov,
       situacao: situacaoCampo(contato.endereco, pessoa.endereco),
     });
   }
   for (const campo of ["telefone", "email"] as const) {
     const v = contato[campo];
-    if (v) comparacoes.push({ campo, valorPlanilha: v, valorSite: undefined, situacao: "fonte_nao_informa" });
+    if (v) comparacoes.push({ campo, valorPlanilha: v, valorEsperado: undefined, situacao: "fonte_nao_informa" });
   }
   const camposDivergentes: CampoDivergente[] = comparacoes
     .filter((c) => c.situacao === "divergente")
-    .map((c) => ({ campo: c.campo, valorPlanilha: c.valorPlanilha, valorEncontrado: c.valorSite }));
+    .map((c) => ({ campo: c.campo, valorPlanilha: c.valorPlanilha, valorEncontrado: c.valorEsperado }));
   const semaforo: Semaforo = camposDivergentes.length > 0 ? "amarelo" : "verde";
   return { contato, semaforo, score, comparacoes, camposDivergentes, origem, fonteUrl: url };
 }

@@ -8,12 +8,12 @@ const CAMPOS = [
   { campo: "endereco", rotulo: "Endereço" },
 ];
 
-/** Valor do site para um campo: valor correto (com origem), "fonte não informa", ou vazio. */
-function valorSiteDe(c: ResultadoContato, campo: string): string {
+/** Valor esperado de um campo: valor correto (com origem), "fonte não informa", ou vazio. */
+function valorEsperadoDe(c: ResultadoContato, campo: string): string {
   const comp = c.comparacoes.find((x) => x.campo === campo);
   if (!comp) return "";
   if (comp.situacao === "fonte_nao_informa") return "fonte não informa";
-  const v = comp.valorSite ?? "";
+  const v = comp.valorEsperado ?? "";
   return v && comp.origemValor === "conhecimento" ? `${v} (via IA — confira)` : v;
 }
 
@@ -36,7 +36,7 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
       };
       for (const f of CAMPOS) {
         linha[`${f.rotulo} (planilha)`] = valorPlanilhaDe(c, f.campo);
-        linha[`${f.rotulo} (site)`] = valorSiteDe(c, f.campo);
+        linha[`${f.rotulo} (site)`] = valorEsperadoDe(c, f.campo);
       }
       linhas.push(linha);
     }

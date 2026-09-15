@@ -96,11 +96,34 @@ function ehCargoCurto(valor: string): boolean {
   return norm.split(" ").filter(Boolean).length <= 8 && contemCargo(norm);
 }
 
+/** O léxico de cargos como conjunto, para comparar o primeiro token da linha. */
+const CARGOS_EM_TOKEN = new Set<string>(CARGOS);
+
+/**
+ * Linha ocupada por um cargo do primeiro ao último token, por mais longa que
+ * seja. A página de Ministros de Estado do Planalto publica títulos de dez
+ * tokens ("Ministra de Estado da Casa Civil da Presidência da República"): eles
+ * escapavam do limite de oito do rótulo curto e entravam na lista como se
+ * fossem gente. É o segundo token que separa este caso de "Ministro Edson
+ * Fachin" e de "Ministra Dra. Maria Elizabeth Guimarães Teixeira Rocha", em que
+ * o que vem depois do título é o nome da pessoa.
+ */
+function ehCargoPorInteiro(valor: string): boolean {
+  const tokens = normalizarTexto(valor).split(" ").filter(Boolean);
+  if (tokens.length < 2) return false;
+  return CARGOS_EM_TOKEN.has(tokens[0]) && ABERTURAS_DE_CARGO.has(tokens[1]);
+}
+
+/** Trecho que é cargo: rótulo curto do léxico ou título longo com complemento. */
+function ehTrechoDeCargo(valor: string): boolean {
+  return ehCargoCurto(valor) || ehCargoPorInteiro(valor);
+}
+
 /** Trecho com cara de nome próprio: 2+ tokens significativos, todos capitalizados. */
 function pareceNome(valor: string): boolean {
   if (valor.length < 5 || valor.length > 70) return false;
   if (valor.includes(":") || /\d/.test(valor)) return false;
-  if (ehRotulo(valor) || ehCargoCurto(valor)) return false;
+  if (ehRotulo(valor) || ehTrechoDeCargo(valor)) return false;
   const tokens = valor.split(" ").filter(Boolean);
   if (tokens.length < 2) return false;
   if (ABERTURAS_DE_CARGO.has(normalizarTexto(tokens[0]))) return false;
@@ -131,7 +154,7 @@ function ehNome(linha: string): boolean {
  * Fulano de Tal" contém "Ministro" e mesmo assim é a linha do nome.
  */
 function ehCargo(linha: string): boolean {
-  return ehCargoCurto(linha) && !ehNome(linha);
+  return ehTrechoDeCargo(linha) && !ehNome(linha);
 }
 
 /** Quebra o corpo em linhas limpas, inserindo separador entre blocos antes do .text(). */
@@ -169,14 +192,66 @@ function pessoaEmLinhaUnica(linha: string): PessoaSite | undefined {
   if (restantes.length === 0) return undefined;
   const nome = nomeDaLinha(restantes[0]);
   if (nome === undefined) return undefined;
-  const cargo = restantes.slice(1).find((parte) => ehCargoCurto(parte));
+  const cargo = restantes.slice(1).find((parte) => ehTrechoDeCargo(parte));
   if (!temOrdinal && cargo === undefined) return undefined;
   return { nome, cargo, contexto: linha };
 }
 
-/** Segmenta linhas em pessoas: linha-nome + cargo adjacente (janela curta). */
+/** De que lado da linha do nome a página publica o cargo. */
+type OrientacaoDoCargo = "depois" | "antes";
+
+/**
+ * Mede a própria página antes de montar as pessoas. STF, STJ, STM, TST, TSE,
+ * Câmara e Defensoria põem o nome primeiro e o cargo embaixo; a página de
+ * Ministros de Estado do Planalto faz o contrário — o cargo em negrito e o nome
+ * recuado na linha seguinte. Olhando só para frente, cada ministro herdava o
+ * cargo do ministro SEGUINTE, e um homem chegava a sair rotulado "Ministra".
+ * Vence o padrão majoritário da página; empate ou nenhuma adjacência mantém
+ * "depois", que é o comportamento já validado pelas outras fontes.
+ */
+function orientacaoDoCargo(linhas: string[]): OrientacaoDoCargo {
+  let antes = 0;
+  let depois = 0;
+  for (let i = 0; i < linhas.length; i++) {
+    if (pessoaEmLinhaUnica(linhas[i]) !== undefined) continue;
+    if (!ehNome(linhas[i])) continue;
+    if (i > 0 && ehCargo(linhas[i - 1])) antes++;
+    if (i + 1 < linhas.length && ehCargo(linhas[i + 1])) depois++;
+  }
+  return antes > depois ? "antes" : "depois";
+}
+
+/** Janela curta para frente: o cargo vem logo abaixo do nome. */
+function indiceDoCargoDepois(linhas: string[], i: number): number | undefined {
+  for (let j = i + 1; j < Math.min(i + 3, linhas.length); j++) {
+    // a linha da PRÓXIMA pessoa encerra a janela: no STJ ela cita um cargo
+    // ("Fulano - Diretor-Geral da ENFAM") e era adotada como cargo desta.
+    if (pessoaEmLinhaUnica(linhas[j]) !== undefined || ehNome(linhas[j])) break;
+    if (ehCargo(linhas[j])) return j;
+  }
+  return undefined;
+}
+
+/**
+ * Só a linha imediatamente anterior, e só enquanto nenhuma outra pessoa já a
+ * tiver tomado: numa página cargo-antes-do-nome um mesmo título não pode servir
+ * a dois nomes.
+ */
+function indiceDoCargoAntes(
+  linhas: string[],
+  i: number,
+  consumidas: ReadonlySet<number>,
+): number | undefined {
+  const j = i - 1;
+  if (j < 0 || consumidas.has(j)) return undefined;
+  return ehCargo(linhas[j]) ? j : undefined;
+}
+
+/** Segmenta linhas em pessoas: linha-nome + cargo adjacente, do lado que a página usa. */
 function segmentarPessoas(linhas: string[]): PessoaSite[] {
   const pessoas: PessoaSite[] = [];
+  const orientacao = orientacaoDoCargo(linhas);
+  const consumidas = new Set<number>();
   for (let i = 0; i < linhas.length; i++) {
     const emLinhaUnica = pessoaEmLinhaUnica(linhas[i]);
     if (emLinhaUnica) {
@@ -185,16 +260,12 @@ function segmentarPessoas(linhas: string[]): PessoaSite[] {
     }
     const nome = nomeDaLinha(linhas[i]);
     if (nome === undefined) continue;
-    let cargo: string | undefined;
-    for (let j = i + 1; j < Math.min(i + 3, linhas.length); j++) {
-      // a linha da PRÓXIMA pessoa encerra a janela: no STJ ela cita um cargo
-      // ("Fulano - Diretor-Geral da ENFAM") e era adotada como cargo desta.
-      if (pessoaEmLinhaUnica(linhas[j]) !== undefined || ehNome(linhas[j])) break;
-      if (ehCargo(linhas[j])) {
-        cargo = linhas[j];
-        break;
-      }
-    }
+    const indiceCargo =
+      orientacao === "antes"
+        ? indiceDoCargoAntes(linhas, i, consumidas)
+        : indiceDoCargoDepois(linhas, i);
+    if (indiceCargo !== undefined) consumidas.add(indiceCargo);
+    const cargo = indiceCargo === undefined ? undefined : linhas[indiceCargo];
     pessoas.push({ nome, cargo, contexto: linhas[i] });
   }
   return pessoas;

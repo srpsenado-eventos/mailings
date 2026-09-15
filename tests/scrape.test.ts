@@ -138,6 +138,18 @@ describe("extrairConteudo (portal com menu fora de <nav>, caso STM)", () => {
     expect(nomes).not.toContain("Governança e Gestão Estratégica");
   });
 
+  test("adota o cargo publicado ACIMA do nome (o STM também inverte a ordem)", () => {
+    // Arrange / Act
+    const c = extrairConteudo(htmlStm, "https://www.stm.jus.br/composicao-da-corte");
+
+    // Assert — a página põe "Presidente" na linha antes do nome; olhando só para
+    // frente, os 15 ministros saíam todos sem cargo
+    const porTrecho = (trecho: string) => c.pessoas.find((p) => p.nome.includes(trecho));
+    expect(porTrecho("Maria Elizabeth")?.cargo).toBe("Presidente");
+    expect(porTrecho("Francisco Joseli")?.cargo).toBe("Vice-presidente");
+    expect(porTrecho("Artur Vidigal")?.cargo).toBe("Ministro(a)");
+  });
+
   test("mantém a composição na ordem de dezenas, não de centenas", () => {
     // Arrange / Act
     const c = extrairConteudo(htmlStm, "https://www.stm.jus.br/composicao-da-corte");
@@ -175,6 +187,77 @@ describe("extrairConteudo (lista numerada, caso TST)", () => {
       "Corregedor-Geral da Justiça do Trabalho",
     );
     expect(porNome("Ives Gandra da Silva Martins Filho")?.cargo).toBeUndefined();
+  });
+});
+
+describe("extrairConteudo (cargo antes do nome, caso Ministros de Estado)", () => {
+  const htmlMinistros = readFileSync(resolve(__dirname, "fixtures/ministros-estado.html"), "utf-8");
+  const URL_MINISTROS =
+    "https://www.gov.br/planalto/pt-br/conheca-a-presidencia/ministros-e-ministras";
+
+  test("pareia o ministro com o cargo da linha anterior, não com o do ministro seguinte", () => {
+    // Arrange / Act
+    const c = extrairConteudo(htmlMinistros, URL_MINISTROS);
+
+    // Assert — olhando só para frente, cada nome herdava o cargo do próximo
+    const porNome = (nome: string) => c.pessoas.find((p) => p.nome === nome);
+    expect(porNome("Miriam Belchior")?.cargo).toBe(
+      "Ministra de Estado da Casa Civil da Presidência da República",
+    );
+    expect(porNome("André Carlos Alves de Paula Filho")?.cargo).toBe(
+      "Ministro de Estado da Agricultura e Pecuária",
+    );
+    expect(porNome("Antonio Vladimir Moura Lima")?.cargo).toBe("Ministro de Estado das Cidades");
+    expect(porNome("Luciana Barbosa de Oliveira Santos")?.cargo).toBe(
+      "Ministra de Estado da Ciência, Tecnologia e Inovação",
+    );
+  });
+
+  test("não atribui cargo de gênero trocado a quem está uma linha depois", () => {
+    // Arrange / Act
+    const c = extrairConteudo(htmlMinistros, URL_MINISTROS);
+
+    // Assert — "Antonio Vladimir Moura Lima || Ministra de ..." era o sintoma do erro de um
+    const vladimir = c.pessoas.find((p) => p.nome === "Antonio Vladimir Moura Lima");
+    expect(vladimir?.cargo).not.toMatch(/^Ministra\b/);
+    // o título dele na página é "Controladoria-Geral da União", que não está no
+    // léxico de cargos; o que não pode é herdar a Agricultura do ministro seguinte
+    const vinicius = c.pessoas.find((p) => p.nome === "Vinícius Marques de Carvalho");
+    expect(vinicius?.cargo ?? "").not.toMatch(/Agricultura/);
+  });
+
+  test("linha que é só cargo não entra como pessoa, por mais longa que seja", () => {
+    // Arrange / Act
+    const c = extrairConteudo(htmlMinistros, URL_MINISTROS);
+
+    // Assert — dez tokens escapavam do limite de oito do rótulo curto de cargo
+    const nomes = c.pessoas.map((p) => p.nome);
+    expect(nomes).not.toContain("Ministra de Estado da Casa Civil da Presidência da República");
+    expect(nomes.some((n) => /^Minist(ro|ra) de Estado/.test(n))).toBe(false);
+    expect(nomes.some((n) => /^Minist(ro|ra) d[aeo]/.test(n))).toBe(false);
+  });
+
+  test("extrai todos os ministros do recorte, com o cargo preenchido", () => {
+    // Arrange / Act
+    const c = extrairConteudo(htmlMinistros, URL_MINISTROS);
+
+    // Assert
+    const comCargoDeMinistro = c.pessoas.filter((p) => /^Minist(ro|ra) de Estado/.test(p.cargo ?? ""));
+    expect(comCargoDeMinistro.length).toBe(16);
+    const nomes = c.pessoas.map((p) => p.nome);
+    expect(nomes).toContain("Guilherme Castro Boulos");
+    expect(nomes).toContain("Leonardo Osvaldo Barchini Rosa");
+  });
+
+  test("não transforma item do menu do portal em pessoa", () => {
+    // Arrange / Act
+    const c = extrairConteudo(htmlMinistros, URL_MINISTROS);
+
+    // Assert
+    const nomes = c.pessoas.map((p) => p.nome);
+    expect(nomes).not.toContain("Estrutura da Presidência");
+    expect(nomes).not.toContain("Perfil Profissional");
+    expect(nomes).not.toContain("Ministros e Ministras");
   });
 });
 

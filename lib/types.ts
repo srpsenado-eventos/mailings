@@ -14,8 +14,23 @@ export interface ContatoPlanilha {
   grupo: string;
 }
 
-/** Procedência do valor esperado: página oficial, conhecimento da IA, ou tabela de protocolo. */
-export type OrigemDado = "pagina" | "conhecimento" | "protocolo";
+/**
+ * Procedência do valor esperado: página oficial, conhecimento da IA, tabela de protocolo,
+ * ou `coerencia` — a Camada A, que confronta campos do próprio contato entre si e por isso
+ * não tem valor esperado externo nenhum.
+ */
+export type OrigemDado = "pagina" | "conhecimento" | "protocolo" | "coerencia";
+
+/**
+ * Achado da Camada A (coerência interna de `Tratamento`, `Endereçamento` e `Cargo`).
+ * Identifica **qual** das quatro verificações apontou, já que as quatro recaem sobre
+ * apenas dois campos. `lib/tratamento.ts` traduz cada código com `rotuloAchado`.
+ */
+export type AchadoCoerencia =
+  | "genero_tratamento_enderecamento"
+  | "genero_cargo_tratamento"
+  | "forma_generica"
+  | "campo_vazio";
 
 /** Uma pessoa extraída (estruturada) da fonte oficial. */
 export interface PessoaSite {
@@ -63,6 +78,12 @@ export interface ComparacaoCampo {
   situacao: SituacaoCampo;
   /** Procedência do valor esperado (página oficial, conhecimento da IA ou tabela de protocolo). */
   origemValor?: OrigemDado;
+  /**
+   * Só na Camada A (`origemValor: "coerencia"`): qual verificação de coerência apontou.
+   * Ali não há `valorEsperado` — a contradição é entre campos do próprio contato, e dizer
+   * qual dos dois está certo seria adivinhação.
+   */
+  achado?: AchadoCoerencia;
 }
 
 export interface ResultadoContato {

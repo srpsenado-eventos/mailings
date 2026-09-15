@@ -2,7 +2,13 @@ import stringSimilarity from "string-similarity";
 import { normalizarTexto } from "@/lib/normalize";
 import { REGRAS_TRATAMENTO } from "@/data/tratamentos";
 import { EXCECOES_CARGO } from "@/data/cargos-tratamento";
-import type { ComparacaoCampo, ContatoPlanilha, RegraTratamento } from "@/lib/types";
+import { CARGOS_FEMININOS, CARGOS_MASCULINOS } from "@/lib/cargos";
+import type {
+  AchadoCoerencia,
+  ComparacaoCampo,
+  ContatoPlanilha,
+  RegraTratamento,
+} from "@/lib/types";
 
 /**
  * Passo 1 — alternativas separadas por "ou" numa linha isolada.
@@ -215,4 +221,149 @@ export function comparacoesProtocolo(
     compararCampoProtocolo("tratamento", contato.tratamento ?? "", regra?.vocativo, contato),
     compararCampoProtocolo("enderecamento", contato.enderecamento ?? "", regra?.enderecamento, contato),
   ];
+}
+
+// ---------------------------------------------------------------------------
+// Camada A — coerência interna de `Tratamento`, `Endereçamento` e `Cargo`.
+//
+// Não consulta a tabela de protocolo e não depende de resolver cargo, então vale para
+// todos os contatos, inclusive os que não resolvem para regra nenhuma — que, medido
+// contra a planilha real, é justamente onde moram os erros de gênero.
+// Ver docs/superpowers/specs/2026-09-15-auditoria-tratamento-correcao-de-alvo.md, Decisão 4.
+// ---------------------------------------------------------------------------
+
+type Genero = "masculino" | "feminino" | "indeterminado";
+
+/**
+ * Formas nominais de tratamento que marcam gênero. Só palavras que **distinguem**:
+ * "excelencia", "santidade" e "eminencia" valem para os dois e ficam de fora, assim como
+ * os artigos, que em "A Sua Excelência o Senhor" apareceriam nos dois gêneros na mesma
+ * linha. O sinal vem sempre do substantivo ou do adjetivo, nunca do artigo.
+ */
+const TRATAMENTOS_MASCULINOS = [
+  "senhor", "excelentissimo", "ilustrissimo", "magnifico",
+  "eminentissimo", "reverendissimo", "doutor", "dom",
+];
+
+const TRATAMENTOS_FEMININOS = [
+  "senhora", "excelentissima", "ilustrissima", "magnifica",
+  "eminentissima", "reverendissima", "doutora", "dona",
+];
+
+/** Marcador de forma genérica: `(a)`, `(o)`, `(as)`, `(os)` em qualquer posição. */
+const MARCADOR_GENERICO = /\((?:a|o|as|os)\)/i;
+
+function estaVazio(valor: string | undefined): boolean {
+  return (valor ?? "").trim().length === 0;
+}
+
+/**
+ * Forma que não compromete o gênero — "Senhor(a)", "A(o) Senhor(a)". Convite, cartão e
+ * cinta não podem sair assim, então é achado por si só.
+ */
+function formaGenerica(valor: string | undefined): boolean {
+  return MARCADOR_GENERICO.test(valor ?? "");
+}
+
+/**
+ * Gênero de um texto pelo léxico recebido. Separa em palavras quebrando também no hífen,
+ * para que "advogado-geral" entregue "advogado".
+ *
+ * Devolve `indeterminado` — que nunca vira acusação — em três casos: nenhuma palavra do
+ * léxico, palavras dos dois gêneros no mesmo texto (sinal ambíguo é sinal nenhum), ou
+ * forma genérica, cujo "Senhor(a)" traz "senhor" sem de fato afirmar o masculino.
+ */
+function generoPorLexico(
+  valor: string | undefined,
+  masculinos: readonly string[],
+  femininos: readonly string[],
+): Genero {
+  if (estaVazio(valor) || formaGenerica(valor)) return "indeterminado";
+  const palavras = new Set(normalizarTexto(valor ?? "").split(/[^a-z]+/).filter(Boolean));
+  const temMasculino = masculinos.some((p) => palavras.has(p));
+  const temFeminino = femininos.some((p) => palavras.has(p));
+  if (temMasculino === temFeminino) return "indeterminado";
+  return temMasculino ? "masculino" : "feminino";
+}
+
+const generoDaForma = (valor?: string): Genero =>
+  generoPorLexico(valor, TRATAMENTOS_MASCULINOS, TRATAMENTOS_FEMININOS);
+
+const generoDoCargo = (valor?: string): Genero =>
+  generoPorLexico(valor, CARGOS_MASCULINOS, CARGOS_FEMININOS);
+
+/** Dois gêneros se contradizem só quando ambos são conhecidos e diferentes. */
+function discordam(a: Genero, b: Genero): boolean {
+  return a !== "indeterminado" && b !== "indeterminado" && a !== b;
+}
+
+function achadoDe(
+  campo: "tratamento" | "enderecamento",
+  valorPlanilha: string,
+  achado: AchadoCoerencia,
+): ComparacaoCampo {
+  return {
+    campo,
+    valorPlanilha,
+    // Sem `valorEsperado`: a contradição é entre campos do próprio contato, e apontar
+    // qual dos dois está certo seria adivinhação. Quem corrige é o usuário.
+    situacao: "divergente",
+    origemValor: "coerencia",
+    achado,
+  };
+}
+
+/** Texto em português de cada achado, para a tela e para o export. */
+export function rotuloAchado(achado: AchadoCoerencia): string {
+  switch (achado) {
+    case "genero_tratamento_enderecamento":
+      return "gênero do Tratamento discorda do Endereçamento";
+    case "genero_cargo_tratamento":
+      return "gênero do Cargo discorda do Tratamento";
+    case "forma_generica":
+      return "forma genérica: falta o gênero da pessoa";
+    case "campo_vazio":
+      return "campo vazio";
+  }
+}
+
+/**
+ * Camada A: confronta `Tratamento`, `Endereçamento` e `Cargo` do contato entre si.
+ *
+ * Devolve **uma comparação por achado**, e nada quando o contato é coerente — `campo` pode
+ * repetir, porque as quatro verificações recaem sobre dois campos. Não emite `confere`:
+ * ausência de contradição interna não é confirmação de que o valor está certo, que é
+ * assunto da Camada B e do site.
+ *
+ * As duas verificações de gênero são ancoradas no campo `tratamento` e nomeiam o outro
+ * campo pelo `achado`, para que um achado seja uma linha só. Campo vazio é `divergente`,
+ * não `sem_regra`: não falta regra para julgá-lo — célula vazia gera convite sem
+ * tratamento, qualquer que seja a autoridade.
+ */
+export function comparacoesCoerencia(contato: ContatoPlanilha): ComparacaoCampo[] {
+  const tratamento = contato.tratamento ?? "";
+  const enderecamento = contato.enderecamento ?? "";
+  const achados: ComparacaoCampo[] = [];
+
+  if (estaVazio(tratamento)) {
+    achados.push(achadoDe("tratamento", tratamento, "campo_vazio"));
+  } else if (formaGenerica(tratamento)) {
+    achados.push(achadoDe("tratamento", tratamento, "forma_generica"));
+  } else {
+    const genero = generoDaForma(tratamento);
+    if (discordam(genero, generoDaForma(enderecamento))) {
+      achados.push(achadoDe("tratamento", tratamento, "genero_tratamento_enderecamento"));
+    }
+    if (discordam(genero, generoDoCargo(contato.cargo))) {
+      achados.push(achadoDe("tratamento", tratamento, "genero_cargo_tratamento"));
+    }
+  }
+
+  if (estaVazio(enderecamento)) {
+    achados.push(achadoDe("enderecamento", enderecamento, "campo_vazio"));
+  } else if (formaGenerica(enderecamento)) {
+    achados.push(achadoDe("enderecamento", enderecamento, "forma_generica"));
+  }
+
+  return achados;
 }

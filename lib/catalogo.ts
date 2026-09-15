@@ -21,10 +21,17 @@ const TAMANHO_MIN_SEGMENTO = 3;
 
 /** Casa um nome de grupo normalizado contra um segmento da planilha. */
 function casaSegmento(nomeNorm: string, seg: string): boolean {
+  if (seg.length < TAMANHO_MIN_SEGMENTO) return false; // guarda contra "pr" casar "presidente..."
+  if (nomeNorm === seg) return true;
   // Contenção: a sigla curta da planilha ("cnj") cabe no nome formal cadastrado
-  // ("conselho nacional de justica (cnj)"). Guarda de tamanho evita que pedaços
-  // de 1-2 letras casem grupos longos por engano (ex.: "pr" em "presidente...").
-  return seg.length >= TAMANHO_MIN_SEGMENTO && (nomeNorm === seg || nomeNorm.includes(seg));
+  // ("conselho nacional de justica (cnj)").
+  if (nomeNorm.includes(seg)) return true;
+  // Contenção ao contrário: o rótulo do Contatos é o nome cadastrado mais um
+  // qualificador no fim ("Presidente do Senado Federal" ↔ "Presidente do Senado").
+  // Exige o nome cadastrado NO COMEÇO do rótulo, seguido de espaço: sem isso
+  // "Vice-Presidente da República" casaria "Presidente da República", porque o
+  // nome cadastrado também é o fim do rótulo.
+  return seg.startsWith(`${nomeNorm} `);
 }
 
 /**

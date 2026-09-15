@@ -97,6 +97,25 @@ describe("buscarFontePrimaria", () => {
     expect(url).toBe("https://stf");
   });
 
+  test("rótulo da planilha com qualificador a mais casa o nome cadastrado", () => {
+    // O Contatos escreve "Presidente do Senado Federal"; o catálogo, "Presidente do
+    // Senado". A contenção só olhava o lado do catálogo e o contato caía em "grupo
+    // desconhecido", sem nem chegar a ser cobrado por falta de fonte.
+    const url = buscarFontePrimaria("Presidente do Senado Federal", [
+      grupoComFonte("Presidente do Senado", "https://senado"),
+    ]);
+    expect(url).toBe("https://senado");
+  });
+
+  test("nome cadastrado que é só o FIM do rótulo não casa", () => {
+    // "Vice-Presidente da República" termina em "Presidente da República". Casar aí
+    // mandaria o vice para a fonte do presidente.
+    const url = buscarFontePrimaria("Vice-Presidente da República", [
+      grupoComFonte("Presidente da República", "https://planalto"),
+    ]);
+    expect(url).toBeUndefined();
+  });
+
   test("segmento curto demais (<3) não casa por contenção", () => {
     // "PR" (2 letras) não pode casar "Presidente da República" só porque cabe dentro.
     const url = buscarFontePrimaria("PR", [grupoComFonte("Presidente da República", "https://planalto")]);

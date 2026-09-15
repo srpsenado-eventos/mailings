@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
 import { Agent } from "undici";
-import { normalizarTexto } from "@/lib/normalize";
+import { normalizarTexto, nucleoDeNome } from "@/lib/normalize";
 import { CARGOS } from "@/lib/cargos";
 import type { ConteudoFonte, PessoaSite } from "@/lib/types";
 
@@ -58,36 +58,87 @@ function ehErroDeCertificado(err: unknown): boolean {
 
 type RaizCheerio = ReturnType<typeof cheerio.load>;
 
-/** Tags cujo fim recebe quebra de linha, para o texto não "grudar" entre elementos. */
+/**
+ * Tags cujo começo e fim recebem quebra de linha, para o texto não "grudar"
+ * entre blocos. `strong` e `b` ficam DE FORA: o STJ marca em negrito só parte do
+ * nome ("<b>Marco Aurélio Bellizze</b> Oliveira") e separar por eles partia o
+ * nome em duas pessoas. Separar também no início do bloco preserva o CNJ, onde o
+ * nome vem num `strong` colado ao `span` do cargo.
+ */
 const TAGS_SEPARAR =
-  "p,li,div,tr,td,th,h1,h2,h3,h4,h5,h6,section,article,dt,dd,span,strong,b,a";
+  "p,li,div,tr,td,th,h1,h2,h3,h4,h5,h6,section,article,dt,dd,span,a";
 
 function ehRotulo(linha: string): boolean {
   return linha.endsWith(":") || /^(nascimento|ingresso|vaga|cep|telefone|cnpj|endere)/i.test(linha);
 }
 
-function ehCargo(linha: string): boolean {
-  const norm = normalizarTexto(linha);
-  if (norm.split(" ").length > 8) return false;
+const CONECTOR = /^(de|da|do|das|dos|e)$/i;
+
+/**
+ * Palavras que, abrindo o que sobra da linha depois do título, denunciam
+ * complemento de cargo e não nome próprio ("Ministro do Supremo Tribunal
+ * Federal", "Desembargador Federal Substituto").
+ */
+const ABERTURAS_DE_CARGO = new Set([
+  "de", "da", "do", "das", "dos", "e", "em", "no", "na", "nos", "nas",
+  "federal", "nacional", "geral", "regional", "militar", "eleitoral", "superior",
+  "titular", "substituto", "substituta", "interino", "interina", "adjunto", "adjunta",
+]);
+
+function contemCargo(valor: string): boolean {
+  const norm = normalizarTexto(valor);
   return CARGOS.some((c) => norm.includes(c));
 }
 
-function ehNome(linha: string): boolean {
-  if (linha.length < 5 || linha.length > 70) return false;
-  if (linha.includes(":") || /\d/.test(linha)) return false;
-  if (ehRotulo(linha) || ehCargo(linha)) return false;
-  const tokens = linha.split(" ").filter(Boolean);
+/** Trecho curto o bastante para ser rótulo de cargo, e que cita um cargo do léxico. */
+function ehCargoCurto(valor: string): boolean {
+  const norm = normalizarTexto(valor);
+  return norm.split(" ").filter(Boolean).length <= 8 && contemCargo(norm);
+}
+
+/** Trecho com cara de nome próprio: 2+ tokens significativos, todos capitalizados. */
+function pareceNome(valor: string): boolean {
+  if (valor.length < 5 || valor.length > 70) return false;
+  if (valor.includes(":") || /\d/.test(valor)) return false;
+  if (ehRotulo(valor) || ehCargoCurto(valor)) return false;
+  const tokens = valor.split(" ").filter(Boolean);
   if (tokens.length < 2) return false;
-  const conector = /^(de|da|do|das|dos|e)$/i;
-  const significativos = tokens.filter((t) => !conector.test(t));
+  if (ABERTURAS_DE_CARGO.has(normalizarTexto(tokens[0]))) return false;
+  const significativos = tokens.filter((t) => !CONECTOR.test(t));
   return significativos.length >= 2 && significativos.every((t) => /^[A-ZÀ-Ý]/.test(t));
+}
+
+/**
+ * O nome que a linha carrega, ou `undefined` se ela não for linha de pessoa.
+ * Vale a linha inteira quando ela já parece nome — é assim que sobrevive o nome
+ * parlamentar "Dr. Hiran", que a poda do tratamento reduziria a um token. Se não
+ * parecer, vale o NÚCLEO (sem título ou patente no começo, sem rótulo de ficha
+ * no fim): é o que recupera "Ministra Dra. Maria Elizabeth Guimarães Teixeira
+ * Rocha" e "Gen Ex Fulano de Tal", que o teste de cargo descartava inteiros.
+ */
+function nomeDaLinha(linha: string): string | undefined {
+  if (pareceNome(linha)) return linha;
+  const nucleo = nucleoDeNome(linha);
+  return pareceNome(nucleo) ? nucleo : undefined;
+}
+
+function ehNome(linha: string): boolean {
+  return nomeDaLinha(linha) !== undefined;
+}
+
+/**
+ * Linha que é PREDOMINANTEMENTE cargo. Conter um cargo não basta: "Ministro
+ * Fulano de Tal" contém "Ministro" e mesmo assim é a linha do nome.
+ */
+function ehCargo(linha: string): boolean {
+  return ehCargoCurto(linha) && !ehNome(linha);
 }
 
 /** Quebra o corpo em linhas limpas, inserindo separador entre blocos antes do .text(). */
 function extrairLinhas($: RaizCheerio): string[] {
   $("br").replaceWith("\n");
   $(TAGS_SEPARAR).each((_, el) => {
-    $(el).append("\n");
+    $(el).prepend("\n").append("\n");
   });
   return $("body")
     .text()
@@ -96,31 +147,111 @@ function extrairLinhas($: RaizCheerio): string[] {
     .filter((l) => l.length > 0);
 }
 
+/** Ordinal que abre a linha em lista numerada ("01 - Fulano de Tal"). */
+const ORDINAL = /^\d{1,3}[.\u00ba\u00b0]?$/;
+
+/**
+ * Pessoa cujo nome e cargo vêm na MESMA linha, separados por " - ": o TST publica
+ * "01 - Fulano de Tal - Presidente" e o STJ, "Fulano - Diretor-Geral da ENFAM".
+ * O dígito do ordinal reprovava a linha inteira no filtro de nome, e os 26
+ * ministros do TST saíam como "possível saída". Só vale como lista quando há
+ * ordinal ou quando a outra parte é mesmo um cargo — senão "Fale Conosco -
+ * Ouvidoria" viraria pessoa.
+ */
+function pessoaEmLinhaUnica(linha: string): PessoaSite | undefined {
+  const partes = linha
+    .split(/\s+-\s+/)
+    .map((parte) => parte.trim())
+    .filter(Boolean);
+  if (partes.length < 2) return undefined;
+  const temOrdinal = ORDINAL.test(partes[0]);
+  const restantes = temOrdinal ? partes.slice(1) : partes;
+  if (restantes.length === 0) return undefined;
+  const nome = nomeDaLinha(restantes[0]);
+  if (nome === undefined) return undefined;
+  const cargo = restantes.slice(1).find((parte) => ehCargoCurto(parte));
+  if (!temOrdinal && cargo === undefined) return undefined;
+  return { nome, cargo, contexto: linha };
+}
+
 /** Segmenta linhas em pessoas: linha-nome + cargo adjacente (janela curta). */
 function segmentarPessoas(linhas: string[]): PessoaSite[] {
   const pessoas: PessoaSite[] = [];
   for (let i = 0; i < linhas.length; i++) {
-    if (!ehNome(linhas[i])) continue;
+    const emLinhaUnica = pessoaEmLinhaUnica(linhas[i]);
+    if (emLinhaUnica) {
+      pessoas.push(emLinhaUnica);
+      continue;
+    }
+    const nome = nomeDaLinha(linhas[i]);
+    if (nome === undefined) continue;
     let cargo: string | undefined;
     for (let j = i + 1; j < Math.min(i + 3, linhas.length); j++) {
+      // a linha da PRÓXIMA pessoa encerra a janela: no STJ ela cita um cargo
+      // ("Fulano - Diretor-Geral da ENFAM") e era adotada como cargo desta.
+      if (pessoaEmLinhaUnica(linhas[j]) !== undefined || ehNome(linhas[j])) break;
       if (ehCargo(linhas[j])) {
         cargo = linhas[j];
         break;
       }
-      if (ehNome(linhas[j])) break;
     }
-    pessoas.push({ nome: linhas[i], cargo, contexto: linhas[i] });
+    pessoas.push({ nome, cargo, contexto: linhas[i] });
   }
   return pessoas;
+}
+
+/**
+ * Moldura da página: navegação, cabeçalho, rodapé e título. Links de menu (Title
+ * Case, multi-palavra) entram como falsas "pessoas" e, pior, dão à página a
+ * aparência de ter composição real — o que transforma quem a extração perdeu em
+ * "possível saída". Muitos portais (STM) não usam `nav`/`header`/`role`: o menu
+ * é um `div`/`ul` identificado só pela classe ou pelo id.
+ */
+const TAGS_MOLDURA = new Set(["nav", "header", "footer", "aside"]);
+const PAPEIS_MOLDURA = new Set(["navigation", "banner", "contentinfo", "menu", "menubar"]);
+
+/**
+ * Palavra de classe/id que denuncia moldura. Exige limite de palavra: no STJ o
+ * bloco que guarda os ministros se chama `idInterfaceVisualBlocoDeMenuBanners
+ * NavegacaoAplicacao` — casar "menu" no meio do nome apagaria a composição.
+ */
+const PALAVRAS_MOLDURA =
+  /(^|[^a-z])(menus?|nav|navbar|navigation|navegacao|breadcrumbs?|sitemap|off-?canvas|skip|page-title)([^a-z]|$)/i;
+
+/**
+ * Fração do texto da página acima da qual o bloco é a própria página, não a
+ * moldura. Protege contra o caso real do STM, em que o `body` inteiro leva a
+ * classe `off-canvas-menu-init`: sem o limite, a página sairia vazia.
+ */
+const MAX_FRACAO_MOLDURA = 0.8;
+
+function tamanhoDoTexto(texto: string): number {
+  return texto.replace(/\s+/g, " ").trim().length;
+}
+
+/** Remove os blocos de moldura, preservando qualquer bloco grande demais para ser moldura. */
+function removerMoldura($: RaizCheerio): void {
+  const total = tamanhoDoTexto($("body").text());
+  if (total === 0) return;
+  $("*").each((_, el) => {
+    const alvo = $(el);
+    const marcas = `${alvo.attr("class") ?? ""} ${alvo.attr("id") ?? ""}`;
+    const tag = "tagName" in el ? String(el.tagName).toLowerCase() : "";
+    const ehMoldura =
+      TAGS_MOLDURA.has(tag) ||
+      PAPEIS_MOLDURA.has((alvo.attr("role") ?? "").toLowerCase()) ||
+      PALAVRAS_MOLDURA.test(marcas);
+    if (!ehMoldura) return;
+    if (tamanhoDoTexto(alvo.text()) / total >= MAX_FRACAO_MOLDURA) return;
+    alvo.remove();
+  });
 }
 
 /** Extrai texto limpo + destaques + pessoas estruturadas de um HTML já baixado. Função pura. */
 export function extrairConteudo(html: string, url: string): ConteudoFonte {
   const $ = cheerio.load(html);
   $("script, style, noscript").remove();
-  // Remove navegação/cabeçalho/rodapé: links de menu (Title Case, multi-palavra)
-  // entravam como falsas "pessoas". O conteúdo de composição fica no corpo.
-  $("nav, header, footer, aside, [role=navigation], [role=banner], [role=contentinfo]").remove();
+  removerMoldura($);
 
   // destaques ANTES de mutar o DOM (extrairLinhas insere "\n").
   const destaquesBrutos: string[] = [];
@@ -167,11 +298,46 @@ async function baixarHtml(url: string, signal: AbortSignal): Promise<string> {
   }
 }
 
+const CHARSET_PADRAO = "utf-8";
+/** Quanto do começo do corpo é vasculhado atrás de um `<meta charset>`. */
+const BYTES_PARA_META = 4096;
+
+function charsetDeclarado(valor: string): string | undefined {
+  return /charset\s*=\s*"?([\w-]+)"?/i.exec(valor)?.[1];
+}
+
+function comoBytes(corpo: ArrayBuffer | Uint8Array): Uint8Array {
+  return corpo instanceof Uint8Array ? corpo : new Uint8Array(corpo);
+}
+
+/**
+ * Decodifica o corpo no charset que a fonte declara, no cabeçalho ou no `<meta>`,
+ * com UTF-8 como padrão. O STJ responde em ISO-8859-1 e sem `<meta charset>`: lido
+ * como UTF-8, "Luis Felipe Salomão" chega corrompido e nenhum nome acentuado casa
+ * a planilha. Função pura, para ser testável sem rede.
+ */
+export function decodificarCorpo(
+  corpo: ArrayBuffer | Uint8Array,
+  contentType?: string | null,
+): string {
+  const bytes = comoBytes(corpo);
+  const doCabecalho = charsetDeclarado(contentType ?? "");
+  const doMeta = doCabecalho
+    ? undefined
+    : charsetDeclarado(new TextDecoder("latin1").decode(bytes.subarray(0, BYTES_PARA_META)));
+  const charset = doCabecalho ?? doMeta ?? CHARSET_PADRAO;
+  try {
+    return new TextDecoder(charset).decode(bytes);
+  } catch {
+    return new TextDecoder(CHARSET_PADRAO).decode(bytes);
+  }
+}
+
 /** Uma requisição HTTP; lança ScrapeError em status não-OK. */
 async function requisitar(url: string, signal: AbortSignal, dispatcher?: Agent): Promise<string> {
   const opcoes: RequestInitComDispatcher = { signal, headers: HEADERS_NAVEGADOR };
   if (dispatcher) opcoes.dispatcher = dispatcher;
   const resp = await fetch(url, opcoes);
   if (!resp.ok) throw new ScrapeError(url, `HTTP ${resp.status}`);
-  return resp.text();
+  return decodificarCorpo(await resp.arrayBuffer(), resp.headers.get("content-type"));
 }

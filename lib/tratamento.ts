@@ -104,8 +104,67 @@ export function expandirFormas(padrao: string, contato: ContatoPlanilha): string
   return [...new Set(formas)];
 }
 
+// ---------------------------------------------------------------------------
+// Compartilhado pelas duas camadas.
+// ---------------------------------------------------------------------------
+
+/** Marcador de forma genérica: `(a)`, `(o)`, `(as)`, `(os)` em qualquer posição. */
+const MARCADOR_GENERICO = /\((?:a|o|as|os)\)/i;
+
+function estaVazio(valor: string | undefined): boolean {
+  return (valor ?? "").trim().length === 0;
+}
+
+/**
+ * Forma que não compromete o gênero — "Senhor(a)", "A(o) Senhor(a)". Convite, cartão e
+ * cinta não podem sair assim, então é achado por si só — da Camada A, que é quem acusa.
+ */
+function formaGenerica(valor: string | undefined): boolean {
+  return MARCADOR_GENERICO.test(valor ?? "");
+}
+
+// ---------------------------------------------------------------------------
+// Camada B — conformidade com a tabela de protocolo.
+// Ver docs/superpowers/specs/2026-09-15-auditoria-tratamento-correcao-de-alvo.md,
+// Decisões 1 a 3.
+// ---------------------------------------------------------------------------
+
 /** Abaixo disso o cargo é considerado não correspondente — vira `sem_regra`. */
 const LIMIAR_CARGO = 0.6;
+
+/**
+ * Vantagem mínima do primeiro colocado sobre o segundo na similaridade. Sem ela, devolve
+ * `undefined` — e `sem_regra` é melhor que uma regra errada, que não aparece na lista do
+ * que falta mapear.
+ *
+ * Medida contra os 329 contatos reais: os empates que hoje resolvem para a regra errada
+ * ficam todos em 0,116 ou menos ("Ministra do Supremo Tribunal Federal" → "Presidente do
+ * Supremo Tribunal Federal", margem 0,112, é o maior deles que o filtro de qualificador
+ * abaixo não pega). O acerto seguinte na escala está em 0,121, então 0,12 é o menor valor
+ * de dois decimais dentro da faixa vazia entre um e outro.
+ */
+const MARGEM_CARGO = 0.12;
+
+/**
+ * Palavras que mudam **quem** é a pessoa em relação ao titular do cargo. A similaridade de
+ * Dice não as enxerga: "Vice-Presidente do Supremo Tribunal Federal" fica a 0,930 de
+ * "Presidente do Supremo Tribunal Federal", margem larga o bastante para passar por
+ * qualquer limiar — e o vice herdaria o protocolo do titular.
+ *
+ * Por isso um candidato só concorre quando carrega exatamente os mesmos qualificadores do
+ * cargo da planilha: "Vice-Governador do Pará" casa "Vice-Governador" e não "Governador".
+ * Vale apenas na similaridade — casamento exato e `EXCECOES_CARGO` continuam vencendo.
+ */
+const QUALIFICADORES = [
+  "vice", "ex", "substituto", "substituta", "interino", "interina",
+  "adjunto", "adjunta", "suplente", "emerito", "emerita", "exercicio",
+];
+
+/** Assinatura de qualificadores de um texto, em ordem fixa, para comparação por igualdade. */
+function qualificadoresDe(texto: string): string {
+  const palavras = new Set(normalizarTexto(texto).split(/[^a-z]+/).filter(Boolean));
+  return QUALIFICADORES.filter((q) => palavras.has(q)).join(" ");
+}
 
 /** Fecho que a tabela usa para deixar a lista de exemplos aberta; não é cargo. */
 const FECHO_DE_LISTA = /^entre outros\b/;
@@ -141,10 +200,39 @@ function nomesCandidatos(regra: RegraTratamento): string[] {
   return [...new Set(linhasCandidatas(regra.cargoDestinatario).flatMap(porBarra))];
 }
 
+interface Candidato {
+  /** Nome do cargo já normalizado, pronto para a similaridade. */
+  readonly nome: string;
+  /** Assinatura de qualificadores do nome — ver `QUALIFICADORES`. */
+  readonly qualificacao: string;
+}
+
+/**
+ * Memória dos candidatos já derivados de cada regra. `resolverRegra` roda uma vez por
+ * contato sobre as mesmas 38 regras imutáveis; sem isto, a planilha de 329 linhas refaz o
+ * mesmo recorte de texto milhares de vezes. Chave fraca: nada é retido além das regras.
+ */
+const candidatosPorRegra = new WeakMap<RegraTratamento, readonly Candidato[]>();
+
+function candidatosDe(regra: RegraTratamento): readonly Candidato[] {
+  const memorizados = candidatosPorRegra.get(regra);
+  if (memorizados) return memorizados;
+  const candidatos = nomesCandidatos(regra).map((nome) => ({
+    nome: normalizarTexto(nome),
+    qualificacao: qualificadoresDe(nome),
+  }));
+  candidatosPorRegra.set(regra, candidatos);
+  return candidatos;
+}
+
 /**
  * Resolve o `Cargo` livre da planilha para uma entrada da tabela de protocolo.
- * Ordem: exceção manual → casamento exato normalizado → similaridade acima do limiar.
- * Nada correspondendo devolve `undefined` — o chamador marca `sem_regra`.
+ * Ordem: exceção manual → casamento exato normalizado → similaridade.
+ *
+ * A similaridade só conclui quando o melhor candidato passa do limiar **e** abre
+ * `MARGEM_CARGO` sobre o segundo colocado, e só concorrem candidatos com os mesmos
+ * qualificadores do cargo (nem vice nem ex herdam a regra do titular). Nada correspondendo
+ * devolve `undefined` — o chamador marca `sem_regra`, que é o resultado seguro.
  */
 export function resolverRegra(
   cargo?: string,
@@ -162,27 +250,94 @@ export function resolverRegra(
     return regras.find((r) => normalizarTexto(r.cargoDestinatario) === norm);
   }
 
-  const exata = regras.find((r) =>
-    nomesCandidatos(r).some((n) => normalizarTexto(n) === alvo),
-  );
+  const exata = regras.find((r) => candidatosDe(r).some((c) => c.nome === alvo));
   if (exata) return exata;
 
-  const pontuadas = regras.map((r) => ({
-    regra: r,
-    score: Math.max(
-      ...nomesCandidatos(r).map((n) => stringSimilarity.compareTwoStrings(alvo, normalizarTexto(n))),
-    ),
-  }));
-  const melhor = pontuadas.sort((a, b) => b.score - a.score)[0];
-  return melhor && melhor.score >= LIMIAR_CARGO ? melhor.regra : undefined;
+  const qualificacaoAlvo = qualificadoresDe(alvo);
+  const pontuadas = regras
+    .flatMap((r) => {
+      const nomes = candidatosDe(r).filter((c) => c.qualificacao === qualificacaoAlvo);
+      if (nomes.length === 0) return [];
+      return [{
+        regra: r,
+        score: Math.max(...nomes.map((c) => stringSimilarity.compareTwoStrings(alvo, c.nome))),
+      }];
+    })
+    .sort((a, b) => b.score - a.score);
+
+  const [melhor, segundo] = pontuadas;
+  if (!melhor || melhor.score < LIMIAR_CARGO) return undefined;
+  // Candidato único não tem com o que ser confundido: nada a desempatar.
+  if (segundo && melhor.score - segundo.score < MARGEM_CARGO) return undefined;
+  return melhor.regra;
 }
 
-/** Monta uma comparação de protocolo para um campo, dado o padrão da tabela. */
+/**
+ * Primeira linha do bloco de endereçamento — é só ela que o Sistema Contatos guarda na
+ * célula `Endereçamento`. As linhas 2 a 4 trazem nome, cargo e órgão: descrevem como montar
+ * a etiqueta, não o conteúdo do cadastro. (Decisão 1)
+ */
+export function linhaDeEnderecamento(enderecamento: string | undefined): string | undefined {
+  const linha = (enderecamento ?? "").split("\n")[0].trim();
+  return linha.length > 0 ? linha : undefined;
+}
+
+/** Palavra da família "Senhor", já sem o marcador de gênero: `Senhor`, `Senhora`, `Senhor(a)`. */
+const NUCLEO_NOMINAL = /^senhor(a)?$/;
+
+/**
+ * Corta o preâmbulo de endereçamento: tudo que vem antes da palavra da família "Senhor"
+ * ("A Sua Excelência o(a)", "Ao", "À", "Reverendíssimo") é fórmula de endereçamento, não
+ * forma nominal. `undefined` quando a linha não tem núcleo — o caso vira `sem_regra`.
+ */
+function cortarPreambulo(texto: string): string | undefined {
+  const tokens = texto.trim().split(/\s+/).filter(Boolean);
+  const i = tokens.findIndex((t) => NUCLEO_NOMINAL.test(normalizarTexto(t).replace(/\(a\)$/, "")));
+  return i === -1 ? undefined : tokens.slice(i).join(" ");
+}
+
+/**
+ * Alternativas completas de uma primeira linha. O parêntese precedido de espaço troca a
+ * linha **inteira**, não só a última palavra: em "Ao Senhor (À Senhora)" a forma feminina
+ * muda também a contração do artigo, e tratá-la como troca de palavra produziria
+ * "Ao À Senhora", reprovando um cadastro correto.
+ *
+ * O marcador de gênero colado — "Senhor(a)" — não é alternativa de linha e fica para
+ * `expandirFormas`.
+ */
+function alternativasDaLinha(linha: string): string[] {
+  const m = linha.match(/^(.*\S) \(([^)]+)\)$/);
+  if (!m) return [linha];
+  const [, antes, dentro] = m;
+  return [antes, dentro];
+}
+
+/**
+ * Núcleo nominal da primeira linha do endereçamento — o que a coluna `Tratamento` do
+ * Sistema Contatos guarda. "A Sua Excelência o(a) Senhor(a)" → "Senhor(a)";
+ * "Ao Senhor (À Senhora)" → "Senhor (Senhora)". (Decisão 2)
+ *
+ * O vocativo epistolar e o pronome da tabela não são auditados: a planilha não tem coluna
+ * que os guarde. `undefined` quando não há núcleo, e aí o campo vira `sem_regra`.
+ */
+export function formaNominal(primeiraLinha: string): string | undefined {
+  const nucleos = alternativasDaLinha(primeiraLinha).map(cortarPreambulo);
+  const [principal, alternativa] = nucleos;
+  if (principal === undefined) return undefined;
+  return alternativa === undefined ? principal : `${principal} (${alternativa})`;
+}
+
+/**
+ * Monta uma comparação de protocolo para um campo, dado o padrão da tabela.
+ * `exibicao` é o texto que vai para a tela como `valorEsperado`; separa-se do `padrao`
+ * porque a linha "Ao Senhor (À Senhora)" se compara como duas alternativas e se lê como uma.
+ */
 function compararCampoProtocolo(
   campo: "tratamento" | "enderecamento",
   valorPlanilha: string,
   padrao: string | undefined,
   contato: ContatoPlanilha,
+  exibicao: string | undefined = padrao,
 ): ComparacaoCampo {
   const semRegra: ComparacaoCampo = {
     campo,
@@ -190,6 +345,9 @@ function compararCampoProtocolo(
     situacao: "sem_regra",
     origemValor: "protocolo",
   };
+  // Forma genérica é achado da Camada A. Acusá-la aqui de novo duplicaria a linha amarela
+  // sobre a mesma célula, e "Senhor(a)" nunca casaria padrão nenhum.
+  if (formaGenerica(valorPlanilha)) return semRegra;
   if (!padrao || padrao.trim().length === 0) return semRegra;
 
   const aceitas = expandirFormas(padrao, contato);
@@ -200,14 +358,18 @@ function compararCampoProtocolo(
     campo,
     valorPlanilha,
     // A forma canônica da tabela orienta melhor que uma das variantes expandidas.
-    valorEsperado: padrao,
+    valorEsperado: exibicao,
     situacao,
     origemValor: "protocolo",
   };
 }
 
 /**
- * Auditoria de protocolo de um contato: tratamento (↔ vocativo epistolar) e endereçamento.
+ * Camada B: auditoria de protocolo de um contato. Os dois campos saem da **primeira linha**
+ * do bloco de endereçamento da regra — o endereçamento contra a linha inteira (Decisão 1),
+ * o tratamento contra o núcleo nominal dela (Decisão 2). O vocativo epistolar e o pronome
+ * da tabela não são auditados: a planilha não tem coluna que os guarde.
+ *
  * Independe do site — roda mesmo quando não há fonte oficial ou ela está inacessível.
  * Devolve sempre as duas comparações, nesta ordem, para que a cobertura seja visível:
  * `sem_regra` informa ao usuário quais cargos ainda faltam mapear.
@@ -217,9 +379,22 @@ export function comparacoesProtocolo(
   regras: readonly RegraTratamento[] = REGRAS_TRATAMENTO,
 ): ComparacaoCampo[] {
   const regra = resolverRegra(contato.cargo, regras);
+  const linha = linhaDeEnderecamento(regra?.enderecamento);
+  const alternativas = linha === undefined ? undefined : alternativasDaLinha(linha).join("\nou\n");
   return [
-    compararCampoProtocolo("tratamento", contato.tratamento ?? "", regra?.vocativo, contato),
-    compararCampoProtocolo("enderecamento", contato.enderecamento ?? "", regra?.enderecamento, contato),
+    compararCampoProtocolo(
+      "tratamento",
+      contato.tratamento ?? "",
+      linha === undefined ? undefined : formaNominal(linha),
+      contato,
+    ),
+    compararCampoProtocolo(
+      "enderecamento",
+      contato.enderecamento ?? "",
+      alternativas,
+      contato,
+      linha,
+    ),
   ];
 }
 
@@ -249,21 +424,6 @@ const TRATAMENTOS_FEMININOS = [
   "senhora", "excelentissima", "ilustrissima", "magnifica",
   "eminentissima", "reverendissima", "doutora", "dona",
 ];
-
-/** Marcador de forma genérica: `(a)`, `(o)`, `(as)`, `(os)` em qualquer posição. */
-const MARCADOR_GENERICO = /\((?:a|o|as|os)\)/i;
-
-function estaVazio(valor: string | undefined): boolean {
-  return (valor ?? "").trim().length === 0;
-}
-
-/**
- * Forma que não compromete o gênero — "Senhor(a)", "A(o) Senhor(a)". Convite, cartão e
- * cinta não podem sair assim, então é achado por si só.
- */
-function formaGenerica(valor: string | undefined): boolean {
-  return MARCADOR_GENERICO.test(valor ?? "");
-}
 
 /**
  * Gênero de um texto pelo léxico recebido. Separa em palavras quebrando também no hífen,

@@ -19,8 +19,19 @@ const fonte: ConteudoFonte = {
   ],
 };
 
+/**
+ * Contato de teste com `Tratamento` e `Endereçamento` coerentes e conformes à tabela de
+ * protocolo. A auditoria dos dois campos roda em todo contato, e célula vazia é achado
+ * por si só — sem eles, um teste que audita o site pintaria amarelo por outro motivo.
+ */
 function contato(p: Partial<ContatoPlanilha>): ContatoPlanilha {
-  return { nome: "", grupo: "ORG", ...p };
+  return {
+    nome: "",
+    grupo: "ORG",
+    tratamento: "Senhor",
+    enderecamento: "A Sua Excelência o Senhor",
+    ...p,
+  };
 }
 
 describe("pontuarPessoa", () => {

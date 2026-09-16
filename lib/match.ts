@@ -13,6 +13,7 @@ import type {
 } from "@/lib/types";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import { CARGOS } from "@/lib/cargos";
+import { comparacoesCoerencia, comparacoesProtocolo } from "@/lib/tratamento";
 
 const LIMIAR_PESSOA = 0.6;
 const LIMIAR_TOKEN = 0.85;
@@ -158,6 +159,28 @@ function situacaoNome(planilha: string, site: string): SituacaoCampo {
   return normalizarNome(planilha) === normalizarNome(site) ? "confere" : "divergente";
 }
 
+/**
+ * Auditoria de Tratamento e Endereçamento — Camada A (coerência interna do contato) e
+ * Camada B (conformidade com a tabela de protocolo). Nenhuma das duas depende do site,
+ * então valem nos quatro caminhos de veredito, inclusive naqueles em que a página não
+ * pôde ser lida ou o grupo não tem fonte cadastrada.
+ * Ver docs/superpowers/specs/2026-09-15-auditoria-tratamento-correcao-de-alvo.md.
+ */
+function comparacoesTratamento(contato: ContatoPlanilha): ComparacaoCampo[] {
+  return [...comparacoesCoerencia(contato), ...comparacoesProtocolo(contato)];
+}
+
+/**
+ * Divergências no formato do badge e do export. `fonte_nao_informa` e `sem_regra` ficam
+ * de fora de propósito: são limites da fonte e do cadastro de regras, não defeitos do
+ * contato, e por contrato não pintam amarelo.
+ */
+function divergenciasDe(comparacoes: readonly ComparacaoCampo[]): CampoDivergente[] {
+  return comparacoes
+    .filter((c) => c.situacao === "divergente")
+    .map((c) => ({ campo: c.campo, valorPlanilha: c.valorPlanilha, valorEncontrado: c.valorEsperado }));
+}
+
 /** Monta o veredito de um contato contra a pessoa casada (ou nenhuma → possível saída). */
 function montarResultado(
   contato: ContatoPlanilha,
@@ -166,12 +189,18 @@ function montarResultado(
   url?: string,
 ): ResultadoContato {
   if (!pessoa) {
+    // A auditoria de tratamento vale também para quem saiu: não depende da fonte, e o
+    // achado tem que chegar ao export junto com a possível saída, não no lugar dela.
+    const protocolo = comparacoesTratamento(contato);
     return {
       contato,
       semaforo: "vermelho",
       score,
-      comparacoes: [],
-      camposDivergentes: [{ campo: "nome", valorPlanilha: contato.nome }],
+      comparacoes: protocolo,
+      camposDivergentes: [
+        { campo: "nome", valorPlanilha: contato.nome },
+        ...divergenciasDe(protocolo),
+      ],
       possivelSaida: true,
       origem: "oficial",
       fonteUrl: url,
@@ -211,9 +240,10 @@ function montarResultado(
     const v = contato[campo];
     if (v) comparacoes.push({ campo, valorPlanilha: v, valorEsperado: undefined, situacao: "fonte_nao_informa" });
   }
-  const camposDivergentes: CampoDivergente[] = comparacoes
-    .filter((c) => c.situacao === "divergente")
-    .map((c) => ({ campo: c.campo, valorPlanilha: c.valorPlanilha, valorEncontrado: c.valorEsperado }));
+  comparacoes.push(...comparacoesTratamento(contato));
+  // Semáforo e divergências derivam de `comparacoes`: um achado de tratamento pinta
+  // amarelo sozinho, e nunca "possível saída" — esta só existe sem pessoa casada.
+  const camposDivergentes = divergenciasDe(comparacoes);
   const semaforo: Semaforo = camposDivergentes.length > 0 ? "amarelo" : "verde";
   return { contato, semaforo, score, comparacoes, camposDivergentes, origem, fonteUrl: url };
 }
@@ -241,16 +271,22 @@ export function marcarFonteInacessivel(
     semFonte: false,
     fonteInacessivel: true,
     erroFonte: motivo,
-    contatos: contatos.map((c) => ({
-      contato: c,
-      semaforo: "indeterminado" as Semaforo,
-      score: 0,
-      comparacoes: [],
-      camposDivergentes: [],
-      origem: "oficial" as const,
-      fonteUrl: url,
-      observacao: "Fonte cadastrada, mas inacessível — verifique manualmente",
-    })),
+    contatos: contatos.map((c) => {
+      // A página não pôde ser lida, mas Tratamento e Endereçamento continuam auditáveis.
+      // O semáforo segue "indeterminado": ele descreve a verificação contra o site, que
+      // de fato não aconteceu — as divergências, essas, precisam chegar ao export.
+      const protocolo = comparacoesTratamento(c);
+      return {
+        contato: c,
+        semaforo: "indeterminado" as Semaforo,
+        score: 0,
+        comparacoes: protocolo,
+        camposDivergentes: divergenciasDe(protocolo),
+        origem: "oficial" as const,
+        fonteUrl: url,
+        observacao: "Fonte cadastrada, mas inacessível — verifique manualmente",
+      };
+    }),
     novos: [],
   };
 }
@@ -264,15 +300,23 @@ export function compararGrupo(
     return {
       grupo,
       semFonte: true,
-      contatos: contatos.map((c) => ({
-        contato: c,
-        semaforo: "vermelho" as Semaforo,
-        score: 0,
-        comparacoes: [],
-        camposDivergentes: [{ campo: "fonte", valorPlanilha: "sem URL cadastrada" }],
-        origem: "oficial" as const,
-        observacao: "Grupo sem fonte oficial cadastrada",
-      })),
+      contatos: contatos.map((c) => {
+        // Sem URL cadastrada não há o que comparar com o site, mas o protocolo é
+        // auditável. O vermelho continua sendo do grupo (falta fonte), não do contato.
+        const protocolo = comparacoesTratamento(c);
+        return {
+          contato: c,
+          semaforo: "vermelho" as Semaforo,
+          score: 0,
+          comparacoes: protocolo,
+          camposDivergentes: [
+            { campo: "fonte", valorPlanilha: "sem URL cadastrada" },
+            ...divergenciasDe(protocolo),
+          ],
+          origem: "oficial" as const,
+          observacao: "Grupo sem fonte oficial cadastrada",
+        };
+      }),
       novos: [],
     };
   }

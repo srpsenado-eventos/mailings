@@ -2,9 +2,16 @@ import { describe, expect, test } from "vitest";
 import { analisar, type Dependencias } from "@/lib/analise";
 import type { ContatoPlanilha, ConteudoFonte } from "@/lib/types";
 
+/**
+ * `Tratamento` e `Endereçamento` coerentes e conformes: a auditoria dos dois campos roda
+ * em todo contato, e célula vazia é achado por si só — aqui o que está sob teste é a
+ * comparação com o site, não o cadastro de protocolo.
+ */
+const CADASTRO_OK = { tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" };
+
 const contatos: ContatoPlanilha[] = [
-  { nome: "Ana Maria Política Completa", grupo: "ORG" },
-  { nome: "Pessoa Sem Fonte", grupo: "SEM_FONTE" },
+  { nome: "Ana Maria Política Completa", grupo: "ORG", ...CADASTRO_OK },
+  { nome: "Pessoa Sem Fonte", grupo: "SEM_FONTE", ...CADASTRO_OK },
 ];
 
 const fonte: ConteudoFonte = {
@@ -137,7 +144,7 @@ describe("analisar", () => {
     };
     const r = await analisar(
       "c.xlsx",
-      [{ nome: "Ana Maria Política Completa", grupo: "ORG", cargo: "Presidente" }],
+      [{ nome: "Ana Maria Política Completa", grupo: "ORG", cargo: "Presidente", ...CADASTRO_OK }],
       depsIa,
     );
     const c = r.grupos[0].contatos[0];

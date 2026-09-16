@@ -1,25 +1,57 @@
 import * as XLSX from "xlsx";
-import type { ResultadoAnalise, ResultadoContato } from "@/lib/types";
+import { coerenciasVisiveis, rotuloAchado } from "@/lib/tratamento";
+import type { ComparacaoCampo, ResultadoAnalise, ResultadoContato } from "@/lib/types";
 
-/** Campos mostrados em pares de colunas planilha×site. */
+/**
+ * Campos mostrados em pares de colunas planilha × referência. O sufixo é fixo por campo:
+ * nome, cargo e endereço se conferem contra o site; tratamento e endereçamento, contra a
+ * tabela de protocolo. Fixo também garante o mesmo cabeçalho em todas as linhas do arquivo.
+ */
 const CAMPOS = [
-  { campo: "nome", rotulo: "Nome" },
-  { campo: "cargo", rotulo: "Cargo" },
-  { campo: "endereco", rotulo: "Endereço" },
+  { campo: "nome", rotulo: "Nome", referencia: "site" },
+  { campo: "cargo", rotulo: "Cargo", referencia: "site" },
+  { campo: "endereco", rotulo: "Endereço", referencia: "site" },
+  { campo: "tratamento", rotulo: "Tratamento", referencia: "protocolo" },
+  { campo: "enderecamento", rotulo: "Endereçamento", referencia: "protocolo" },
 ];
 
-/** Valor esperado de um campo: valor correto (com origem), "fonte não informa", ou vazio. */
+/**
+ * Comparação de valor de um campo. A linha de coerência é diagnóstico, não comparação:
+ * não tem `valorEsperado` e, se ocupasse o par de colunas, esconderia o valor do protocolo.
+ * Ela sai na coluna `Coerência`.
+ */
+function comparacaoDe(c: ResultadoContato, campo: string): ComparacaoCampo | undefined {
+  return c.comparacoes.find((x) => x.campo === campo && x.origemValor !== "coerencia");
+}
+
+/** Valor esperado de um campo: valor correto (com origem), aviso, ou vazio. */
 function valorEsperadoDe(c: ResultadoContato, campo: string): string {
-  const comp = c.comparacoes.find((x) => x.campo === campo);
+  const comp = comparacaoDe(c, campo);
   if (!comp) return "";
   if (comp.situacao === "fonte_nao_informa") return "fonte não informa";
+  if (comp.situacao === "sem_regra") return "sem regra de protocolo";
   const v = comp.valorEsperado ?? "";
   return v && comp.origemValor === "conhecimento" ? `${v} (via IA — confira)` : v;
 }
 
 function valorPlanilhaDe(c: ResultadoContato, campo: string): string {
   if (campo === "nome") return c.contato.nome;
-  return c.comparacoes.find((x) => x.campo === campo)?.valorPlanilha ?? "";
+  return comparacaoDe(c, campo)?.valorPlanilha ?? "";
+}
+
+/**
+ * Texto de um achado da Camada A. As duas verificações de gênero já nomeiam os dois campos
+ * no próprio rótulo, então dizer o campo de novo seria repetição ("gênero do Cargo discorda
+ * do Tratamento (Tratamento)"). Forma genérica e campo vazio valem para os dois campos e
+ * precisam dizer qual deles.
+ */
+function textoCoerencia(c: ComparacaoCampo): string {
+  const rotulo = rotuloAchado(c.achado!);
+  if (c.achado === "genero_tratamento_enderecamento" || c.achado === "genero_cargo_tratamento") {
+    return rotulo;
+  }
+  const nome = CAMPOS.find((f) => f.campo === c.campo)?.rotulo ?? c.campo;
+  return `${rotulo} (${nome})`;
 }
 
 export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, string>[] {
@@ -29,15 +61,16 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
       const linha: Record<string, string> = {
         Grupo: g.grupo,
         Status: c.possivelSaida ? "possível saída" : c.semaforo,
-        Divergencias: c.camposDivergentes.map((d) => d.campo).join(", "),
+        Divergencias: [...new Set(c.camposDivergentes.map((d) => d.campo))].join(", "),
         Origem: c.origem,
         Fonte: c.fonteUrl ?? "",
         Observacao: c.observacao ?? "",
       };
       for (const f of CAMPOS) {
         linha[`${f.rotulo} (planilha)`] = valorPlanilhaDe(c, f.campo);
-        linha[`${f.rotulo} (site)`] = valorEsperadoDe(c, f.campo);
+        linha[`${f.rotulo} (${f.referencia})`] = valorEsperadoDe(c, f.campo);
       }
+      linha["Coerência"] = coerenciasVisiveis(c.comparacoes).map(textoCoerencia).join("; ");
       linhas.push(linha);
     }
     for (const novo of g.novos) {
@@ -47,6 +80,11 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
           ? `${novo.cargo} (via IA)`
           : novo.cargo
         : "";
+      const siteDe: Record<string, string> = {
+        nome: siteNome,
+        cargo: siteCargo,
+        endereco: novo.endereco ?? "",
+      };
       const linha: Record<string, string> = {
         Grupo: g.grupo,
         Status: "novo",
@@ -54,13 +92,12 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
         Origem: novo.origem === "conhecimento" ? "pesquisa_ampla" : "oficial",
         Fonte: g.fonteUrl ?? "",
         Observacao: "Pessoa na fonte sem correspondência na planilha",
-        "Nome (planilha)": "",
-        "Nome (site)": siteNome,
-        "Cargo (planilha)": "",
-        "Cargo (site)": siteCargo,
-        "Endereço (planilha)": "",
-        "Endereço (site)": novo.endereco ?? "",
       };
+      for (const f of CAMPOS) {
+        linha[`${f.rotulo} (planilha)`] = "";
+        linha[`${f.rotulo} (${f.referencia})`] = siteDe[f.campo] ?? "";
+      }
+      linha["Coerência"] = "";
       linhas.push(linha);
     }
   }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { comparacoesCoerencia, rotuloAchado } from "@/lib/tratamento";
-import type { AchadoCoerencia, ContatoPlanilha } from "@/lib/types";
+import { coerenciasVisiveis, comparacoesCoerencia, rotuloAchado } from "@/lib/tratamento";
+import type { AchadoCoerencia, ComparacaoCampo, ContatoPlanilha } from "@/lib/types";
 
 /** Contato mínimo; cada teste sobrescreve só os campos que a verificação usa. */
 function contato(campos: Partial<ContatoPlanilha>): ContatoPlanilha {
@@ -379,5 +379,98 @@ describe("rotuloAchado", () => {
       "campo vazio",
     ]);
     expect(new Set(rotulos).size).toBe(todos.length);
+  });
+});
+
+describe("coerenciasVisiveis", () => {
+  const vazioCamadaA: ComparacaoCampo = {
+    campo: "tratamento",
+    valorPlanilha: "",
+    situacao: "divergente",
+    origemValor: "coerencia",
+    achado: "campo_vazio",
+  };
+
+  test("campo vazio some quando o protocolo diz o que deveria estar na célula", () => {
+    // Arrange
+    const comparacoes: ComparacaoCampo[] = [
+      vazioCamadaA,
+      {
+        campo: "tratamento",
+        valorPlanilha: "",
+        valorEsperado: "Excelentíssimo Senhor Ministro",
+        situacao: "divergente",
+        origemValor: "protocolo",
+      },
+    ];
+
+    // Act
+    const visiveis = coerenciasVisiveis(comparacoes);
+
+    // Assert
+    expect(visiveis).toEqual([]);
+  });
+
+  test("campo vazio permanece quando o cargo não tem regra de protocolo", () => {
+    // Arrange
+    const comparacoes: ComparacaoCampo[] = [
+      vazioCamadaA,
+      { campo: "tratamento", valorPlanilha: "", situacao: "sem_regra", origemValor: "protocolo" },
+    ];
+
+    // Act
+    const visiveis = coerenciasVisiveis(comparacoes);
+
+    // Assert
+    expect(visiveis).toHaveLength(1);
+    expect(visiveis[0].achado).toBe("campo_vazio");
+  });
+
+  test("achado de gênero nunca colapsa, mesmo com o protocolo divergindo no mesmo campo", () => {
+    // Arrange
+    const comparacoes: ComparacaoCampo[] = [
+      {
+        campo: "tratamento",
+        valorPlanilha: "Excelentíssimo Senhor",
+        situacao: "divergente",
+        origemValor: "coerencia",
+        achado: "genero_cargo_tratamento",
+      },
+      {
+        campo: "tratamento",
+        valorPlanilha: "Excelentíssimo Senhor",
+        valorEsperado: "Excelentíssima Senhora Ministra",
+        situacao: "divergente",
+        origemValor: "protocolo",
+      },
+    ];
+
+    // Act
+    const visiveis = coerenciasVisiveis(comparacoes);
+
+    // Assert
+    expect(visiveis).toHaveLength(1);
+    expect(visiveis[0].achado).toBe("genero_cargo_tratamento");
+  });
+
+  test("campo vazio de um campo não é colapsado pelo protocolo do outro campo", () => {
+    // Arrange
+    const comparacoes: ComparacaoCampo[] = [
+      { ...vazioCamadaA, campo: "enderecamento" },
+      {
+        campo: "tratamento",
+        valorPlanilha: "Senhor",
+        valorEsperado: "Excelentíssimo Senhor Ministro",
+        situacao: "divergente",
+        origemValor: "protocolo",
+      },
+    ];
+
+    // Act
+    const visiveis = coerenciasVisiveis(comparacoes);
+
+    // Assert
+    expect(visiveis).toHaveLength(1);
+    expect(visiveis[0].campo).toBe("enderecamento");
   });
 });

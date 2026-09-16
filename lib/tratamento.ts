@@ -488,6 +488,37 @@ export function rotuloAchado(achado: AchadoCoerencia): string {
 }
 
 /**
+ * Achados da Camada A que chegam ao usuário, depois do colapso da dupla acusação sobre a
+ * mesma célula (Decisão 1 da T6, Clovis 2026-09-16): quando a Camada B tem valor esperado
+ * para o campo, a linha `campo_vazio` some, porque a linha do protocolo já mostra a célula
+ * vazia e o texto que deveria estar nela. Sem regra aplicável (`sem_regra`) ela permanece,
+ * senão a célula vazia passaria batida.
+ *
+ * Os demais achados nunca colapsam: gênero e forma genérica são contradições internas que a
+ * Camada B não cobre, e a linha do protocolo não diz o que elas dizem.
+ *
+ * Apresentação apenas — `comparacoes` e `camposDivergentes` seguem intactos em `lib/match.ts`.
+ */
+export function coerenciasVisiveis(
+  comparacoes: readonly ComparacaoCampo[],
+): ComparacaoCampo[] {
+  const temValorDeProtocolo = (campo: string): boolean =>
+    comparacoes.some(
+      (c) =>
+        c.campo === campo &&
+        c.origemValor === "protocolo" &&
+        c.situacao === "divergente" &&
+        (c.valorEsperado ?? "").trim().length > 0,
+    );
+
+  return comparacoes.filter(
+    (c) =>
+      c.origemValor === "coerencia" &&
+      !(c.achado === "campo_vazio" && temValorDeProtocolo(c.campo)),
+  );
+}
+
+/**
  * Camada A: confronta `Tratamento`, `Endereçamento` e `Cargo` do contato entre si.
  *
  * Devolve **uma comparação por achado**, e nada quando o contato é coerente — `campo` pode

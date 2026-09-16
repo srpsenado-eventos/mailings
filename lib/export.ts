@@ -1,18 +1,20 @@
 import * as XLSX from "xlsx";
-import { coerenciasVisiveis, rotuloAchado } from "@/lib/tratamento";
+import { coerenciasVisiveis, textoCoerencia, ROTULOS_CAMPO_TRATAMENTO } from "@/lib/tratamento";
 import type { ComparacaoCampo, ResultadoAnalise, ResultadoContato } from "@/lib/types";
 
 /**
  * Campos mostrados em pares de colunas planilha × referência. O sufixo é fixo por campo:
  * nome, cargo e endereço se conferem contra o site; tratamento e endereçamento, contra a
  * tabela de protocolo. Fixo também garante o mesmo cabeçalho em todas as linhas do arquivo.
+ * Os rótulos de tratamento e endereçamento vêm de `lib/tratamento.ts`, que também os usa
+ * para nomear o campo no texto de um achado de coerência — um só lugar para os dois nomes.
  */
 const CAMPOS = [
   { campo: "nome", rotulo: "Nome", referencia: "site" },
   { campo: "cargo", rotulo: "Cargo", referencia: "site" },
   { campo: "endereco", rotulo: "Endereço", referencia: "site" },
-  { campo: "tratamento", rotulo: "Tratamento", referencia: "protocolo" },
-  { campo: "enderecamento", rotulo: "Endereçamento", referencia: "protocolo" },
+  { campo: "tratamento", rotulo: ROTULOS_CAMPO_TRATAMENTO.tratamento, referencia: "protocolo" },
+  { campo: "enderecamento", rotulo: ROTULOS_CAMPO_TRATAMENTO.enderecamento, referencia: "protocolo" },
 ];
 
 /**
@@ -37,21 +39,6 @@ function valorEsperadoDe(c: ResultadoContato, campo: string): string {
 function valorPlanilhaDe(c: ResultadoContato, campo: string): string {
   if (campo === "nome") return c.contato.nome;
   return comparacaoDe(c, campo)?.valorPlanilha ?? "";
-}
-
-/**
- * Texto de um achado da Camada A. As duas verificações de gênero já nomeiam os dois campos
- * no próprio rótulo, então dizer o campo de novo seria repetição ("gênero do Cargo discorda
- * do Tratamento (Tratamento)"). Forma genérica e campo vazio valem para os dois campos e
- * precisam dizer qual deles.
- */
-function textoCoerencia(c: ComparacaoCampo): string {
-  const rotulo = rotuloAchado(c.achado!);
-  if (c.achado === "genero_tratamento_enderecamento" || c.achado === "genero_cargo_tratamento") {
-    return rotulo;
-  }
-  const nome = CAMPOS.find((f) => f.campo === c.campo)?.rotulo ?? c.campo;
-  return `${rotulo} (${nome})`;
 }
 
 export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, string>[] {

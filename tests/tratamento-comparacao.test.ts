@@ -386,3 +386,100 @@ describe("comparacoesProtocolo — contrato", () => {
     expect(original).toEqual(copia);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Guarda-corpo contra a tabela REAL (`REGRAS_TRATAMENTO`, sem injeção).
+//
+// Os testes acima usam micro-tabelas injetadas de uma ou duas regras: corretos, mas
+// sintéticos — "vice não herda a regra do titular" passaria mesmo sem `MARGEM_CARGO`,
+// porque o filtro de qualificador já esvazia a lista de candidatos. Contra as ~38 regras
+// reais, `LIMIAR_CARGO` (0,6) e `MARGEM_CARGO` (0,12) foram calibrados com folga medida de
+// só 0,001 e 0,031 (ver docs/superpowers/specs), e o "Pós-implementação" do plano convida
+// a mexer nelas depois do merge. Isto fixa o comportamento ATUAL da resolução, incluindo
+// casos em que `sem_regra` é o resultado seguro e não o desejável — se alguém melhorar a
+// resolução de cargo, é esperado que alguns destes testes mudem, e a mudança tem que ser
+// deliberada, não um efeito colateral silencioso.
+//
+// Os números de cada comentário foram medidos diretamente contra `REGRAS_TRATAMENTO`
+// nesta revisão (2026-09-16), reproduzindo a lógica de `resolverRegra` (candidato só
+// concorre com a mesma assinatura de qualificador do alvo, e o score é o maior entre as
+// formas candidatas de cada regra). Duas das seis previsões do brief da revisão final não
+// bateram com o código: ver o relatório da correção para o detalhe.
+describe("resolverRegra — tabela real, sem tabela injetada (guarda-corpo)", () => {
+  test("'Presidente da República' cai em sem_regra: margem curta demais sobre o 2º colocado", () => {
+    // Medido: 1º "Presidente de empresa pública" 0,756; 2º "Presidente da República
+    // Federativa do Brasil" 0,690; margem 0,066, abaixo de MARGEM_CARGO (0,12). É o caso
+    // mais perigoso da tabela: "Presidente de empresa pública" endereça "Ao Senhor (À
+    // Senhora)", não "A Sua Excelência", e o contato é o mais importante da Posse.
+    expect(resolverRegra("Presidente da República")).toBeUndefined();
+  });
+
+  test("'Ministro do Supremo Tribunal Federal' cai em sem_regra: quase confunde com a Presidência do STF", () => {
+    // Medido: 1º "Presidente do Supremo Tribunal Federal" 0,719; 2º "Ministro de Tribunal
+    // Superior" 0,679; margem 0,040, abaixo de MARGEM_CARGO.
+    expect(resolverRegra("Ministro do Supremo Tribunal Federal")).toBeUndefined();
+  });
+
+  test("'Ex-Presidente do Senado Federal' cai em sem_regra: nenhuma regra real tem qualificador 'ex'", () => {
+    // A tabela real não tem nenhuma entrada cujo cargo carregue o qualificador "ex" (só
+    // "Demais patentes militares" cita "Ex.:" como abertura de lista de exemplos, o que não
+    // é qualificador de titularidade). O filtro de qualificador (`QUALIFICADORES`) esvazia
+    // a lista de candidatos antes mesmo de calcular similaridade — `melhor` fica undefined.
+    expect(resolverRegra("Ex-Presidente do Senado Federal")).toBeUndefined();
+  });
+
+  test("'Vice-Presidente do Superior Tribunal Militar' cai em sem_regra: fica abaixo do piso de similaridade, não da margem", () => {
+    // Medido: o único candidato qualificado como "vice" com score relevante é
+    // "Vice-Presidente da República Federativa do Brasil", a 0,488 — abaixo de LIMIAR_CARGO
+    // (0,6). A margem sobre o 2º colocado ("Militares com patente superior", via
+    // "Vice-Almirante") é 0,142, folgada — quem barra aqui é o piso de similaridade, não a
+    // margem. Divergência do relatório da revisão final registrada abaixo.
+    expect(resolverRegra("Vice-Presidente do Superior Tribunal Militar")).toBeUndefined();
+  });
+
+  test("'Deputado Federal' cai em sem_regra: empate exato entre as duas variantes de Senador/Deputado", () => {
+    // Medido: "Senador / Deputado Federal (com cargo)" e "Senador / Deputado Federal (sem
+    // cargo)" empatam em 0,737 cada — margem 0,000 entre o 1º e o 2º colocados, os dois
+    // vindos de regras diferentes. "Presidente do Congresso Nacional / Senado Federal" fica
+    // em 3º lugar, a 0,692, fora da disputa. Divergência do relatório da revisão final
+    // registrada abaixo.
+    expect(resolverRegra("Deputado Federal")).toBeUndefined();
+  });
+
+  test("'Presidente da República Federativa do Brasil' resolve por casamento exato", () => {
+    expect(resolverRegra("Presidente da República Federativa do Brasil")?.cargoDestinatario).toBe(
+      "Presidente da República Federativa do Brasil",
+    );
+  });
+
+  test("'Coronel' resolve para as patentes militares por casamento exato num item de exemplo", () => {
+    expect(resolverRegra("Coronel")?.cargoDestinatario.split("\n")[0]).toBe(
+      "Demais patentes militares",
+    );
+  });
+
+  test("'Senador' resolve para a primeira regra cadastrada, mesmo empatando com a segunda", () => {
+    // "Senador" casa exatamente as duas regras "Senador / Deputado Federal (com/sem
+    // cargo)" — o casamento exato vence sem precisar de margem, e `regras.find` devolve a
+    // primeira do array, que é a variante "(com cargo)".
+    expect(resolverRegra("Senador")?.cargoDestinatario.split("\n")[0]).toBe(
+      "Senador / Deputado Federal (com cargo)",
+    );
+  });
+
+  test("'Embaixador de Gana' resolve para Embaixador, com margem folgada sobre Desembargador", () => {
+    // Medido: 1º "Embaixador" 0,750; 2º "Desembargador" 0,593; margem 0,157.
+    expect(resolverRegra("Embaixador de Gana")?.cargoDestinatario).toBe("Embaixador");
+  });
+
+  test("'Embaixadora de Gana' TAMBÉM resolve para Embaixador — não é o caso-limite do relatório", () => {
+    // Divergência do relatório da revisão final: o brief previa `sem_regra` aqui (margem
+    // 0,115, a um passo do corte). Medido contra o código real: "Embaixador" é a ÚNICA
+    // entrada da tabela para esse cargo (não há "Embaixador(a)" nem "Embaixatriz" como
+    // candidato), e "embaixadora de gana" bate 0,720 contra ela — 2º colocado
+    // "Desembargador" a 0,571, margem 0,149, folgada acima de MARGEM_CARGO. O caso resolve,
+    // ponto final; não há fronteira apertada entre masculino e feminino aqui hoje. Ver
+    // relatório da correção para a divergência completa.
+    expect(resolverRegra("Embaixadora de Gana")?.cargoDestinatario).toBe("Embaixador");
+  });
+});

@@ -160,6 +160,14 @@ O XLSX de origem ganha exceção no `.gitignore`: a regra `*.xlsx` existe porque
 Senado contêm PII, e **esta não contém** — só cargos e marcadores `[Nome]`. Versioná-la
 preserva a proveniência do arquivo gerado, como `data/apply-all.sql` faz para o catálogo.
 
+> **Errata (2026-09-16):** o parágrafo acima não se sustentou. O commit 16c303f tirou a
+> pasta `Regras de Atualizacao/` inteira do controle de versão — XLSX de protocolo incluído
+> — porque ela também guarda uma planilha de 51 MB e um PDF com e-mails de servidores, e não
+> dava para abrir exceção para um arquivo sem excluir os outros dois pelo mesmo padrão de
+> nome. O XLSX de protocolo não é versionado hoje; quem roda `scripts/gerar-tratamentos.mjs`
+> precisa pedi-lo ao Clovis. Mantendo o texto original acima como registro da decisão na
+> data em que foi tomada.
+
 ## O que este spec não altera
 
 Raspagem, Camada IA, catálogo de grupos/fontes, upload no cliente e o motor de comparação

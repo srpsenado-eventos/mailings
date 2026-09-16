@@ -1,6 +1,6 @@
 import type { ResultadoAnalise } from "@/lib/types";
 import { SemaforoBadge } from "@/components/semaforo-badge";
-import { coerenciasVisiveis, rotuloAchado } from "@/lib/tratamento";
+import { celulaDivergencias } from "@/lib/celula-divergencias";
 
 export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
   return (
@@ -65,45 +65,21 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
               <th>Nome</th><th>Cargo</th><th>Divergências</th><th>Origem</th><th>Status</th>
             </tr></thead>
             <tbody>
-              {g.contatos.map((c, i) => {
-                const valores = c.comparacoes.filter(
-                  (x) => x.situacao === "divergente" && x.origemValor !== "coerencia",
-                );
-                const coerencias = coerenciasVisiveis(c.comparacoes);
-                const detalhes = [
-                  ...valores.map(
-                    (d) =>
-                      `${d.campo}: ${d.valorPlanilha || "(vazio)"} → ${d.valorEsperado ?? "sem referência"}` +
-                      (d.origemValor === "conhecimento" ? " (via IA — confira)" : ""),
-                  ),
-                  ...coerencias.map((d) =>
-                    d.valorPlanilha
-                      ? `${d.campo}: ${d.valorPlanilha} (${rotuloAchado(d.achado!)})`
-                      : `${d.campo}: ${rotuloAchado(d.achado!)}`,
-                  ),
-                ];
-                return (
-                  <tr key={i} className="border-t">
-                    <td>{c.contato.nome}</td>
-                    <td>{c.contato.cargo ?? "—"}</td>
-                    <td>
-                      {c.possivelSaida
-                        ? "não consta na fonte"
-                        : detalhes.length === 0
-                          ? "—"
-                          : detalhes.join("; ")}
-                    </td>
-                    <td>{c.origem === "pesquisa_ampla" ? "pesquisa ampla" : "oficial"}</td>
-                    <td>
-                      {c.possivelSaida ? (
-                        <span className="text-red-600">possível saída</span>
-                      ) : (
-                        <SemaforoBadge status={c.semaforo} />
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+              {g.contatos.map((c, i) => (
+                <tr key={i} className="border-t">
+                  <td>{c.contato.nome}</td>
+                  <td>{c.contato.cargo ?? "—"}</td>
+                  <td>{celulaDivergencias(c.comparacoes, c.possivelSaida)}</td>
+                  <td>{c.origem === "pesquisa_ampla" ? "pesquisa ampla" : "oficial"}</td>
+                  <td>
+                    {c.possivelSaida ? (
+                      <span className="text-red-600">possível saída</span>
+                    ) : (
+                      <SemaforoBadge status={c.semaforo} />
+                    )}
+                  </td>
+                </tr>
+              ))}
               {g.novos.map((n, i) => (
                 <tr key={`novo-${i}`} className="border-t">
                   <td>{n.nome}</td>

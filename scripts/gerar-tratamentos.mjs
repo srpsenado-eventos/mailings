@@ -1,6 +1,12 @@
 #!/usr/bin/env node
 // Converte a aba "Tratamentos Simplificado" do XLSX de protocolo em data/tratamentos.ts.
 // Ver docs/superpowers/specs/2026-08-13-auditoria-tratamento-enderecamento.md
+//
+// O arquivo de origem (Regras de Atualizacao/Posse2027_TabelaTratamentos.xlsx) NÃO vem no
+// clone: saiu do controle de versão no commit 16c303f porque a pasta também guarda uma
+// planilha de 51 MB e um PDF com e-mails de servidores. Quem clonar o repo e rodar este
+// gerador recebe ENOENT na linha da leitura abaixo. Peça o arquivo ao Clovis e coloque-o em
+// "Regras de Atualizacao/Posse2027_TabelaTratamentos.xlsx" antes de rodar.
 import * as XLSX from "xlsx";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";

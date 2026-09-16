@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { coerenciasVisiveis, comparacoesCoerencia, rotuloAchado } from "@/lib/tratamento";
+import { coerenciasVisiveis, comparacoesCoerencia, rotuloAchado, textoCoerencia } from "@/lib/tratamento";
 import type { AchadoCoerencia, ComparacaoCampo, ContatoPlanilha } from "@/lib/types";
 
 /** Contato mínimo; cada teste sobrescreve só os campos que a verificação usa. */
@@ -379,6 +379,40 @@ describe("rotuloAchado", () => {
       "campo vazio",
     ]);
     expect(new Set(rotulos).size).toBe(todos.length);
+  });
+});
+
+describe("textoCoerencia", () => {
+  // Função única usada pela tela (components/resultado-tabela.tsx, via
+  // lib/celula-divergencias.ts) e pelo export (lib/export.ts) para o texto do achado de
+  // coerência. As saídas abaixo são as que tests/export.test.ts já fixa; não podem mudar
+  // sem atualizar os dois consumidores.
+  function achadoDeCampo(campo: string, achado: AchadoCoerencia): ComparacaoCampo {
+    return { campo, valorPlanilha: "qualquer coisa", situacao: "divergente", origemValor: "coerencia", achado };
+  }
+
+  test("achado de gênero não repete o nome do campo: os dois já estão no rótulo", () => {
+    expect(textoCoerencia(achadoDeCampo("tratamento", "genero_cargo_tratamento"))).toBe(
+      "gênero do Cargo discorda do Tratamento",
+    );
+    expect(textoCoerencia(achadoDeCampo("tratamento", "genero_tratamento_enderecamento"))).toBe(
+      "gênero do Tratamento discorda do Endereçamento",
+    );
+  });
+
+  test("forma genérica nomeia o campo pelo rótulo da coluna, não pelo nome cru", () => {
+    expect(textoCoerencia(achadoDeCampo("enderecamento", "forma_generica"))).toBe(
+      "forma genérica: falta o gênero da pessoa (Endereçamento)",
+    );
+  });
+
+  test("campo vazio nomeia o campo pelo rótulo da coluna, não pelo nome cru", () => {
+    expect(textoCoerencia(achadoDeCampo("enderecamento", "campo_vazio"))).toBe(
+      "campo vazio (Endereçamento)",
+    );
+    expect(textoCoerencia(achadoDeCampo("tratamento", "campo_vazio"))).toBe(
+      "campo vazio (Tratamento)",
+    );
   });
 });
 

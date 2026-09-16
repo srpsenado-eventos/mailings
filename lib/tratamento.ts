@@ -488,6 +488,34 @@ export function rotuloAchado(achado: AchadoCoerencia): string {
 }
 
 /**
+ * Rótulos de exibição dos dois campos que a Camada A audita. Moram aqui — e não em
+ * `lib/export.ts` — porque `textoCoerencia` (abaixo) precisa deles e a dependência entre os
+ * dois módulos só pode correr num sentido: `lib/export.ts` já importa de `lib/tratamento.ts`,
+ * nunca o contrário. `lib/export.ts` reaproveita este mapa para as mesmas duas colunas do seu
+ * próprio catálogo de campos, em vez de repetir os rótulos.
+ */
+export const ROTULOS_CAMPO_TRATAMENTO: Readonly<Record<string, string>> = {
+  tratamento: "Tratamento",
+  enderecamento: "Endereçamento",
+};
+
+/**
+ * Texto de um achado de coerência, pronto para exibição — usado pela tela e pelo export, que
+ * antes formatavam a mesma informação de dois jeitos parecidos e não idênticos. As duas
+ * verificações de gênero já nomeiam os dois campos envolvidos no próprio rótulo
+ * ("gênero do Cargo discorda do Tratamento"), então repetir o campo seria redundante. Forma
+ * genérica e campo vazio valem para os dois campos auditados e precisam dizer qual.
+ */
+export function textoCoerencia(c: ComparacaoCampo): string {
+  const rotulo = rotuloAchado(c.achado!);
+  if (c.achado === "genero_tratamento_enderecamento" || c.achado === "genero_cargo_tratamento") {
+    return rotulo;
+  }
+  const nome = ROTULOS_CAMPO_TRATAMENTO[c.campo] ?? c.campo;
+  return `${rotulo} (${nome})`;
+}
+
+/**
  * Achados da Camada A que chegam ao usuário, depois do colapso da dupla acusação sobre a
  * mesma célula (Decisão 1 da T6, Clovis 2026-09-16): quando a Camada B tem valor esperado
  * para o campo, a linha `campo_vazio` some, porque a linha do protocolo já mostra a célula

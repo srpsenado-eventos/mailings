@@ -8,3 +8,14 @@ coverage
 # Fixtures de teste sob tests/fixtures/ são permitidas.
 *.xlsx
 !tests/fixtures/*.xlsx
+
+# Config local do Claude Code (permissões pessoais; comandos permitidos podem carregar segredo).
+.claude/settings.local.json
+.claude/worktrees/
+
+# Material de referência do GT (e-mail e planilhas com nomes de servidores e de autoridades).
+# A pasta inteira fica fora do git.
+Regras de Atualizacao/
+
+# Lista da Posse Presidencial 2027 (telefones e e-mails de autoridades). Nunca versionar.
+Agrupador PP27/

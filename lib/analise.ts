@@ -68,9 +68,9 @@ async function analisarGrupo(
       const motivo = fonteRaspada
         ? "página não retornou conteúdo legível (provável JavaScript)"
         : motivoFalha;
-      return marcarFonteInacessivel(grupo, contatos, resolvida.url, motivo);
+      return marcarFonteInacessivel(grupo, contatos, resolvida.url, motivo, resolvida.grupoCanonico);
     }
-    return compararGrupo(grupo, contatos, undefined); // sem URL → sem fonte
+    return compararGrupo(grupo, contatos, undefined, resolvida.grupoCanonico); // sem URL → sem fonte
   }
 
   // 4. Compara contra a composição (página + resgates da IA, ou só IA na página ilegível).
@@ -80,7 +80,7 @@ async function analisarGrupo(
     destaques: [],
     pessoas: composicao,
   };
-  const r = compararGrupo(grupo, contatos, fonte);
+  const r = compararGrupo(grupo, contatos, fonte, resolvida.grupoCanonico);
   // Marca o grupo quando a composição dependeu do conhecimento da IA (não 100% oficial).
   const usouConhecimento = composicao.some((p) => p.origem === "conhecimento");
   return usouConhecimento || !resolvida.url ? { ...r, viaPesquisaAmpla: true } : r;

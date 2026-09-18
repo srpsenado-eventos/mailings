@@ -22,15 +22,21 @@ export interface ContatoPlanilha {
 export type OrigemDado = "pagina" | "conhecimento" | "protocolo" | "coerencia";
 
 /**
- * Achado da Camada A (coerência interna de `Tratamento`, `Endereçamento` e `Cargo`).
- * Identifica **qual** das quatro verificações apontou, já que as quatro recaem sobre
- * apenas dois campos. `lib/tratamento.ts` traduz cada código com `rotuloAchado`.
+ * Achado da Camada A (coerência interna de `Tratamento`, `Endereçamento` e `Cargo`) ou
+ * da Camada C (regras de escrita do cadastro, `data/regras-nome.ts`). Identifica **qual**
+ * verificação apontou. `lib/tratamento.ts` traduz cada código com `rotuloAchado`.
+ *
+ * `nome_tratamento_academico` é o único achado com `valorEsperado` preenchido na
+ * comparação que o carrega: diferente dos achados da Camada A (contradição entre campos
+ * do próprio contato, sem "certo" a apontar), a Camada C tem uma correção objetiva — o
+ * nome sem o tratamento —, e ela precisa chegar ao usuário para copiar.
  */
 export type AchadoCoerencia =
   | "genero_tratamento_enderecamento"
   | "genero_cargo_tratamento"
   | "forma_generica"
-  | "campo_vazio";
+  | "campo_vazio"
+  | "nome_tratamento_academico";
 
 /** Uma pessoa extraída (estruturada) da fonte oficial. */
 export interface PessoaSite {
@@ -79,9 +85,10 @@ export interface ComparacaoCampo {
   /** Procedência do valor esperado (página oficial, conhecimento da IA ou tabela de protocolo). */
   origemValor?: OrigemDado;
   /**
-   * Só na Camada A (`origemValor: "coerencia"`): qual verificação de coerência apontou.
-   * Ali não há `valorEsperado` — a contradição é entre campos do próprio contato, e dizer
-   * qual dos dois está certo seria adivinhação.
+   * Só nas Camadas A e C (`origemValor: "coerencia"`): qual verificação apontou. Na
+   * Camada A não há `valorEsperado` — a contradição é entre campos do próprio contato, e
+   * dizer qual dos dois está certo seria adivinhação. Na Camada C (`nome_tratamento_academico`)
+   * há: a regra do grupo dá a correção objetiva, e `valorEsperado` a carrega.
    */
   achado?: AchadoCoerencia;
 }

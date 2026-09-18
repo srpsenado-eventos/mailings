@@ -100,6 +100,24 @@ describe("celulaDivergencias — contrato de exibição da tela", () => {
     );
   });
 
+  test("achado da Camada C (nome com tratamento acadêmico) aparece na célula com o nome corrigido", () => {
+    // Arrange
+    const nomeTratamentoAcademico: ComparacaoCampo = {
+      campo: "nome",
+      valorPlanilha: "Dr. Artur Vidigal de Oliveira",
+      valorEsperado: "Artur Vidigal de Oliveira",
+      situacao: "divergente",
+      origemValor: "coerencia",
+      achado: "nome_tratamento_academico",
+    };
+
+    // Act
+    const texto = celulaDivergencias([nomeTratamentoAcademico], false);
+
+    // Assert
+    expect(texto).toContain("Artur Vidigal de Oliveira");
+  });
+
   test("comparação sem_regra ou confere não vira linha de divergência", () => {
     // Arrange
     const semRegra: ComparacaoCampo = {

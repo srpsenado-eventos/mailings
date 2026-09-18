@@ -265,6 +265,30 @@ describe("colunas de tratamento e endereçamento", () => {
     expect(linhas[0].Divergencias).toBe("tratamento");
   });
 
+  test("achado da Camada C (nome com tratamento acadêmico) sai na coluna Coerência com o nome corrigido", () => {
+    // Arrange
+    const analise = analiseCom(
+      [
+        {
+          campo: "nome",
+          valorPlanilha: "Dr. Artur Vidigal de Oliveira",
+          valorEsperado: "Artur Vidigal de Oliveira",
+          situacao: "divergente",
+          origemValor: "coerencia",
+          achado: "nome_tratamento_academico",
+        },
+      ],
+      { nome: "Dr. Artur Vidigal de Oliveira", grupo: "Ministros do STM" },
+    );
+
+    // Act
+    const linhas = resultadoParaLinhas(analise);
+
+    // Assert
+    expect(linhas[0].Coerência).toContain("Artur Vidigal de Oliveira");
+    expect(linhas[0].Divergencias).toBe("nome");
+  });
+
   test("linhas de novos trazem as mesmas colunas, vazias", () => {
     // Arrange
     const analise = analiseCom([], { nome: "Ana", grupo: "ORG" });

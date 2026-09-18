@@ -7,7 +7,7 @@ Situação: aprovado pelo Clovis em 2026-09-18, escopo inicial STM
 
 O STM publica os ministros com "Dr." e "Dra." antes do nome. O e-mail do GT Gestão de Convidados de 2026-07-20 manda **retirar** esses tratamentos de todos os contatos do STM: o convite, o cartão e a cinta saem do campo `Nome`, e nenhum deles leva tratamento acadêmico.
 
-Hoje o app não acusa nada nesses casos. A comparação de nome passa por `normalizarNome`, que remove tratamento dos dois lados antes de comparar, então "Dr. Artur Vidigal de Oliveira" no cadastro casa com "Dr. Artur Vidigal de Oliveira" no site e o veredito sai verde. Medido em 2026-09-17 contra a planilha real: dos 15 contatos do STM, **5 trazem "Dr." ou "Dra." no cadastro** e 14 estavam verdes. Nenhum outro grupo da base tem ocorrência.
+Hoje o app não acusa nada nesses casos. A comparação de nome passa por `normalizarNome`, que remove tratamento dos dois lados antes de comparar, então um ministro cadastrado com "Dr." (ou "Dra.") casa com o mesmo nome, também com "Dr.", publicado no site, e o veredito sai verde. Medido em 2026-09-17 contra a planilha real: dos 15 contatos do STM, **5 trazem "Dr." ou "Dra." no cadastro** e 14 estavam verdes. Nenhum outro grupo da base tem ocorrência.
 
 Esse comportamento da comparação de nome está certo e não muda: se o cadastro for corrigido e o site continuar com "Dr.", os dois têm que continuar casando. O que falta é outra coisa.
 

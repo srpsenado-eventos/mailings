@@ -266,26 +266,26 @@ describe("colunas de tratamento e endereçamento", () => {
   });
 
   test("achado da Camada C (nome com tratamento acadêmico) sai na coluna Coerência com o nome corrigido", () => {
-    // Arrange
+    // Arrange — nome fictício
     const analise = analiseCom(
       [
         {
           campo: "nome",
-          valorPlanilha: "Dr. Artur Vidigal de Oliveira",
-          valorEsperado: "Artur Vidigal de Oliveira",
+          valorPlanilha: "Dr. Joaquim Bezerra Vilaça",
+          valorEsperado: "Joaquim Bezerra Vilaça",
           situacao: "divergente",
           origemValor: "coerencia",
           achado: "nome_tratamento_academico",
         },
       ],
-      { nome: "Dr. Artur Vidigal de Oliveira", grupo: "Ministros do STM" },
+      { nome: "Dr. Joaquim Bezerra Vilaça", grupo: "Ministros do STM" },
     );
 
     // Act
     const linhas = resultadoParaLinhas(analise);
 
     // Assert
-    expect(linhas[0].Coerência).toContain("Artur Vidigal de Oliveira");
+    expect(linhas[0].Coerência).toContain("Joaquim Bezerra Vilaça");
     expect(linhas[0].Divergencias).toBe("nome");
   });
 

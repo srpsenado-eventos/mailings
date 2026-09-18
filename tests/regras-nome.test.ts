@@ -4,15 +4,15 @@ import type { ContatoPlanilha } from "@/lib/types";
 
 const GRUPO_STM = "Ministros do STM";
 
-/** Contato mínimo; cada teste sobrescreve só os campos que a verificação usa. */
+/** Contato mínimo; cada teste sobrescreve só os campos que a verificação usa. Nome fictício. */
 function contato(campos: Partial<ContatoPlanilha> = {}): ContatoPlanilha {
-  return { nome: "Artur Vidigal de Oliveira", grupo: "Grupo de Teste", ...campos };
+  return { nome: "Joaquim Bezerra Vilaça", grupo: "Grupo de Teste", ...campos };
 }
 
 describe("comparacaoRegraNome — Camada C, ministros do STM", () => {
   test("acusa 'Dr.' no nome de um contato do STM", () => {
     // Arrange
-    const c = contato({ nome: "Dr. Artur Vidigal de Oliveira" });
+    const c = contato({ nome: "Dr. Joaquim Bezerra Vilaça" });
 
     // Act
     const resultado = comparacaoRegraNome(c, GRUPO_STM);
@@ -21,8 +21,8 @@ describe("comparacaoRegraNome — Camada C, ministros do STM", () => {
     expect(resultado).toEqual([
       {
         campo: "nome",
-        valorPlanilha: "Dr. Artur Vidigal de Oliveira",
-        valorEsperado: "Artur Vidigal de Oliveira",
+        valorPlanilha: "Dr. Joaquim Bezerra Vilaça",
+        valorEsperado: "Joaquim Bezerra Vilaça",
         situacao: "divergente",
         origemValor: "coerencia",
         achado: "nome_tratamento_academico",
@@ -32,19 +32,19 @@ describe("comparacaoRegraNome — Camada C, ministros do STM", () => {
 
   test("não acusa quando o cadastro já está limpo", () => {
     // Arrange
-    const c = contato({ nome: "Artur Vidigal de Oliveira" });
+    const c = contato({ nome: "Joaquim Bezerra Vilaça" });
 
     // Act / Assert
     expect(comparacaoRegraNome(c, GRUPO_STM)).toEqual([]);
   });
 
   test.each([
-    ["Dra. Maria Elizabeth Guimarães", "Maria Elizabeth Guimarães"],
-    ["DRA MARIA ELIZABETH GUIMARÃES", "MARIA ELIZABETH GUIMARÃES"],
-    ["Doutor Artur Vidigal de Oliveira", "Artur Vidigal de Oliveira"],
-    ["Doutora Maria Elizabeth Guimarães", "Maria Elizabeth Guimarães"],
-    ["Dr Artur Vidigal de Oliveira", "Artur Vidigal de Oliveira"],
-    ["dra. Maria Elizabeth Guimarães", "Maria Elizabeth Guimarães"],
+    ["Dra. Luiza Meireles Prado", "Luiza Meireles Prado"],
+    ["DRA LUIZA MEIRELES PRADO", "LUIZA MEIRELES PRADO"],
+    ["Doutor Joaquim Bezerra Vilaça", "Joaquim Bezerra Vilaça"],
+    ["Doutora Luiza Meireles Prado", "Luiza Meireles Prado"],
+    ["Dr Joaquim Bezerra Vilaça", "Joaquim Bezerra Vilaça"],
+    ["dra. Luiza Meireles Prado", "Luiza Meireles Prado"],
   ])("acusa e corrige a forma '%s'", (nome, corrigido) => {
     // Arrange
     const c = contato({ nome });
@@ -60,14 +60,14 @@ describe("comparacaoRegraNome — Camada C, ministros do STM", () => {
 
   test("acusa tratamento acadêmico no meio do nome, não só no início", () => {
     // Arrange
-    const c = contato({ nome: "Ministra Dra. Maria Elizabeth Guimarães" });
+    const c = contato({ nome: "Ministra Dra. Luiza Meireles Prado" });
 
     // Act
     const resultado = comparacaoRegraNome(c, GRUPO_STM);
 
     // Assert
     expect(resultado).toHaveLength(1);
-    expect(resultado[0].valorEsperado).toBe("Ministra Maria Elizabeth Guimarães");
+    expect(resultado[0].valorEsperado).toBe("Ministra Luiza Meireles Prado");
   });
 
   test("não acusa 'Coronel Tadeu Silva' — patente é nome parlamentar, não tratamento", () => {
@@ -78,9 +78,9 @@ describe("comparacaoRegraNome — Camada C, ministros do STM", () => {
     expect(comparacaoRegraNome(c, GRUPO_STM)).toEqual([]);
   });
 
-  test("não casa por substring: 'Drummond' não é 'Dr'", () => {
+  test("não casa por substring: 'Adroaldo' não é 'Dr'", () => {
     // Arrange
-    const c = contato({ nome: "Carlos Drummond de Andrade" });
+    const c = contato({ nome: "Marcos Adroaldo Ferreira" });
 
     // Act / Assert
     expect(comparacaoRegraNome(c, GRUPO_STM)).toEqual([]);
@@ -96,7 +96,7 @@ describe("comparacaoRegraNome — Camada C, ministros do STM", () => {
 
   test("não acusa contato de outro grupo com 'Dr.' no nome — a regra é por grupo", () => {
     // Arrange
-    const c = contato({ nome: "Dr. Artur Vidigal de Oliveira", grupo: "Ministros do STF" });
+    const c = contato({ nome: "Dr. Joaquim Bezerra Vilaça", grupo: "Ministros do STF" });
 
     // Act / Assert
     expect(comparacaoRegraNome(c, "Ministros do STF")).toEqual([]);
@@ -104,7 +104,7 @@ describe("comparacaoRegraNome — Camada C, ministros do STM", () => {
 
   test("não acusa quando não há grupo canônico resolvido", () => {
     // Arrange — grupo desconhecido na planilha, sem casamento no catálogo
-    const c = contato({ nome: "Dr. Artur Vidigal de Oliveira" });
+    const c = contato({ nome: "Dr. Joaquim Bezerra Vilaça" });
 
     // Act / Assert
     expect(comparacaoRegraNome(c, undefined)).toEqual([]);
@@ -112,7 +112,7 @@ describe("comparacaoRegraNome — Camada C, ministros do STM", () => {
 
   test("não muta o contato recebido", () => {
     // Arrange
-    const c = contato({ nome: "Dr. Artur Vidigal de Oliveira" });
+    const c = contato({ nome: "Dr. Joaquim Bezerra Vilaça" });
     const antes = JSON.parse(JSON.stringify(c));
 
     // Act
@@ -136,7 +136,7 @@ describe("rotuloAchado e textoCoerencia — nome_tratamento_academico", () => {
   test("textoCoerencia traz o nome corrigido entre parênteses, para o usuário copiar", () => {
     // Arrange
     const achado = comparacaoRegraNome(
-      contato({ nome: "Dr. Artur Vidigal de Oliveira" }),
+      contato({ nome: "Dr. Joaquim Bezerra Vilaça" }),
       GRUPO_STM,
     )[0];
 
@@ -144,7 +144,7 @@ describe("rotuloAchado e textoCoerencia — nome_tratamento_academico", () => {
     const texto = textoCoerencia(achado);
 
     // Assert
-    expect(texto).toContain("Artur Vidigal de Oliveira");
-    expect(texto.endsWith("(Artur Vidigal de Oliveira)")).toBe(true);
+    expect(texto).toContain("Joaquim Bezerra Vilaça");
+    expect(texto.endsWith("(Joaquim Bezerra Vilaça)")).toBe(true);
   });
 });

@@ -1,5 +1,9 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { analisar, type Dependencias } from "@/lib/analise";
+import { extrairTabela } from "@/lib/scrape";
+import { CATALOGO } from "@/data/catalogo";
 import type { ContatoPlanilha, ConteudoFonte } from "@/lib/types";
 
 /**
@@ -364,5 +368,91 @@ describe("analisar com duas fontes no mesmo grupo", () => {
     expect(r.grupos[0].fonteInacessivel).toBe(true);
     expect(r.grupos[0].contatos.every((c) => c.semaforo === "indeterminado")).toBe(true);
     expect(r.grupos[0].contatos.some((c) => c.possivelSaida)).toBe(false);
+  });
+});
+
+describe("Senadores de ponta a ponta (fixtures das duas páginas reais)", () => {
+  const EM_EXERCICIO = "https://www25.senado.leg.br/web/senadores/em-exercicio";
+  const FORA = "https://www25.senado.leg.br/web/senadores/fora-de-exercicio";
+  const html = (arquivo: string) =>
+    readFileSync(join(__dirname, "fixtures", arquivo), "utf8");
+
+  const grupoMA = CATALOGO.find((g) => g.nome === "Senadores (Maranhão ao Piauí)")!;
+
+  const deps: Dependencias = {
+    resolverFonte: () => ({
+      grupoCanonico: grupoMA.nome,
+      fontes: grupoMA.fontes.filter((f) => f.ativo),
+      ufs: grupoMA.ufs,
+      sugestoes: [],
+    }),
+    raspar: async (fonte) =>
+      extrairTabela(
+        html(fonte.url === FORA ? "senado-fora-de-exercicio.html" : "senado-em-exercicio.html"),
+        fonte.url,
+        fonte.tabela!,
+      ),
+    extrairComposicao: async () => [],
+  };
+
+  const contatos: ContatoPlanilha[] = [
+    { nome: "Weverton", grupo: grupoMA.nome, ...CADASTRO_OK },
+    { nome: "Wellington Dias", grupo: grupoMA.nome, ...CADASTRO_OK },
+  ];
+
+  test("senador de nome de uma palavra não é possível saída", async () => {
+    const r = await analisar("c.xlsx", contatos, deps);
+    const weverton = r.grupos[0].contatos.find((c) => c.contato.nome === "Weverton");
+    expect(weverton?.possivelSaida).toBeUndefined();
+    expect(weverton?.semaforo).toBe("verde");
+  });
+
+  test("titular afastado casa pela segunda fonte e carrega o motivo", async () => {
+    const r = await analisar("c.xlsx", contatos, deps);
+    const wd = r.grupos[0].contatos.find((c) => c.contato.nome === "Wellington Dias");
+    expect(wd?.semaforo).toBe("verde");
+    expect(wd?.observacao).toBe("fora de exercício — Ocupação de cargo de ministro/secretário");
+  });
+
+  test("titular afastado que falta na planilha vira novo, e só na faixa de UF do grupo", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], deps);
+    expect(r.grupos[0].novos.map((n) => n.nome).sort()).toEqual([
+      "Ana Paula Lobato",
+      "Diego Tavares",
+      "Wellington Dias",
+    ]);
+  });
+
+  test("suplente, falecido e renunciante nunca entram no grupo", async () => {
+    const r = await analisar("c.xlsx", contatos, deps);
+    const nomes = r.grupos[0].novos.map((n) => n.nome);
+    expect(nomes).not.toContain("Ney Suassuna");
+    expect(nomes).not.toContain("Arolde de Oliveira");
+    expect(nomes).not.toContain("Flávio Dino");
+  });
+
+  test("Eduardo Girão (CE) não é proposto no grupo de Maranhão ao Piauí", async () => {
+    const r = await analisar("c.xlsx", contatos, deps);
+    expect(r.grupos[0].novos.map((n) => n.nome)).not.toContain("Eduardo Girão");
+  });
+
+  test("grupo de uma fonte só continua se comportando como antes", async () => {
+    const umaFonte: Dependencias = {
+      ...deps,
+      resolverFonte: () => ({
+        grupoCanonico: grupoMA.nome,
+        fontes: [grupoMA.fontes[0]],
+        ufs: grupoMA.ufs,
+        sugestoes: [],
+      }),
+    };
+    const r = await analisar("c.xlsx", contatos, umaFonte);
+    const g = r.grupos[0];
+    expect(g.fonteUrl).toBe(EM_EXERCICIO);
+    expect(g.erroFonte).toBeUndefined();
+    // Sem a segunda fonte, o titular afastado volta a ser possível saída — é o
+    // comportamento de hoje, e o que a fonte nova existe para corrigir.
+    expect(g.contatos.find((c) => c.contato.nome === "Wellington Dias")?.possivelSaida).toBe(true);
+    expect(g.novos).toEqual([]);
   });
 });

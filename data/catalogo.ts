@@ -352,8 +352,30 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp1: "thassia.lima@senado.leg.br",
     emailResp2: "marcus.sousa@senado.leg.br",
     emailBackup: "priscifs@senado.leg.br",
+    ufs: ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO"],
     fontes: [
-      { url: "https://www25.senado.leg.br/web/senadores/em-exercicio", ativo: true },
+      {
+        url: "https://www25.senado.leg.br/web/senadores/em-exercicio",
+        ativo: true,
+        // Tabela de 6 colunas, seções por UF. Extração estruturada porque o caminho de
+        // texto perde os senadores de nome de uma palavra (Weverton, Cleitinho, Romário,
+        // Giordano, Irajá). Não propõe inclusão: a lista traz também suplente convocado,
+        // que o GT não convida (e-mail de 2026-07-20).
+        tabela: { colunas: { nome: 0, uf: 2 } },
+      },
+      {
+        url: "https://www25.senado.leg.br/web/senadores/fora-de-exercicio",
+        ativo: true,
+        rotulo: "fora de exercício",
+        propoeInclusao: true,
+        // Só os titulares afastados. Ficam de fora "Suplentes que exerceram o cargo" e a
+        // 2ª tabela (falecimento, perda de mandato, renúncia): não são senadores em
+        // mandato. Ver docs/superpowers/specs/2026-09-24-segunda-fonte-senadores-fora-de-exercicio.md
+        tabela: {
+          colunas: { nome: 0, uf: 2, motivo: 3 },
+          secoes: ["Assunção de cargo", "Licença com convocação de suplente"],
+        },
+      },
     ],
   },
   {
@@ -364,8 +386,30 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp1: "thiago.pinto@senado.leg.br",
     emailResp2: "sarah.costa@senado.leg.br",
     emailBackup: "adriana.araujo@senado.leg.br",
+    ufs: ["MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI"],
     fontes: [
-      { url: "https://www25.senado.leg.br/web/senadores/em-exercicio", ativo: true },
+      {
+        url: "https://www25.senado.leg.br/web/senadores/em-exercicio",
+        ativo: true,
+        // Tabela de 6 colunas, seções por UF. Extração estruturada porque o caminho de
+        // texto perde os senadores de nome de uma palavra (Weverton, Cleitinho, Romário,
+        // Giordano, Irajá). Não propõe inclusão: a lista traz também suplente convocado,
+        // que o GT não convida (e-mail de 2026-07-20).
+        tabela: { colunas: { nome: 0, uf: 2 } },
+      },
+      {
+        url: "https://www25.senado.leg.br/web/senadores/fora-de-exercicio",
+        ativo: true,
+        rotulo: "fora de exercício",
+        propoeInclusao: true,
+        // Só os titulares afastados. Ficam de fora "Suplentes que exerceram o cargo" e a
+        // 2ª tabela (falecimento, perda de mandato, renúncia): não são senadores em
+        // mandato. Ver docs/superpowers/specs/2026-09-24-segunda-fonte-senadores-fora-de-exercicio.md
+        tabela: {
+          colunas: { nome: 0, uf: 2, motivo: 3 },
+          secoes: ["Assunção de cargo", "Licença com convocação de suplente"],
+        },
+      },
     ],
   },
   {
@@ -376,8 +420,30 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp1: "jaciara.santos@senado.leg.br",
     emailResp2: "adriana.araujo@senado.leg.br",
     emailBackup: "marcus.sousa@senado.leg.br",
+    ufs: ["RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"],
     fontes: [
-      { url: "https://www25.senado.leg.br/web/senadores/em-exercicio", ativo: true },
+      {
+        url: "https://www25.senado.leg.br/web/senadores/em-exercicio",
+        ativo: true,
+        // Tabela de 6 colunas, seções por UF. Extração estruturada porque o caminho de
+        // texto perde os senadores de nome de uma palavra (Weverton, Cleitinho, Romário,
+        // Giordano, Irajá). Não propõe inclusão: a lista traz também suplente convocado,
+        // que o GT não convida (e-mail de 2026-07-20).
+        tabela: { colunas: { nome: 0, uf: 2 } },
+      },
+      {
+        url: "https://www25.senado.leg.br/web/senadores/fora-de-exercicio",
+        ativo: true,
+        rotulo: "fora de exercício",
+        propoeInclusao: true,
+        // Só os titulares afastados. Ficam de fora "Suplentes que exerceram o cargo" e a
+        // 2ª tabela (falecimento, perda de mandato, renúncia): não são senadores em
+        // mandato. Ver docs/superpowers/specs/2026-09-24-segunda-fonte-senadores-fora-de-exercicio.md
+        tabela: {
+          colunas: { nome: 0, uf: 2, motivo: 3 },
+          secoes: ["Assunção de cargo", "Licença com convocação de suplente"],
+        },
+      },
     ],
   },
   {

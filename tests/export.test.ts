@@ -46,6 +46,40 @@ describe("resultadoParaLinhas", () => {
     });
     expect(linhas[0].Divergencias).toContain("cargo");
   });
+
+  test("novo vindo de fonte rotulada leva a situação na observação e a URL daquela fonte", () => {
+    const analise: ResultadoAnalise = {
+      arquivoNome: "c.xlsx",
+      grupos: [
+        {
+          grupo: "Senadores (Maranhão ao Piauí)",
+          fonteUrl: "https://senado.leg.br/em-exercicio",
+          semFonte: false,
+          contatos: [],
+          novos: [
+            {
+              nome: "Wellington Dias",
+              uf: "PI",
+              origem: "pagina",
+              contexto: "Ocupação de cargo de ministro/secretário",
+              rotuloFonte: "fora de exercício",
+              fonteUrl: "https://senado.leg.br/fora-de-exercicio",
+            },
+          ],
+        },
+      ],
+      resumo: {
+        total: 0, verde: 0, amarelo: 0, vermelho: 0, novo: 1, indeterminado: 0,
+        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+      },
+    };
+    const linha = resultadoParaLinhas(analise)[0];
+    expect(linha.Status).toBe("novo");
+    expect(linha.Observacao).toBe(
+      "Pessoa na fonte sem correspondência na planilha — fora de exercício: Ocupação de cargo de ministro/secretário",
+    );
+    expect(linha.Fonte).toBe("https://senado.leg.br/fora-de-exercicio");
+  });
 });
 
 describe("gerarXlsx", () => {

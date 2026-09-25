@@ -67,7 +67,12 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
             <tbody>
               {g.contatos.map((c, i) => (
                 <tr key={i} className="border-t">
-                  <td>{c.contato.nome}</td>
+                  <td>
+                    {c.contato.nome}
+                    {c.observacao && !c.possivelSaida ? (
+                      <span className="block text-xs text-gray-500">{c.observacao}</span>
+                    ) : null}
+                  </td>
                   <td>{c.contato.cargo ?? "—"}</td>
                   <td>{celulaDivergencias(c.comparacoes, c.possivelSaida)}</td>
                   <td>{c.origem === "pesquisa_ampla" ? "pesquisa ampla" : "oficial"}</td>
@@ -83,7 +88,7 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
               {g.novos.map((n, i) => (
                 <tr key={`novo-${i}`} className="border-t">
                   <td>{n.nome}</td>
-                  <td>{n.cargo ?? "—"}</td>
+                  <td>{n.cargo ?? (n.rotuloFonte ? `${n.rotuloFonte}${n.contexto ? ` — ${n.contexto}` : ""}` : "—")}</td>
                   <td>—</td>
                   <td>{n.origem === "conhecimento" ? "pesquisa ampla" : "oficial"}</td>
                   <td><SemaforoBadge status="novo" /></td>

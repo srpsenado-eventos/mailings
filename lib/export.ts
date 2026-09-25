@@ -72,13 +72,16 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
         cargo: siteCargo,
         endereco: novo.endereco ?? "",
       };
+      const situacao = novo.rotuloFonte
+        ? ` — ${[novo.rotuloFonte, novo.contexto].filter(Boolean).join(": ")}`
+        : "";
       const linha: Record<string, string> = {
         Grupo: g.grupo,
         Status: "novo",
         Divergencias: "",
         Origem: novo.origem === "conhecimento" ? "pesquisa_ampla" : "oficial",
-        Fonte: g.fonteUrl ?? "",
-        Observacao: "Pessoa na fonte sem correspondência na planilha",
+        Fonte: novo.fonteUrl ?? g.fonteUrl ?? "",
+        Observacao: `Pessoa na fonte sem correspondência na planilha${situacao}`,
       };
       for (const f of CAMPOS) {
         linha[`${f.rotulo} (planilha)`] = "";

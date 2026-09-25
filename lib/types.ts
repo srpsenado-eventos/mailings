@@ -45,7 +45,7 @@ export interface PessoaSite {
   endereco?: string;
   /** De onde veio o registro (página oficial vs conhecimento da IA). */
   origem?: OrigemDado;
-  /** Trecho de origem (para depuração). */
+  /** Motivo da situação da fonte rotulada (ex.: "Ocupação de cargo de ministro/secretário"); exibido na tela e no export. */
   contexto?: string;
   /** UF publicada pela fonte (só em fonte tabular que tenha a coluna). */
   uf?: string;

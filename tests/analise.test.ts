@@ -100,6 +100,35 @@ describe("analisar", () => {
     expect(r.resumo.gruposViaPesquisaAmpla).toBe(1);
   });
 
+  test("nenhuma fonte legível, mas a IA compôs: quem falta na composição ainda é possível saída", async () => {
+    // Fronteira da regra de ouro, e o limite da correção de leitura parcial: composição
+    // "página OU IA". Nenhuma fonte contribuiu, então não há leitura parcial — a lista da
+    // IA é composição real e pode apontar saída, marcada viaPesquisaAmpla ("≈ via IA —
+    // confira"). É o caminho documentado do TCU (spec de 2026-06-14) e não muda aqui.
+    // Arrange
+    const depsIa: Dependencias = {
+      ...deps,
+      raspar: async () => {
+        throw new Error("HTTP 403");
+      },
+      extrairComposicao: async () => [
+        { nome: "Ana Maria Política Completa", cargo: "Presidente", origem: "conhecimento" },
+      ],
+    };
+    const ausente = { nome: "Beatriz Sousa Ausente", grupo: "ORG", ...CADASTRO_OK };
+
+    // Act
+    const r = await analisar("c.xlsx", [contatos[0], ausente], depsIa);
+
+    // Assert
+    const g = r.grupos[0];
+    expect(g.viaPesquisaAmpla).toBe(true);
+    expect(g.erroFonte).toBeUndefined(); // não é leitura parcial: nenhuma fonte respondeu
+    const beatriz = g.contatos.find((c) => c.contato.nome === "Beatriz Sousa Ausente");
+    expect(beatriz?.possivelSaida).toBe(true);
+    expect(beatriz?.semaforo).toBe("vermelho");
+  });
+
   test("página vazia (JS) + IA completa pelo conhecimento casa e marca viaPesquisaAmpla", async () => {
     const depsIa: Dependencias = {
       ...deps,
@@ -335,9 +364,11 @@ describe("analisar com duas fontes no mesmo grupo", () => {
     // O rótulo da fonte que caiu entra no motivo — sem ele, "HTTP 403" parece falha da primária.
     expect(g.erroFonte).toBe("fora de exercício: HTTP 403");
     expect(g.contatos.find((c) => c.contato.nome === "Weverton")?.semaforo).toBe("verde");
-    // Era o "limite conhecido" desta branch, e é o defeito que esta correção fecha: com a
-    // secundária fora do ar, quem só ela publica (titular afastado) não pode ser dado como
-    // saída. Fica indeterminado, com a ressalva na observação.
+    // LEITURA PARCIAL (uma fonte respondeu, outra não): era o "limite conhecido" desta
+    // branch e é o defeito que esta correção fecha. Com a secundária fora do ar, quem só
+    // ela publica (titular afastado) não pode ser dado como saída — fica indeterminado,
+    // com a ressalva na observação. Só esta situação suspende o veredito: composição
+    // vinda só da IA continua apontando saída (ver o teste da fronteira, acima).
     const wd = g.contatos.find((c) => c.contato.nome === "Wellington Dias");
     expect(wd?.possivelSaida).toBeUndefined();
     expect(wd?.semaforo).toBe("indeterminado");

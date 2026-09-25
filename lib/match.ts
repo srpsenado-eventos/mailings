@@ -238,15 +238,15 @@ function montarResultado(
   score: number,
   grupoCanonico: string | undefined,
   url?: string,
-  fonteIncompleta?: boolean,
+  leituraParcial?: boolean,
 ): ResultadoContato {
   if (!pessoa) {
     // A auditoria de tratamento vale também para quem saiu: não depende da fonte, e o
     // achado tem que chegar ao export junto com a possível saída, não no lugar dela.
     const protocolo = comparacoesTratamento(contato, grupoCanonico);
-    if (fonteIncompleta) {
-      // Regra de ouro: alguma fonte ativa do grupo não contribuiu, então a composição
-      // está incompleta e a ausência não prova nada. Indeterminado, nunca saída.
+    if (leituraParcial) {
+      // Regra de ouro: parte das fontes ativas respondeu e parte não, então a composição
+      // oficial está incompleta e a ausência não prova nada. Indeterminado, nunca saída.
       return {
         contato,
         semaforo: "indeterminado",
@@ -388,9 +388,12 @@ export function marcarFonteInacessivel(
 }
 
 /**
- * @param fonteIncompleta Alguma fonte ativa do grupo não contribuiu (lançou erro ou voltou
- *   sem ninguém). Quem não casar fica `indeterminado` em vez de "possível saída": a
- *   composição está incompleta e a ausência não prova nada. Ver a regra de ouro no CLAUDE.md.
+ * @param leituraParcial Parte das fontes ativas do grupo respondeu e parte não (erro, ou 200
+ *   sem ninguém). Quem não casar fica `indeterminado` em vez de "possível saída": falta um
+ *   pedaço da composição oficial e a ausência não prova nada. **Só a leitura PARCIAL suspende
+ *   o veredito.** Composição inteiramente vinda da IA é composição real e segue podendo
+ *   apontar saída, marcada `viaPesquisaAmpla` — é a regra de ouro do CLAUDE.md ("página *ou
+ *   IA*") e o caminho documentado do TCU.
  */
 export function compararGrupo(
   grupo: string,
@@ -398,7 +401,7 @@ export function compararGrupo(
   fonte: ConteudoFonte | undefined,
   grupoCanonico?: string,
   ufsDoGrupo?: readonly string[],
-  fonteIncompleta?: boolean,
+  leituraParcial?: boolean,
 ): ResultadoGrupo {
   if (!fonte) {
     return {
@@ -437,7 +440,7 @@ export function compararGrupo(
       score,
       grupoCanonico,
       fonte.url,
-      fonteIncompleta,
+      leituraParcial,
     );
   });
   // "novos": de fonte que propõe inclusão, só quem está na faixa de UF do grupo. Das

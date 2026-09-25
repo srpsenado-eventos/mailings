@@ -92,14 +92,18 @@ async function analisarGrupo(
   );
   const urlPrimaria = resolvida.fontes[0]?.url;
   // Toda fonte que contribuiu entra na composição, na ordem do catálogo: dado oficial da
-  // Camada 1 nunca é descartado, nem quando a primária caiu. O que a falha de uma fonte
-  // suspende é a CONCLUSÃO, não a comparação — quem não casar fica indeterminado (ver
-  // `fonteIncompleta` abaixo), porque a composição está incompleta e a ausência não prova
-  // nada. É a regra de ouro: nunca transformar "não conseguimos ler" em "possível saída".
+  // Camada 1 nunca é descartado, nem quando a primária caiu. O que a falha de UMA fonte
+  // entre várias suspende é a CONCLUSÃO, não a comparação — ver `leituraParcial` abaixo.
   const pessoasPagina = unirFontes(
     lidas.map((l) => (l.conteudo ? marcarProveniencia(l.conteudo.pessoas, l.fonte) : [])),
   );
   const naoContribuiram = lidas.filter((l) => !contribuiu(l));
+  // LEITURA PARCIAL: alguma fonte ativa respondeu e outra não. É a única situação criada
+  // por esta branch, e a única em que o veredito de saída fica suspenso — ver o passo 4.
+  // Quando NENHUMA fonte contribuiu nada muda em relação ao que já existia: a composição
+  // da IA, se houver, é composição real e continua podendo apontar saída (marcada
+  // `viaPesquisaAmpla`, o caminho documentado do TCU); sem IA, cai em fonte inacessível.
+  const leituraParcial = naoContribuiram.length > 0 && lidas.some(contribuiu);
   // A Camada 2 recebe o texto da fonte primária — uma chamada por grupo, como sempre.
   const textoLimpo = lidas[0]?.conteudo?.textoLimpo ?? "";
 
@@ -124,20 +128,19 @@ async function analisarGrupo(
     destaques: [],
     pessoas: composicao,
   };
-  // Alguma fonte ativa não contribuiu: a composição está incompleta, então ninguém deste
-  // grupo pode ser dado como saída — e o usuário precisa saber disso, na tela e no export.
-  const fonteIncompleta = naoContribuiram.length > 0;
+  // Leitura parcial: parte da composição oficial ficou de fora, então ninguém deste grupo
+  // pode ser dado como saída — e o usuário precisa saber disso, na tela e no export.
   const r = compararGrupo(
     grupo,
     contatos,
     fonte,
     resolvida.grupoCanonico,
     resolvida.ufs,
-    fonteIncompleta,
+    leituraParcial,
   );
   // Motivo técnico atribuído A CADA fonte que falhou — sem identificar qual, "HTTP 403"
   // parece falha da primária. Só rótulo/URL e o motivo: nunca um contato.
-  const erro = fonteIncompleta
+  const erro = leituraParcial
     ? naoContribuiram
         .map((l) => `${identificarFonte(l.fonte)}: ${l.erro ?? MOTIVO_PAGINA_SEM_CONTEUDO}`)
         .join(" · ")

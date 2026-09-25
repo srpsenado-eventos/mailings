@@ -344,7 +344,7 @@ export function extrairConteudo(html: string, url: string): ConteudoFonte {
  * sobrenome, corta linha curta) e, numa tabela, a célula JÁ é o dado — o que devolve os
  * senadores de nome de uma palavra e mantém fora as seções que não são do grupo.
  *
- * Uma linha com uma célula só é cabeçalho de seção (`colspan`) e passa a valer para as
+ * Uma linha com uma célula só E `colspan` é cabeçalho de seção, e passa a valer para as
  * linhas seguintes. Linha só de `<th>` é ignorada. Linha sem a célula do nome é ignorada:
  * se a página mudar de estrutura, o resultado é composição vazia — e o orquestrador
  * transforma isso em indeterminado, nunca em possível saída.
@@ -365,7 +365,11 @@ export function extrairTabela(html: string, url: string, cfg: ExtracaoTabela): C
       celulas.eq(i).text().replace(/\s+/g, " ").trim() || undefined;
 
     if (celulas.length === 1) {
-      secao = texto(0) ?? "";
+      // Só é cabeçalho de seção a linha cuja única célula declara `colspan` — é assim que
+      // a página marca. Linha de uma célula sem `colspan` é dado malformado: ignorada SEM
+      // reescrever a seção corrente, senão uma linha estranha derrubaria todas as linhas
+      // seguintes da composição e o grupo cairia para indeterminado sem motivo.
+      if (celulas.eq(0).attr("colspan")) secao = texto(0) ?? "";
       return;
     }
     const nome = texto(cfg.colunas.nome);

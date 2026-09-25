@@ -59,6 +59,13 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
                 fonte
               </a>
             )}
+            {/* Falha parcial: o grupo foi comparado com as fontes que responderam, mas a
+                composição está incompleta. Sem este aviso a tela mostra um link azul comum
+                e parece um veredito completo — era o que o `erroFonte` prometia e não
+                entregava. O ramo de fonte inacessível já exibe o motivo no próprio texto. */}
+            {g.erroFonte && !g.fonteInacessivel ? (
+              <span className="text-sm text-amber-700"> · uma fonte não respondeu: {g.erroFonte}</span>
+            ) : null}
           </h2>
           <table className="w-full text-sm">
             <thead><tr className="text-left text-gray-500">

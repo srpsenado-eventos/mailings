@@ -142,6 +142,43 @@ describe("resolverGrupoEFonte", () => {
     expect(r.ufs).toEqual(["MA", "PI"]);
   });
 
+  test("rótulo que casa dois grupos com fonte compõe só com as fontes do dono da primária", () => {
+    // Arrange: a célula "Grupo" do Contatos junta mailings com ";" — misturar as páginas
+    // do STF e do TSE numa composição só faria ministro de um órgão "confirmar" o do outro.
+    const catalogo: GrupoCatalogo[] = [
+      { nome: "Ministros do STF", fontes: [{ url: "https://stf.jus.br/ministros", ativo: true }] },
+      { nome: "Ministros do TSE", fontes: [{ url: "https://tse.jus.br/ministros", ativo: true }] },
+    ];
+
+    // Act
+    const r = resolverGrupoEFonte("Ministros do STF; Ministros do TSE", catalogo);
+
+    // Assert
+    expect(r.grupoCanonico).toBe("Ministros do STF");
+    expect(r.fontes.map((f) => f.url)).toEqual(["https://stf.jus.br/ministros"]);
+  });
+
+  test("grupo sem fonte não empurra a fonte do vizinho casado para a composição", () => {
+    // Arrange: o 1º grupo casado não tem fonte; o dono da primária é o 2º, e é dele que
+    // saem as fontes — e também o nome canônico e a faixa de UF.
+    const catalogo: GrupoCatalogo[] = [
+      { nome: "Senadores (Acre a Goiás)", ufs: ["AC", "GO"], fontes: [] },
+      {
+        nome: "Senadores (Maranhão ao Piauí)",
+        ufs: ["MA", "PI"],
+        fontes: [{ url: "https://senado.leg.br/em-exercicio", ativo: true }],
+      },
+    ];
+
+    // Act
+    const r = resolverGrupoEFonte("Senadores", catalogo);
+
+    // Assert
+    expect(r.grupoCanonico).toBe("Senadores (Maranhão ao Piauí)");
+    expect(r.fontes.map((f) => f.url)).toEqual(["https://senado.leg.br/em-exercicio"]);
+    expect(r.ufs).toEqual(["MA", "PI"]);
+  });
+
   test("fonte inativa fica de fora da composição", () => {
     const r = resolverGrupoEFonte("STF", [
       {

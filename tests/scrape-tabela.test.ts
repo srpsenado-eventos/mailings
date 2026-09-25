@@ -51,6 +51,24 @@ describe("extrairTabela", () => {
     expect(c.pessoas[0].uf).toBeUndefined();
   });
 
+  test("linha de uma célula SEM colspan não é cabeçalho e não apaga a seção corrente", () => {
+    // Arrange: uma linha malformada (célula solta, sem colspan) no meio da seção aceita.
+    // Tratá-la como cabeçalho reescreveria a seção e derrubaria todas as linhas seguintes
+    // — composição vazia, que é a entrada do falso "possível saída".
+    const html = `<table>
+      <tr><td colspan="4"><strong>Assunção de cargo conforme RISF Art. 39, II</strong></td></tr>
+      <tr><td>Fulano de Tal</td><td>PP</td><td>PB</td><td>Ocupação de cargo</td></tr>
+      <tr><td>Nota de rodapé qualquer</td></tr>
+      <tr><td>Beltrano de Tal</td><td>PT</td><td>PI</td><td>Ocupação de cargo</td></tr>
+    </table>`;
+
+    // Act
+    const c = extrairTabela(html, URL_FORA, CFG_FORA);
+
+    // Assert
+    expect(c.pessoas.map((p) => p.nome)).toEqual(["Fulano de Tal", "Beltrano de Tal"]);
+  });
+
   test("seção casa sem depender de acento, caixa ou do resto da frase", () => {
     const html = `<table>
       <tr><td colspan="4"><strong>ASSUNÇÃO DE CARGO CONFORME RISF ART. 39, II</strong></td></tr>

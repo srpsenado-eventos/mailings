@@ -80,6 +80,47 @@ describe("resultadoParaLinhas", () => {
     );
     expect(linha.Fonte).toBe("https://senado.leg.br/fora-de-exercicio");
   });
+
+  test("fonte que não respondeu vira ressalva na observação de quem trabalha pelo download", () => {
+    // Arrange: grupo comparado com a fonte que sobrou, com o motivo técnico da que caiu.
+    const analise: ResultadoAnalise = {
+      arquivoNome: "c.xlsx",
+      grupos: [
+        {
+          grupo: "Senadores (Maranhão ao Piauí)",
+          fonteUrl: "https://senado.leg.br/em-exercicio",
+          semFonte: false,
+          erroFonte: "fora de exercício: HTTP 403",
+          contatos: [
+            {
+              contato: { nome: "Wellington Dias", grupo: "Senadores (Maranhão ao Piauí)" },
+              semaforo: "indeterminado",
+              score: 0,
+              comparacoes: [],
+              camposDivergentes: [],
+              origem: "oficial",
+              fonteUrl: "https://senado.leg.br/em-exercicio",
+              observacao: "Não consta nas fontes que responderam",
+            },
+          ],
+          novos: [],
+        },
+      ],
+      resumo: {
+        total: 1, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 1,
+        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+      },
+    };
+
+    // Act
+    const linha = resultadoParaLinhas(analise)[0];
+
+    // Assert: a mesma ressalva que a tela dá chega à planilha baixada.
+    expect(linha.Status).toBe("indeterminado");
+    expect(linha.Observacao).toBe(
+      "Não consta nas fontes que responderam · fonte não respondeu — fora de exercício: HTTP 403",
+    );
+  });
 });
 
 describe("gerarXlsx", () => {

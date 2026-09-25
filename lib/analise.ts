@@ -91,15 +91,15 @@ async function analisarGrupo(
     }),
   );
   const urlPrimaria = resolvida.fontes[0]?.url;
-  const primariaOk = lidas.length > 0 && contribuiu(lidas[0]);
-  // A regra de ouro vale mais que "compara com quem sobrou": se a fonte PRIMÁRIA não
-  // contribuiu, uma secundária sozinha condenaria quem só a primária publica (ex.: os
-  // senadores em exercício, se só a lista de "fora de exercício" respondesse). Por isso a
-  // página inteira é descartada — inclusive as secundárias — sobrando só o resgate da IA,
-  // o mesmo caminho que já existia para fonte única ilegível.
-  const pessoasPagina = primariaOk
-    ? unirFontes(lidas.map((l) => (l.conteudo ? marcarProveniencia(l.conteudo.pessoas, l.fonte) : [])))
-    : [];
+  // Toda fonte que contribuiu entra na composição, na ordem do catálogo: dado oficial da
+  // Camada 1 nunca é descartado, nem quando a primária caiu. O que a falha de uma fonte
+  // suspende é a CONCLUSÃO, não a comparação — quem não casar fica indeterminado (ver
+  // `fonteIncompleta` abaixo), porque a composição está incompleta e a ausência não prova
+  // nada. É a regra de ouro: nunca transformar "não conseguimos ler" em "possível saída".
+  const pessoasPagina = unirFontes(
+    lidas.map((l) => (l.conteudo ? marcarProveniencia(l.conteudo.pessoas, l.fonte) : [])),
+  );
+  const naoContribuiram = lidas.filter((l) => !contribuiu(l));
   // A Camada 2 recebe o texto da fonte primária — uma chamada por grupo, como sempre.
   const textoLimpo = lidas[0]?.conteudo?.textoLimpo ?? "";
 
@@ -124,12 +124,23 @@ async function analisarGrupo(
     destaques: [],
     pessoas: composicao,
   };
-  const r = compararGrupo(grupo, contatos, fonte, resolvida.grupoCanonico, resolvida.ufs);
-  // A primária sustentou o veredito, mas uma secundária caiu (ou voltou vazia): expõe o
-  // motivo técnico atribuído A ELA — sem o prefixo, "HTTP 403" parece falha da primária.
-  const secundariaQuebrada = primariaOk ? lidas.slice(1).find((l) => !contribuiu(l)) : undefined;
-  const erro = secundariaQuebrada
-    ? `${identificarFonte(secundariaQuebrada.fonte)}: ${secundariaQuebrada.erro ?? MOTIVO_PAGINA_SEM_CONTEUDO}`
+  // Alguma fonte ativa não contribuiu: a composição está incompleta, então ninguém deste
+  // grupo pode ser dado como saída — e o usuário precisa saber disso, na tela e no export.
+  const fonteIncompleta = naoContribuiram.length > 0;
+  const r = compararGrupo(
+    grupo,
+    contatos,
+    fonte,
+    resolvida.grupoCanonico,
+    resolvida.ufs,
+    fonteIncompleta,
+  );
+  // Motivo técnico atribuído A CADA fonte que falhou — sem identificar qual, "HTTP 403"
+  // parece falha da primária. Só rótulo/URL e o motivo: nunca um contato.
+  const erro = fonteIncompleta
+    ? naoContribuiram
+        .map((l) => `${identificarFonte(l.fonte)}: ${l.erro ?? MOTIVO_PAGINA_SEM_CONTEUDO}`)
+        .join(" · ")
     : undefined;
   // Marca o grupo quando a composição dependeu do conhecimento da IA (não 100% oficial).
   const usouConhecimento = composicao.some((p) => p.origem === "conhecimento");

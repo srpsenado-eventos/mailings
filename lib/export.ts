@@ -41,6 +41,17 @@ function valorPlanilhaDe(c: ResultadoContato, campo: string): string {
   return comparacaoDe(c, campo)?.valorPlanilha ?? "";
 }
 
+/**
+ * Observação do contato mais a ressalva do grupo, quando alguma fonte não respondeu.
+ * Quem trabalha a partir do download precisa da mesma ressalva que a tela dá: sem ela, a
+ * linha parece um veredito completo.
+ */
+function observacaoCom(observacao: string | undefined, erroFonte: string | undefined): string {
+  return [observacao, erroFonte ? `fonte não respondeu — ${erroFonte}` : undefined]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, string>[] {
   const linhas: Record<string, string>[] = [];
   for (const g of analise.grupos) {
@@ -51,7 +62,7 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
         Divergencias: [...new Set(c.camposDivergentes.map((d) => d.campo))].join(", "),
         Origem: c.origem,
         Fonte: c.fonteUrl ?? "",
-        Observacao: c.observacao ?? "",
+        Observacao: observacaoCom(c.observacao, g.erroFonte),
       };
       for (const f of CAMPOS) {
         linha[`${f.rotulo} (planilha)`] = valorPlanilhaDe(c, f.campo);
@@ -81,7 +92,10 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
         Divergencias: "",
         Origem: novo.origem === "conhecimento" ? "pesquisa_ampla" : "oficial",
         Fonte: novo.fonteUrl ?? g.fonteUrl ?? "",
-        Observacao: `Pessoa na fonte sem correspondência na planilha${situacao}`,
+        Observacao: observacaoCom(
+          `Pessoa na fonte sem correspondência na planilha${situacao}`,
+          g.erroFonte,
+        ),
       };
       for (const f of CAMPOS) {
         linha[`${f.rotulo} (planilha)`] = "";

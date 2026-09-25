@@ -62,7 +62,7 @@ function fontePrimariaDe(grupos: readonly GrupoCatalogo[]): FonteCatalogo | unde
 export interface FonteResolvida {
   /** Nome do grupo como cadastrado. `undefined` quando nenhum grupo casa. */
   grupoCanonico?: string;
-  /** TODAS as fontes ativas dos grupos casados, na ordem do catálogo. A 1ª é a primária. */
+  /** TODAS as fontes ativas do grupo dono da primária, na ordem do catálogo. A 1ª é a primária. */
   fontes: FonteCatalogo[];
   /** Faixa de UFs do grupo casado, quando cadastrada. Filtra proposta de inclusão. */
   ufs?: readonly string[];
@@ -103,10 +103,14 @@ export function resolverGrupoEFonte(
     return { fontes: [], sugestoes: sugerirGrupos(segmentos, catalogo.map((g) => g.nome)) };
   }
 
-  const fontes = casados.flatMap((g) => g.fontes).filter((f) => f.ativo);
-  // Prefere o nome do grupo que de fato fornece a fonte primária; senão, o 1º casado.
-  const dono = casados.find((g) => g.fontes.some((f) => f.ativo && f.url === fontes[0]?.url));
+  // O rótulo da planilha pode casar VÁRIOS grupos ("Ministros do STF; Ministros do TSE",
+  // ou "Senadores" solto, que cabe nos três grupos de faixa). Compõem o grupo apenas as
+  // fontes do grupo DONO da primária — juntar as páginas de órgãos diferentes numa
+  // composição só inventaria composição e faria autoridade de um órgão "confirmar" a de
+  // outro. Os demais casados continuam servindo só para escolher qual é esse dono.
+  const dono = casados.find((g) => g.fontes.some((f) => f.ativo));
   const grupo = dono ?? casados[0];
+  const fontes = grupo.fontes.filter((f) => f.ativo);
   return {
     grupoCanonico: grupo.nome,
     fontes,

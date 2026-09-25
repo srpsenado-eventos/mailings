@@ -262,11 +262,11 @@ describe("analisar com duas fontes no mesmo grupo", () => {
     expect(r.grupos[0].novos).toEqual([]);
   });
 
-  test("a fonte primária cai (erro): a secundária sozinha não decide quem saiu (regra de ouro)", async () => {
-    // Antes da correção deste round de revisão, esse cenário comparava só com a
-    // secundária e marcava Weverton (só publicado pela primária) como possível saída.
-    // A regra de ouro manda mais que "compara com quem sobrou": com a PRIMÁRIA fora do
-    // ar, ninguém pode ser confirmado nem descartado — o grupo inteiro fica indeterminado.
+  test("a fonte primária cai (erro): a secundária ainda confirma quem ela publica, e ninguém vira saída", async () => {
+    // Invariante: toda fonte que contribuiu compõe o grupo — jogar fora a secundária
+    // oficial descartaria Camada 1 de verdade. O que a falha suspende é a CONCLUSÃO:
+    // Wellington Dias, publicado pela secundária, sai verde; Weverton, que só a primária
+    // publica, fica indeterminado, nunca possível saída (regra de ouro).
     const depsPrimariaQuebrada: Dependencias = {
       ...depsSenadores,
       raspar: async (fonte) => {
@@ -281,16 +281,18 @@ describe("analisar com duas fontes no mesmo grupo", () => {
     };
     const r = await analisar("c.xlsx", senadores, depsPrimariaQuebrada);
     const g = r.grupos[0];
-    expect(g.fonteInacessivel).toBe(true);
-    expect(g.erroFonte).toBe("HTTP 403");
-    expect(g.contatos.every((c) => c.semaforo === "indeterminado")).toBe(true);
+    expect(g.fonteInacessivel).toBeUndefined();
+    // A fonte que falhou é identificada: sem o prefixo, "HTTP 403" não diz qual página caiu.
+    expect(g.erroFonte).toBe(`${PRIMARIA}: HTTP 403`);
+    expect(g.contatos.find((c) => c.contato.nome === "Wellington Dias")?.semaforo).toBe("verde");
+    expect(g.contatos.find((c) => c.contato.nome === "Weverton")?.semaforo).toBe("indeterminado");
     expect(g.contatos.some((c) => c.possivelSaida)).toBe(false);
   });
 
-  test("a fonte primária volta vazia (200 sem gente): mesma regra, indeterminado para todos", async () => {
+  test("a fonte primária volta vazia (200 sem gente): mesma regra, quem ela publicava fica indeterminado", async () => {
     // Espelho do teste acima com um scrape que teve sucesso (sem lançar) mas não achou
     // ninguém — o caso real do TCU/JS. As duas formas de "não contribuir" têm que levar
-    // ao mesmo lugar: nunca uma comparação fiada só na secundária.
+    // ao mesmo lugar: comparar com quem respondeu, sem concluir saída de ninguém.
     const depsPrimariaVazia: Dependencias = {
       ...depsSenadores,
       raspar: async (fonte) =>
@@ -305,9 +307,10 @@ describe("analisar com duas fontes no mesmo grupo", () => {
     };
     const r = await analisar("c.xlsx", senadores, depsPrimariaVazia);
     const g = r.grupos[0];
-    expect(g.fonteInacessivel).toBe(true);
-    expect(g.erroFonte).toMatch(/conteúdo legível/);
-    expect(g.contatos.every((c) => c.semaforo === "indeterminado")).toBe(true);
+    expect(g.fonteInacessivel).toBeUndefined();
+    expect(g.erroFonte).toBe(`${PRIMARIA}: página não retornou conteúdo legível (provável JavaScript)`);
+    expect(g.contatos.find((c) => c.contato.nome === "Wellington Dias")?.semaforo).toBe("verde");
+    expect(g.contatos.find((c) => c.contato.nome === "Weverton")?.semaforo).toBe("indeterminado");
     expect(g.contatos.some((c) => c.possivelSaida)).toBe(false);
   });
 
@@ -331,10 +334,14 @@ describe("analisar com duas fontes no mesmo grupo", () => {
     expect(g.fonteInacessivel).toBeUndefined();
     // O rótulo da fonte que caiu entra no motivo — sem ele, "HTTP 403" parece falha da primária.
     expect(g.erroFonte).toBe("fora de exercício: HTTP 403");
-    expect(g.contatos.every((c) => c.semaforo !== "indeterminado")).toBe(true);
     expect(g.contatos.find((c) => c.contato.nome === "Weverton")?.semaforo).toBe("verde");
-    // Limite conhecido: a secundária caiu, então quem só ela publica ainda vira possível saída.
-    expect(g.contatos.find((c) => c.contato.nome === "Wellington Dias")?.possivelSaida).toBe(true);
+    // Era o "limite conhecido" desta branch, e é o defeito que esta correção fecha: com a
+    // secundária fora do ar, quem só ela publica (titular afastado) não pode ser dado como
+    // saída. Fica indeterminado, com a ressalva na observação.
+    const wd = g.contatos.find((c) => c.contato.nome === "Wellington Dias");
+    expect(wd?.possivelSaida).toBeUndefined();
+    expect(wd?.semaforo).toBe("indeterminado");
+    expect(wd?.observacao).toMatch(/não respondeu/);
   });
 
   test("a fonte secundária volta vazia: o grupo segue comparado e o erro atribuído carrega o rótulo", async () => {
@@ -354,7 +361,9 @@ describe("analisar com duas fontes no mesmo grupo", () => {
     const g = r.grupos[0];
     expect(g.fonteInacessivel).toBeUndefined();
     expect(g.erroFonte).toBe("fora de exercício: página não retornou conteúdo legível (provável JavaScript)");
-    expect(g.contatos.some((c) => c.semaforo === "indeterminado")).toBe(false);
+    // A primária confirma Weverton; o que a secundária publicava fica sem conclusão.
+    expect(g.contatos.find((c) => c.contato.nome === "Weverton")?.semaforo).toBe("verde");
+    expect(g.contatos.some((c) => c.possivelSaida)).toBe(false);
   });
 
   test("as duas fontes caem: todos indeterminados, nenhuma saída", async () => {

@@ -415,4 +415,66 @@ describe("veredito com fonte rotulada", () => {
     );
     expect(r.novos.map((n) => n.nome)).not.toContain("Weverton");
   });
+
+  test("proposta de inclusão sem UF publicada entra no grupo: o filtro não inventa exclusão", () => {
+    // Arrange: a fonte não publicou a UF desta pessoa. A direção é conservadora de
+    // propósito — é melhor propor no grupo errado do que deixar autoridade de fora.
+    const semUf: ConteudoFonte = {
+      ...fonteSenadores,
+      pessoas: [
+        {
+          nome: "Fulana de Tal",
+          origem: "pagina",
+          rotuloFonte: "fora de exercício",
+          propoeInclusao: true,
+        },
+      ],
+    };
+
+    // Act
+    const r = compararGrupo("Senadores (Maranhão ao Piauí)", [], semUf, undefined, ["MA", "PI"]);
+
+    // Assert
+    expect(r.novos.map((n) => n.nome)).toEqual(["Fulana de Tal"]);
+  });
+
+  test("grupo sem faixa de UF cadastrada não filtra proposta nenhuma", () => {
+    // Arrange/Act: mesmo cadastro, sem `ufs` — nada a filtrar, tudo passa.
+    const r = compararGrupo("Senadores (Maranhão ao Piauí)", [], fonteSenadores, undefined);
+
+    // Assert
+    expect(r.novos.map((n) => n.nome)).toEqual(["Wellington Dias", "Eduardo Girão"]);
+  });
+});
+
+describe("compararGrupo com fonte incompleta (alguma fonte do grupo não respondeu)", () => {
+  const CADASTRO_OK = { tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" };
+  const fonte: ConteudoFonte = {
+    url: "https://orgao.gov.br",
+    textoLimpo: "",
+    destaques: [],
+    pessoas: [{ nome: "Ana Maria Política Completa", origem: "pagina" }],
+  };
+  const ausente = { nome: "Beatriz Sousa Ausente", grupo: "ORG", ...CADASTRO_OK };
+
+  test("quem não casa fica indeterminado, nunca possível saída", () => {
+    // Arrange/Act
+    const r = compararGrupo("ORG", [ausente], fonte, "ORG", undefined, true);
+
+    // Assert
+    const c = r.contatos[0];
+    expect(c.semaforo).toBe("indeterminado");
+    expect(c.possivelSaida).toBeUndefined();
+    expect(c.observacao).toMatch(/não respondeu/);
+  });
+
+  test("com todas as fontes de pé, quem não casa segue possível saída", () => {
+    // Arrange/Act
+    const r = compararGrupo("ORG", [ausente], fonte, "ORG");
+
+    // Assert
+    const c = r.contatos[0];
+    expect(c.semaforo).toBe("vermelho");
+    expect(c.possivelSaida).toBe(true);
+  });
 });

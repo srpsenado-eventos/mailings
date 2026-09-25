@@ -224,6 +224,13 @@ function divergenciasDe(comparacoes: readonly ComparacaoCampo[]): CampoDivergent
     .map((c) => ({ campo: c.campo, valorPlanilha: c.valorPlanilha, valorEncontrado: c.valorEsperado }));
 }
 
+/**
+ * Texto do contato não casado quando alguma fonte do grupo não respondeu. Diz o que
+ * aconteceu (verificação incompleta) sem afirmar o que não se sabe (saída).
+ */
+export const OBSERVACAO_VERIFICACAO_INCOMPLETA =
+  "Não consta nas fontes que responderam, mas uma fonte do grupo não respondeu — confira manualmente";
+
 /** Monta o veredito de um contato contra a pessoa casada (ou nenhuma → possível saída). */
 function montarResultado(
   contato: ContatoPlanilha,
@@ -231,11 +238,26 @@ function montarResultado(
   score: number,
   grupoCanonico: string | undefined,
   url?: string,
+  fonteIncompleta?: boolean,
 ): ResultadoContato {
   if (!pessoa) {
     // A auditoria de tratamento vale também para quem saiu: não depende da fonte, e o
     // achado tem que chegar ao export junto com a possível saída, não no lugar dela.
     const protocolo = comparacoesTratamento(contato, grupoCanonico);
+    if (fonteIncompleta) {
+      // Regra de ouro: alguma fonte ativa do grupo não contribuiu, então a composição
+      // está incompleta e a ausência não prova nada. Indeterminado, nunca saída.
+      return {
+        contato,
+        semaforo: "indeterminado",
+        score,
+        comparacoes: protocolo,
+        camposDivergentes: divergenciasDe(protocolo),
+        origem: "oficial",
+        fonteUrl: url,
+        observacao: OBSERVACAO_VERIFICACAO_INCOMPLETA,
+      };
+    }
     return {
       contato,
       semaforo: "vermelho",
@@ -365,12 +387,18 @@ export function marcarFonteInacessivel(
   };
 }
 
+/**
+ * @param fonteIncompleta Alguma fonte ativa do grupo não contribuiu (lançou erro ou voltou
+ *   sem ninguém). Quem não casar fica `indeterminado` em vez de "possível saída": a
+ *   composição está incompleta e a ausência não prova nada. Ver a regra de ouro no CLAUDE.md.
+ */
 export function compararGrupo(
   grupo: string,
   contatos: ContatoPlanilha[],
   fonte: ConteudoFonte | undefined,
   grupoCanonico?: string,
   ufsDoGrupo?: readonly string[],
+  fonteIncompleta?: boolean,
 ): ResultadoGrupo {
   if (!fonte) {
     return {
@@ -403,7 +431,14 @@ export function compararGrupo(
     const { indice, score } = melhorPessoa(c.nome, fonte.pessoas);
     const casou = indice >= 0 && score >= LIMIAR_PESSOA;
     if (casou) usados.add(indice);
-    return montarResultado(c, casou ? fonte.pessoas[indice] : undefined, score, grupoCanonico, fonte.url);
+    return montarResultado(
+      c,
+      casou ? fonte.pessoas[indice] : undefined,
+      score,
+      grupoCanonico,
+      fonte.url,
+      fonteIncompleta,
+    );
   });
   // "novos": de fonte que propõe inclusão, só quem está na faixa de UF do grupo. Das
   // demais fontes, mantém a regra antiga — só pessoa com cargo, que corta item de menu

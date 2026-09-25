@@ -69,7 +69,7 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
                 <tr key={i} className="border-t">
                   <td>
                     {c.contato.nome}
-                    {c.observacao && !c.possivelSaida ? (
+                    {c.observacao && !c.possivelSaida && !g.semFonte && !g.fonteInacessivel ? (
                       <span className="block text-xs text-gray-500">{c.observacao}</span>
                     ) : null}
                   </td>

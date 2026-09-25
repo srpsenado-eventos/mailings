@@ -289,7 +289,30 @@ function montarResultado(
   // amarelo sozinho, e nunca "possível saída" — esta só existe sem pessoa casada.
   const camposDivergentes = divergenciasDe(comparacoes);
   const semaforo: Semaforo = camposDivergentes.length > 0 ? "amarelo" : "verde";
-  return { contato, semaforo, score, comparacoes, camposDivergentes, origem, fonteUrl: url };
+  // Casou por fonte rotulada (ex.: a lista de fora de exercício): o cadastro está certo,
+  // e o que o usuário precisa saber é a situação, não uma divergência.
+  const nota = pessoa.rotuloFonte
+    ? [pessoa.rotuloFonte, pessoa.contexto].filter(Boolean).join(" — ")
+    : undefined;
+  return {
+    contato,
+    semaforo,
+    score,
+    comparacoes,
+    camposDivergentes,
+    origem,
+    fonteUrl: pessoa.fonteUrl ?? url,
+    ...(nota ? { observacao: nota } : {}),
+  };
+}
+
+/**
+ * A pessoa pertence à faixa de UF do grupo? Sem faixa cadastrada, ou sem UF publicada
+ * pela fonte, não há o que filtrar e a resposta é sim — o filtro nunca inventa exclusão.
+ */
+function naFaixaDeUf(pessoa: PessoaSite, ufs?: readonly string[]): boolean {
+  if (!ufs || ufs.length === 0 || !pessoa.uf) return true;
+  return ufs.includes(pessoa.uf.toUpperCase());
 }
 
 /**
@@ -347,6 +370,7 @@ export function compararGrupo(
   contatos: ContatoPlanilha[],
   fonte: ConteudoFonte | undefined,
   grupoCanonico?: string,
+  ufsDoGrupo?: readonly string[],
 ): ResultadoGrupo {
   if (!fonte) {
     return {
@@ -381,8 +405,12 @@ export function compararGrupo(
     if (casou) usados.add(indice);
     return montarResultado(c, casou ? fonte.pessoas[indice] : undefined, score, grupoCanonico, fonte.url);
   });
-  // "novos" só pessoas com cargo de autoridade — item de menu não tem cargo,
-  // então fica de fora (reduz drasticamente o ruído de navegação).
-  const novos = fonte.pessoas.filter((p, i) => !usados.has(i) && Boolean(p.cargo));
+  // "novos": de fonte que propõe inclusão, só quem está na faixa de UF do grupo. Das
+  // demais fontes, mantém a regra antiga — só pessoa com cargo, que corta item de menu
+  // do texto achatado. Numa fonte tabular toda linha já é pessoa.
+  const novos = fonte.pessoas.filter((p, i) => {
+    if (usados.has(i)) return false;
+    return p.propoeInclusao ? naFaixaDeUf(p, ufsDoGrupo) : Boolean(p.cargo);
+  });
   return { grupo, fonteUrl: fonte.url, semFonte: false, contatos: resultados, novos };
 }

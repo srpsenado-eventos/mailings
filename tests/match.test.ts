@@ -348,3 +348,71 @@ describe("sugerirGrupos", () => {
     expect(sugerirGrupos([], cadastrados)).toHaveLength(0);
   });
 });
+
+describe("veredito com fonte rotulada", () => {
+  const CADASTRO_OK = { tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" };
+
+  const fonteSenadores: ConteudoFonte = {
+    url: "https://senado.leg.br/em-exercicio",
+    textoLimpo: "",
+    destaques: [],
+    pessoas: [
+      { nome: "Weverton", uf: "MA", origem: "pagina", fonteUrl: "https://senado.leg.br/em-exercicio" },
+      {
+        nome: "Wellington Dias",
+        uf: "PI",
+        origem: "pagina",
+        contexto: "Ocupação de cargo de ministro/secretário",
+        rotuloFonte: "fora de exercício",
+        fonteUrl: "https://senado.leg.br/fora-de-exercicio",
+        propoeInclusao: true,
+      },
+      {
+        nome: "Eduardo Girão",
+        uf: "CE",
+        origem: "pagina",
+        contexto: "Licença com convocação de suplente (superior a 120 dias)",
+        rotuloFonte: "fora de exercício",
+        fonteUrl: "https://senado.leg.br/fora-de-exercicio",
+        propoeInclusao: true,
+      },
+    ],
+  };
+
+  test("quem casa pela fonte rotulada sai verde, com a nota e o motivo", () => {
+    const r = compararGrupo(
+      "Senadores (Maranhão ao Piauí)",
+      [{ nome: "Wellington Dias", grupo: "Senadores (Maranhão ao Piauí)", ...CADASTRO_OK }],
+      fonteSenadores,
+      "Senadores (Maranhão ao Piauí)",
+      ["MA", "PI"],
+    );
+    const c = r.contatos[0];
+    expect(c.semaforo).toBe("verde");
+    expect(c.possivelSaida).toBeUndefined();
+    expect(c.observacao).toBe("fora de exercício — Ocupação de cargo de ministro/secretário");
+    expect(c.fonteUrl).toBe("https://senado.leg.br/fora-de-exercicio");
+  });
+
+  test("proposta de inclusão só sai no grupo da faixa de UF", () => {
+    const r = compararGrupo(
+      "Senadores (Maranhão ao Piauí)",
+      [{ nome: "Weverton", grupo: "Senadores (Maranhão ao Piauí)", ...CADASTRO_OK }],
+      fonteSenadores,
+      "Senadores (Maranhão ao Piauí)",
+      ["MA", "PI"],
+    );
+    expect(r.novos.map((n) => n.nome)).toEqual(["Wellington Dias"]);
+  });
+
+  test("pessoa de fonte que não propõe inclusão e não tem cargo não vira novo", () => {
+    const r = compararGrupo(
+      "Senadores (Maranhão ao Piauí)",
+      [{ nome: "Wellington Dias", grupo: "Senadores (Maranhão ao Piauí)", ...CADASTRO_OK }],
+      fonteSenadores,
+      "Senadores (Maranhão ao Piauí)",
+      ["MA", "PI"],
+    );
+    expect(r.novos.map((n) => n.nome)).not.toContain("Weverton");
+  });
+});

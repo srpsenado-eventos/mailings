@@ -124,7 +124,7 @@ async function analisarGrupo(
     destaques: [],
     pessoas: composicao,
   };
-  const r = compararGrupo(grupo, contatos, fonte, resolvida.grupoCanonico);
+  const r = compararGrupo(grupo, contatos, fonte, resolvida.grupoCanonico, resolvida.ufs);
   // A primária sustentou o veredito, mas uma secundária caiu (ou voltou vazia): expõe o
   // motivo técnico atribuído A ELA — sem o prefixo, "HTTP 403" parece falha da primária.
   const secundariaQuebrada = primariaOk ? lidas.slice(1).find((l) => !contribuiu(l)) : undefined;

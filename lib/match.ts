@@ -100,14 +100,27 @@ export function mesclarComposicao(
  * primeira fonte que publica alguém vence: a mesma autoridade pode constar em duas
  * páginas do mesmo órgão, e contá-la duas vezes duplicaria a proposta de inclusão e
  * bagunçaria o casamento por índice de `compararGrupo`.
+ *
+ * A comparação só olha para TRÁS: cada pessoa é testada contra quem as fontes ANTERIORES
+ * já contribuíram, nunca contra alguém da própria lista. Sem essa guarda, duas autoridades
+ * de verdade na mesma página que só compartilham sobrenomes (ex.: "Carlos Eduardo Silva" e
+ * "Carlos Eduardo Souza") ou um nome de uma palavra contido num mais completo pontuam ≥
+ * `LIMIAR_PESSOA` uma contra a outra e uma delas some da composição — exatamente o nome
+ * curto que a extração de tabela (Task 2) foi buscar recuperar.
  */
 export function unirFontes(listas: PessoaSite[][]): PessoaSite[] {
   const unida: PessoaSite[] = [];
+  let deFontesAnteriores: PessoaSite[] = [];
   for (const lista of listas) {
     for (const pessoa of lista) {
-      const repetida = unida.some((p) => pontuarPessoa(p.nome, pessoa.nome) >= LIMIAR_PESSOA);
+      const repetida = deFontesAnteriores.some(
+        (p) => pontuarPessoa(p.nome, pessoa.nome) >= LIMIAR_PESSOA,
+      );
       if (!repetida) unida.push(pessoa);
     }
+    // Fecha a fonte com uma cópia: `unida` segue crescendo nas próximas fontes, e sem a
+    // cópia essa mesma referência faria a fonte seguinte se comparar contra si mesma.
+    deFontesAnteriores = [...unida];
   }
   return unida;
 }

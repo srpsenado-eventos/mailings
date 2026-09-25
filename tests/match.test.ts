@@ -304,6 +304,22 @@ describe("unirFontes", () => {
   test("lista vazia de fontes devolve composição vazia", () => {
     expect(unirFontes([])).toEqual([]);
   });
+
+  test("duas pessoas distintas da MESMA fonte não se comparam entre si, mesmo pontuando alto", () => {
+    // "Carlos Eduardo Silva" e "Carlos Eduardo Souza" compartilham 2 de 3 tokens fortes
+    // (score 0,667 ≥ LIMIAR_PESSOA) — mas são pessoas diferentes na mesma página, e a
+    // deduplicação só pode olhar fontes ANTERIORES, nunca a própria lista.
+    const fonte = [{ nome: "Carlos Eduardo Silva" }, { nome: "Carlos Eduardo Souza" }];
+    const unida = unirFontes([fonte]);
+    expect(unida.map((p) => p.nome)).toEqual(["Carlos Eduardo Silva", "Carlos Eduardo Souza"]);
+  });
+
+  test("nome de uma fonte anterior ainda funde com o de uma fonte seguinte (Weverton / Weverton Rocha)", () => {
+    const primaria = [{ nome: "Weverton" }];
+    const secundaria = [{ nome: "Weverton Rocha" }];
+    const unida = unirFontes([primaria, secundaria]);
+    expect(unida.map((p) => p.nome)).toEqual(["Weverton"]);
+  });
 });
 
 describe("sugerirGrupos", () => {

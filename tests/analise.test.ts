@@ -258,7 +258,11 @@ describe("analisar com duas fontes no mesmo grupo", () => {
     expect(r.grupos[0].novos).toEqual([]);
   });
 
-  test("uma fonte cai e a outra responde: compara com a que sobrou e guarda o motivo", async () => {
+  test("a fonte primária cai (erro): a secundária sozinha não decide quem saiu (regra de ouro)", async () => {
+    // Antes da correção deste round de revisão, esse cenário comparava só com a
+    // secundária e marcava Weverton (só publicado pela primária) como possível saída.
+    // A regra de ouro manda mais que "compara com quem sobrou": com a PRIMÁRIA fora do
+    // ar, ninguém pode ser confirmado nem descartado — o grupo inteiro fica indeterminado.
     const depsPrimariaQuebrada: Dependencias = {
       ...depsSenadores,
       raspar: async (fonte) => {
@@ -273,10 +277,80 @@ describe("analisar com duas fontes no mesmo grupo", () => {
     };
     const r = await analisar("c.xlsx", senadores, depsPrimariaQuebrada);
     const g = r.grupos[0];
-    expect(g.fonteInacessivel).toBeUndefined();
+    expect(g.fonteInacessivel).toBe(true);
     expect(g.erroFonte).toBe("HTTP 403");
-    expect(g.contatos.find((c) => c.contato.nome === "Wellington Dias")?.semaforo).toBe("verde");
-    expect(g.contatos.find((c) => c.contato.nome === "Weverton")?.possivelSaida).toBe(true);
+    expect(g.contatos.every((c) => c.semaforo === "indeterminado")).toBe(true);
+    expect(g.contatos.some((c) => c.possivelSaida)).toBe(false);
+  });
+
+  test("a fonte primária volta vazia (200 sem gente): mesma regra, indeterminado para todos", async () => {
+    // Espelho do teste acima com um scrape que teve sucesso (sem lançar) mas não achou
+    // ninguém — o caso real do TCU/JS. As duas formas de "não contribuir" têm que levar
+    // ao mesmo lugar: nunca uma comparação fiada só na secundária.
+    const depsPrimariaVazia: Dependencias = {
+      ...depsSenadores,
+      raspar: async (fonte) =>
+        fonte.url === PRIMARIA
+          ? { url: PRIMARIA, textoLimpo: "", destaques: [], pessoas: [] }
+          : {
+              url: SECUNDARIA,
+              textoLimpo: "Wellington Dias — PI",
+              destaques: [],
+              pessoas: [{ nome: "Wellington Dias", uf: "PI", origem: "pagina" as const }],
+            },
+    };
+    const r = await analisar("c.xlsx", senadores, depsPrimariaVazia);
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBe(true);
+    expect(g.erroFonte).toMatch(/conteúdo legível/);
+    expect(g.contatos.every((c) => c.semaforo === "indeterminado")).toBe(true);
+    expect(g.contatos.some((c) => c.possivelSaida)).toBe(false);
+  });
+
+  test("a fonte secundária cai (erro): o grupo segue comparado com a primária e o erro é atribuído a ela", async () => {
+    const depsSecundariaQuebrada: Dependencias = {
+      ...depsSenadores,
+      raspar: async (fonte) => {
+        if (fonte.url === PRIMARIA) {
+          return {
+            url: PRIMARIA,
+            textoLimpo: "Weverton — MA",
+            destaques: [],
+            pessoas: [{ nome: "Weverton", uf: "MA", origem: "pagina" as const }],
+          };
+        }
+        throw new Error("HTTP 403");
+      },
+    };
+    const r = await analisar("c.xlsx", senadores, depsSecundariaQuebrada);
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBeUndefined();
+    // O rótulo da fonte que caiu entra no motivo — sem ele, "HTTP 403" parece falha da primária.
+    expect(g.erroFonte).toBe("fora de exercício: HTTP 403");
+    expect(g.contatos.every((c) => c.semaforo !== "indeterminado")).toBe(true);
+    expect(g.contatos.find((c) => c.contato.nome === "Weverton")?.semaforo).toBe("verde");
+    // Limite conhecido: a secundária caiu, então quem só ela publica ainda vira possível saída.
+    expect(g.contatos.find((c) => c.contato.nome === "Wellington Dias")?.possivelSaida).toBe(true);
+  });
+
+  test("a fonte secundária volta vazia: o grupo segue comparado e o erro atribuído carrega o rótulo", async () => {
+    const depsSecundariaVazia: Dependencias = {
+      ...depsSenadores,
+      raspar: async (fonte) =>
+        fonte.url === PRIMARIA
+          ? {
+              url: PRIMARIA,
+              textoLimpo: "Weverton — MA",
+              destaques: [],
+              pessoas: [{ nome: "Weverton", uf: "MA", origem: "pagina" as const }],
+            }
+          : { url: SECUNDARIA, textoLimpo: "", destaques: [], pessoas: [] },
+    };
+    const r = await analisar("c.xlsx", senadores, depsSecundariaVazia);
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBeUndefined();
+    expect(g.erroFonte).toBe("fora de exercício: página não retornou conteúdo legível (provável JavaScript)");
+    expect(g.contatos.some((c) => c.semaforo === "indeterminado")).toBe(false);
   });
 
   test("as duas fontes caem: todos indeterminados, nenhuma saída", async () => {

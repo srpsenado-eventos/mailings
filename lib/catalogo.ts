@@ -58,12 +58,16 @@ function fontePrimariaDe(grupos: readonly GrupoCatalogo[]): FonteCatalogo | unde
   return grupos.flatMap((g) => g.fontes).find((f) => f.ativo);
 }
 
-/** Resolução de grupo: casamento com o cadastro + fonte oficial + sugestões. */
+/** Resolução de grupo: casamento com o cadastro + fontes oficiais + sugestões. */
 export interface FonteResolvida {
   /** Nome do grupo como cadastrado. `undefined` quando nenhum grupo casa. */
   grupoCanonico?: string;
-  /** URL oficial primária ativa, se o grupo casado tiver fonte cadastrada. */
+  /** TODAS as fontes ativas dos grupos casados, na ordem do catálogo. A 1ª é a primária. */
+  fontes: FonteCatalogo[];
+  /** URL da fonte primária. Derivada de `fontes[0]`; some quando `lib/analise.ts` parar de usá-la (Task 3). */
   url?: string;
+  /** Faixa de UFs do grupo casado, quando cadastrada. Filtra proposta de inclusão. */
+  ufs?: readonly string[];
   /** Quando nada casa: nomes cadastrados mais próximos, para orientar o usuário. */
   sugestoes: string[];
 }
@@ -94,17 +98,24 @@ export function resolverGrupoEFonte(
   catalogo: readonly GrupoCatalogo[] = CATALOGO,
 ): FonteResolvida {
   const segmentos = segmentarGrupo(grupoNome);
-  if (segmentos.length === 0) return { sugestoes: [] };
+  if (segmentos.length === 0) return { fontes: [], sugestoes: [] };
 
   const casados = gruposQueCasam(catalogo, segmentos);
   if (casados.length === 0) {
-    return { sugestoes: sugerirGrupos(segmentos, catalogo.map((g) => g.nome)) };
+    return { fontes: [], sugestoes: sugerirGrupos(segmentos, catalogo.map((g) => g.nome)) };
   }
 
-  const primaria = fontePrimariaDe(casados);
+  const fontes = casados.flatMap((g) => g.fontes).filter((f) => f.ativo);
   // Prefere o nome do grupo que de fato fornece a fonte primária; senão, o 1º casado.
-  const canonico = casados.find((g) => g.fontes.some((f) => f.ativo && f.url === primaria?.url));
-  return { grupoCanonico: (canonico ?? casados[0]).nome, url: primaria?.url, sugestoes: [] };
+  const dono = casados.find((g) => g.fontes.some((f) => f.ativo && f.url === fontes[0]?.url));
+  const grupo = dono ?? casados[0];
+  return {
+    grupoCanonico: grupo.nome,
+    fontes,
+    ...(fontes[0] ? { url: fontes[0].url } : {}),
+    ...(grupo.ufs ? { ufs: grupo.ufs } : {}),
+    sugestoes: [],
+  };
 }
 
 function mapearGrupo(grupo: GrupoCatalogo): GrupoCadastro {

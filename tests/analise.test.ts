@@ -24,8 +24,13 @@ const fonte: ConteudoFonte = {
 const deps: Dependencias = {
   resolverFonte: (grupo) =>
     grupo === "ORG"
-      ? { grupoCanonico: "ORG", url: "https://orgao.gov.br", sugestoes: [] }
-      : { sugestoes: [] },
+      ? {
+          grupoCanonico: "ORG",
+          fontes: [{ url: "https://orgao.gov.br", ativo: true }],
+          url: "https://orgao.gov.br",
+          sugestoes: [],
+        }
+      : { fontes: [], sugestoes: [] },
   raspar: async () => fonte,
   extrairComposicao: async () => [], // sem IA → usa o determinístico do scrape
 };
@@ -108,7 +113,7 @@ describe("analisar", () => {
   test("grupo casado sem URL oficial + IA → via pesquisa ampla", async () => {
     const depsSemUrl: Dependencias = {
       ...deps,
-      resolverFonte: () => ({ grupoCanonico: "ORG", sugestoes: [] }),
+      resolverFonte: () => ({ grupoCanonico: "ORG", fontes: [], sugestoes: [] }),
       extrairComposicao: async () => [
         { nome: "Ana Maria Política Completa", cargo: "Presidente", origem: "conhecimento" },
       ],
@@ -120,7 +125,7 @@ describe("analisar", () => {
   test("grupo desconhecido com sugestões → semFonte + sugestoesCadastro", async () => {
     const depsSug: Dependencias = {
       ...deps,
-      resolverFonte: () => ({ sugestoes: ["Conselho Nacional de Justiça (CNJ)"] }),
+      resolverFonte: () => ({ fontes: [], sugestoes: ["Conselho Nacional de Justiça (CNJ)"] }),
     };
     const r = await analisar("c.xlsx", [contatos[1]], depsSug);
     const g = r.grupos[0];

@@ -64,8 +64,6 @@ export interface FonteResolvida {
   grupoCanonico?: string;
   /** TODAS as fontes ativas dos grupos casados, na ordem do catálogo. A 1ª é a primária. */
   fontes: FonteCatalogo[];
-  /** URL da fonte primária. Derivada de `fontes[0]`; some quando `lib/analise.ts` parar de usá-la (Task 3). */
-  url?: string;
   /** Faixa de UFs do grupo casado, quando cadastrada. Filtra proposta de inclusão. */
   ufs?: readonly string[];
   /** Quando nada casa: nomes cadastrados mais próximos, para orientar o usuário. */
@@ -88,10 +86,10 @@ export function buscarFontePrimaria(
 }
 
 /**
- * Resolve o rótulo da planilha para o grupo cadastrado e sua fonte oficial.
- * Sempre devolve um objeto: com `grupoCanonico` quando casa (e `url` se houver
- * fonte), ou só com `sugestoes` (nomes próximos) quando nenhum grupo casa — para
- * a UI orientar o usuário a alinhar a planilha em vez de um beco sem saída.
+ * Resolve o rótulo da planilha para o grupo cadastrado e suas fontes oficiais.
+ * Sempre devolve um objeto: com `grupoCanonico` quando casa (e `fontes` com o que
+ * houver ativo), ou só com `sugestoes` (nomes próximos) quando nenhum grupo casa —
+ * para a UI orientar o usuário a alinhar a planilha em vez de um beco sem saída.
  */
 export function resolverGrupoEFonte(
   grupoNome: string,
@@ -112,7 +110,6 @@ export function resolverGrupoEFonte(
   return {
     grupoCanonico: grupo.nome,
     fontes,
-    ...(fontes[0] ? { url: fontes[0].url } : {}),
     ...(grupo.ufs ? { ufs: grupo.ufs } : {}),
     sugestoes: [],
   };

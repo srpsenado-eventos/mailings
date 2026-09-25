@@ -6,6 +6,7 @@ import {
   mesclarComposicao,
   pontuarPessoa,
   sugerirGrupos,
+  unirFontes,
 } from "@/lib/match";
 import type { ContatoPlanilha, ConteudoFonte, PessoaSite } from "@/lib/types";
 
@@ -285,6 +286,23 @@ describe("mesclarComposicao (Camada 1 base + resgate da IA)", () => {
     const r = mesclarComposicao(pagina, ia, alvo);
     expect(r.map((p) => p.nome)).toEqual(["Bruno Dantas Nascimento"]);
     expect(r[0].origem).toBe("pagina"); // a página vence (oficial)
+  });
+});
+
+describe("unirFontes", () => {
+  test("mantém a ordem das fontes e não duplica quem aparece nas duas", () => {
+    const primaria = [{ nome: "Alan Rick", fonteUrl: "https://a" }];
+    const secundaria = [
+      { nome: "Alan Rick", fonteUrl: "https://b", rotuloFonte: "fora de exercício" },
+      { nome: "Wellington Dias", fonteUrl: "https://b", rotuloFonte: "fora de exercício" },
+    ];
+    const unida = unirFontes([primaria, secundaria]);
+    expect(unida.map((p) => p.nome)).toEqual(["Alan Rick", "Wellington Dias"]);
+    expect(unida[0].fonteUrl).toBe("https://a");
+  });
+
+  test("lista vazia de fontes devolve composição vazia", () => {
+    expect(unirFontes([])).toEqual([]);
   });
 });
 

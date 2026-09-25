@@ -95,6 +95,23 @@ export function mesclarComposicao(
   return [...pessoasPagina, ...resgates];
 }
 
+/**
+ * Une as composições das várias fontes ativas de um grupo, na ordem do catálogo. A
+ * primeira fonte que publica alguém vence: a mesma autoridade pode constar em duas
+ * páginas do mesmo órgão, e contá-la duas vezes duplicaria a proposta de inclusão e
+ * bagunçaria o casamento por índice de `compararGrupo`.
+ */
+export function unirFontes(listas: PessoaSite[][]): PessoaSite[] {
+  const unida: PessoaSite[] = [];
+  for (const lista of listas) {
+    for (const pessoa of lista) {
+      const repetida = unida.some((p) => pontuarPessoa(p.nome, pessoa.nome) >= LIMIAR_PESSOA);
+      if (!repetida) unida.push(pessoa);
+    }
+  }
+  return unida;
+}
+
 function melhorPessoa(nome: string, pessoas: PessoaSite[]): { indice: number; score: number } {
   let indice = -1;
   let score = 0;

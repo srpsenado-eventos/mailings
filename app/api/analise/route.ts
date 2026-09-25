@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
     const deps: Dependencias = {
       resolverFonte: (grupo) => resolverGrupoEFonte(grupo),
-      raspar,
+      raspar: (fonte) => raspar(fonte.url, fonte.tabela ? { tabela: fonte.tabela } : {}),
       extrairComposicao: (grupoCanonico, textoLimpo) => extrairComposicao(grupoCanonico, textoLimpo),
     };
 

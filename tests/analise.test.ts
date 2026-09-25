@@ -27,11 +27,10 @@ const deps: Dependencias = {
       ? {
           grupoCanonico: "ORG",
           fontes: [{ url: "https://orgao.gov.br", ativo: true }],
-          url: "https://orgao.gov.br",
           sugestoes: [],
         }
       : { fontes: [], sugestoes: [] },
-  raspar: async () => fonte,
+  raspar: async (_fonte) => fonte,
   extrairComposicao: async () => [], // sem IA → usa o determinístico do scrape
 };
 
@@ -190,5 +189,106 @@ describe("analisar", () => {
     expect(c.semaforo).toBe("verde");
     expect(c.possivelSaida).toBeFalsy();
     expect(c.origem).toBe("pesquisa_ampla"); // resgatado pela IA
+  });
+});
+
+describe("analisar com duas fontes no mesmo grupo", () => {
+  const PRIMARIA = "https://senado.leg.br/em-exercicio";
+  const SECUNDARIA = "https://senado.leg.br/fora-de-exercicio";
+
+  const depsSenadores: Dependencias = {
+    resolverFonte: () => ({
+      grupoCanonico: "Senadores (Maranhão ao Piauí)",
+      fontes: [
+        { url: PRIMARIA, ativo: true },
+        { url: SECUNDARIA, ativo: true, rotulo: "fora de exercício", propoeInclusao: true },
+      ],
+      ufs: ["MA", "PI"],
+      sugestoes: [],
+    }),
+    raspar: async (fonte) =>
+      fonte.url === PRIMARIA
+        ? {
+            url: PRIMARIA,
+            textoLimpo: "Weverton — MA",
+            destaques: [],
+            pessoas: [{ nome: "Weverton", uf: "MA", origem: "pagina" as const }],
+          }
+        : {
+            url: SECUNDARIA,
+            textoLimpo: "Wellington Dias — PI",
+            destaques: [],
+            pessoas: [
+              { nome: "Wellington Dias", uf: "PI", contexto: "Ocupação de cargo de ministro/secretário", origem: "pagina" as const },
+            ],
+          },
+    extrairComposicao: async () => [],
+  };
+
+  const senadores: ContatoPlanilha[] = [
+    { nome: "Weverton", grupo: "Senadores (Maranhão ao Piauí)", ...CADASTRO_OK },
+    { nome: "Wellington Dias", grupo: "Senadores (Maranhão ao Piauí)", ...CADASTRO_OK },
+  ];
+
+  test("contato que só consta na fonte secundária não é possível saída", async () => {
+    const r = await analisar("c.xlsx", senadores, depsSenadores);
+    const wellington = r.grupos[0].contatos.find((c) => c.contato.nome === "Wellington Dias");
+    expect(wellington?.possivelSaida).toBeUndefined();
+    expect(wellington?.semaforo).toBe("verde");
+  });
+
+  test("o grupo aponta para a fonte primária", async () => {
+    const r = await analisar("c.xlsx", senadores, depsSenadores);
+    expect(r.grupos[0].fonteUrl).toBe(PRIMARIA);
+    expect(r.grupos[0].semFonte).toBe(false);
+  });
+
+  test("quem aparece nas duas fontes conta uma vez só e não vira novo", async () => {
+    const depsRepetido: Dependencias = {
+      ...depsSenadores,
+      raspar: async (fonte) => ({
+        url: fonte.url,
+        textoLimpo: "Weverton — MA",
+        destaques: [],
+        pessoas: [{ nome: "Weverton", uf: "MA", origem: "pagina" as const }],
+      }),
+    };
+    const r = await analisar("c.xlsx", [senadores[0]], depsRepetido);
+    expect(r.grupos[0].contatos).toHaveLength(1);
+    expect(r.grupos[0].novos).toEqual([]);
+  });
+
+  test("uma fonte cai e a outra responde: compara com a que sobrou e guarda o motivo", async () => {
+    const depsPrimariaQuebrada: Dependencias = {
+      ...depsSenadores,
+      raspar: async (fonte) => {
+        if (fonte.url === PRIMARIA) throw new Error("HTTP 403");
+        return {
+          url: SECUNDARIA,
+          textoLimpo: "Wellington Dias — PI",
+          destaques: [],
+          pessoas: [{ nome: "Wellington Dias", uf: "PI", origem: "pagina" as const }],
+        };
+      },
+    };
+    const r = await analisar("c.xlsx", senadores, depsPrimariaQuebrada);
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBeUndefined();
+    expect(g.erroFonte).toBe("HTTP 403");
+    expect(g.contatos.find((c) => c.contato.nome === "Wellington Dias")?.semaforo).toBe("verde");
+    expect(g.contatos.find((c) => c.contato.nome === "Weverton")?.possivelSaida).toBe(true);
+  });
+
+  test("as duas fontes caem: todos indeterminados, nenhuma saída", async () => {
+    const depsTudoQuebrado: Dependencias = {
+      ...depsSenadores,
+      raspar: async () => {
+        throw new Error("timeout");
+      },
+    };
+    const r = await analisar("c.xlsx", senadores, depsTudoQuebrado);
+    expect(r.grupos[0].fonteInacessivel).toBe(true);
+    expect(r.grupos[0].contatos.every((c) => c.semaforo === "indeterminado")).toBe(true);
+    expect(r.grupos[0].contatos.some((c) => c.possivelSaida)).toBe(false);
   });
 });

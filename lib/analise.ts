@@ -1,13 +1,14 @@
 import type {
   ContatoPlanilha,
   ConteudoFonte,
+  FonteCatalogo,
   PessoaSite,
   ResultadoAnalise,
   ResultadoGrupo,
   ResumoAnalise,
 } from "@/lib/types";
 import { agruparPorGrupo } from "@/lib/planilha";
-import { compararGrupo, marcarFonteInacessivel, mesclarComposicao } from "@/lib/match";
+import { compararGrupo, marcarFonteInacessivel, mesclarComposicao, unirFontes } from "@/lib/match";
 import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { ScrapeError } from "@/lib/scrape";
 import type { FonteResolvida } from "@/lib/catalogo";
@@ -23,11 +24,29 @@ function motivoDaFalha(err: unknown): string {
  * resolução de URL, o scraping e a composição via IA (Camada B) vêm de fora.
  */
 export interface Dependencias {
-  /** Resolve o rótulo da planilha para grupo canônico + URL oficial. Síncrono: lê o catálogo versionado. */
+  /** Resolve o rótulo da planilha para grupo canônico + fontes oficiais. Lê o catálogo versionado. */
   resolverFonte: (grupo: string) => FonteResolvida;
-  raspar: (url: string) => Promise<ConteudoFonte>;
+  /** Raspa UMA fonte cadastrada, com a extração que ela declara. */
+  raspar: (fonte: FonteCatalogo) => Promise<ConteudoFonte>;
   /** Camada B: composição via IA (texto raspado + conhecimento). `[]` = indisponível. */
   extrairComposicao: (grupoCanonico: string, textoLimpo: string) => Promise<PessoaSite[]>;
+}
+
+/** Resultado da leitura de uma fonte: conteúdo OU motivo técnico da falha, nunca os dois. */
+interface FonteLida {
+  fonte: FonteCatalogo;
+  conteudo?: ConteudoFonte;
+  erro?: string;
+}
+
+/** Carimba em cada pessoa de onde ela veio, para o veredito saber o que dizer depois. */
+function marcarProveniencia(pessoas: PessoaSite[], fonte: FonteCatalogo): PessoaSite[] {
+  return pessoas.map((p) => ({
+    ...p,
+    fonteUrl: fonte.url,
+    ...(fonte.rotulo ? { rotuloFonte: fonte.rotulo } : {}),
+    ...(fonte.propoeInclusao ? { propoeInclusao: true } : {}),
+  }));
 }
 
 async function analisarGrupo(
@@ -44,46 +63,56 @@ async function analisarGrupo(
       : base;
   }
 
-  // 1. Camada 1 (base): tenta raspar a URL oficial. Falha → texto vazio (a IA cobre).
-  let fonteRaspada: ConteudoFonte | undefined;
-  let motivoFalha = "fonte inacessível";
-  if (resolvida.url) {
-    try {
-      fonteRaspada = await deps.raspar(resolvida.url);
-    } catch (err) {
-      motivoFalha = motivoDaFalha(err);
-    }
-  }
-  const textoLimpo = fonteRaspada?.textoLimpo ?? "";
-  const pessoasPagina = fonteRaspada?.pessoas ?? [];
+  // 1. Camada 1 (base): todas as fontes ativas, em paralelo. Uma falhar não derruba a outra.
+  const lidas: FonteLida[] = await Promise.all(
+    resolvida.fontes.map(async (fonte) => {
+      try {
+        return { fonte, conteudo: await deps.raspar(fonte) };
+      } catch (err) {
+        return { fonte, erro: motivoDaFalha(err) };
+      }
+    }),
+  );
+  const pessoasPagina = unirFontes(
+    lidas.map((l) => (l.conteudo ? marcarProveniencia(l.conteudo.pessoas, l.fonte) : [])),
+  );
+  // A Camada 2 recebe o texto da fonte primária — uma chamada por grupo, como sempre.
+  const textoLimpo = lidas[0]?.conteudo?.textoLimpo ?? "";
 
   // 2. Camada 2 (refinamento/cobertura): composição via IA. Sem chave → [].
   const pessoasIA = await deps.extrairComposicao(resolvida.grupoCanonico, textoLimpo);
   const composicao = mesclarComposicao(pessoasPagina, pessoasIA, contatos);
+  const urlPrimaria = resolvida.fontes[0]?.url;
 
-  // 3. Sem composição (página ilegível E IA vazia): NUNCA "saída" — "não verificado".
+  // 3. Sem composição (nenhuma fonte legível E IA vazia): NUNCA "saída" — "não verificado".
   if (composicao.length === 0) {
-    if (resolvida.url) {
+    if (urlPrimaria) {
       // Diferencia scrape que lançou erro de página que veio sem conteúdo legível (JS).
-      const motivo = fonteRaspada
-        ? "página não retornou conteúdo legível (provável JavaScript)"
-        : motivoFalha;
-      return marcarFonteInacessivel(grupo, contatos, resolvida.url, motivo, resolvida.grupoCanonico);
+      const motivo =
+        lidas.find((l) => l.erro)?.erro ??
+        "página não retornou conteúdo legível (provável JavaScript)";
+      return marcarFonteInacessivel(grupo, contatos, urlPrimaria, motivo, resolvida.grupoCanonico);
     }
     return compararGrupo(grupo, contatos, undefined, resolvida.grupoCanonico); // sem URL → sem fonte
   }
 
-  // 4. Compara contra a composição (página + resgates da IA, ou só IA na página ilegível).
+  // 4. Compara contra a composição (todas as fontes + resgates da IA).
   const fonte: ConteudoFonte = {
-    url: resolvida.url ?? URL_PESQUISA_AMPLA,
+    url: urlPrimaria ?? URL_PESQUISA_AMPLA,
     textoLimpo,
     destaques: [],
     pessoas: composicao,
   };
   const r = compararGrupo(grupo, contatos, fonte, resolvida.grupoCanonico);
+  // Uma fonte caiu e a outra respondeu: compara com a que sobrou e expõe o motivo técnico.
+  const erro = lidas.find((l) => l.erro)?.erro;
   // Marca o grupo quando a composição dependeu do conhecimento da IA (não 100% oficial).
   const usouConhecimento = composicao.some((p) => p.origem === "conhecimento");
-  return usouConhecimento || !resolvida.url ? { ...r, viaPesquisaAmpla: true } : r;
+  return {
+    ...r,
+    ...(erro ? { erroFonte: erro } : {}),
+    ...(usouConhecimento || !urlPrimaria ? { viaPesquisaAmpla: true } : {}),
+  };
 }
 
 function resumir(grupos: ResultadoGrupo[]): ResumoAnalise {

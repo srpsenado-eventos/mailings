@@ -23,6 +23,14 @@ function motivoDaFalha(err: unknown): string {
 const MOTIVO_PAGINA_SEM_CONTEUDO = "página não retornou conteúdo legível (provável JavaScript)";
 
 /**
+ * Motivo de uma fonte que respondeu e simplesmente não trouxe ninguém, enquanto outra fonte
+ * do grupo trouxe. Diferente do diagnóstico acima de propósito: a página respondeu, e dizer
+ * que ela é ilegível seria mentira — a lista de "fora de exercício" fica legitimamente vazia
+ * quando nenhum senador está afastado.
+ */
+const MOTIVO_FONTE_VAZIA = "não trouxe ninguém";
+
+/**
  * Dependências injetadas no orquestrador. Mantêm `lib/*` puro e testável: a
  * resolução de URL, o scraping e a composição via IA (Camada B) vêm de fora.
  */
@@ -59,6 +67,22 @@ function marcarProveniencia(pessoas: PessoaSite[], fonte: FonteCatalogo): Pessoa
  */
 function contribuiu(lida: FonteLida): boolean {
   return lida.conteudo !== undefined && lida.conteudo.pessoas.length > 0;
+}
+
+/**
+ * A fonte FALHOU, no sentido que suspende o veredito de saída? Não é a mesma pergunta que
+ * `contribuiu`: lá o que se decide é quem entra na composição; aqui, se a composição ficou
+ * confiável o bastante para concluir que alguém saiu.
+ *
+ * - Lançou erro (403, TLS, timeout) → falhou, em qualquer posição.
+ * - É a PRIMÁRIA e voltou de pé sem ninguém → falhou: é o caso do TCU/JS e o da página que
+ *   mudou de estrutura, em que o spec de 2026-09-24 promete indeterminado, nunca saída falsa.
+ * - É uma fonte secundária e voltou de pé sem ninguém → NÃO falhou: a lista de "fora de
+ *   exercício" vazia é estado normal (nenhum senador afastado), e tratá-la como falha
+ *   desligaria a detecção de saída dos três mailings de Senadores sem ninguém perceber.
+ */
+function falhou(lida: FonteLida, ehPrimaria: boolean): boolean {
+  return lida.erro !== undefined || (ehPrimaria && !contribuiu(lida));
 }
 
 /** Identifica a fonte no motivo técnico: o rótulo quando houver, senão a URL. Sem PII. */
@@ -98,12 +122,14 @@ async function analisarGrupo(
     lidas.map((l) => (l.conteudo ? marcarProveniencia(l.conteudo.pessoas, l.fonte) : [])),
   );
   const naoContribuiram = lidas.filter((l) => !contribuiu(l));
-  // LEITURA PARCIAL: alguma fonte ativa respondeu e outra não. É a única situação criada
-  // por esta branch, e a única em que o veredito de saída fica suspenso — ver o passo 4.
+  const algumaContribuiu = lidas.some(contribuiu);
+  // LEITURA PARCIAL: alguma fonte ativa compôs o grupo e outra FALHOU (ver `falhou`). É a
+  // única situação em que o veredito de saída fica suspenso — ver o passo 4. Fonte que
+  // respondeu e não tinha ninguém a listar não entra aqui: vira só ressalva em `erroFonte`.
   // Quando NENHUMA fonte contribuiu nada muda em relação ao que já existia: a composição
   // da IA, se houver, é composição real e continua podendo apontar saída (marcada
   // `viaPesquisaAmpla`, o caminho documentado do TCU); sem IA, cai em fonte inacessível.
-  const leituraParcial = naoContribuiram.length > 0 && lidas.some(contribuiu);
+  const leituraParcial = algumaContribuiu && lidas.some((l, i) => falhou(l, i === 0));
   // A Camada 2 recebe o texto da fonte primária — uma chamada por grupo, como sempre.
   const textoLimpo = lidas[0]?.conteudo?.textoLimpo ?? "";
 
@@ -138,11 +164,13 @@ async function analisarGrupo(
     resolvida.ufs,
     leituraParcial,
   );
-  // Motivo técnico atribuído A CADA fonte que falhou — sem identificar qual, "HTTP 403"
-  // parece falha da primária. Só rótulo/URL e o motivo: nunca um contato.
-  const erro = leituraParcial
+  // Ressalva atribuída A CADA fonte que não compôs — sem identificar qual, "HTTP 403"
+  // parece falha da primária. Vale para as duas formas de não compor, inclusive a que NÃO
+  // suspende o veredito: o usuário tem que saber que aquela fonte não trouxe nada. Só
+  // rótulo/URL e o motivo técnico: nunca um contato.
+  const erro = algumaContribuiu && naoContribuiram.length > 0
     ? naoContribuiram
-        .map((l) => `${identificarFonte(l.fonte)}: ${l.erro ?? MOTIVO_PAGINA_SEM_CONTEUDO}`)
+        .map((l) => `${identificarFonte(l.fonte)}: ${l.erro ?? MOTIVO_FONTE_VAZIA}`)
         .join(" · ")
     : undefined;
   // Marca o grupo quando a composição dependeu do conhecimento da IA (não 100% oficial).

@@ -320,8 +320,10 @@ describe("analisar com duas fontes no mesmo grupo", () => {
 
   test("a fonte primária volta vazia (200 sem gente): mesma regra, quem ela publicava fica indeterminado", async () => {
     // Espelho do teste acima com um scrape que teve sucesso (sem lançar) mas não achou
-    // ninguém — o caso real do TCU/JS. As duas formas de "não contribuir" têm que levar
-    // ao mesmo lugar: comparar com quem respondeu, sem concluir saída de ninguém.
+    // ninguém — o caso real do TCU/JS e o da página que mudou de estrutura. Na PRIMÁRIA
+    // isso é falha: é a lista que define quem é do grupo, e o spec de 2026-09-24 promete
+    // indeterminado, nunca saída falsa. (Numa fonte secundária, vazio é estado normal —
+    // ver o teste "a fonte secundária responde sem ninguém".)
     const depsPrimariaVazia: Dependencias = {
       ...depsSenadores,
       raspar: async (fonte) =>
@@ -337,7 +339,7 @@ describe("analisar com duas fontes no mesmo grupo", () => {
     const r = await analisar("c.xlsx", senadores, depsPrimariaVazia);
     const g = r.grupos[0];
     expect(g.fonteInacessivel).toBeUndefined();
-    expect(g.erroFonte).toBe(`${PRIMARIA}: página não retornou conteúdo legível (provável JavaScript)`);
+    expect(g.erroFonte).toBe(`${PRIMARIA}: não trouxe ninguém`);
     expect(g.contatos.find((c) => c.contato.nome === "Wellington Dias")?.semaforo).toBe("verde");
     expect(g.contatos.find((c) => c.contato.nome === "Weverton")?.semaforo).toBe("indeterminado");
     expect(g.contatos.some((c) => c.possivelSaida)).toBe(false);
@@ -375,7 +377,10 @@ describe("analisar com duas fontes no mesmo grupo", () => {
     expect(wd?.observacao).toMatch(/não respondeu/);
   });
 
-  test("a fonte secundária volta vazia: o grupo segue comparado e o erro atribuído carrega o rótulo", async () => {
+  test("a fonte secundária responde sem ninguém: a detecção de saída continua de pé, com a ressalva", async () => {
+    // Estado NORMAL da lista de "fora de exercício": ninguém afastado hoje. Não é falha, e
+    // tratá-la como falha desligaria a detecção de saída dos três mailings de Senadores
+    // sem ninguém perceber. A página respondeu — a ressalva diz isso, não que é ilegível.
     const depsSecundariaVazia: Dependencias = {
       ...depsSenadores,
       raspar: async (fonte) =>
@@ -391,10 +396,12 @@ describe("analisar com duas fontes no mesmo grupo", () => {
     const r = await analisar("c.xlsx", senadores, depsSecundariaVazia);
     const g = r.grupos[0];
     expect(g.fonteInacessivel).toBeUndefined();
-    expect(g.erroFonte).toBe("fora de exercício: página não retornou conteúdo legível (provável JavaScript)");
-    // A primária confirma Weverton; o que a secundária publicava fica sem conclusão.
+    // Ressalva honesta: a fonte respondeu e não trouxe ninguém.
+    expect(g.erroFonte).toBe("fora de exercício: não trouxe ninguém");
     expect(g.contatos.find((c) => c.contato.nome === "Weverton")?.semaforo).toBe("verde");
-    expect(g.contatos.some((c) => c.possivelSaida)).toBe(false);
+    // E o veredito de saída continua funcionando: quem não está em nenhuma das duas listas
+    // é possível saída, como seria se a secundária nem existisse.
+    expect(g.contatos.find((c) => c.contato.nome === "Wellington Dias")?.possivelSaida).toBe(true);
   });
 
   test("as duas fontes caem: todos indeterminados, nenhuma saída", async () => {

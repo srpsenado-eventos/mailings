@@ -121,6 +121,47 @@ describe("resultadoParaLinhas", () => {
       "Não consta nas fontes que responderam · fonte não respondeu — fora de exercício: HTTP 403",
     );
   });
+
+  test("grupo inteiro inacessível não repete o motivo: a observação do contato já o diz", () => {
+    // Arrange: aqui `erroFonte` é o motivo da única fonte, e a observação do contato já
+    // avisa que a fonte não pôde ser lida. Somar a ressalva daria a mesma frase duas vezes
+    // na mesma célula — a tela suprime pelo mesmo motivo.
+    const analise: ResultadoAnalise = {
+      arquivoNome: "c.xlsx",
+      grupos: [
+        {
+          grupo: "TCU",
+          fonteUrl: "https://tcu.gov.br",
+          semFonte: false,
+          fonteInacessivel: true,
+          erroFonte: "HTTP 403",
+          contatos: [
+            {
+              contato: { nome: "Ana", grupo: "TCU" },
+              semaforo: "indeterminado",
+              score: 0,
+              comparacoes: [],
+              camposDivergentes: [],
+              origem: "oficial",
+              fonteUrl: "https://tcu.gov.br",
+              observacao: "Fonte cadastrada, mas inacessível — verifique manualmente",
+            },
+          ],
+          novos: [],
+        },
+      ],
+      resumo: {
+        total: 1, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 1,
+        gruposSemFonte: 0, gruposFonteInacessivel: 1, gruposViaPesquisaAmpla: 0,
+      },
+    };
+
+    // Act
+    const linha = resultadoParaLinhas(analise)[0];
+
+    // Assert
+    expect(linha.Observacao).toBe("Fonte cadastrada, mas inacessível — verifique manualmente");
+  });
 });
 
 describe("gerarXlsx", () => {

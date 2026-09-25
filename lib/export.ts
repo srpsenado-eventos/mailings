@@ -1,6 +1,6 @@
 import * as XLSX from "xlsx";
 import { coerenciasVisiveis, textoCoerencia, ROTULOS_CAMPO_TRATAMENTO } from "@/lib/tratamento";
-import type { ComparacaoCampo, ResultadoAnalise, ResultadoContato } from "@/lib/types";
+import type { ComparacaoCampo, ResultadoAnalise, ResultadoContato, ResultadoGrupo } from "@/lib/types";
 
 /**
  * Campos mostrados em pares de colunas planilha × referência. O sufixo é fixo por campo:
@@ -46,15 +46,25 @@ function valorPlanilhaDe(c: ResultadoContato, campo: string): string {
  * Quem trabalha a partir do download precisa da mesma ressalva que a tela dá: sem ela, a
  * linha parece um veredito completo.
  */
-function observacaoCom(observacao: string | undefined, erroFonte: string | undefined): string {
-  return [observacao, erroFonte ? `fonte não respondeu — ${erroFonte}` : undefined]
+function observacaoCom(observacao: string | undefined, ressalva: string | undefined): string {
+  return [observacao, ressalva ? `fonte não respondeu — ${ressalva}` : undefined]
     .filter(Boolean)
     .join(" · ");
+}
+
+/**
+ * Ressalva do grupo a repetir na linha de cada contato. No grupo inteiro inacessível a
+ * observação do contato já diz que a fonte não pôde ser lida: repetir o motivo aqui daria
+ * a mesma frase duas vezes na mesma célula. A tela suprime pelo mesmo motivo.
+ */
+function ressalvaDoGrupo(g: ResultadoGrupo): string | undefined {
+  return g.fonteInacessivel ? undefined : g.erroFonte;
 }
 
 export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, string>[] {
   const linhas: Record<string, string>[] = [];
   for (const g of analise.grupos) {
+    const ressalva = ressalvaDoGrupo(g);
     for (const c of g.contatos) {
       const linha: Record<string, string> = {
         Grupo: g.grupo,
@@ -62,7 +72,7 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
         Divergencias: [...new Set(c.camposDivergentes.map((d) => d.campo))].join(", "),
         Origem: c.origem,
         Fonte: c.fonteUrl ?? "",
-        Observacao: observacaoCom(c.observacao, g.erroFonte),
+        Observacao: observacaoCom(c.observacao, ressalva),
       };
       for (const f of CAMPOS) {
         linha[`${f.rotulo} (planilha)`] = valorPlanilhaDe(c, f.campo);
@@ -94,7 +104,7 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
         Fonte: novo.fonteUrl ?? g.fonteUrl ?? "",
         Observacao: observacaoCom(
           `Pessoa na fonte sem correspondência na planilha${situacao}`,
-          g.erroFonte,
+          ressalva,
         ),
       };
       for (const f of CAMPOS) {

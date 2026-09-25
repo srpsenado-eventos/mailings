@@ -76,7 +76,14 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
                 <tr key={i} className="border-t">
                   <td>
                     {c.contato.nome}
-                    {c.observacao && !c.possivelSaida && !g.semFonte && !g.fonteInacessivel ? (
+                    {/* `g.erroFonte` já avisa no cabeçalho do grupo: repetir por contato
+                        devolveria o ruído que o commit 58d743b tirou. No export a linha
+                        precisa se sustentar sozinha, e lá a ressalva continua. */}
+                    {c.observacao &&
+                    !c.possivelSaida &&
+                    !g.semFonte &&
+                    !g.fonteInacessivel &&
+                    !g.erroFonte ? (
                       <span className="block text-xs text-gray-500">{c.observacao}</span>
                     ) : null}
                   </td>

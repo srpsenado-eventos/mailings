@@ -22,15 +22,21 @@ export interface ContatoPlanilha {
 export type OrigemDado = "pagina" | "conhecimento" | "protocolo" | "coerencia";
 
 /**
- * Achado da Camada A (coerência interna de `Tratamento`, `Endereçamento` e `Cargo`).
- * Identifica **qual** das quatro verificações apontou, já que as quatro recaem sobre
- * apenas dois campos. `lib/tratamento.ts` traduz cada código com `rotuloAchado`.
+ * Achado da Camada A (coerência interna de `Tratamento`, `Endereçamento` e `Cargo`) ou
+ * da Camada C (regras de escrita do cadastro, `data/regras-nome.ts`). Identifica **qual**
+ * verificação apontou. `lib/tratamento.ts` traduz cada código com `rotuloAchado`.
+ *
+ * `nome_tratamento_academico` é o único achado com `valorEsperado` preenchido na
+ * comparação que o carrega: diferente dos achados da Camada A (contradição entre campos
+ * do próprio contato, sem "certo" a apontar), a Camada C tem uma correção objetiva — o
+ * nome sem o tratamento —, e ela precisa chegar ao usuário para copiar.
  */
 export type AchadoCoerencia =
   | "genero_tratamento_enderecamento"
   | "genero_cargo_tratamento"
   | "forma_generica"
-  | "campo_vazio";
+  | "campo_vazio"
+  | "nome_tratamento_academico";
 
 /** Uma pessoa extraída (estruturada) da fonte oficial. */
 export interface PessoaSite {
@@ -39,8 +45,16 @@ export interface PessoaSite {
   endereco?: string;
   /** De onde veio o registro (página oficial vs conhecimento da IA). */
   origem?: OrigemDado;
-  /** Trecho de origem (para depuração). */
+  /** Motivo da situação da fonte rotulada (ex.: "Ocupação de cargo de ministro/secretário"); exibido na tela e no export. */
   contexto?: string;
+  /** UF publicada pela fonte (só em fonte tabular que tenha a coluna). */
+  uf?: string;
+  /** Rótulo da fonte de onde a pessoa veio ("fora de exercício"). */
+  rotuloFonte?: string;
+  /** URL da fonte de onde a pessoa veio. */
+  fonteUrl?: string;
+  /** A fonte de origem propõe inclusão: não casar com ninguém faz desta pessoa um "novo". */
+  propoeInclusao?: boolean;
 }
 
 /** Conteúdo limpo de uma página oficial. */
@@ -79,9 +93,10 @@ export interface ComparacaoCampo {
   /** Procedência do valor esperado (página oficial, conhecimento da IA ou tabela de protocolo). */
   origemValor?: OrigemDado;
   /**
-   * Só na Camada A (`origemValor: "coerencia"`): qual verificação de coerência apontou.
-   * Ali não há `valorEsperado` — a contradição é entre campos do próprio contato, e dizer
-   * qual dos dois está certo seria adivinhação.
+   * Só nas Camadas A e C (`origemValor: "coerencia"`): qual verificação apontou. Na
+   * Camada A não há `valorEsperado` — a contradição é entre campos do próprio contato, e
+   * dizer qual dos dois está certo seria adivinhação. Na Camada C (`nome_tratamento_academico`)
+   * há: a regra do grupo dá a correção objetiva, e `valorEsperado` a carrega.
    */
   achado?: AchadoCoerencia;
 }
@@ -162,10 +177,40 @@ export interface GrupoCadastro {
   temFonte: boolean;
 }
 
+/**
+ * Extração estruturada de uma página que publica a lista como tabela. Declarada no
+ * catálogo, por fonte: os índices de coluna e os nomes de seção são cadastro, não
+ * dedução em tempo de execução. Ver
+ * docs/superpowers/specs/2026-09-24-segunda-fonte-senadores-fora-de-exercicio.md
+ */
+export interface ExtracaoTabela {
+  /** Índice da tabela na página, 0-based. Padrão: 0. */
+  indice?: number;
+  /** Índice da coluna, 0-based. `nome` é obrigatório; as demais, quando a página publica. */
+  colunas: { nome: number; uf?: number; motivo?: number };
+  /**
+   * Só as linhas sob estas seções entram na composição. Casamento normalizado e por
+   * prefixo. Lista vazia ou ausente = todas as seções entram.
+   */
+  secoes?: readonly string[];
+}
+
 /** Fonte oficial de um grupo no catálogo versionado (`data/catalogo.ts`). */
 export interface FonteCatalogo {
   url: string;
   ativo: boolean;
+  /**
+   * Nota curta mostrada no veredito de quem casar por esta fonte ("fora de exercício").
+   * Ausente na fonte principal: casar por ela é o caso normal e não merece nota.
+   */
+  rotulo?: string;
+  /** A página publica a lista como tabela; sem isto vale a extração de texto padrão. */
+  tabela?: ExtracaoTabela;
+  /**
+   * Pessoas desta fonte sem par na planilha viram "novo". Padrão `false`: uma fonte só
+   * compõe o grupo; propor inclusão é decisão de cadastro.
+   */
+  propoeInclusao?: boolean;
 }
 
 /**
@@ -182,6 +227,12 @@ export interface GrupoCatalogo {
   emailResp2?: string;
   emailBackup?: string;
   fontes: FonteCatalogo[];
+  /**
+   * UFs que pertencem ao grupo, quando ele é uma faixa geográfica ("Senadores (Acre a
+   * Goiás)"). Filtra **apenas** a proposta de inclusão: para casar contato existente a
+   * composição inteira vale, senão contato arquivado na faixa errada viraria "saída".
+   */
+  ufs?: readonly string[];
 }
 
 /**

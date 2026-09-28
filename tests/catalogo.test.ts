@@ -124,21 +124,95 @@ describe("buscarFontePrimaria", () => {
 });
 
 describe("resolverGrupoEFonte", () => {
+  test("devolve todas as fontes ativas do grupo, na ordem do cadastro", () => {
+    const r = resolverGrupoEFonte("Senadores (Maranhão ao Piauí)", [
+      {
+        nome: "Senadores (Maranhão ao Piauí)",
+        ufs: ["MA", "PI"],
+        fontes: [
+          { url: "https://senado.leg.br/em-exercicio", ativo: true },
+          { url: "https://senado.leg.br/fora-de-exercicio", ativo: true, rotulo: "fora de exercício" },
+        ],
+      },
+    ]);
+    expect(r.fontes.map((f) => f.url)).toEqual([
+      "https://senado.leg.br/em-exercicio",
+      "https://senado.leg.br/fora-de-exercicio",
+    ]);
+    expect(r.ufs).toEqual(["MA", "PI"]);
+  });
+
+  test("rótulo que casa dois grupos com fonte compõe só com as fontes do dono da primária", () => {
+    // Arrange: a célula "Grupo" do Contatos junta mailings com ";" — misturar as páginas
+    // do STF e do TSE numa composição só faria ministro de um órgão "confirmar" o do outro.
+    const catalogo: GrupoCatalogo[] = [
+      { nome: "Ministros do STF", fontes: [{ url: "https://stf.jus.br/ministros", ativo: true }] },
+      { nome: "Ministros do TSE", fontes: [{ url: "https://tse.jus.br/ministros", ativo: true }] },
+    ];
+
+    // Act
+    const r = resolverGrupoEFonte("Ministros do STF; Ministros do TSE", catalogo);
+
+    // Assert
+    expect(r.grupoCanonico).toBe("Ministros do STF");
+    expect(r.fontes.map((f) => f.url)).toEqual(["https://stf.jus.br/ministros"]);
+  });
+
+  test("grupo sem fonte não empurra a fonte do vizinho casado para a composição", () => {
+    // Arrange: o 1º grupo casado não tem fonte; o dono da primária é o 2º, e é dele que
+    // saem as fontes — e também o nome canônico e a faixa de UF.
+    const catalogo: GrupoCatalogo[] = [
+      { nome: "Senadores (Acre a Goiás)", ufs: ["AC", "GO"], fontes: [] },
+      {
+        nome: "Senadores (Maranhão ao Piauí)",
+        ufs: ["MA", "PI"],
+        fontes: [{ url: "https://senado.leg.br/em-exercicio", ativo: true }],
+      },
+    ];
+
+    // Act
+    const r = resolverGrupoEFonte("Senadores", catalogo);
+
+    // Assert
+    expect(r.grupoCanonico).toBe("Senadores (Maranhão ao Piauí)");
+    expect(r.fontes.map((f) => f.url)).toEqual(["https://senado.leg.br/em-exercicio"]);
+    expect(r.ufs).toEqual(["MA", "PI"]);
+  });
+
+  test("fonte inativa fica de fora da composição", () => {
+    const r = resolverGrupoEFonte("STF", [
+      {
+        nome: "STF",
+        fontes: [
+          { url: "https://stf.jus.br/atual", ativo: true },
+          { url: "https://stf.jus.br/antiga", ativo: false },
+        ],
+      },
+    ]);
+    expect(r.fontes.map((f) => f.url)).toEqual(["https://stf.jus.br/atual"]);
+  });
+
+  test("grupo sem fonte cadastrada devolve lista vazia, não undefined", () => {
+    const r = resolverGrupoEFonte("Ex-Senadores", [{ nome: "Ex-Senadores", fontes: [] }]);
+    expect(r.grupoCanonico).toBe("Ex-Senadores");
+    expect(r.fontes).toEqual([]);
+  });
+
   test("grupo casado devolve nome canônico, URL e sem sugestões", () => {
     const r = resolverGrupoEFonte("CNJ; MAILING RP - Sessão Especial", [
       grupoComFonte("Conselho Nacional de Justiça (CNJ)", "https://cnj"),
     ]);
     expect(r.grupoCanonico).toBe("Conselho Nacional de Justiça (CNJ)");
-    expect(r.url).toBe("https://cnj");
+    expect(r.fontes[0]?.url).toBe("https://cnj");
     expect(r.sugestoes).toHaveLength(0);
   });
 
-  test("grupo casado sem fonte ativa devolve canônico com url indefinida", () => {
+  test("grupo casado sem fonte ativa devolve canônico com lista de fontes vazia", () => {
     const r = resolverGrupoEFonte("Defensor Público Geral da União", [
       { nome: "Defensor Público Geral da União", fontes: [] },
     ]);
     expect(r.grupoCanonico).toBe("Defensor Público Geral da União");
-    expect(r.url).toBeUndefined();
+    expect(r.fontes).toEqual([]);
   });
 
   test("nenhum grupo casa → sem canônico, com sugestões próximas", () => {

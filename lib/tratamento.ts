@@ -2,6 +2,7 @@ import stringSimilarity from "string-similarity";
 import { normalizarTexto } from "@/lib/normalize";
 import { REGRAS_TRATAMENTO } from "@/data/tratamentos";
 import { EXCECOES_CARGO } from "@/data/cargos-tratamento";
+import { REGRAS_NOME, type RegraNome } from "@/data/regras-nome";
 import { CARGOS_FEMININOS, CARGOS_MASCULINOS } from "@/lib/cargos";
 import type {
   AchadoCoerencia,
@@ -484,6 +485,8 @@ export function rotuloAchado(achado: AchadoCoerencia): string {
       return "forma genérica: falta o gênero da pessoa";
     case "campo_vazio":
       return "campo vazio";
+    case "nome_tratamento_academico":
+      return "nome traz tratamento acadêmico; grafar sem ele no cadastro";
   }
 }
 
@@ -510,6 +513,11 @@ export function textoCoerencia(c: ComparacaoCampo): string {
   const rotulo = rotuloAchado(c.achado!);
   if (c.achado === "genero_tratamento_enderecamento" || c.achado === "genero_cargo_tratamento") {
     return rotulo;
+  }
+  // Camada C: o parêntese leva o nome já corrigido (não o rótulo do campo), para o
+  // usuário copiar direto para o cadastro — é o que o spec pede para a coluna Coerência.
+  if (c.achado === "nome_tratamento_academico") {
+    return `${rotulo} (${c.valorEsperado ?? ""})`;
   }
   const nome = ROTULOS_CAMPO_TRATAMENTO[c.campo] ?? c.campo;
   return `${rotulo} (${nome})`;
@@ -585,4 +593,69 @@ export function comparacoesCoerencia(contato: ContatoPlanilha): ComparacaoCampo[
   }
 
   return achados;
+}
+
+// ---------------------------------------------------------------------------
+// Camada C — regras de escrita do cadastro (`data/regras-nome.ts`).
+//
+// Ao contrário das Camadas A e B, não há referência (nem o próprio contato, nem a
+// tabela de protocolo): a regra é uma decisão do GT sobre como o campo `Nome` deve
+// ser ESCRITO no cadastro, e por isso pode contrariar de propósito o que o site
+// publica. Ver docs/superpowers/specs/2026-09-18-regras-de-escrita-do-cadastro.md.
+//
+// Independe do site — como as Camadas A e B, vale nos quatro caminhos de veredito.
+// ---------------------------------------------------------------------------
+
+/** Forma comparável de um token do nome: sem acento, sem caixa, sem ponto final. */
+function chaveTokenNome(token: string): string {
+  return normalizarTexto(token).replace(/\.$/, "");
+}
+
+/** Algum token do nome é um tratamento proibido pela regra do grupo. */
+function temTratamentoProibido(nome: string, proibidos: readonly string[]): boolean {
+  const proibidosSet = new Set(proibidos);
+  return nome
+    .split(/\s+/)
+    .some((token) => token.length > 0 && proibidosSet.has(chaveTokenNome(token)));
+}
+
+/**
+ * Nome sem os tratamentos proibidos pela regra — o valor corrigido que o usuário copia
+ * para o cadastro. Remove só os tokens proibidos (comparação por token inteiro, nunca
+ * substring: "Drummond" não é "Dr"), preservando os demais tokens e a ordem original.
+ */
+function semTratamentosProibidos(nome: string, proibidos: readonly string[]): string {
+  const proibidosSet = new Set(proibidos);
+  return nome
+    .split(/\s+/)
+    .filter((token) => token.length > 0 && !proibidosSet.has(chaveTokenNome(token)))
+    .join(" ");
+}
+
+/**
+ * Camada C: confronta o campo `Nome` do cadastro com a regra de escrita do grupo
+ * canônico, em `data/regras-nome.ts`. Sem regra cadastrada para o grupo (a maioria),
+ * ou grupo canônico não resolvido, devolve `[]` — não é `sem_regra`: essa situação é
+ * exclusiva de comparações com referência externa (Camada B), e aqui simplesmente não
+ * há o que auditar.
+ *
+ * Devolve no máximo uma comparação: cadastro já limpo não gera achado.
+ */
+export function comparacaoRegraNome(
+  contato: ContatoPlanilha,
+  grupoCanonico: string | undefined,
+  regras: Readonly<Record<string, RegraNome>> = REGRAS_NOME,
+): ComparacaoCampo[] {
+  const regra = grupoCanonico ? regras[grupoCanonico] : undefined;
+  if (!regra || !temTratamentoProibido(contato.nome, regra.tratamentosProibidos)) return [];
+  return [
+    {
+      campo: "nome",
+      valorPlanilha: contato.nome,
+      valorEsperado: semTratamentosProibidos(contato.nome, regra.tratamentosProibidos),
+      situacao: "divergente",
+      origemValor: "coerencia",
+      achado: "nome_tratamento_academico",
+    },
+  ];
 }

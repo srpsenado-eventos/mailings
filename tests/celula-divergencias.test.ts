@@ -100,6 +100,25 @@ describe("celulaDivergencias — contrato de exibição da tela", () => {
     );
   });
 
+  test("achado da Camada C (nome com tratamento acadêmico) mostra só o corrigido, sem duplicar o nome cru", () => {
+    // Arrange — a comparação tem valorEsperado: o sufixo "— valorPlanilha" some, porque
+    // textoCoerencia já embute o nome corrigido entre parênteses (item 3 da revisão).
+    const nomeTratamentoAcademico: ComparacaoCampo = {
+      campo: "nome",
+      valorPlanilha: "Dr. Joaquim Bezerra Vilaça",
+      valorEsperado: "Joaquim Bezerra Vilaça",
+      situacao: "divergente",
+      origemValor: "coerencia",
+      achado: "nome_tratamento_academico",
+    };
+
+    // Act
+    const texto = celulaDivergencias([nomeTratamentoAcademico], false);
+
+    // Assert
+    expect(texto).toBe("nome traz tratamento acadêmico; grafar sem ele no cadastro (Joaquim Bezerra Vilaça)");
+  });
+
   test("comparação sem_regra ou confere não vira linha de divergência", () => {
     // Arrange
     const semRegra: ComparacaoCampo = {

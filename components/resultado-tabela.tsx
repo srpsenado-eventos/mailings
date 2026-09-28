@@ -59,6 +59,13 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
                 fonte
               </a>
             )}
+            {/* Falha parcial: o grupo foi comparado com as fontes que responderam, mas a
+                composição está incompleta. Sem este aviso a tela mostra um link azul comum
+                e parece um veredito completo — era o que o `erroFonte` prometia e não
+                entregava. O ramo de fonte inacessível já exibe o motivo no próprio texto. */}
+            {g.erroFonte && !g.fonteInacessivel ? (
+              <span className="text-sm text-amber-700"> · uma fonte não respondeu: {g.erroFonte}</span>
+            ) : null}
           </h2>
           <table className="w-full text-sm">
             <thead><tr className="text-left text-gray-500">
@@ -67,7 +74,19 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
             <tbody>
               {g.contatos.map((c, i) => (
                 <tr key={i} className="border-t">
-                  <td>{c.contato.nome}</td>
+                  <td>
+                    {c.contato.nome}
+                    {/* `g.erroFonte` já avisa no cabeçalho do grupo: repetir por contato
+                        devolveria o ruído que o commit 58d743b tirou. No export a linha
+                        precisa se sustentar sozinha, e lá a ressalva continua. */}
+                    {c.observacao &&
+                    !c.possivelSaida &&
+                    !g.semFonte &&
+                    !g.fonteInacessivel &&
+                    !g.erroFonte ? (
+                      <span className="block text-xs text-gray-500">{c.observacao}</span>
+                    ) : null}
+                  </td>
                   <td>{c.contato.cargo ?? "—"}</td>
                   <td>{celulaDivergencias(c.comparacoes, c.possivelSaida)}</td>
                   <td>{c.origem === "pesquisa_ampla" ? "pesquisa ampla" : "oficial"}</td>
@@ -83,7 +102,7 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
               {g.novos.map((n, i) => (
                 <tr key={`novo-${i}`} className="border-t">
                   <td>{n.nome}</td>
-                  <td>{n.cargo ?? "—"}</td>
+                  <td>{n.cargo ?? (n.rotuloFonte ? `${n.rotuloFonte}${n.contexto ? ` — ${n.contexto}` : ""}` : "—")}</td>
                   <td>—</td>
                   <td>{n.origem === "conhecimento" ? "pesquisa ampla" : "oficial"}</td>
                   <td><SemaforoBadge status="novo" /></td>

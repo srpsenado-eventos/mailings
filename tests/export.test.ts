@@ -46,6 +46,122 @@ describe("resultadoParaLinhas", () => {
     });
     expect(linhas[0].Divergencias).toContain("cargo");
   });
+
+  test("novo vindo de fonte rotulada leva a situação na observação e a URL daquela fonte", () => {
+    const analise: ResultadoAnalise = {
+      arquivoNome: "c.xlsx",
+      grupos: [
+        {
+          grupo: "Senadores (Maranhão ao Piauí)",
+          fonteUrl: "https://senado.leg.br/em-exercicio",
+          semFonte: false,
+          contatos: [],
+          novos: [
+            {
+              nome: "Wellington Dias",
+              uf: "PI",
+              origem: "pagina",
+              contexto: "Ocupação de cargo de ministro/secretário",
+              rotuloFonte: "fora de exercício",
+              fonteUrl: "https://senado.leg.br/fora-de-exercicio",
+            },
+          ],
+        },
+      ],
+      resumo: {
+        total: 0, verde: 0, amarelo: 0, vermelho: 0, novo: 1, indeterminado: 0,
+        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+      },
+    };
+    const linha = resultadoParaLinhas(analise)[0];
+    expect(linha.Status).toBe("novo");
+    expect(linha.Observacao).toBe(
+      "Pessoa na fonte sem correspondência na planilha — fora de exercício: Ocupação de cargo de ministro/secretário",
+    );
+    expect(linha.Fonte).toBe("https://senado.leg.br/fora-de-exercicio");
+  });
+
+  test("fonte que não respondeu vira ressalva na observação de quem trabalha pelo download", () => {
+    // Arrange: grupo comparado com a fonte que sobrou, com o motivo técnico da que caiu.
+    const analise: ResultadoAnalise = {
+      arquivoNome: "c.xlsx",
+      grupos: [
+        {
+          grupo: "Senadores (Maranhão ao Piauí)",
+          fonteUrl: "https://senado.leg.br/em-exercicio",
+          semFonte: false,
+          erroFonte: "fora de exercício: HTTP 403",
+          contatos: [
+            {
+              contato: { nome: "Wellington Dias", grupo: "Senadores (Maranhão ao Piauí)" },
+              semaforo: "indeterminado",
+              score: 0,
+              comparacoes: [],
+              camposDivergentes: [],
+              origem: "oficial",
+              fonteUrl: "https://senado.leg.br/em-exercicio",
+              observacao: "Não consta nas fontes que responderam",
+            },
+          ],
+          novos: [],
+        },
+      ],
+      resumo: {
+        total: 1, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 1,
+        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+      },
+    };
+
+    // Act
+    const linha = resultadoParaLinhas(analise)[0];
+
+    // Assert: a mesma ressalva que a tela dá chega à planilha baixada.
+    expect(linha.Status).toBe("indeterminado");
+    expect(linha.Observacao).toBe(
+      "Não consta nas fontes que responderam · fonte não respondeu — fora de exercício: HTTP 403",
+    );
+  });
+
+  test("grupo inteiro inacessível não repete o motivo: a observação do contato já o diz", () => {
+    // Arrange: aqui `erroFonte` é o motivo da única fonte, e a observação do contato já
+    // avisa que a fonte não pôde ser lida. Somar a ressalva daria a mesma frase duas vezes
+    // na mesma célula — a tela suprime pelo mesmo motivo.
+    const analise: ResultadoAnalise = {
+      arquivoNome: "c.xlsx",
+      grupos: [
+        {
+          grupo: "TCU",
+          fonteUrl: "https://tcu.gov.br",
+          semFonte: false,
+          fonteInacessivel: true,
+          erroFonte: "HTTP 403",
+          contatos: [
+            {
+              contato: { nome: "Ana", grupo: "TCU" },
+              semaforo: "indeterminado",
+              score: 0,
+              comparacoes: [],
+              camposDivergentes: [],
+              origem: "oficial",
+              fonteUrl: "https://tcu.gov.br",
+              observacao: "Fonte cadastrada, mas inacessível — verifique manualmente",
+            },
+          ],
+          novos: [],
+        },
+      ],
+      resumo: {
+        total: 1, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 1,
+        gruposSemFonte: 0, gruposFonteInacessivel: 1, gruposViaPesquisaAmpla: 0,
+      },
+    };
+
+    // Act
+    const linha = resultadoParaLinhas(analise)[0];
+
+    // Assert
+    expect(linha.Observacao).toBe("Fonte cadastrada, mas inacessível — verifique manualmente");
+  });
 });
 
 describe("gerarXlsx", () => {
@@ -263,6 +379,30 @@ describe("colunas de tratamento e endereçamento", () => {
 
     // Assert
     expect(linhas[0].Divergencias).toBe("tratamento");
+  });
+
+  test("achado da Camada C (nome com tratamento acadêmico) sai na coluna Coerência com o nome corrigido", () => {
+    // Arrange — nome fictício
+    const analise = analiseCom(
+      [
+        {
+          campo: "nome",
+          valorPlanilha: "Dr. Joaquim Bezerra Vilaça",
+          valorEsperado: "Joaquim Bezerra Vilaça",
+          situacao: "divergente",
+          origemValor: "coerencia",
+          achado: "nome_tratamento_academico",
+        },
+      ],
+      { nome: "Dr. Joaquim Bezerra Vilaça", grupo: "Ministros do STM" },
+    );
+
+    // Act
+    const linhas = resultadoParaLinhas(analise);
+
+    // Assert
+    expect(linhas[0].Coerência).toContain("Joaquim Bezerra Vilaça");
+    expect(linhas[0].Divergencias).toBe("nome");
   });
 
   test("linhas de novos trazem as mesmas colunas, vazias", () => {

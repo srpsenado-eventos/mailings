@@ -10,10 +10,16 @@ function linhaValor(d: ComparacaoCampo): string {
   return d.origemValor === "conhecimento" ? `${base} (via IA — confira)` : base;
 }
 
-/** Linha de um achado da Camada A, com o valor da planilha ao lado quando houver. */
+/**
+ * Linha de um achado de coerência, com o valor da planilha ao lado quando houver.
+ * Suprimida quando a comparação já tem `valorEsperado` (hoje, só a Camada C
+ * `nome_tratamento_academico`): `textoCoerencia` já embute o valor corrigido entre
+ * parênteses nesse caso, e repetir o valor cru da planilha depois do travessão duplicaria
+ * o nome na célula.
+ */
 function linhaCoerencia(d: ComparacaoCampo): string {
   const texto = textoCoerencia(d);
-  return d.valorPlanilha ? `${texto} — ${d.valorPlanilha}` : texto;
+  return d.valorPlanilha && !d.valorEsperado ? `${texto} — ${d.valorPlanilha}` : texto;
 }
 
 /**

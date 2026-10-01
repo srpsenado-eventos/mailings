@@ -1,6 +1,14 @@
 import * as XLSX from "xlsx";
 import { coerenciasVisiveis, textoCoerencia, ROTULOS_CAMPO_TRATAMENTO } from "@/lib/tratamento";
-import type { ComparacaoCampo, ResultadoAnalise, ResultadoContato, ResultadoGrupo } from "@/lib/types";
+import { rotuloAchadoEndereco } from "@/lib/endereco";
+import type {
+  AuditoriaEndereco,
+  ComparacaoCampo,
+  ResultadoAnalise,
+  ResultadoContato,
+  ResultadoGrupo,
+  SituacaoEndereco,
+} from "@/lib/types";
 
 /**
  * Campos mostrados em pares de colunas planilha × referência. O sufixo é fixo por campo:
@@ -16,6 +24,40 @@ const CAMPOS = [
   { campo: "tratamento", rotulo: ROTULOS_CAMPO_TRATAMENTO.tratamento, referencia: "protocolo" },
   { campo: "enderecamento", rotulo: ROTULOS_CAMPO_TRATAMENTO.enderecamento, referencia: "protocolo" },
 ];
+
+/** Rótulo da situação de endereço na planilha. `sem_base` sai vazio: nada foi auditado. */
+const SITUACAO_ENDERECO: Record<SituacaoEndereco, string> = {
+  completo: "completo",
+  a_completar: "a completar",
+  pendente: "a confirmar",
+  nao_verificado: "não verificado",
+  sem_base: "",
+};
+
+/** Colunas do endereço estruturado, na ordem da planilha de origem. */
+const COLUNAS_ENDERECO = [
+  ["Logradouro", "logradouro"],
+  ["Número", "numero"],
+  ["Complemento", "complemento"],
+  ["Bairro", "bairro"],
+  ["CEP", "cep"],
+  ["Cidade", "cidade"],
+  ["UF", "uf"],
+] as const;
+
+/**
+ * Colunas da auditoria de endereço, sempre as mesmas chaves (vazias sem auditoria) para o
+ * cabeçalho ser uniforme. `Endereço (montado)` só tem texto com o endereço completo.
+ */
+function colunasDeEndereco(a: AuditoriaEndereco | undefined): Record<string, string> {
+  const e = a?.endereco;
+  const linha: Record<string, string> = {};
+  for (const [rotulo, campo] of COLUNAS_ENDERECO) linha[rotulo] = e?.[campo] ?? "";
+  linha["Endereço (situação)"] = a ? SITUACAO_ENDERECO[a.situacao] : "";
+  linha["Endereço (achados)"] = (a?.achados ?? []).map(rotuloAchadoEndereco).join("; ");
+  linha["Endereço (montado)"] = a?.formatado ?? "";
+  return linha;
+}
 
 /**
  * Comparação de valor de um campo. A linha de coerência é diagnóstico, não comparação:
@@ -79,6 +121,7 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
         linha[`${f.rotulo} (${f.referencia})`] = valorEsperadoDe(c, f.campo);
       }
       linha["Coerência"] = coerenciasVisiveis(c.comparacoes).map(textoCoerencia).join("; ");
+      Object.assign(linha, colunasDeEndereco(c.endereco));
       linhas.push(linha);
     }
     for (const novo of g.novos) {
@@ -112,6 +155,7 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
         linha[`${f.rotulo} (${f.referencia})`] = siteDe[f.campo] ?? "";
       }
       linha["Coerência"] = "";
+      Object.assign(linha, colunasDeEndereco(undefined));
       linhas.push(linha);
     }
   }

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import * as XLSX from "xlsx";
 import { resultadoParaLinhas, gerarXlsx } from "@/lib/export";
-import type { ComparacaoCampo, ContatoPlanilha, ResultadoAnalise } from "@/lib/types";
+import type { ComparacaoCampo, ContatoPlanilha, ResultadoAnalise, ResultadoContato } from "@/lib/types";
 
 const analise: ResultadoAnalise = {
   arquivoNome: "c.xlsx",
@@ -425,5 +425,102 @@ describe("colunas de tratamento e endereçamento", () => {
     expect(Object.keys(linhas[1])).toEqual(Object.keys(linhas[0]));
     expect(linhas[1]["Tratamento (protocolo)"]).toBe("");
     expect(linhas[1]["Coerência"]).toBe("");
+  });
+});
+
+/** Um grupo com um contato, para testar colunas isoladas. `over` sobrescreve o contato. */
+function analiseComContato(over: Partial<ResultadoContato>): ResultadoAnalise {
+  return {
+    arquivoNome: "c.xlsx",
+    grupos: [
+      {
+        grupo: "ORG", fonteUrl: "https://orgao.gov.br", semFonte: false,
+        contatos: [
+          {
+            contato: { nome: "Ana", grupo: "ORG" },
+            semaforo: "verde", score: 1,
+            comparacoes: [],
+            camposDivergentes: [],
+            origem: "oficial", fonteUrl: "https://orgao.gov.br",
+            ...over,
+          },
+        ],
+        novos: [],
+      },
+    ],
+    resumo: {
+      total: 1, verde: 1, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0,
+      gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+    },
+  };
+}
+
+describe("colunas do endereço auditado", () => {
+  test("endereço auditado sai em colunas separadas, com situação e achados", () => {
+    // Arrange
+    const analise = analiseComContato({
+      endereco: {
+        situacao: "a_completar",
+        achados: ["sem_bairro"],
+        endereco: {
+          contatoId: "7", logradouro: "Praça dos Três Poderes", numero: "S/N",
+          cidade: "Brasília", uf: "DF", cep: "70160-900", prioritario: true,
+        },
+        formatado: "Praça dos Três Poderes, S/N\n70160-900 Brasília - DF",
+        linhas: 1,
+      },
+    });
+
+    // Act
+    const linha = resultadoParaLinhas(analise)[0];
+
+    // Assert
+    expect(linha["Logradouro"]).toBe("Praça dos Três Poderes");
+    expect(linha["Número"]).toBe("S/N");
+    expect(linha["CEP"]).toBe("70160-900");
+    expect(linha["UF"]).toBe("DF");
+    expect(linha["Endereço (situação)"]).toBe("a completar");
+    expect(linha["Endereço (achados)"]).toBe("sem bairro (sai do CEP)");
+  });
+
+  test("sem base de endereços, as colunas novas saem vazias e as antigas não mudam", () => {
+    // Arrange
+    const analise = analiseComContato({ endereco: { situacao: "sem_base", achados: [] } });
+
+    // Act
+    const linha = resultadoParaLinhas(analise)[0];
+
+    // Assert
+    expect(linha["Logradouro"]).toBe("");
+    expect(linha["Endereço (situação)"]).toBe("");
+    expect(linha["Endereço (achados)"]).toBe("");
+  });
+
+  test("as colunas que já existiam mantêm nome e ordem com as novas no fim", () => {
+    // Arrange
+    const analise = analiseComContato({ endereco: { situacao: "sem_base", achados: [] } });
+
+    // Act
+    const chaves = Object.keys(resultadoParaLinhas(analise)[0]);
+
+    // Assert
+    expect(chaves.slice(0, 6)).toEqual([
+      "Grupo", "Status", "Divergencias", "Origem", "Fonte", "Observacao",
+    ]);
+    expect(chaves.indexOf("Coerência")).toBeLessThan(chaves.indexOf("Logradouro"));
+  });
+
+  test("a coluna montada só traz texto quando o endereço está completo", () => {
+    // Arrange
+    const analise = analiseComContato({
+      endereco: { situacao: "pendente", achados: ["sem_logradouro"] },
+    });
+
+    // Act
+    const linha = resultadoParaLinhas(analise)[0];
+
+    // Assert
+    expect(linha["Endereço (montado)"]).toBe("");
+    expect(linha["Endereço (situação)"]).toBe("a confirmar");
   });
 });

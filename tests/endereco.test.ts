@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { auditarEndereco, formatarEnderecoContatos, indexarEnderecos } from "@/lib/endereco";
+import { auditarEndereco, formatarEnderecoContatos, indexarEnderecos, rotuloAchadoEndereco } from "@/lib/endereco";
 import type { ContatoPlanilha, EnderecoEstruturado } from "@/lib/types";
 
 const linha = (over: Partial<EnderecoEstruturado> = {}): EnderecoEstruturado => ({
@@ -183,5 +183,19 @@ describe("formatarEnderecoContatos", () => {
     );
     expect(a.startsWith("- ")).toBe(false);
     expect(a).toBe("Bloco A, sala 412\n70070-030 Brasília - DF");
+  });
+});
+
+describe("rotuloAchadoEndereco", () => {
+  test("rótulo do CEP recuperável não promete proposta pronta e manda confirmar nos Correios", () => {
+    // Arrange
+    const achado = "cep_recuperavel";
+
+    // Act
+    const rotulo = rotuloAchadoEndereco(achado);
+
+    // Assert
+    expect(rotulo).not.toContain("proposta pronta");
+    expect(rotulo).toContain("confirmar nos Correios");
   });
 });

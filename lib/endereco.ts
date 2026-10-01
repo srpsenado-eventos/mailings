@@ -37,7 +37,8 @@ export function formatarEnderecoContatos(e: EnderecoEstruturado): string {
   // Sem logradouro/número não há o que separar: o complemento fica sozinho, sem o "- " à frente.
   const comComplemento = e.complemento ? (primeira ? `${primeira} - ${e.complemento}` : e.complemento) : primeira;
   const cep = classificarCep(e.cep, e.uf);
-  const digitos = cep.digitos ?? cep.proposto;
+  // O CEP só entra no texto quando é válido; uma proposta nunca é formatada como fato.
+  const digitos = cep.digitos;
   const ultima = [digitos ? formatarCep(digitos) : "", [e.cidade, e.uf].filter(Boolean).join(" - ")]
     .filter((p) => p.length > 0)
     .join(" ");
@@ -51,7 +52,7 @@ const ROTULOS: Record<AchadoEndereco, string> = {
   sem_bairro: "sem bairro (sai do CEP)",
   cep_ausente: "sem CEP",
   cep_invalido: "CEP inválido",
-  cep_recuperavel: "CEP com dígito faltando (proposta pronta)",
+  cep_recuperavel: "CEP com dígito faltando (zero à esquerda; confirmar nos Correios)",
   nome_ambiguo: "nome casa mais de um contato — endereço não atribuído",
   sem_prioritario: "vários endereços, nenhum prioritário",
   varios_prioritarios: "vários endereços marcados como prioritários",
@@ -61,14 +62,16 @@ export function rotuloAchadoEndereco(achado: AchadoEndereco): string {
   return ROTULOS[achado];
 }
 
-/** Achados que exigem pessoa: ninguém completa isso sozinho. */
+/**
+ * Achados que exigem pessoa: ninguém completa isso sozinho.
+ * `nome_ambiguo` não está aqui: é decidido antes (devolve `nao_verificado`, nunca `pendente`).
+ */
 const PENDENCIAS: readonly AchadoEndereco[] = [
   "sem_linha",
   "sem_logradouro",
   "sem_numero",
   "cep_ausente",
   "cep_invalido",
-  "nome_ambiguo",
   "sem_prioritario",
   "varios_prioritarios",
 ];

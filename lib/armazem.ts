@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Retrato } from "@/lib/types";
 
@@ -41,8 +41,13 @@ function validarRetrato(valor: unknown): Retrato {
     throw new RetratoIlegivelError("retrato não é um objeto");
   }
   const o = valor as Record<string, unknown>;
-  if (typeof o.geradoEm !== "string" || !Array.isArray(o.grupos) || typeof o.resumo !== "object" || o.resumo === null) {
-    throw new RetratoIlegivelError("retrato sem geradoEm, grupos ou resumo");
+  const planilha = o.planilhaContatos as Record<string, unknown> | null | undefined;
+  if (
+    typeof o.geradoEm !== "string" || !Array.isArray(o.grupos) ||
+    typeof o.resumo !== "object" || o.resumo === null ||
+    typeof planilha !== "object" || planilha === null || typeof planilha.nome !== "string"
+  ) {
+    throw new RetratoIlegivelError("retrato sem geradoEm, grupos, resumo ou planilhaContatos");
   }
   return valor as Retrato;
 }
@@ -70,12 +75,18 @@ export function armazemEmArquivo(caminho: string): Armazem {
       return validarRetrato(json);
     },
     async gravarRetrato(retrato) {
-      // Escrita atômica: grava ao lado e renomeia, para uma queda no meio não deixar
-      // um retrato pela metade. `rename` substitui o destino, inclusive no Windows.
+      // Escrita atômica: grava num temporário único ao lado e renomeia, para uma queda no
+      // meio não deixar um retrato pela metade nem duas gravações disputarem o mesmo arquivo.
+      // `rename` substitui o destino, inclusive no Windows. Se falhar, o temporário é apagado.
       await mkdir(dirname(caminho), { recursive: true });
-      const temporario = `${caminho}.tmp`;
-      await writeFile(temporario, JSON.stringify(retrato), "utf8");
-      await rename(temporario, caminho);
+      const temporario = `${caminho}.${process.pid}.${Date.now()}.tmp`;
+      try {
+        await writeFile(temporario, JSON.stringify(retrato), "utf8");
+        await rename(temporario, caminho);
+      } catch (err) {
+        await rm(temporario, { force: true });
+        throw err;
+      }
     },
   };
 }

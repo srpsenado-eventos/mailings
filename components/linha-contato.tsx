@@ -8,6 +8,7 @@ import {
   etiquetasDoContato,
   linhasDoEndereco,
   motivoDoContato,
+  procedenciaNomeCargo,
   situacaoDoContato,
   textoDataHora,
   textoEnderecoParaCopiar,
@@ -80,6 +81,7 @@ function BlocoEndereco({ c, retrato }: { c: ResultadoContato; retrato: Retrato }
 
 function Detalhe({ c, g, retrato }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato }) {
   const cartoes = detalhesDoContato(c, g);
+  const p = procedenciaNomeCargo(g);
   return (
     <div className="space-y-4 border-t border-separador bg-fundo/60 px-4 py-4">
       {cartoes.length > 0 && (
@@ -104,8 +106,8 @@ function Detalhe({ c, g, retrato }: { c: ResultadoContato; g: ResultadoGrupo; re
       <div>
       <h3 className="text-xs font-semibold uppercase tracking-wide text-cinza-claro">De onde veio cada resposta</h3>
       <ul className="mt-1 text-xs leading-relaxed text-cinza">
-        {g.fonteUrl && g.fonteUrl.startsWith("http") && (
-          <li>Nome e cargo: <a href={g.fonteUrl} target="_blank" rel="noreferrer" className="text-acao underline">{g.fonteUrl}</a>, lido em {textoDataHora(retrato.geradoEm)}</li>
+        {p && (
+          <li>Nome e cargo: {p.url ? <a href={p.url} target="_blank" rel="noreferrer" className="text-acao underline">{p.texto}</a> : p.texto}, lido em {textoDataHora(retrato.geradoEm)}</li>
         )}
         <li>Tratamento e endereçamento: tabela de protocolo (Posse2027_TabelaTratamentos.xlsx)</li>
         {retrato.planilhaEnderecos && <li>Endereço: {retrato.planilhaEnderecos.nome}</li>}

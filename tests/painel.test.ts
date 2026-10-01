@@ -8,6 +8,7 @@ import {
   linhasDoEndereco,
   montarRetrato,
   motivoDoContato,
+  procedenciaNomeCargo,
   situacaoDoContato,
   textoDataHora,
   textoEnderecoParaCopiar,
@@ -323,5 +324,23 @@ describe("montarRetrato", () => {
   test("sem a planilha de endereços o campo fica ausente", () => {
     const r = montarRetrato(resultado, { contatos: { nome: "c.xlsx", linhas: 1 } }, new Date());
     expect("planilhaEnderecos" in r).toBe(false);
+  });
+});
+
+describe("procedenciaNomeCargo", () => {
+  test("com URL http devolve a URL como texto e link", () => {
+    // Arrange + Act + Assert
+    expect(procedenciaNomeCargo(grupoComFonte)).toEqual({ texto: "https://orgao.gov.br", url: "https://orgao.gov.br" });
+  });
+
+  test("grupo composto só pela IA diz que veio do conhecimento da IA, sem link", () => {
+    const g: ResultadoGrupo = { grupo: "TCU", fonteUrl: "pesquisa-ampla://x", viaPesquisaAmpla: true, semFonte: false, contatos: [], novos: [] };
+    const p = procedenciaNomeCargo(g);
+    expect(p).toEqual({ texto: "conhecimento da IA, confira" });
+    expect(p?.url).toBeUndefined();
+  });
+
+  test("grupo sem fonte não tem linha de procedência", () => {
+    expect(procedenciaNomeCargo(grupoSemFonte)).toBeUndefined();
   });
 });

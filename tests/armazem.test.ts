@@ -67,6 +67,14 @@ describe("armazemEmArquivo", () => {
     await expect(armazemEmArquivo(caminho).lerRetrato()).rejects.toBeInstanceOf(RetratoIlegivelError);
   });
 
+  test("JSON sem planilhaContatos lança RetratoIlegivelError", async () => {
+    // Arrange
+    const caminho = join(pasta, "retrato.json");
+    await writeFile(caminho, JSON.stringify({ geradoEm: retrato.geradoEm, grupos: [], resumo: {} }), "utf8");
+    // Act + Assert
+    await expect(armazemEmArquivo(caminho).lerRetrato()).rejects.toBeInstanceOf(RetratoIlegivelError);
+  });
+
   test("o arquivo gravado é JSON legível por fora", async () => {
     const caminho = join(pasta, "retrato.json");
     await armazemEmArquivo(caminho).gravarRetrato(retrato);

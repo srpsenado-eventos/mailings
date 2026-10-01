@@ -263,6 +263,13 @@ const FORMATO_DATA_HORA = new Intl.DateTimeFormat("pt-BR", {
   timeZone: "America/Sao_Paulo",
 });
 
+/** Linha "Nome e cargo" do rodapé de procedência. Sem URL http não há página: a composição veio do conhecimento da IA. */
+export function procedenciaNomeCargo(g: ResultadoGrupo): { texto: string; url?: string } | undefined {
+  if (g.semFonte) return undefined;
+  if (g.fonteUrl && g.fonteUrl.startsWith("http")) return { texto: g.fonteUrl, url: g.fonteUrl };
+  return { texto: "conhecimento da IA, confira" };
+}
+
 /** "01/10, 14h12", no fuso de Brasília, como o cabeçalho do mockup. */
 export function textoDataHora(iso: string): string {
   const partes = FORMATO_DATA_HORA.formatToParts(new Date(iso));

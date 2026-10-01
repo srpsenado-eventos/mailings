@@ -553,4 +553,18 @@ describe("auditoria de endereço anexada ao resultado", () => {
     expect(r.grupos[0].semFonte).toBe(true);
     expect(c.endereco?.situacao).toBe("completo");
   });
+
+  test("grupo com fonte inacessível também recebe a auditoria de endereço", async () => {
+    const depsQuebrado: Dependencias = {
+      ...deps,
+      raspar: async () => {
+        throw new Error("timeout");
+      },
+    };
+    const r = await analisar("c.xlsx", [{ ...contatos[0], id: "7" }], depsQuebrado, enderecos);
+    const c = r.grupos[0].contatos[0];
+    expect(r.grupos[0].fonteInacessivel).toBe(true);
+    expect(c.semaforo).toBe("indeterminado");
+    expect(c.endereco?.situacao).toBe("completo");
+  });
 });

@@ -1,11 +1,24 @@
 import { describe, expect, test } from "vitest";
 import {
+  cartoesDoResumo,
+  contarContatos,
   detalhesDoContato,
   etiquetasDoContato,
+  filtrarGrupos,
+  linhasDoEndereco,
+  montarRetrato,
   motivoDoContato,
   situacaoDoContato,
+  textoDataHora,
+  textoEnderecoParaCopiar,
 } from "@/lib/painel";
-import type { ComparacaoCampo, ResultadoContato, ResultadoGrupo } from "@/lib/types";
+import type {
+  ComparacaoCampo,
+  EnderecoEstruturado,
+  ResultadoAnalise,
+  ResultadoContato,
+  ResultadoGrupo,
+} from "@/lib/types";
 
 const grupoComFonte: ResultadoGrupo = {
   grupo: "ORG", fonteUrl: "https://orgao.gov.br", semFonte: false, contatos: [], novos: [],
@@ -76,6 +89,11 @@ describe("etiquetasDoContato", () => {
       comparacoes: [confere("tratamento", "protocolo", "Senhora"), coerencia("tratamento", "genero_cargo_tratamento")],
     });
     expect(etiquetasDoContato(c, grupoComFonte).find((e) => e.campo === "tratamento")?.texto).toBe("Tratamento diverge");
+  });
+
+  test("possível saída com achado de gênero no tratamento mostra as duas coisas: marcador primeiro, depois 'Tratamento diverge'", () => {
+    const c = contato({ semaforo: "vermelho", possivelSaida: true, comparacoes: [coerencia("tratamento", "genero_cargo_tratamento")] });
+    expect(textos(c, grupoComFonte).slice(0, 2)).toEqual(["Sem par na fonte", "Tratamento diverge"]);
   });
 
   test("possível saída: 'Sem par na fonte' primeiro, sem etiquetas de nome e cargo", () => {
@@ -190,5 +208,120 @@ describe("detalhesDoContato", () => {
   test("campo vazio com valor de protocolo não duplica (coerenciasVisiveis colapsa)", () => {
     const c = contato({ comparacoes: [diverge("tratamento", "protocolo", "", "Vossa Excelência"), coerencia("tratamento", "campo_vazio", "")] });
     expect(detalhesDoContato(c, grupoComFonte)[0].coerencias).toEqual([]);
+  });
+});
+
+describe("filtrarGrupos", () => {
+  const verde = contato({ contato: { nome: "João da Silva", grupo: "ORG", cargo: "Ministro", orgao: "TST" }, comparacoes: [confere("nome", "pagina")] });
+  const saida = contato({ contato: { nome: "Pedro Que Saiu", grupo: "ORG" }, semaforo: "vermelho", possivelSaida: true });
+  const pendente = contato({ contato: { nome: "Maria Pendente", grupo: "ORG" }, endereco: { situacao: "pendente", achados: ["sem_numero"] } });
+  const semFonte = contato({ contato: { nome: "Carla Sem Fonte", grupo: "SEM" }, semaforo: "vermelho", comparacoes: [diverge("tratamento", "protocolo", "a", "b")] });
+  const grupos: ResultadoGrupo[] = [
+    { ...grupoComFonte, contatos: [verde, saida, pendente], novos: [{ nome: "Nova Pessoa", cargo: "Ministra", origem: "pagina" }] },
+    { ...grupoSemFonte, contatos: [semFonte] },
+  ];
+  const nomes = (gs: ResultadoGrupo[]) => gs.flatMap((g) => g.contatos.map((c) => c.contato.nome));
+
+  test("tudo: devolve tudo, inclusive novos", () => {
+    const r = filtrarGrupos(grupos, "tudo", "");
+    expect(nomes(r)).toHaveLength(4);
+    expect(r[0].novos).toHaveLength(1);
+  });
+
+  test("ressalva: tira só quem é verde com endereço em ordem; grupo sem fonte com tratamento divergente entra", () => {
+    expect(nomes(filtrarGrupos(grupos, "ressalva", ""))).toEqual(["Pedro Que Saiu", "Maria Pendente", "Carla Sem Fonte"]);
+  });
+
+  test("endereco: só pendente", () => {
+    expect(nomes(filtrarGrupos(grupos, "endereco", ""))).toEqual(["Maria Pendente"]);
+  });
+
+  test("saida: só possível saída; inclusao: só os novos, e grupo sem novos some", () => {
+    expect(nomes(filtrarGrupos(grupos, "saida", ""))).toEqual(["Pedro Que Saiu"]);
+    const inc = filtrarGrupos(grupos, "inclusao", "");
+    expect(inc).toHaveLength(1);
+    expect(inc[0].contatos).toEqual([]);
+    expect(inc[0].novos.map((n) => n.nome)).toEqual(["Nova Pessoa"]);
+  });
+
+  test("busca ignora acento e caixa, e procura em nome, cargo e órgão", () => {
+    expect(nomes(filtrarGrupos(grupos, "tudo", "joao"))).toEqual(["João da Silva"]);
+    expect(nomes(filtrarGrupos(grupos, "tudo", "MINISTRO"))).toEqual(["João da Silva"]);
+    expect(nomes(filtrarGrupos(grupos, "tudo", "tst"))).toEqual(["João da Silva"]);
+    expect(filtrarGrupos(grupos, "tudo", "nova pessoa")[0].novos).toHaveLength(1);
+  });
+
+  test("não muta a entrada", () => {
+    const antes = JSON.stringify(grupos);
+    filtrarGrupos(grupos, "saida", "x");
+    expect(JSON.stringify(grupos)).toBe(antes);
+  });
+
+  test("contarContatos soma os contatos dos grupos", () => {
+    expect(contarContatos(grupos)).toBe(4);
+  });
+});
+
+describe("cartoesDoResumo", () => {
+  test("seis cartões na ordem do mockup; 'Não verificados' soma indeterminado e sem fonte", () => {
+    const cartoes = cartoesDoResumo({
+      total: 10, verde: 4, amarelo: 2, vermelho: 3, novo: 1, indeterminado: 1,
+      enderecosAConfirmar: 5, possivelSaida: 2, contatosSemFonte: 1,
+      gruposSemFonte: 1, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+    });
+    expect(cartoes).toEqual([
+      { rotulo: "Conferem", valor: 4 },
+      { rotulo: "Com divergência", valor: 2 },
+      { rotulo: "Possível saída", valor: 2 },
+      { rotulo: "Não verificados", valor: 2 },
+      { rotulo: "Propostas de inclusão", valor: 1 },
+      { rotulo: "Endereços a confirmar", valor: 5 },
+    ]);
+  });
+
+  test("retrato gravado por versão anterior, sem os contadores novos, mostra 0 e não NaN", () => {
+    const cartoes = cartoesDoResumo({ verde: 1, amarelo: 0, indeterminado: 2, novo: 0, enderecosAConfirmar: 0 });
+    expect(cartoes.map((c) => c.valor)).toEqual([1, 0, 0, 2, 0, 0]);
+  });
+});
+
+describe("endereço para copiar", () => {
+  const e: EnderecoEstruturado = {
+    contatoId: "7", logradouro: "SAUS Quadra 3", numero: "Bloco A", complemento: "sala 412",
+    bairro: "Asa Sul", cep: "70070-030", cidade: "Brasília", uf: "DF", prioritario: true,
+  };
+
+  test("três linhas: logradouro/número/complemento, bairro, CEP cidade - UF", () => {
+    expect(linhasDoEndereco(e)).toEqual(["SAUS Quadra 3, Bloco A, sala 412", "Asa Sul", "70070-030 Brasília - DF"]);
+    expect(textoEnderecoParaCopiar(e)).toBe("SAUS Quadra 3, Bloco A, sala 412\nAsa Sul\n70070-030 Brasília - DF");
+  });
+
+  test("campos ausentes somem sem deixar separador solto; CEP sai como está no relatório", () => {
+    expect(linhasDoEndereco({ contatoId: "1", logradouro: "Rua A", cep: "1049000", uf: "SP", prioritario: false }))
+      .toEqual(["Rua A", "1049000 SP"]);
+    expect(linhasDoEndereco({ contatoId: "1", prioritario: false })).toEqual([]);
+  });
+});
+
+describe("textoDataHora", () => {
+  test("dia/mês e hora em Brasília, no formato do mockup", () => {
+    expect(textoDataHora("2026-10-01T17:12:00.000Z")).toBe("01/10, 14h12");
+  });
+});
+
+describe("montarRetrato", () => {
+  const resultado: ResultadoAnalise = {
+    arquivoNome: "c.xlsx", grupos: [],
+    resumo: { total: 0, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0, gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0 },
+  };
+
+  test("com as duas planilhas", () => {
+    const r = montarRetrato(resultado, { contatos: { nome: "c.xlsx", linhas: 418 }, enderecos: { nome: "e.xlsx", linhas: 1531 } }, new Date("2026-10-01T17:12:00.000Z"));
+    expect(r).toMatchObject({ arquivoNome: "c.xlsx", geradoEm: "2026-10-01T17:12:00.000Z", planilhaContatos: { nome: "c.xlsx", linhas: 418 }, planilhaEnderecos: { nome: "e.xlsx", linhas: 1531 } });
+  });
+
+  test("sem a planilha de endereços o campo fica ausente", () => {
+    const r = montarRetrato(resultado, { contatos: { nome: "c.xlsx", linhas: 1 } }, new Date());
+    expect("planilhaEnderecos" in r).toBe(false);
   });
 });

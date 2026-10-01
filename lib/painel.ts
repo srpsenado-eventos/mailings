@@ -1,8 +1,14 @@
 import { coerenciasVisiveis, textoCoerencia } from "@/lib/tratamento";
+import { normalizarTexto } from "@/lib/normalize";
 import type {
   ComparacaoCampo,
+  EnderecoEstruturado,
+  PessoaSite,
+  ResultadoAnalise,
   ResultadoContato,
   ResultadoGrupo,
+  ResumoAnalise,
+  Retrato,
   SituacaoEndereco,
 } from "@/lib/types";
 
@@ -160,4 +166,119 @@ export function detalhesDoContato(c: ResultadoContato, _g: ResultadoGrupo): Deta
     });
   }
   return cartoes;
+}
+
+export type Filtro = "tudo" | "ressalva" | "endereco" | "saida" | "inclusao";
+
+export const FILTROS: readonly { id: Filtro; rotulo: string }[] = [
+  { id: "tudo", rotulo: "Tudo" },
+  { id: "ressalva", rotulo: "Só o que tem ressalva" },
+  { id: "endereco", rotulo: "Endereço a confirmar" },
+  { id: "saida", rotulo: "Possível saída" },
+  { id: "inclusao", rotulo: "Propostas de inclusão" },
+];
+
+/** Ressalva: tudo que não é verde com o endereço em ordem (completo, a completar ou sem base). */
+function temRessalva(c: ResultadoContato): boolean {
+  const e = c.endereco?.situacao;
+  return c.semaforo !== "verde" || e === "pendente" || e === "nao_verificado";
+}
+
+function passaFiltro(c: ResultadoContato, filtro: Filtro): boolean {
+  switch (filtro) {
+    case "tudo": return true;
+    case "ressalva": return temRessalva(c);
+    case "endereco": return c.endereco?.situacao === "pendente";
+    case "saida": return c.possivelSaida === true;
+    case "inclusao": return false;
+  }
+}
+
+const FILTROS_COM_NOVOS: readonly Filtro[] = ["tudo", "ressalva", "inclusao"];
+
+function casa(valor: string | undefined, busca: string): boolean {
+  return valor !== undefined && normalizarTexto(valor).includes(busca);
+}
+
+function contatoCasaBusca(c: ResultadoContato, busca: string): boolean {
+  return busca === "" || casa(c.contato.nome, busca) || casa(c.contato.cargo, busca) || casa(c.contato.orgao, busca);
+}
+
+function novoCasaBusca(n: PessoaSite, busca: string): boolean {
+  return busca === "" || casa(n.nome, busca) || casa(n.cargo, busca);
+}
+
+/** Filtro e busca no navegador. Grupo que fica sem linha some. Não muta a entrada. */
+export function filtrarGrupos(grupos: readonly ResultadoGrupo[], filtro: Filtro, busca: string): ResultadoGrupo[] {
+  const b = normalizarTexto(busca.trim());
+  return grupos
+    .map((g) => ({
+      ...g,
+      contatos: g.contatos.filter((c) => passaFiltro(c, filtro) && contatoCasaBusca(c, b)),
+      novos: FILTROS_COM_NOVOS.includes(filtro) ? g.novos.filter((n) => novoCasaBusca(n, b)) : [],
+    }))
+    .filter((g) => g.contatos.length > 0 || g.novos.length > 0);
+}
+
+export function contarContatos(grupos: readonly ResultadoGrupo[]): number {
+  return grupos.reduce((soma, g) => soma + g.contatos.length, 0);
+}
+
+/**
+ * Os seis cartões do mockup. Recebe `Partial` de propósito: um retrato gravado por uma
+ * versão anterior do código pode não ter os contadores mais novos, e o painel não pode
+ * mostrar NaN por isso.
+ */
+export function cartoesDoResumo(r: Partial<ResumoAnalise>): { rotulo: string; valor: number }[] {
+  const n = (v: number | undefined) => v ?? 0;
+  return [
+    { rotulo: "Conferem", valor: n(r.verde) },
+    { rotulo: "Com divergência", valor: n(r.amarelo) },
+    { rotulo: "Possível saída", valor: n(r.possivelSaida) },
+    { rotulo: "Não verificados", valor: n(r.indeterminado) + n(r.contatosSemFonte) },
+    { rotulo: "Propostas de inclusão", valor: n(r.novo) },
+    { rotulo: "Endereços a confirmar", valor: n(r.enderecosAConfirmar) },
+  ];
+}
+
+/**
+ * As três linhas do bloco de endereço e do botão Copiar. Não é o `formatado` da Fase 1
+ * (que só existe em `completo`): aqui o CEP sai como está no relatório, sem formatar nem
+ * propor zero à esquerda, porque isto é o que o relatório diz, não o que o app conclui.
+ */
+export function linhasDoEndereco(e: EnderecoEstruturado): string[] {
+  const primeira = [e.logradouro, e.numero, e.complemento].filter(Boolean).join(", ");
+  const segunda = e.bairro ?? "";
+  const cidadeUf = [e.cidade, e.uf].filter(Boolean).join(" - ");
+  const terceira = [e.cep, cidadeUf].filter(Boolean).join(" ");
+  return [primeira, segunda, terceira].filter((l) => l.length > 0);
+}
+
+export function textoEnderecoParaCopiar(e: EnderecoEstruturado): string {
+  return linhasDoEndereco(e).join("\n");
+}
+
+const FORMATO_DATA_HORA = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+  timeZone: "America/Sao_Paulo",
+});
+
+/** "01/10, 14h12", no fuso de Brasília, como o cabeçalho do mockup. */
+export function textoDataHora(iso: string): string {
+  const partes = FORMATO_DATA_HORA.formatToParts(new Date(iso));
+  const p = (tipo: Intl.DateTimeFormatPartTypes) => partes.find((x) => x.type === tipo)?.value ?? "";
+  return `${p("day")}/${p("month")}, ${p("hour")}h${p("minute")}`;
+}
+
+export function montarRetrato(
+  resultado: ResultadoAnalise,
+  planilhas: { contatos: { nome: string; linhas: number }; enderecos?: { nome: string; linhas: number } },
+  agora: Date,
+): Retrato {
+  return {
+    ...resultado,
+    geradoEm: agora.toISOString(),
+    planilhaContatos: planilhas.contatos,
+    ...(planilhas.enderecos ? { planilhaEnderecos: planilhas.enderecos } : {}),
+  };
 }

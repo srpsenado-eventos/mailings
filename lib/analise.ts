@@ -1,6 +1,7 @@
 import type {
   ContatoPlanilha,
   ConteudoFonte,
+  EnderecoEstruturado,
   FonteCatalogo,
   PessoaSite,
   ResultadoAnalise,
@@ -12,6 +13,7 @@ import { compararGrupo, marcarFonteInacessivel, mesclarComposicao, unirFontes } 
 import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { ScrapeError } from "@/lib/scrape";
 import type { FonteResolvida } from "@/lib/catalogo";
+import { auditarEndereco, indexarEnderecos, type IndiceEnderecos } from "@/lib/endereco";
 
 function motivoDaFalha(err: unknown): string {
   if (err instanceof ScrapeError) return err.motivo;
@@ -182,6 +184,19 @@ async function analisarGrupo(
   };
 }
 
+/**
+ * Anexa a auditoria de endereço a cada contato do grupo. Passada POSTERIOR de
+ * propósito: o endereço não depende da fonte oficial, então não entra em
+ * `compararGrupo` e vale igual nos três caminhos (com fonte, sem fonte, fonte
+ * inacessível). Não toca `semaforo`, `camposDivergentes` nem `possivelSaida`.
+ */
+function anexarEnderecos(grupo: ResultadoGrupo, indice?: IndiceEnderecos): ResultadoGrupo {
+  return {
+    ...grupo,
+    contatos: grupo.contatos.map((c) => ({ ...c, endereco: auditarEndereco(c.contato, indice) })),
+  };
+}
+
 function resumir(grupos: ResultadoGrupo[]): ResumoAnalise {
   const resumo: ResumoAnalise = {
     total: 0,
@@ -190,7 +205,6 @@ function resumir(grupos: ResultadoGrupo[]): ResumoAnalise {
     vermelho: 0,
     novo: 0,
     indeterminado: 0,
-    // Nenhuma base de endereços é processada ainda (Camada D é tarefa posterior deste spec).
     enderecosAConfirmar: 0,
     gruposSemFonte: 0,
     gruposFonteInacessivel: 0,
@@ -204,6 +218,7 @@ function resumir(grupos: ResultadoGrupo[]): ResumoAnalise {
     for (const c of g.contatos) {
       resumo.total += 1;
       resumo[c.semaforo] += 1;
+      if (c.endereco?.situacao === "pendente") resumo.enderecosAConfirmar += 1;
     }
   }
   return resumo;
@@ -213,10 +228,14 @@ export async function analisar(
   arquivoNome: string,
   contatos: ContatoPlanilha[],
   deps: Dependencias,
+  enderecos?: EnderecoEstruturado[],
 ): Promise<ResultadoAnalise> {
+  const indice = enderecos && enderecos.length > 0 ? indexarEnderecos(enderecos) : undefined;
   const porGrupo = agruparPorGrupo(contatos);
   const grupos = await Promise.all(
-    [...porGrupo.entries()].map(([grupo, lista]) => analisarGrupo(grupo, lista, deps)),
+    [...porGrupo.entries()].map(async ([grupo, lista]) =>
+      anexarEnderecos(await analisarGrupo(grupo, lista, deps), indice),
+    ),
   );
   return { arquivoNome, grupos, resumo: resumir(grupos) };
 }

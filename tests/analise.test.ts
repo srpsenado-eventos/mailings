@@ -503,3 +503,54 @@ describe("Senadores de ponta a ponta (fixtures das duas páginas reais)", () => 
     expect(g.novos).toEqual([]);
   });
 });
+
+describe("auditoria de endereço anexada ao resultado", () => {
+  const enderecos = [
+    {
+      contatoId: "7",
+      nome: "Ana Maria Política Completa",
+      logradouro: "Praça dos Três Poderes",
+      numero: "S/N",
+      bairro: "Zona Cívico-Administrativa",
+      cidade: "Brasília",
+      uf: "DF",
+      cep: "70160-900",
+      prioritario: true,
+    },
+  ];
+
+  test("sem planilha de endereços, a situação é sem_base e o resumo conta zero", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], deps);
+    expect(r.grupos[0].contatos[0].endereco?.situacao).toBe("sem_base");
+    expect(r.resumo.enderecosAConfirmar).toBe(0);
+  });
+
+  test("com a planilha, o contato casado pelo Id recebe o endereço", async () => {
+    const r = await analisar("c.xlsx", [{ ...contatos[0], id: "7" }], deps, enderecos);
+    const e = r.grupos[0].contatos[0].endereco;
+    expect(e?.situacao).toBe("completo");
+    expect(e?.formatado).toContain("70160-900 Brasília - DF");
+    expect(r.resumo.enderecosAConfirmar).toBe(0);
+  });
+
+  test("contato sem endereço na base conta no resumo como a confirmar", async () => {
+    const r = await analisar("c.xlsx", [{ ...contatos[0], id: "999" }], deps, enderecos);
+    expect(r.grupos[0].contatos[0].endereco?.situacao).toBe("pendente");
+    expect(r.resumo.enderecosAConfirmar).toBe(1);
+  });
+
+  test("a auditoria não muda o semáforo nem cria divergência", async () => {
+    const r = await analisar("c.xlsx", [{ ...contatos[0], id: "999" }], deps, enderecos);
+    const c = r.grupos[0].contatos[0];
+    expect(c.semaforo).toBe("verde");
+    expect(c.camposDivergentes).toEqual([]);
+    expect(c.possivelSaida).toBeUndefined();
+  });
+
+  test("grupo sem fonte também recebe a auditoria de endereço", async () => {
+    const r = await analisar("c.xlsx", [{ ...contatos[1], id: "7" }], deps, enderecos);
+    const c = r.grupos[0].contatos[0];
+    expect(r.grupos[0].semFonte).toBe(true);
+    expect(c.endereco?.situacao).toBe("completo");
+  });
+});

@@ -2,10 +2,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { NovaVarreduraForm } from "@/components/nova-varredura-form";
+import { Painel } from "@/components/painel";
 import type { Retrato } from "@/lib/types";
 
 export default function NovaVarreduraPage() {
   const [naoGuardado, setNaoGuardado] = useState<{ retrato: Retrato; aviso: string } | null>(null);
+
+  if (naoGuardado) return <Painel retrato={naoGuardado.retrato} aviso={naoGuardado.aviso} />;
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-12">
@@ -16,13 +19,7 @@ export default function NovaVarreduraPage() {
       <p className="max-w-2xl text-sm leading-relaxed text-cinza">
         As duas planilhas são lidas aqui no seu navegador. Esta máquina lê as fontes oficiais e guarda o resultado em um arquivo local; nada sai daqui.
       </p>
-      {naoGuardado ? (
-        <p className="mt-6 rounded-lg border border-atencao-borda bg-atencao-fundo p-4 text-sm text-atencao">
-          {naoGuardado.aviso} Resultado: {naoGuardado.retrato.resumo.total} contatos varridos.
-        </p>
-      ) : (
-        <NovaVarreduraForm onRetratoNaoGuardado={(retrato, aviso) => setNaoGuardado({ retrato, aviso })} />
-      )}
+      <NovaVarreduraForm onRetratoNaoGuardado={(retrato, aviso) => setNaoGuardado({ retrato, aviso })} />
     </main>
   );
 }

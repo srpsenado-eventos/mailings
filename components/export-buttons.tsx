@@ -12,14 +12,16 @@ function baixar(nome: string, conteudo: BlobPart, tipo: string) {
 export function ExportButtons({ analise }: { analise: ResultadoAnalise }) {
   return (
     <div className="flex gap-2">
-      <button className="rounded bg-gray-800 px-3 py-1.5 text-sm text-white"
+      <button
+        className="rounded-md bg-acao px-3 py-1.5 text-sm font-medium text-white"
         onClick={() => baixar("resultado.xlsx", gerarXlsx(analise),
           "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}>
-        Exportar XLSX
+        Baixar planilha
       </button>
-      <button className="rounded border px-3 py-1.5 text-sm"
+      <button
+        className="rounded-md border border-borda-forte bg-cartao px-3 py-1.5 text-sm"
         onClick={() => baixar("resultado.csv", gerarCsv(analise), "text/csv")}>
-        Exportar CSV
+        CSV
       </button>
     </div>
   );

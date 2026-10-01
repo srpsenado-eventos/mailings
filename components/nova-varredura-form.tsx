@@ -79,6 +79,7 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
 
   async function lerContatos(arquivo: File) {
     setErroContatos(null);
+    setErroVarredura(null);
     try {
       const lista = lerPlanilha(await arquivo.arrayBuffer());
       setContatos({ nome: arquivo.name, contatos: lista, grupos: new Set(lista.map((c) => c.grupo)).size });
@@ -90,6 +91,7 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
 
   async function lerEnderecos(arquivo: File) {
     setErroEnderecos(null);
+    setErroVarredura(null);
     try {
       setEnderecos({ nome: arquivo.name, enderecos: lerPlanilhaEnderecos(await arquivo.arrayBuffer()) });
     } catch (err) {
@@ -115,10 +117,12 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
       const json = await lerJsonSeguro(resp);
       if (!json) {
         setErroVarredura(`O servidor respondeu de forma inesperada (HTTP ${resp.status}). Tente novamente.`);
+        setVarrendo(false);
         return;
       }
       if (!json.ok) {
         setErroVarredura(json.message ?? "Falha ao varrer.");
+        setVarrendo(false);
         return;
       }
       if (json.aviso) {
@@ -127,7 +131,8 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
       }
       router.push("/");
       router.refresh();
-    } finally {
+    } catch (err) {
+      setErroVarredura(err instanceof Error ? `Falha na varredura: ${err.message}` : "Falha na varredura.");
       setVarrendo(false);
     }
   }
@@ -144,7 +149,7 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
             Exportação do Sistema Contatos. Os grupos a varrer saem da coluna <strong className="font-medium">Grupo</strong> desta planilha.
           </p>
           {contatos ? (
-            <ArquivoLido nome={contatos.nome} resumo={`${contatos.contatos.length} contatos · ${contatos.grupos} grupos`} onTrocar={() => setContatos(null)} desabilitado={varrendo} />
+            <ArquivoLido nome={contatos.nome} resumo={`${contatos.contatos.length} contatos · ${contatos.grupos} grupos`} onTrocar={() => { setContatos(null); setErroVarredura(null); }} desabilitado={varrendo} />
           ) : (
             <SeletorDeArquivo id="planilha-contatos" rotulo="Escolher arquivo" desabilitado={varrendo} onArquivo={lerContatos} />
           )}
@@ -161,7 +166,7 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
             Sem ele, o endereço continua saindo como <em>fonte não informa</em>: os sites dos órgãos não publicam endereço.
           </p>
           {enderecos ? (
-            <ArquivoLido nome={enderecos.nome} resumo={`${enderecos.enderecos.length} endereços`} onTrocar={() => setEnderecos(null)} desabilitado={varrendo} />
+            <ArquivoLido nome={enderecos.nome} resumo={`${enderecos.enderecos.length} endereços`} onTrocar={() => { setEnderecos(null); setErroVarredura(null); }} desabilitado={varrendo} />
           ) : (
             <SeletorDeArquivo id="planilha-enderecos" rotulo="Escolher arquivo" desabilitado={varrendo} onArquivo={lerEnderecos} />
           )}
@@ -176,7 +181,7 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
           disabled={!contatos || varrendo}
           className="rounded-lg bg-acao px-6 py-3 text-base font-semibold text-white disabled:opacity-50"
         >
-          {varrendo ? "Varrendo…" : contatos ? `Varrer ${contatos.grupos} grupos` : "Varrer"}
+          {varrendo ? "Varrendo…" : contatos ? `Varrer ${contatos.grupos} ${contatos.grupos === 1 ? "grupo" : "grupos"}` : "Varrer"}
         </button>
         {varrendo && <p className="text-sm text-cinza">Esta máquina está lendo as fontes oficiais. Pode levar mais de um minuto.</p>}
         {erroVarredura && <p className="text-sm text-ruim">{erroVarredura}</p>}

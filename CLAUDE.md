@@ -1,20 +1,20 @@
 # CLAUDE.md — Fiscal de Mailings
 
-Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui. Última revisão: 2026-09-03.
+Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui. Última revisão: 2026-10-01.
 
 ## Contexto rápido
 
-Web app interno do Senado Federal (Secretaria de Relações Públicas, GT Gestão de Convidados) que confronta o **Sistema Contatos** (planilha de autoridades) com as **listas oficiais publicadas nos sites dos órgãos** e aponta o que mudou. O motivo imediato é a **Posse Presidencial 2027**: convites, cartões e cintas saem desse cadastro, e um nome, cargo ou tratamento errado vira constrangimento institucional. Single-user, stateless, sem banco.
+Web app interno do Senado Federal (Secretaria de Relações Públicas, GT Gestão de Convidados) que confronta o **Sistema Contatos** (planilha de autoridades) com as **listas oficiais publicadas nos sites dos órgãos** e aponta o que mudou. O motivo imediato é a **Posse Presidencial 2027**: convites, cartões e cintas saem desse cadastro, e um nome, cargo ou tratamento errado vira constrangimento institucional. Single-user, sem banco; persiste só o último retrato da varredura em arquivo local.
 
-Repositório remoto: `github.com/srpsenado-eventos/mailings`, branch de trabalho `feat/mvp-fiscal`.
+Repositório remoto: `github.com/srpsenado-eventos/mailings`, branch base `main`; o trabalho sai em branches `feat/*` mescladas por PR.
 
 ## Estado do projeto (2026-10-01)
 
 - Suíte: 24 arquivos, 437 testes, verde (2026-10-01). `npm run typecheck` limpo.
 - Catálogo: 33 grupos, 24 fontes, 21 grupos com fonte, **12 sem fonte** (todo contato deles sai vermelho, ver semântica abaixo).
-- **Trabalho em andamento fora da branch principal:** auditoria de Tratamento e Endereçamento (spec de 2026-08-13). Está no worktree `.claude/worktrees/supabase-vps-migration-37d8b1`, branch `claude/supabase-vps-migration-37d8b1`, 5 commits à frente de `feat/mvp-fiscal`. Tarefas 1 e 2 de 7 concluídas (`data/tratamentos.ts`, `lib/tratamento.ts`, gerador e testes). Faltam: resolução de cargo, mudança de contrato (`sem_regra`, `protocolo`, `valorEsperado`), integração no `match.ts`, export e UI. Ledger em `.superpowers/sdd/2026-08-13-auditoria-tratamento-enderecamento/progress.md` (dentro do worktree). Antes de retomar, rebase sobre `feat/mvp-fiscal`.
+- Auditoria de Tratamento e Endereçamento (spec de 2026-08-13) e Camada C (regras de nome, spec de 2026-09-18) estão em `main` desde setembro de 2026 (`lib/tratamento.ts`, `data/regras-nome.ts`).
 - **Dívidas conhecidas** (não corrigir de passagem; abrir tarefa própria):
-  - `lib/gemini.ts` e `GeminiCliente` são nomes históricos: o cliente é Anthropic Haiku desde 2026-06-14. Comentários em `lib/types.ts` e `components/resultado-tabela.tsx` ainda falam em "Gemini + Google Search".
+  - `lib/gemini.ts` e `GeminiCliente` são nomes históricos: o cliente é Anthropic Haiku desde 2026-06-14. Comentários em `lib/types.ts` ainda falam em "Gemini + Google Search".
   - `package.json` declara `@google/genai`, `fuse.js`, `@mozilla/readability`, `jsdom` e `pg` sem nenhum import em `lib/`, `app/` ou `components/`. `pg` só serve ao script legado `scripts/apply-migrations.mjs`.
   - `diagnosticarIa` e o parâmetro `?diag=1` em `/api/analise` são diagnóstico temporário; remover quando o TCU estiver confirmado em produção.
   - Há `package-lock.json` versionado e `pnpm-lock.yaml` + `pnpm-workspace.yaml` soltos na raiz. O projeto usa **npm**; não commitar os arquivos do pnpm.
@@ -41,7 +41,7 @@ Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**
 | 2026-06-14 | `ia-first-composicao-proveniencia.md` | Proveniência (`origem` por registro), "possível saída" | Parcialmente substituído pelo abaixo |
 | 2026-06-14 | `camada1-base-ia-refinamento.md` | **Camada 1 determinística é a base; IA é refinamento. Regra de ouro do "possível saída"** | **Vigente, manda na ordem das camadas** |
 | 2026-08-13 | `catalogo-em-arquivo-sem-banco.md` | Catálogo em `data/catalogo.ts`; Supabase sai | Vigente |
-| 2026-08-13 | `auditoria-tratamento-enderecamento.md` | Tratamento/Endereçamento auditados contra a tabela de protocolo | Aprovado, **só no worktree** |
+| 2026-08-13 | `auditoria-tratamento-enderecamento.md` | Tratamento/Endereçamento auditados contra a tabela de protocolo | Vigente (implementado em `main`) |
 | 2026-09-04 | `varredura-continua-posse-2027-design.md` | Abrir o app e ver o último retrato, com data; investigação por busca | **Parcialmente substituído** por 2026-10-01 (painel local): fica o retrato; caem Blob, senha, cron e varredura na Vercel |
 | 2026-09-24 | `segunda-fonte-senadores-fora-de-exercicio.md` | Todas as fontes ativas do grupo compõem a composição; extração por tabela; inclusão filtrada por UF | Vigente |
 | 2026-10-01 | `auditoria-de-endereco-camada-d.md` | **Camada D**: endereço estruturado da segunda planilha, junção por `Id`, prioritário, CEP classificado; não pinta o semáforo; conferência nos Correios é a Fase 2 | Vigente (Fase 1 implementada) |
@@ -57,7 +57,7 @@ Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**
 - **Todas as fontes ativas do grupo compõem a composição**, na ordem do catálogo; a primeira é a primária (vai em `fonteUrl` e alimenta a Camada 2). Só as fontes do grupo dono da primária entram — um rótulo da planilha que case dois grupos não mistura as páginas dos dois. Toda fonte que respondeu continua compondo, mesmo se outra caiu; mas na **leitura parcial** — uma fonte compôs o grupo e outra **falhou** (lançou erro, ou é a primária e voltou sem ninguém) — **ninguém do grupo vira possível saída**: falta um pedaço da composição oficial, quem não casa fica indeterminado, e `erroFonte` diz qual fonte falhou, na tela e no export. Fonte secundária que responde e não tem ninguém a listar (nenhum senador afastado) **não é falha**: vira só ressalva em `erroFonte` e a detecção de saída continua de pé. Se **nenhuma** fonte respondeu e a IA compôs o grupo, a composição é real e a ausência ainda aponta saída, marcada `viaPesquisaAmpla` (caminho do TCU); sem fonte e sem IA, o grupo inteiro é indeterminado.
 - **Regra de ouro do "possível saída":** só existe quando há **composição real** (página ou IA) que não contém a pessoa. Página ilegível (JS, ex.: TCU) e IA vazia geram **"indeterminado / não verificado"**, nunca "saída". Foi o defeito que derrubou a confiança no TCU em junho; não reintroduzir.
 - **Não há mais "pesquisa ampla" com busca na web.** O sentinela `URL_PESQUISA_AMPLA` e a flag `viaPesquisaAmpla` significam hoje: "a composição dependeu do conhecimento da IA". O rótulo na UI é "≈ via IA — confira".
-- **Sem banco de dados.** Catálogo em `data/catalogo.ts`, versionado. Resultado da análise vive em memória durante a request. Não reintroduzir Postgres/Supabase sem novo spec.
+- **Sem banco de dados.** Catálogo em `data/catalogo.ts`, versionado. Resultado da análise vive em memória durante a request e o último retrato é gravado em `.fiscal/retrato.json` (ver o princípio do retrato). Não reintroduzir Postgres/Supabase sem novo spec.
 - **Fontes cadastradas à mão.** Nenhuma URL entra no catálogo por descoberta automática, busca ou IA. O Clovis fornece e confere cada uma.
 - **Camada D (endereço) é um eixo independente e não pinta o semáforo.** A planilha de endereços é opcional, lida no navegador (`lib/planilha-enderecos.ts`) e viaja no mesmo JSON (`enderecos`, `arquivoEnderecosNome`). A junção com o contato é pelo `Id` (nome só como fallback, e nome ambíguo não recebe endereço); entre várias linhas vale a marcada `Prioritário`, e várias prioritárias ou nenhuma é achado sem endereço. O orquestrador anexa `ResultadoContato.endereco` numa passada posterior, nos três caminhos (com fonte, sem fonte, fonte inacessível); ela não entra em `comparacoes` nem em `camposDivergentes` e nunca cria `possivelSaida`. `AuditoriaEndereco.formatado` **só existe quando `situacao === "completo"`**; tela e export não devem montar endereço "pronto para copiar" fora disso. CEP de 7 dígitos vira proposta de zero à esquerda **só em SP**, e continua proposta até os Correios confirmarem (Fase 2, bloqueada na chave). O contador próprio é `resumo.enderecosAConfirmar` (só `pendente`).
 - **O retrato é a única persistência.** `lib/armazem.ts` grava o último `Retrato` em `.fiscal/retrato.json`, fora do git, com escrita atômica; um só, sem histórico. O painel (`/`) lê o retrato; sem retrato, manda para `/nova-varredura`. A lógica de apresentação (etiquetas, situação, filtros, cartões, detalhe) é função pura em `lib/painel.ts`, testada; componentes só renderizam.
@@ -69,7 +69,7 @@ Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**
 | Veredito | Quando | O que o usuário deve fazer |
 |---|---|---|
 | **verde** | Contato casou com pessoa da composição e nenhum campo diverge | Nada |
-| **amarelo** | Casou, mas nome, cargo ou endereço diverge do site | Revisar; o valor do site vem em `valorSite` |
+| **amarelo** | Casou, mas nome, cargo ou endereço diverge do site | Revisar; o valor do site vem em `valorEsperado` |
 | **vermelho + `possivelSaida`** | Há composição real e o contato não está nela | Confirmar se a autoridade saiu |
 | **vermelho + campo `fonte`** | Grupo **sem URL cadastrada** | Cadastrar fonte (não é problema do contato) |
 | **indeterminado** | URL existe, mas a página não pôde ser lida (403, TLS, timeout, JS) e a IA não cobriu | Conferir à mão; `erroFonte` diz o motivo |
@@ -99,7 +99,7 @@ Nota: o spec de 2026-08-13 registra que o Clovis considerou esse PDF "de outra f
 ## Layout do código
 
 ```
-app/                 ← rotas Next.js; /api/analise (POST JSON) e /grupos
+app/                 ← rotas Next.js; /api/analise (POST JSON), /nova-varredura e /grupos; `/` lê o retrato
 components/          ← UI (Tailwind puro): painel, linha-contato, etiqueta, nova-varredura-form, export-buttons
 lib/                 ← lógica pura: planilha, catalogo, scrape, match, analise, gemini (=Haiku), normalize, cargos, export, armazem, painel
 data/catalogo.ts     ← FONTE DA VERDADE de grupos, responsáveis e URLs oficiais

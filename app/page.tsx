@@ -2,7 +2,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { ResultadoAnalise } from "@/lib/types";
-import { UploadZone } from "@/components/upload-zone";
 import { ResultadoTabela } from "@/components/resultado-tabela";
 import { ExportButtons } from "@/components/export-buttons";
 
@@ -17,7 +16,7 @@ export default function Home() {
           Grupos cadastrados →
         </Link>
       </div>
-      {!analise && <UploadZone onResultado={(r) => setAnalise(r as ResultadoAnalise)} />}
+      {!analise && <Link href="/nova-varredura" className="underline">Nova varredura</Link>}
       {analise && (
         <div className="space-y-4">
           <div className="flex items-center justify-between">

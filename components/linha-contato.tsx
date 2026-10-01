@@ -24,9 +24,13 @@ function BotaoCopiar({ texto }: { texto: string }) {
       type="button"
       className="mt-1.5 rounded border border-acao-borda bg-cartao px-2 py-0.5 text-[11px] text-acao"
       onClick={async () => {
-        await navigator.clipboard.writeText(texto);
-        setCopiado(true);
-        setTimeout(() => setCopiado(false), 1500);
+        try {
+          await navigator.clipboard.writeText(texto);
+          setCopiado(true);
+          setTimeout(() => setCopiado(false), 1500);
+        } catch {
+          /* o navegador negou: o valor continua selecionável na tela */
+        }
       }}
     >
       {copiado ? "Copiado" : "Copiar"}
@@ -97,13 +101,16 @@ function Detalhe({ c, g, retrato }: { c: ResultadoContato; g: ResultadoGrupo; re
         </div>
       )}
       <BlocoEndereco c={c} retrato={retrato} />
-      <ul className="text-xs leading-relaxed text-cinza">
+      <div>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-cinza-claro">De onde veio cada resposta</h3>
+      <ul className="mt-1 text-xs leading-relaxed text-cinza">
         {g.fonteUrl && g.fonteUrl.startsWith("http") && (
           <li>Nome e cargo: <a href={g.fonteUrl} target="_blank" rel="noreferrer" className="text-acao underline">{g.fonteUrl}</a>, lido em {textoDataHora(retrato.geradoEm)}</li>
         )}
         <li>Tratamento e endereçamento: tabela de protocolo (Posse2027_TabelaTratamentos.xlsx)</li>
         {retrato.planilhaEnderecos && <li>Endereço: {retrato.planilhaEnderecos.nome}</li>}
       </ul>
+      </div>
     </div>
   );
 }

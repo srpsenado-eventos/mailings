@@ -35,7 +35,7 @@ function EstadoDaFonte({ g }: { g: ResultadoGrupo }) {
   );
 }
 
-export function Painel({ retrato, aviso }: { retrato: Retrato; aviso?: string }) {
+export function Painel({ retrato, aviso, onNovaVarredura }: { retrato: Retrato; aviso?: string; onNovaVarredura?: () => void }) {
   const [filtro, setFiltro] = useState<Filtro>("tudo");
   const [busca, setBusca] = useState("");
   const grupos = useMemo(() => filtrarGrupos(retrato.grupos, filtro, busca), [retrato, filtro, busca]);
@@ -55,7 +55,12 @@ export function Painel({ retrato, aviso }: { retrato: Retrato; aviso?: string })
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/nova-varredura" className="rounded-md border border-borda-forte bg-cartao px-3 py-1.5 text-sm">Nova varredura</Link>
+          <Link href="/grupos" className="text-sm text-acao underline">Grupos cadastrados</Link>
+          {onNovaVarredura ? (
+            <button type="button" onClick={onNovaVarredura} className="rounded-md border border-borda-forte bg-cartao px-3 py-1.5 text-sm">Nova varredura</button>
+          ) : (
+            <Link href="/nova-varredura" className="rounded-md border border-borda-forte bg-cartao px-3 py-1.5 text-sm">Nova varredura</Link>
+          )}
           <ExportButtons analise={retrato} />
         </div>
       </header>

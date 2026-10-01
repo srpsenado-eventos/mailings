@@ -8,7 +8,7 @@ import type { Retrato } from "@/lib/types";
 export default function NovaVarreduraPage() {
   const [naoGuardado, setNaoGuardado] = useState<{ retrato: Retrato; aviso: string } | null>(null);
 
-  if (naoGuardado) return <Painel retrato={naoGuardado.retrato} aviso={naoGuardado.aviso} />;
+  if (naoGuardado) return <Painel retrato={naoGuardado.retrato} aviso={naoGuardado.aviso} onNovaVarredura={() => setNaoGuardado(null)} />;
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-12">

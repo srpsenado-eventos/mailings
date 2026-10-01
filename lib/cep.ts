@@ -16,6 +16,8 @@ export interface Cep {
 /**
  * Faixa de CEP de São Paulo: 01000-000 a 19999-999. É a única UF com CEP
  * começando em zero, e é por isso que a recuperação do dígito perdido só vale lá.
+ * A faixa também rejeita um 7º dígito que já é zero (vira "00…", que não existe):
+ * nesse caso o resultado é `invalido`, não `recuperavel`.
  */
 const FAIXA_SP = /^(0[1-9]|1\d)/;
 

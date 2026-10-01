@@ -11,8 +11,9 @@ export class ColunaFaltanteError extends Error {
 
 /** Mapa de campo do domínio → rótulo de cabeçalho normalizado esperado. */
 const MAPA_COLUNAS: Record<keyof ContatoPlanilha, string> = {
-  // `id` ainda não é lido da planilha de contatos — a junção com a base de
-  // endereços (que usa essa coluna) é de uma tarefa posterior deste spec.
+  // Chave da junção com a base de endereços (ver `ContatoPlanilha.id`). Não é
+  // obrigatória: planilha sem a coluna continua funcionando, só a junção cai
+  // para o nome.
   id: "id",
   foto: "foto",
   tratamento: "tratamento",
@@ -66,6 +67,7 @@ export function lerPlanilha(buffer: ArrayBuffer): ContatoPlanilha[] {
     const grupo = pegar(linha, "grupo");
     if (!nome && !grupo) continue; // linha vazia
     contatos.push({
+      id: pegar(linha, "id") || undefined,
       foto: pegar(linha, "foto") || undefined,
       tratamento: pegar(linha, "tratamento") || undefined,
       enderecamento: pegar(linha, "enderecamento") || undefined,

@@ -35,6 +35,10 @@ describe("classificarCep", () => {
     expect(classificarCep("1049000", "RJ")).toEqual({ situacao: "invalido" });
     expect(classificarCep("1049000", undefined)).toEqual({ situacao: "invalido" });
   });
+
+  test("sete dígitos que já começam em zero não viram proposta: não existe CEP 00…", () => {
+    expect(classificarCep("0049000", "SP")).toEqual({ situacao: "invalido" });
+  });
 });
 
 describe("formatarCep", () => {

@@ -1,6 +1,6 @@
 import type { ResultadoAnalise } from "@/lib/types";
 import { SemaforoBadge } from "@/components/semaforo-badge";
-import { celulaDivergencias } from "@/lib/celula-divergencias";
+import { etiquetasDoContato } from "@/lib/painel";
 import { rotuloAchadoEndereco } from "@/lib/endereco";
 
 export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
@@ -113,7 +113,7 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
                       "—"
                     )}
                   </td>
-                  <td>{celulaDivergencias(c.comparacoes, c.possivelSaida)}</td>
+                  <td>{etiquetasDoContato(c, g).map((e) => e.texto).join("; ") || "—"}</td>
                   <td>{c.origem === "pesquisa_ampla" ? "pesquisa ampla" : "oficial"}</td>
                   <td>
                     {c.possivelSaida ? (

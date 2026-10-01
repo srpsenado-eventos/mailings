@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, message: "Corpo inválido (esperado JSON)." }, { status: 400 });
     }
 
-    const { arquivoNome, contatos } = parsePayloadAnalise(corpo);
+    const { arquivoNome, contatos, enderecos } = parsePayloadAnalise(corpo);
 
     const deps: Dependencias = {
       resolverFonte: (grupo) => resolverGrupoEFonte(grupo),
@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       extrairComposicao: (grupoCanonico, textoLimpo) => extrairComposicao(grupoCanonico, textoLimpo),
     };
 
-    const resultado = await analisar(arquivoNome, contatos, deps);
+    const resultado = await analisar(arquivoNome, contatos, deps, enderecos);
     // Diagnóstico temporário (não-PII): só roda com ?diag=1 (custo zero no fluxo normal).
     const diag =
       req.nextUrl.searchParams.get("diag") === "1" ? await diagnosticarIa() : undefined;

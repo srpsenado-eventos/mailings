@@ -1,6 +1,7 @@
 import type { ResultadoAnalise } from "@/lib/types";
 import { SemaforoBadge } from "@/components/semaforo-badge";
 import { celulaDivergencias } from "@/lib/celula-divergencias";
+import { rotuloAchadoEndereco } from "@/lib/endereco";
 
 export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
   return (
@@ -69,7 +70,7 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
           </h2>
           <table className="w-full text-sm">
             <thead><tr className="text-left text-gray-500">
-              <th>Nome</th><th>Cargo</th><th>Divergências</th><th>Origem</th><th>Status</th>
+              <th>Nome</th><th>Cargo</th><th>Endereço</th><th>Divergências</th><th>Origem</th><th>Status</th>
             </tr></thead>
             <tbody>
               {g.contatos.map((c, i) => (
@@ -88,6 +89,30 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
                     ) : null}
                   </td>
                   <td>{c.contato.cargo ?? "—"}</td>
+                  <td>
+                    {c.endereco && c.endereco.situacao !== "sem_base" ? (
+                      <span
+                        className={
+                          c.endereco.situacao === "pendente"
+                            ? "text-amber-700"
+                            : c.endereco.situacao === "completo"
+                              ? "text-gray-600"
+                              : "text-gray-700"
+                        }
+                        title={c.endereco.achados.map(rotuloAchadoEndereco).join("; ")}
+                      >
+                        {c.endereco.situacao === "completo"
+                          ? "completo"
+                          : c.endereco.situacao === "a_completar"
+                            ? "a completar"
+                            : c.endereco.situacao === "pendente"
+                              ? "a confirmar"
+                              : "não verificado"}
+                      </span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td>{celulaDivergencias(c.comparacoes, c.possivelSaida)}</td>
                   <td>{c.origem === "pesquisa_ampla" ? "pesquisa ampla" : "oficial"}</td>
                   <td>
@@ -103,6 +128,7 @@ export function ResultadoTabela({ analise }: { analise: ResultadoAnalise }) {
                 <tr key={`novo-${i}`} className="border-t">
                   <td>{n.nome}</td>
                   <td>{n.cargo ?? (n.rotuloFonte ? `${n.rotuloFonte}${n.contexto ? ` — ${n.contexto}` : ""}` : "—")}</td>
+                  <td>—</td>
                   <td>—</td>
                   <td>{n.origem === "conhecimento" ? "pesquisa ampla" : "oficial"}</td>
                   <td><SemaforoBadge status="novo" /></td>

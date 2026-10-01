@@ -1,4 +1,4 @@
-import type { ContatoPlanilha } from "@/lib/types";
+import type { ContatoPlanilha, EnderecoEstruturado } from "@/lib/types";
 
 /** Corpo JSON do `/api/analise` inválido (estrutura inesperada vinda do cliente). */
 export class PayloadInvalidoError extends Error {
@@ -11,6 +11,10 @@ export class PayloadInvalidoError extends Error {
 export interface PayloadAnalise {
   arquivoNome: string;
   contatos: ContatoPlanilha[];
+  /** Nome da planilha de endereços, quando enviada. */
+  arquivoEnderecosNome?: string;
+  /** Linhas da planilha de endereços. Ausente = auditoria de endereço não roda. */
+  enderecos?: EnderecoEstruturado[];
 }
 
 /** Teto defensivo contra abuso/erro — não é o limite real de uso (uma base tem dezenas/centenas). */
@@ -30,6 +34,7 @@ function narrowContato(v: unknown): ContatoPlanilha {
   return {
     nome: texto(o.nome),
     grupo: texto(o.grupo),
+    id: textoOpcional(o.id),
     foto: textoOpcional(o.foto),
     tratamento: textoOpcional(o.tratamento),
     enderecamento: textoOpcional(o.enderecamento),
@@ -40,6 +45,25 @@ function narrowContato(v: unknown): ContatoPlanilha {
     orgao: textoOpcional(o.orgao),
     cargo: textoOpcional(o.cargo),
     departamento: textoOpcional(o.departamento),
+  };
+}
+
+/** Converte uma linha de endereço vinda do JSON num `EnderecoEstruturado` seguro. */
+function narrowEndereco(v: unknown): EnderecoEstruturado {
+  const o = (typeof v === "object" && v !== null ? v : {}) as Record<string, unknown>;
+  return {
+    contatoId: texto(o.contatoId),
+    enderecoId: textoOpcional(o.enderecoId),
+    nome: textoOpcional(o.nome),
+    logradouro: textoOpcional(o.logradouro),
+    numero: textoOpcional(o.numero),
+    complemento: textoOpcional(o.complemento),
+    bairro: textoOpcional(o.bairro),
+    cidade: textoOpcional(o.cidade),
+    uf: textoOpcional(o.uf),
+    pais: textoOpcional(o.pais),
+    cep: textoOpcional(o.cep),
+    prioritario: o.prioritario === true,
   };
 }
 
@@ -61,5 +85,19 @@ export function parsePayloadAnalise(corpo: unknown): PayloadAnalise {
   if (contatos.length > MAX_CONTATOS) {
     throw new PayloadInvalidoError(`Planilha muito grande (máximo ${MAX_CONTATOS} linhas).`);
   }
-  return { arquivoNome, contatos: contatos.map(narrowContato) };
+  const { arquivoEnderecosNome, enderecos } = corpo as Record<string, unknown>;
+  if (enderecos !== undefined && !Array.isArray(enderecos)) {
+    throw new PayloadInvalidoError("Lista de endereços inválida.");
+  }
+  if (Array.isArray(enderecos) && enderecos.length > MAX_CONTATOS) {
+    throw new PayloadInvalidoError(`Planilha de endereços muito grande (máximo ${MAX_CONTATOS} linhas).`);
+  }
+  return {
+    arquivoNome,
+    contatos: contatos.map(narrowContato),
+    ...(typeof arquivoEnderecosNome === "string" && arquivoEnderecosNome.length > 0
+      ? { arquivoEnderecosNome }
+      : {}),
+    ...(Array.isArray(enderecos) ? { enderecos: enderecos.map(narrowEndereco) } : {}),
+  };
 }

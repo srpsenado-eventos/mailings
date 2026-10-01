@@ -1,5 +1,11 @@
 /** Uma linha da planilha do Sistema Contatos (campos opcionais exceto nome/grupo). */
 export interface ContatoPlanilha {
+  /**
+   * `Id` do contato no Sistema Contatos. Chave exata da junção com a base de
+   * endereços: casar por nome deixa 26 dos 418 contatos do agrupador ambíguos
+   * (medido em 2026-10-01), e endereço de outra pessoa é pior que endereço ausente.
+   */
+  id?: string;
   foto?: string;
   tratamento?: string;
   enderecamento?: string;
@@ -114,6 +120,11 @@ export interface ResultadoContato {
   origem: OrigemVeredito;
   fonteUrl?: string;
   observacao?: string;
+  /**
+   * Auditoria de endereço (Camada D). **Não** entra em `camposDivergentes` nem muda
+   * `semaforo`: ver docs/superpowers/specs/2026-10-01-auditoria-de-endereco-camada-d.md
+   */
+  endereco?: AuditoriaEndereco;
 }
 
 export interface ResultadoGrupo {
@@ -151,6 +162,8 @@ export interface ResumoAnalise {
   vermelho: number;
   novo: number;
   indeterminado: number;
+  /** Contatos cujo endereço precisa de confirmação humana (situacao `pendente`). */
+  enderecosAConfirmar: number;
   gruposSemFonte: number;
   gruposFonteInacessivel: number;
   /** Grupos verificados pela 2ª etapa (pesquisa ampla via Gemini). */
@@ -249,4 +262,53 @@ export interface RegraTratamento {
   vocativo: string;
   pronome: string;
   enderecamento: string;
+}
+
+/** Uma linha da planilha de endereços do Sistema Contatos, com os campos separados. */
+export interface EnderecoEstruturado {
+  contatoId: string;
+  enderecoId?: string;
+  /** Nome como está na base de endereços — usado só na junção por nome, sem `Id`. */
+  nome?: string;
+  logradouro?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
+  pais?: string;
+  cep?: string;
+  /** Coluna `Prioritário` (Sim/Não): qual endereço vale quando o contato tem vários. */
+  prioritario: boolean;
+}
+
+/**
+ * Situação do endereço de um contato. Eixo **separado** do semáforo: endereço
+ * incompleto não é divergência contra fonte nenhuma, é trabalho de telefone pendente.
+ * `sem_base` = nenhuma planilha de endereços foi enviada (comportamento de hoje).
+ */
+export type SituacaoEndereco = "completo" | "a_completar" | "pendente" | "nao_verificado" | "sem_base";
+
+/** O que a auditoria de endereço encontrou. `rotuloAchadoEndereco` traduz cada código. */
+export type AchadoEndereco =
+  | "sem_linha"
+  | "sem_logradouro"
+  | "sem_numero"
+  | "sem_bairro"
+  | "cep_ausente"
+  | "cep_invalido"
+  | "cep_recuperavel"
+  | "nome_ambiguo"
+  | "sem_prioritario"
+  | "varios_prioritarios";
+
+export interface AuditoriaEndereco {
+  situacao: SituacaoEndereco;
+  achados: AchadoEndereco[];
+  /** A linha escolhida da base. Ausente quando não há linha ou a junção não resolveu. */
+  endereco?: EnderecoEstruturado;
+  /** Endereço montado no formato do Contatos, pronto para copiar. */
+  formatado?: string;
+  /** Quantas linhas de endereço o contato tem na base (para explicar a escolha). */
+  linhas?: number;
 }

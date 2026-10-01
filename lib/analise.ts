@@ -190,6 +190,8 @@ function resumir(grupos: ResultadoGrupo[]): ResumoAnalise {
     vermelho: 0,
     novo: 0,
     indeterminado: 0,
+    // Nenhuma base de endereços é processada ainda (Camada D é tarefa posterior deste spec).
+    enderecosAConfirmar: 0,
     gruposSemFonte: 0,
     gruposFonteInacessivel: 0,
     gruposViaPesquisaAmpla: 0,

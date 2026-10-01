@@ -11,6 +11,9 @@ export class ColunaFaltanteError extends Error {
 
 /** Mapa de campo do domínio → rótulo de cabeçalho normalizado esperado. */
 const MAPA_COLUNAS: Record<keyof ContatoPlanilha, string> = {
+  // `id` ainda não é lido da planilha de contatos — a junção com a base de
+  // endereços (que usa essa coluna) é de uma tarefa posterior deste spec.
+  id: "id",
   foto: "foto",
   tratamento: "tratamento",
   enderecamento: "enderecamento",

@@ -57,18 +57,34 @@ describe("auditarEndereco", () => {
     );
     expect(a.situacao).toBe("a_completar");
     expect(a.achados).toContain("cep_recuperavel");
+    // O CEP recuperado é proposta, não confirmação (ver lib/cep.ts): "a_completar" nunca
+    // expõe `formatado`, senão a etiqueta sairia com um CEP ainda não checado nos Correios.
+    expect(a.formatado).toBeUndefined();
   });
 
   test("sem número é pendência humana", () => {
     const a = auditarEndereco(contato({ id: "1" }), indexarEnderecos([linha({ numero: undefined })]));
     expect(a.situacao).toBe("pendente");
     expect(a.achados).toContain("sem_numero");
+    expect(a.formatado).toBeUndefined();
   });
 
   test("CEP vazio é pendência humana", () => {
     const a = auditarEndereco(contato({ id: "1" }), indexarEnderecos([linha({ cep: undefined })]));
     expect(a.situacao).toBe("pendente");
     expect(a.achados).toContain("cep_ausente");
+    expect(a.formatado).toBeUndefined();
+  });
+
+  test("CEP e bairro ausentes ao mesmo tempo: só cep_ausente, sem_bairro não se aplica", () => {
+    // O CEP é a fonte do bairro; sem CEP recuperável não há de onde completar o bairro,
+    // então a pendência certa é só o CEP — "sem_bairro" aqui seria redundante e enganoso.
+    const a = auditarEndereco(
+      contato({ id: "1" }),
+      indexarEnderecos([linha({ cep: undefined, bairro: undefined })]),
+    );
+    expect(a.achados).toContain("cep_ausente");
+    expect(a.achados).not.toContain("sem_bairro");
   });
 
   test("contato sem linha na base é pendência", () => {
@@ -128,6 +144,19 @@ describe("auditarEndereco", () => {
     expect(a.endereco?.contatoId).toBe("1");
   });
 
+  test("com Id, nome ambíguo na base não desvia da junção por Id", () => {
+    // 414 dos 418 contatos casam pelo Id sem ambiguidade nenhuma; é essa junção que
+    // precisa vencer mesmo quando o nome, por coincidência, também aparece em outro id.
+    const indice = indexarEnderecos([
+      linha({ contatoId: "1", nome: "Nome Repetido" }),
+      linha({ contatoId: "2", nome: "Nome Repetido", complemento: "Outro endereço" }),
+    ]);
+    const a = auditarEndereco(contato({ id: "1", nome: "Nome Repetido" }), indice);
+    expect(a.situacao).toBe("completo");
+    expect(a.endereco?.contatoId).toBe("1");
+    expect(a.achados).not.toContain("nome_ambiguo");
+  });
+
   test("sem Id, nome que casa dois contatos não recebe endereço nenhum", () => {
     const indice = indexarEnderecos([
       linha({ contatoId: "1" }),
@@ -146,5 +175,13 @@ describe("formatarEnderecoContatos", () => {
     expect(formatarEnderecoContatos(linha({ bairro: undefined, complemento: undefined }))).toBe(
       "Setor de Autarquias Sul, Quadra 3, S/N\n70070-030 Brasília - DF",
     );
+  });
+
+  test("sem logradouro e número, o complemento não ganha um '- ' sobrando na frente", () => {
+    const a = formatarEnderecoContatos(
+      linha({ logradouro: undefined, numero: undefined, bairro: undefined }),
+    );
+    expect(a.startsWith("- ")).toBe(false);
+    expect(a).toBe("Bloco A, sala 412\n70070-030 Brasília - DF");
   });
 });

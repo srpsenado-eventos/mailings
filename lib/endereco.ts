@@ -34,7 +34,8 @@ export function indexarEnderecos(linhas: EnderecoEstruturado[]): IndiceEnderecos
 /** Monta o endereço no formato que o Sistema Contatos usa no campo `Endereço`. */
 export function formatarEnderecoContatos(e: EnderecoEstruturado): string {
   const primeira = [e.logradouro, e.numero].filter(Boolean).join(", ");
-  const comComplemento = e.complemento ? `${primeira} - ${e.complemento}` : primeira;
+  // Sem logradouro/número não há o que separar: o complemento fica sozinho, sem o "- " à frente.
+  const comComplemento = e.complemento ? (primeira ? `${primeira} - ${e.complemento}` : e.complemento) : primeira;
   const cep = classificarCep(e.cep, e.uf);
   const digitos = cep.digitos ?? cep.proposto;
   const ultima = [digitos ? formatarCep(digitos) : "", [e.cidade, e.uf].filter(Boolean).join(" - ")]
@@ -67,6 +68,7 @@ const PENDENCIAS: readonly AchadoEndereco[] = [
   "sem_numero",
   "cep_ausente",
   "cep_invalido",
+  "nome_ambiguo",
   "sem_prioritario",
   "varios_prioritarios",
 ];
@@ -128,7 +130,9 @@ export function auditarEndereco(
     situacao,
     achados,
     endereco: escolhido,
-    formatado: formatarEnderecoContatos(escolhido),
+    // "pronto para copiar" só vale quando não falta nada: endereço truncado ou com CEP
+    // ainda não confirmado (cep_recuperavel) não entra em `formatado`.
+    formatado: situacao === "completo" ? formatarEnderecoContatos(escolhido) : undefined,
     linhas: linhas.length,
   };
 }

@@ -307,7 +307,7 @@ export interface AuditoriaEndereco {
   achados: AchadoEndereco[];
   /** A linha escolhida da base. Ausente quando não há linha ou a junção não resolveu. */
   endereco?: EnderecoEstruturado;
-  /** Endereço montado no formato do Contatos, pronto para copiar. */
+  /** Endereço montado no formato do Contatos, pronto para copiar. Só quando `situacao` é `completo`. */
   formatado?: string;
   /** Quantas linhas de endereço o contato tem na base (para explicar a escolha). */
   linhas?: number;

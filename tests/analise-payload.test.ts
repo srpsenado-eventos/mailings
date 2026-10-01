@@ -49,4 +49,34 @@ describe("parsePayloadAnalise", () => {
       /muito grande/i,
     );
   });
+
+  test("aceita a planilha de endereços e normaliza cada linha", () => {
+    const p = parsePayloadAnalise({
+      arquivoNome: "c.xlsx",
+      contatos: [{ nome: "Autoridade", grupo: "G", id: "7" }],
+      arquivoEnderecosNome: "enderecos.xlsx",
+      enderecos: [
+        { contatoId: "7", logradouro: "Rua A", numero: "10", cep: "70070-030", uf: "DF", prioritario: true },
+        { contatoId: 9, prioritario: "Sim" },
+      ],
+    });
+    expect(p.contatos[0].id).toBe("7");
+    expect(p.arquivoEnderecosNome).toBe("enderecos.xlsx");
+    expect(p.enderecos).toHaveLength(2);
+    expect(p.enderecos?.[0]).toMatchObject({ contatoId: "7", numero: "10", prioritario: true });
+    // tipos errados vindos do JSON não derrubam a rota: viram vazio/falso
+    expect(p.enderecos?.[1]).toMatchObject({ contatoId: "", prioritario: false });
+  });
+
+  test("sem a planilha de endereços, o campo fica ausente", () => {
+    const p = parsePayloadAnalise({ arquivoNome: "c.xlsx", contatos: [] });
+    expect(p.enderecos).toBeUndefined();
+  });
+
+  test("planilha de endereços maior que o teto é recusada", () => {
+    const enderecos = Array.from({ length: 50_001 }, () => ({ contatoId: "1", prioritario: false }));
+    expect(() => parsePayloadAnalise({ arquivoNome: "c.xlsx", contatos: [], enderecos })).toThrow(
+      PayloadInvalidoError,
+    );
+  });
 });

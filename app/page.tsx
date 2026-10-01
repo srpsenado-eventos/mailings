@@ -33,6 +33,11 @@ export default function Home() {
                   {" "}· {analise.resumo.gruposViaPesquisaAmpla} grupo(s) por pesquisa ampla
                 </span>
               )}
+              {analise.resumo.enderecosAConfirmar > 0 && (
+                <span className="text-amber-700">
+                  {" "}· {analise.resumo.enderecosAConfirmar} endereço(s) a confirmar
+                </span>
+              )}
             </p>
             <div className="flex gap-2">
               <ExportButtons analise={analise} />

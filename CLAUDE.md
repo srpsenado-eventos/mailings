@@ -10,7 +10,7 @@ Repositório remoto: `github.com/srpsenado-eventos/mailings`, branch base `main`
 
 ## Estado do projeto (2026-10-01)
 
-- Suíte: 24 arquivos, 437 testes, verde (2026-10-01). `npm run typecheck` limpo.
+- Suíte: 25 arquivos, 458 testes, verde (2026-10-02). `npm run typecheck` limpo.
 - Catálogo: 33 grupos, 24 fontes, 21 grupos com fonte, **12 sem fonte** (todo contato deles sai vermelho, ver semântica abaixo).
 - Auditoria de Tratamento e Endereçamento (spec de 2026-08-13) e Camada C (regras de nome, spec de 2026-09-18) estão em `main` desde setembro de 2026 (`lib/tratamento.ts`, `data/regras-nome.ts`).
 - **Dívidas conhecidas** (não corrigir de passagem; abrir tarefa própria):
@@ -46,6 +46,7 @@ Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**
 | 2026-09-24 | `segunda-fonte-senadores-fora-de-exercicio.md` | Todas as fontes ativas do grupo compõem a composição; extração por tabela; inclusão filtrada por UF | Vigente |
 | 2026-10-01 | `auditoria-de-endereco-camada-d.md` | **Camada D**: endereço estruturado da segunda planilha, junção por `Id`, prioritário, CEP classificado; não pinta o semáforo; conferência nos Correios é a Fase 2 | Vigente (Fase 1 implementada) |
 | 2026-10-01 | `painel-local-retrato-em-arquivo.md` | **App só local.** Retrato em `.fiscal/retrato.json`; painel do mockup (etiquetas por campo, linha expansível, Copiar); tela Nova varredura | Vigente |
+| 2026-10-02 | `ajustes-do-painel-genero-tcu-publicacao.md` | Gênero não muda a regra de protocolo; "Nada a revisar"; "Cargo vazio"; filtro por grupo; explicações; TCU por navegador (Plano B); retrato publicado com senha (Plano C) | Vigente; Plano A implementado |
 
 ## Princípios de implementação
 
@@ -78,6 +79,8 @@ Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**
 Por campo (`ComparacaoCampo.situacao`): `confere`, `divergente`, `fonte_nao_informa`. Telefone e e-mail são sempre `fonte_nao_informa` (site não publica). `fonte_nao_informa` **não é** divergência e não pinta amarelo. O spec de tratamento acrescenta `sem_regra` (cargo não mapeado na tabela de protocolo), que também **não** é divergência.
 
 Cargo compara por **papel** (léxico em `lib/cargos.ts`): "Ministro (Decano)" confirma "Ministro do STF"; "Vice-Presidente" não confirma "Presidente"; "Ministra" não confirma "Ministro". Nome compara igualdade após `normalizarNome`.
+
+No painel, a situação da linha é "Tudo confere" só com todas as etiquetas verdes; com etiqueta neutra (sem regra, a completar, não verificado) e nada a revisar, "Nada a revisar". Cargo vazio é atenção.
 
 ## Regras de negócio da fiscalização (orientação do GT, e-mail de 2026-07-20)
 

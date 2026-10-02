@@ -8,9 +8,12 @@ const CLASSES: Record<Tom, string> = {
 };
 
 /** Etiqueta curta de estado (campo conferido, situação da linha). Só apresentação. */
-export function Etiqueta({ texto, tom }: { texto: string; tom: Tom }) {
+export function Etiqueta({ texto, tom, explicacao }: { texto: string; tom: Tom; explicacao?: string }) {
   return (
-    <span className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${CLASSES[tom]}`}>
+    <span
+      title={explicacao}
+      className={`inline-block cursor-default whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${CLASSES[tom]}`}
+    >
       {texto}
     </span>
   );

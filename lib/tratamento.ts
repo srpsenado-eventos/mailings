@@ -3,7 +3,7 @@ import { normalizarTexto } from "@/lib/normalize";
 import { REGRAS_TRATAMENTO } from "@/data/tratamentos";
 import { EXCECOES_CARGO } from "@/data/cargos-tratamento";
 import { REGRAS_NOME, type RegraNome } from "@/data/regras-nome";
-import { CARGOS_FEMININOS, CARGOS_MASCULINOS } from "@/lib/cargos";
+import { CARGOS_FEMININOS, CARGOS_MASCULINOS, neutralizarGenero } from "@/lib/cargos";
 import type {
   AchadoCoerencia,
   ComparacaoCampo,
@@ -241,7 +241,8 @@ export function resolverRegra(
   excecoes: Readonly<Record<string, string>> = EXCECOES_CARGO,
 ): RegraTratamento | undefined {
   if (!cargo) return undefined;
-  const alvo = normalizarTexto(cargo);
+  // Gênero não muda a regra: "Senadora" procura como "senador". Só a busca; ver §4.2 do spec.
+  const alvo = neutralizarGenero(normalizarTexto(cargo));
   if (alvo.length === 0) return undefined;
 
   // `typeof` protege de chaves herdadas do prototype ("constructor", "toString").

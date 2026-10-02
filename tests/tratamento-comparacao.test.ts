@@ -483,3 +483,18 @@ describe("resolverRegra — tabela real, sem tabela injetada (guarda-corpo)", ()
     expect(resolverRegra("Embaixadora de Gana")?.cargoDestinatario).toBe("Embaixador");
   });
 });
+
+describe("resolverRegra: gênero não muda a regra encontrada (tabela real)", () => {
+  test.each([
+    ["Senadora", "Senador"],
+    ["Encarregada de Negócios", "Encarregado de Negócios"],
+    ["Governadora do Estado do Acre", "Governador do Estado do Acre"],
+  ])("%s resolve igual a %s", (feminino, masculino) => {
+    expect(resolverRegra(feminino)?.cargoDestinatario).toBe(resolverRegra(masculino)?.cargoDestinatario);
+  });
+
+  test("Senadora encontra a regra de Senador (hoje caía em sem regra)", () => {
+    expect(resolverRegra("Senadora")).toBeDefined();
+    expect(resolverRegra("Senadora")?.cargoDestinatario).toBe(resolverRegra("Senador")?.cargoDestinatario);
+  });
+});

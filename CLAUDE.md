@@ -1,68 +1,169 @@
 # CLAUDE.md — Fiscal de Mailings
 
-Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui.
+Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui. Última revisão: 2026-10-01.
 
 ## Contexto rápido
 
-Web app interno do Senado Federal que confronta o **Sistema Contatos** (planilha XLSX de autoridades) com as **listas oficiais publicadas nos sites dos órgãos**, apontando divergências. Single-user, MVP stateless (sem histórico no banco).
+Web app interno do Senado Federal (Secretaria de Relações Públicas, GT Gestão de Convidados) que confronta o **Sistema Contatos** (planilha de autoridades) com as **listas oficiais publicadas nos sites dos órgãos** e aponta o que mudou. O motivo imediato é a **Posse Presidencial 2027**: convites, cartões e cintas saem desse cadastro, e um nome, cargo ou tratamento errado vira constrangimento institucional. Single-user, sem banco; persiste só o último retrato da varredura em arquivo local.
 
-Especificação aprovada: [docs/superpowers/specs/2026-06-04-fiscal-de-mailings-design.md](docs/superpowers/specs/2026-06-04-fiscal-de-mailings-design.md). **Toda decisão arquitetural deve ser conferida nesse documento antes de ser alterada.**
+Repositório remoto: `github.com/srpsenado-eventos/mailings`, branch base `main`; o trabalho sai em branches `feat/*` mescladas por PR.
 
-## Stack (fixa)
+## Estado do projeto (2026-10-01)
 
-Next.js 15 (App Router) + TypeScript + Tailwind + shadcn/ui · SheetJS · cheerio + readability + jsdom · fuse.js + string-similarity · Anthropic Claude Haiku (Camada B opcional, via `fetch` na Messages API) · Vitest · Vercel. **Sem banco de dados.**
+- Suíte: 24 arquivos, 437 testes, verde (2026-10-01). `npm run typecheck` limpo.
+- Catálogo: 33 grupos, 24 fontes, 21 grupos com fonte, **12 sem fonte** (todo contato deles sai vermelho, ver semântica abaixo).
+- Auditoria de Tratamento e Endereçamento (spec de 2026-08-13) e Camada C (regras de nome, spec de 2026-09-18) estão em `main` desde setembro de 2026 (`lib/tratamento.ts`, `data/regras-nome.ts`).
+- **Dívidas conhecidas** (não corrigir de passagem; abrir tarefa própria):
+  - `lib/gemini.ts` e `GeminiCliente` são nomes históricos: o cliente é Anthropic Haiku desde 2026-06-14. Comentários em `lib/types.ts` ainda falam em "Gemini + Google Search".
+  - `package.json` declara `@google/genai`, `fuse.js`, `@mozilla/readability`, `jsdom` e `pg` sem nenhum import em `lib/`, `app/` ou `components/`. `pg` só serve ao script legado `scripts/apply-migrations.mjs`.
+  - `diagnosticarIa` e o parâmetro `?diag=1` em `/api/analise` são diagnóstico temporário; remover quando o TCU estiver confirmado em produção.
+  - Há `package-lock.json` versionado e `pnpm-lock.yaml` + `pnpm-workspace.yaml` soltos na raiz. O projeto usa **npm**; não commitar os arquivos do pnpm.
+
+## Stack (em uso)
+
+Next.js 15 (App Router) + TypeScript + Tailwind · SheetJS (`xlsx`) · `fetch` (undici) + cheerio · string-similarity · Anthropic Claude Haiku via `fetch` na Messages API (Camada 2, opcional) · Vitest · roda local com `npm run dev` (a Vercel saiu da stack em 2026-10-01; o deploy antigo é sobra). **Sem banco de dados.** shadcn/ui está previsto no spec, mas não há `components/ui/`; os componentes são Tailwind puro.
 
 Não trocar dependências sem registrar a decisão num novo doc em `docs/superpowers/specs/`.
 
+## Documentos de decisão (ordem de leitura)
+
+Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**. Antes de mudar arquitetura, conferir:
+
+| Data | Spec | O que decide | Situação |
+|---|---|---|---|
+| 2026-06-04 | `fiscal-de-mailings-design.md` | MVP, escopo, semáforo, fontes manuais | Base |
+| 2026-06-05 | `fonte-inacessivel-e-scrape-resiliente.md` | `fonteInacessivel` ≠ `semFonte`; headers de navegador; retry TLS relaxado | Vigente |
+| 2026-06-05 | `responsaveis-por-grupo.md` | Responsáveis e backup por grupo; tela `/grupos` | Vigente |
+| 2026-06-06 | `extracao-estruturada-auditoria-por-campo-design.md` | `PessoaSite[]`, matching por token, `ComparacaoCampo` | Vigente |
+| 2026-06-06 | `upload-no-cliente-e-resiliencia.md` | Parse no navegador; `/api/analise` recebe JSON | Vigente |
+| 2026-06-06 | `camada-b-fallback-pesquisa-ampla.md` | Gemini + Google Search | **Substituído** por 2026-06-14 (Haiku) |
+| 2026-06-14 | `camada-b-anthropic-haiku.md` | Troca Gemini por Claude Haiku | Vigente |
+| 2026-06-14 | `ia-first-composicao-proveniencia.md` | Proveniência (`origem` por registro), "possível saída" | Parcialmente substituído pelo abaixo |
+| 2026-06-14 | `camada1-base-ia-refinamento.md` | **Camada 1 determinística é a base; IA é refinamento. Regra de ouro do "possível saída"** | **Vigente, manda na ordem das camadas** |
+| 2026-08-13 | `catalogo-em-arquivo-sem-banco.md` | Catálogo em `data/catalogo.ts`; Supabase sai | Vigente |
+| 2026-08-13 | `auditoria-tratamento-enderecamento.md` | Tratamento/Endereçamento auditados contra a tabela de protocolo | Vigente (implementado em `main`) |
+| 2026-09-04 | `varredura-continua-posse-2027-design.md` | Abrir o app e ver o último retrato, com data; investigação por busca | **Parcialmente substituído** por 2026-10-01 (painel local): fica o retrato; caem Blob, senha, cron e varredura na Vercel |
+| 2026-09-24 | `segunda-fonte-senadores-fora-de-exercicio.md` | Todas as fontes ativas do grupo compõem a composição; extração por tabela; inclusão filtrada por UF | Vigente |
+| 2026-10-01 | `auditoria-de-endereco-camada-d.md` | **Camada D**: endereço estruturado da segunda planilha, junção por `Id`, prioritário, CEP classificado; não pinta o semáforo; conferência nos Correios é a Fase 2 | Vigente (Fase 1 implementada) |
+| 2026-10-01 | `painel-local-retrato-em-arquivo.md` | **App só local.** Retrato em `.fiscal/retrato.json`; painel do mockup (etiquetas por campo, linha expansível, Copiar); tela Nova varredura | Vigente |
+
 ## Princípios de implementação
 
-- **`lib/*.ts` são funções puras.** Sem JSX, sem chamadas a hooks, sem acesso direto a `window`. Recebem dados, devolvem dados.
-- **UI sem lógica de negócio.** Componentes em `components/` só renderizam e disparam Server Actions.
-- **Server Components por padrão.** Marcar `"use client"` só quando exigir estado/efeito real.
-- **Sem PII no log.** Nomes, telefones, e-mails das autoridades nunca aparecem em `console.log`, Sentry, ou prompt do Gemini sem necessidade — quando aparecem, é mínimo e justificado.
-- **Camada A antes da B.** O determinístico roda sempre. A IA (Claude Haiku) é opcional: `extrairComposicao(grupoCanonico, textoLimpo)` faz UMA chamada que devolve a composição com `origem` por registro ("pagina" vs "conhecimento"). Sem `ANTHROPIC_API_KEY`/erro → cai no determinístico. Ver `docs/superpowers/specs/2026-06-14-ia-first-composicao-proveniencia.md`.
-- **Fonte primária antes da ampla.** 1ª etapa = URL oficial raspada → a IA extrai dela; quando a página não entrega (JS, ex.: TCU) ou está bloqueada, a IA completa pelo conhecimento, e cada dado vem rotulado com a origem ("✓ oficial" vs "≈ via IA — confira"). Nome auditado contra o site (parâmetro); quem não consta vira "possível saída" (≠ "fonte não informa").
-- **Sem banco de dados.** O catálogo de grupos e fontes vive em `data/catalogo.ts`, versionado. Não reintroduzir Postgres/Supabase sem um novo spec. Resultado da análise vive em memória durante a request e é devolvido ao cliente. Ver `docs/superpowers/specs/2026-08-13-catalogo-em-arquivo-sem-banco.md`.
-- **Fontes cadastradas manualmente** em `data/catalogo.ts`. Não implementar **cadastro/descoberta automática de URLs** — a pesquisa ampla da 2ª etapa é leitura efêmera e nunca persiste URLs.
+- **`lib/*.ts` são funções puras.** Sem JSX, sem hooks, sem `window`. Recebem dados, devolvem dados. O orquestrador `lib/analise.ts` recebe `Dependencias` injetadas (resolver fonte, raspar, extrair composição) para continuar testável.
+- **UI sem lógica de negócio.** Componentes em `components/` só renderizam e chamam `/api/analise`.
+- **Server Components por padrão.** `"use client"` só com estado ou efeito real.
+- **Sem PII no log nem no prompt.** Nomes, telefones e e-mails das autoridades nunca vão para `console.*` nem para a IA. O prompt da Camada 2 recebe **só o nome do grupo e o texto público da página**, nunca os contatos da planilha. O único log do servidor é o motivo técnico do erro em `/api/analise`.
+- **Camada 1 antes da Camada 2.** A comparação determinística planilha × nomes realmente presentes na página oficial é sempre a base. A IA (Haiku) é opcional e roda **uma chamada por grupo**: `extrairComposicao(grupoCanonico, textoLimpo)` devolve pessoas com `origem: "pagina" | "conhecimento"`. `mesclarComposicao` usa a página como verdade e só **resgata** da IA quem casa um contato da planilha e não estava na página. Sem `ANTHROPIC_API_KEY` ou com erro, a IA devolve `[]` e nada muda.
+- **Todas as fontes ativas do grupo compõem a composição**, na ordem do catálogo; a primeira é a primária (vai em `fonteUrl` e alimenta a Camada 2). Só as fontes do grupo dono da primária entram — um rótulo da planilha que case dois grupos não mistura as páginas dos dois. Toda fonte que respondeu continua compondo, mesmo se outra caiu; mas na **leitura parcial** — uma fonte compôs o grupo e outra **falhou** (lançou erro, ou é a primária e voltou sem ninguém) — **ninguém do grupo vira possível saída**: falta um pedaço da composição oficial, quem não casa fica indeterminado, e `erroFonte` diz qual fonte falhou, na tela e no export. Fonte secundária que responde e não tem ninguém a listar (nenhum senador afastado) **não é falha**: vira só ressalva em `erroFonte` e a detecção de saída continua de pé. Se **nenhuma** fonte respondeu e a IA compôs o grupo, a composição é real e a ausência ainda aponta saída, marcada `viaPesquisaAmpla` (caminho do TCU); sem fonte e sem IA, o grupo inteiro é indeterminado.
+- **Regra de ouro do "possível saída":** só existe quando há **composição real** (página ou IA) que não contém a pessoa. Página ilegível (JS, ex.: TCU) e IA vazia geram **"indeterminado / não verificado"**, nunca "saída". Foi o defeito que derrubou a confiança no TCU em junho; não reintroduzir.
+- **Não há mais "pesquisa ampla" com busca na web.** O sentinela `URL_PESQUISA_AMPLA` e a flag `viaPesquisaAmpla` significam hoje: "a composição dependeu do conhecimento da IA". O rótulo na UI é "≈ via IA — confira".
+- **Sem banco de dados.** Catálogo em `data/catalogo.ts`, versionado. Resultado da análise vive em memória durante a request e o último retrato é gravado em `.fiscal/retrato.json` (ver o princípio do retrato). Não reintroduzir Postgres/Supabase sem novo spec.
+- **Fontes cadastradas à mão.** Nenhuma URL entra no catálogo por descoberta automática, busca ou IA. O Clovis fornece e confere cada uma.
+- **Camada D (endereço) é um eixo independente e não pinta o semáforo.** A planilha de endereços é opcional, lida no navegador (`lib/planilha-enderecos.ts`) e viaja no mesmo JSON (`enderecos`, `arquivoEnderecosNome`). A junção com o contato é pelo `Id` (nome só como fallback, e nome ambíguo não recebe endereço); entre várias linhas vale a marcada `Prioritário`, e várias prioritárias ou nenhuma é achado sem endereço. O orquestrador anexa `ResultadoContato.endereco` numa passada posterior, nos três caminhos (com fonte, sem fonte, fonte inacessível); ela não entra em `comparacoes` nem em `camposDivergentes` e nunca cria `possivelSaida`. `AuditoriaEndereco.formatado` **só existe quando `situacao === "completo"`**; tela e export não devem montar endereço "pronto para copiar" fora disso. CEP de 7 dígitos vira proposta de zero à esquerda **só em SP**, e continua proposta até os Correios confirmarem (Fase 2, bloqueada na chave). O contador próprio é `resumo.enderecosAConfirmar` (só `pendente`).
+- **O retrato é a única persistência.** `lib/armazem.ts` grava o último `Retrato` em `.fiscal/retrato.json`, fora do git, com escrita atômica; um só, sem histórico. O painel (`/`) lê o retrato; sem retrato, manda para `/nova-varredura`. A lógica de apresentação (etiquetas, situação, filtros, cartões, detalhe) é função pura em `lib/painel.ts`, testada; componentes só renderizam.
+
+## Semântica dos vereditos
+
+É o coração da fiscalização e o ponto onde mais se erra. Vale para código, testes e texto de UI.
+
+| Veredito | Quando | O que o usuário deve fazer |
+|---|---|---|
+| **verde** | Contato casou com pessoa da composição e nenhum campo diverge | Nada |
+| **amarelo** | Casou, mas nome, cargo ou endereço diverge do site | Revisar; o valor do site vem em `valorEsperado` |
+| **vermelho + `possivelSaida`** | Há composição real e o contato não está nela | Confirmar se a autoridade saiu |
+| **vermelho + campo `fonte`** | Grupo **sem URL cadastrada** | Cadastrar fonte (não é problema do contato) |
+| **indeterminado** | URL existe, mas a página não pôde ser lida (403, TLS, timeout, JS) e a IA não cobriu | Conferir à mão; `erroFonte` diz o motivo |
+| **novo** | Pessoa da composição **com cargo** e sem par na planilha | Avaliar inclusão |
+
+Por campo (`ComparacaoCampo.situacao`): `confere`, `divergente`, `fonte_nao_informa`. Telefone e e-mail são sempre `fonte_nao_informa` (site não publica). `fonte_nao_informa` **não é** divergência e não pinta amarelo. O spec de tratamento acrescenta `sem_regra` (cargo não mapeado na tabela de protocolo), que também **não** é divergência.
+
+Cargo compara por **papel** (léxico em `lib/cargos.ts`): "Ministro (Decano)" confirma "Ministro do STF"; "Vice-Presidente" não confirma "Presidente"; "Ministra" não confirma "Ministro". Nome compara igualdade após `normalizarNome`.
+
+## Regras de negócio da fiscalização (orientação do GT, e-mail de 2026-07-20)
+
+O e-mail do GT Gestão de Convidados fixa como o Contatos deve ser atualizado para a Posse 2027. Hoje o app audita **nome, cargo e endereço**; as demais regras servem de referência para decidir o que implementar a seguir e para não contrariá-las no que já existe.
+
+- **Nome:** usar o **nome político/parlamentar** como está no site oficial de cada órgão. STM: retirar "Dr." e "Dra." de todos. STJ: usar as partes do nome em negrito. Senadores: nome parlamentar do portal; suplentes não são convidados.
+- **Cargo:** conforme o site. Presidentes de tribunal levam "Ministro/Ministra" antes do nome e a presidência indicada no cargo.
+- **Endereço:** confirmado **por telefone**, o mais completo possível (gera etiqueta de correio). O site raramente informa; `fonte_nao_informa` é o resultado normal, não erro.
+- **Tratamento e Endereçamento:** seguem a tabela `Regras de Atualizacao/Posse2027_TabelaTratamentos.xlsx` (aba "Tratamentos Simplificado"). Gênero tem que bater com a pessoa. É o objeto do spec de 2026-08-13.
+- **Pessoa em mais de um órgão:** atualizada em **todos** os grupos em que está; quem decide o convite único é o GT.
+- **Foto:** atual e de frente (usada no reconhecimento no dia). Fora do escopo do app.
+- **Grupo no Contatos:** marcado "Posse Presidencial: SIM". Fora do escopo do app.
+- **Grupos prioritários** do e-mail: Presidentes do Congresso, Senadores, Deputados Federais, Ministros do STF, TSE, STJ, TST, STM e TCU, PGR, DPGF, Presidentes da República, Ministros de Estado, Governadores, membros do CNJ e CNMP, Embaixadores.
+
+Fontes oficiais citadas no e-mail que **ainda não estão no catálogo** (candidatas para o Clovis cadastrar): senadores fora de exercício (`www25.senado.leg.br/web/senadores/fora-de-exercicio`), Procurador-Geral da República (`mpf.mp.br/o-mpf/o-mpf/membros/procurador-geral-da-republica`), deputados em exercício (`camara.leg.br/deputados/quem-sao`), convocados do TST (`tst.jus.br/en/orgaos`). A fonte atual de "Presidente da OAB Nacional" é uma notícia do Conjur de 2009: substituir por página oficial da OAB.
+
+Nota: o spec de 2026-08-13 registra que o Clovis considerou esse PDF "de outra finalidade" para a auditoria de tratamento. Ele continua sendo a referência do processo de atualização como um todo, e é por isso que está listado aqui.
 
 ## Layout do código
 
 ```
-app/         ← rotas Next.js (Server Components por padrão)
-components/  ← UI (shadcn/ui + composições)
-lib/         ← lógica pura: planilha, catalogo, scrape, match, gemini, normalize
-data/        ← catalogo.ts (fonte da verdade de grupos/fontes) + SQL histórico
-supabase/migrations/  ← histórico; fora do caminho de execução
-tests/       ← Vitest, espelha lib/ e components/
-docs/superpowers/specs/  ← decisões arquiteturais datadas
+app/                 ← rotas Next.js; /api/analise (POST JSON), /nova-varredura e /grupos; `/` lê o retrato
+components/          ← UI (Tailwind puro): painel, linha-contato, etiqueta, nova-varredura-form, export-buttons
+lib/                 ← lógica pura: planilha, catalogo, scrape, match, analise, gemini (=Haiku), normalize, cargos, export, armazem, painel
+data/catalogo.ts     ← FONTE DA VERDADE de grupos, responsáveis e URLs oficiais
+data/*.sql           ← histórico da fase Supabase; fora do caminho de execução
+supabase/migrations/ ← idem, histórico
+scripts/             ← geradores (gerar-catalogo.mjs, gerar-seed.mjs) e apply-migrations.mjs (legado)
+tests/               ← Vitest; fixtures HTML em tests/fixtures/
+docs/superpowers/specs/  ← decisões arquiteturais datadas (tabela acima)
+docs/superpowers/plans/  ← planos de implementação correspondentes
+Regras de Atualizacao/   ← material do GT, NÃO versionado (xlsx e pdf no .gitignore):
+                            Posse2027_TabelaTratamentos.xlsx (tabela de protocolo, sem PII),
+                            Regras do Kit.txt (convite, cartão, cinta; geração de material, fora do escopo),
+                            e-mail orientacao.pdf (orientações do GT; contém e-mails de servidores)
+.claude/worktrees/   ← worktrees do Claude Code; não versionar
+.fiscal/            ← último retrato (PII); fora do git
 ```
 
 ## Convenções de código
 
-- **Imutabilidade:** funções de `lib/` nunca mutam input. Retornar novo objeto/array. (já é regra global, reforçada aqui pelo perfil de matching/normalização.)
-- **Normalização centralizada** em `lib/normalize.ts`. Não reimplementar `lowercase + sem acento + sem tratamento` em outros arquivos.
-- **Erros explícitos.** Funções de `lib/` lançam erro tipado quando dado de entrada é inválido. Server Actions capturam e devolvem `{ ok: false, message }` para o cliente.
-- **Sem `any`.** Use `unknown` + narrowing, ou defina o tipo.
-- **Schema do XLSX** validado na entrada de `lib/planilha.ts`. Colunas esperadas (case-insensitive, com normalização): `Foto`, `Tratamento`, `Endereçamento`, `Nome`, `Telefone`, `E-mail`, `Rede Social`, `Endereço`, `Órgão`, `Cargo`, `Departamento`, `Grupo`. Coluna ausente = erro claro pro usuário, não fallback silencioso.
-- **Upload com parse no cliente.** A planilha é lida **no navegador** (`lerPlanilha` é pura/isomórfica) e só o texto (`ContatoPlanilha[]`) viaja. O app aceita **`.xlsx` e `.csv`**; o `/api/analise` recebe **JSON** `{ arquivoNome, contatos }`, não mais arquivo. Isso evita o limite de ~4,5 MB de corpo da plataforma (fotos embutidas não trafegam). Ver `docs/superpowers/specs/2026-06-06-upload-no-cliente-e-resiliencia.md`.
-- **Raspagem estruturada + auditoria por campo.** `extrairConteudo` produz `ConteudoFonte.pessoas: PessoaSite[]` (não um blob): insere separadores entre blocos e filtra rótulos. O matching casa contato↔pessoa por **tokens de nome** e compara campo a campo (`ComparacaoCampo`: `confere`/`divergente`/`fonte_nao_informa`), preenchendo o valor correto do site; pessoa casada sai do pool → "novos" limpos. Ver `docs/superpowers/specs/2026-06-06-extracao-estruturada-auditoria-por-campo-design.md`.
+- **Imutabilidade:** funções de `lib/` nunca mutam input; devolvem novo objeto/array.
+- **Normalização centralizada** em `lib/normalize.ts` (`normalizarTexto`, `removerTratamentos`, `normalizarNome`). Não reimplementar "minúsculas + sem acento + sem tratamento" em outro lugar.
+- **Erros explícitos.** `lib/` lança erro tipado (`ColunaFaltanteError`, `ScrapeError`, `PayloadInvalidoError`). A rota captura e devolve `{ ok: false, message }` com status 400/422/500.
+- **Sem `any`.** `unknown` + narrowing, ou tipo definido.
+- **Schema da planilha** validado em `lib/planilha.ts`. Colunas (case-insensitive, normalizadas): `Foto`, `Tratamento`, `Endereçamento`, `Nome`, `Telefone`, `E-mail`, `Rede Social`, `Endereço`, `Órgão`, `Cargo`, `Departamento`, `Grupo`. Coluna ausente = erro claro, não fallback.
+- **Parse no cliente.** A planilha (`.xlsx` ou `.csv`) é lida no navegador; só `ContatoPlanilha[]` viaja como JSON `{ arquivoNome, contatos }`. Fotos embutidas nunca trafegam.
+- **Raspagem estruturada.** `extrairConteudo(html, url)` remove nav/header/footer/aside, insere separadores entre blocos e produz `PessoaSite[]` filtrando rótulos. "Novos" só entram com cargo (corta itens de menu).
+- **Grupo desconhecido** na planilha gera `sugestoesCadastro` por similaridade; não inventar mapeamento automático.
+
+## Catálogo: como cadastrar ou trocar uma URL
+
+1. Confirmar que a URL é do **domínio oficial** do órgão (`.gov.br`, `.jus.br`, `.leg.br`, `.mp.br`, `.def.br`). Notícia, Wikipedia e portais de terceiros não entram.
+2. Testar com `fetch` simples se a página entrega os nomes em HTML. Se a lista vem por JavaScript (caso TCU), cadastrar mesmo assim e registrar no comentário da entrada que depende da Camada 2.
+3. Acrescentar em `data/catalogo.ts`. A **primeira** fonte com `ativo: true` é a primária; a ordem do array importa.
+4. Se a página tem estrutura peculiar (nomes grudados, tabela sem separador), salvar um recorte anonimizável em `tests/fixtures/` e cobrir em `tests/scrape.test.ts`.
+5. Rodar `npm test` (inclui `tests/catalogo-dados.test.ts`) e `npm run typecheck`.
 
 ## Testes
 
-- Cobertura mínima 80% (regra global). Foco prioritário em `lib/normalize.ts`, `lib/match.ts`, `lib/planilha.ts` — são o coração do produto.
-- Padrão AAA. Nomes descritivos em português.
-- Sem testes que dependem de internet real. `lib/scrape.ts` é testado com HTML fixture em `tests/fixtures/`.
+- Cobertura mínima 80% (regra global). Prioridade: `lib/normalize.ts`, `lib/match.ts`, `lib/planilha.ts`, `lib/analise.ts`.
+- Padrão AAA, nomes em português descrevendo o comportamento.
+- Sem internet real. Scrape testado com fixtures; IA testada com `GeminiCliente` injetado.
+- Toda correção de veredito falso (como o TCU) ganha teste de regressão em `tests/analise.test.ts` reproduzindo o cenário.
 
 ## Workflow
 
-1. Mudança arquitetural → atualizar/criar doc em `docs/superpowers/specs/` antes de codar.
-2. Nova URL oficial cadastrada pelo Clovis → acrescentar em `data/catalogo.ts` e rodar `npm run typecheck`.
-3. Antes de PR: rodar `npm test` + `npm run typecheck` + `npm run build`.
+1. Mudança arquitetural → spec datado em `docs/superpowers/specs/` antes de codar, e linha nova na tabela deste arquivo.
+2. Nova URL oficial → checklist do catálogo acima.
+3. Antes de PR: `npm test`, `npm run typecheck`, `npm run build`.
+4. Gerenciador de pacotes é **npm**. Não versionar `pnpm-lock.yaml` nem `pnpm-workspace.yaml`.
+
+## Segurança e dados
+
+- `.claude/settings.local.json` **não é versionado** (adicionado ao `.gitignore` em 2026-09-03). Até essa data ele estava no repositório remoto com a string de conexão do Postgres do Supabase antigo, senha incluída; a senha precisa ser considerada exposta e o histórico, limpo ou o projeto Supabase encerrado.
+- Nunca colocar segredo em comando permitido do Claude Code, em spec ou em plano. Só `.env.local`.
+- Planilhas do Senado (`*.xlsx`) e o PDF do GT ficam fora do git. Só fixtures de teste em `tests/fixtures/`.
+- A única variável de ambiente é `ANTHROPIC_API_KEY`, opcional.
 
 ## O que NÃO fazer
 
-- Não adicionar autenticação complexa, multi-tenant, RLS — está fora do MVP.
+- Não adicionar autenticação, multi-tenant, RLS. Fora do MVP.
 - Não reintroduzir banco de dados (Supabase, Postgres, ORM) sem novo spec.
-- Não persistir resultados de análise.
-- Não usar Firecrawl, Puppeteer, Playwright para scraping no MVP — só `fetch` + `cheerio` + `readability`.
-- Não cadastrar URLs descobertas por busca/IA — Clovis fornece manualmente.
+- Não persistir nada além do último retrato em `.fiscal/`; não reintroduzir histórico, Blob ou banco sem novo spec.
+- Não voltar a depender da Vercel para ler fontes: ela é bloqueada por IP (medido em 2026-09-17).
+- Não usar Firecrawl, Puppeteer ou Playwright **dentro do app**. Scraping é `fetch` + cheerio. (Usar Firecrawl ou o navegador como ferramenta de desenvolvimento, para inspecionar uma página candidata antes de cadastrar, é permitido.)
+- Não cadastrar URLs descobertas por busca ou IA. O Clovis fornece.
+- Não transformar "não conseguimos ler a página" em "possível saída". Ver regra de ouro.
+- Não enviar contatos da planilha para a IA.

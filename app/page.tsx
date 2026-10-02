@@ -1,52 +1,28 @@
-"use client";
-import { useState } from "react";
 import Link from "next/link";
-import type { ResultadoAnalise } from "@/lib/types";
-import { UploadZone } from "@/components/upload-zone";
-import { ResultadoTabela } from "@/components/resultado-tabela";
-import { ExportButtons } from "@/components/export-buttons";
+import { redirect } from "next/navigation";
+import { Painel } from "@/components/painel";
+import { armazemPadrao, RetratoIlegivelError } from "@/lib/armazem";
+import type { Retrato } from "@/lib/types";
 
-export default function Home() {
-  const [analise, setAnalise] = useState<ResultadoAnalise | null>(null);
+// Lê o arquivo a cada abertura: o retrato muda fora do ciclo de build.
+export const dynamic = "force-dynamic";
 
-  return (
-    <main className="mx-auto max-w-5xl p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Fiscal de Mailings</h1>
-        <Link href="/grupos" className="text-sm underline">
-          Grupos cadastrados →
-        </Link>
-      </div>
-      {!analise && <UploadZone onResultado={(r) => setAnalise(r as ResultadoAnalise)} />}
-      {analise && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-gray-600">
-              {analise.arquivoNome} — {analise.resumo.total} registros · 🟢 {analise.resumo.verde} · 🟡 {analise.resumo.amarelo} · 🔴 {analise.resumo.vermelho} · ✨ {analise.resumo.novo} · ⚪ {analise.resumo.indeterminado}
-              {analise.resumo.gruposFonteInacessivel > 0 && (
-                <span className="text-amber-600">
-                  {" "}· {analise.resumo.gruposFonteInacessivel} grupo(s) com fonte inacessível
-                </span>
-              )}
-              {analise.resumo.gruposViaPesquisaAmpla > 0 && (
-                <span className="text-amber-700">
-                  {" "}· {analise.resumo.gruposViaPesquisaAmpla} grupo(s) por pesquisa ampla
-                </span>
-              )}
-              {analise.resumo.enderecosAConfirmar > 0 && (
-                <span className="text-amber-700">
-                  {" "}· {analise.resumo.enderecosAConfirmar} endereço(s) a confirmar
-                </span>
-              )}
-            </p>
-            <div className="flex gap-2">
-              <ExportButtons analise={analise} />
-              <button className="text-sm underline" onClick={() => setAnalise(null)}>Nova análise</button>
-            </div>
-          </div>
-          <ResultadoTabela analise={analise} />
-        </div>
-      )}
-    </main>
-  );
+export default async function Home() {
+  let retrato: Retrato | undefined;
+  try {
+    retrato = await armazemPadrao().lerRetrato();
+  } catch (err) {
+    if (err instanceof RetratoIlegivelError) {
+      return (
+        <main className="mx-auto max-w-3xl px-6 py-12">
+          <h1 className="font-serif text-3xl font-semibold">O último retrato não pôde ser lido</h1>
+          <p className="mt-2 text-sm text-cinza">O arquivo .fiscal/retrato.json existe, mas não é um retrato válido. Faça uma nova varredura; ela substitui o arquivo.</p>
+          <Link href="/nova-varredura" className="mt-6 inline-block rounded-lg bg-acao px-5 py-2.5 text-sm font-semibold text-white">Nova varredura</Link>
+        </main>
+      );
+    }
+    throw err;
+  }
+  if (!retrato) redirect("/nova-varredura");
+  return <Painel retrato={retrato} />;
 }

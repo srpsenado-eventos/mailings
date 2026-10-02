@@ -1,0 +1,291 @@
+import { coerenciasVisiveis, textoCoerencia } from "@/lib/tratamento";
+import { normalizarTexto } from "@/lib/normalize";
+import type {
+  ComparacaoCampo,
+  EnderecoEstruturado,
+  PessoaSite,
+  ResultadoAnalise,
+  ResultadoContato,
+  ResultadoGrupo,
+  ResumoAnalise,
+  Retrato,
+  SituacaoEndereco,
+} from "@/lib/types";
+
+/**
+ * O que o painel mostra, decidido fora do JSX: etiquetas por campo, situação da linha,
+ * motivo, cartões do detalhe. Os componentes só renderizam o que sai daqui.
+ * Ver docs/superpowers/specs/2026-10-01-painel-local-retrato-em-arquivo.md, §6 e §7.
+ */
+
+export type Tom = "ok" | "atencao" | "ruim" | "neutro";
+export type CampoEtiqueta = "nome" | "cargo" | "tratamento" | "enderecamento" | "endereco" | "fonte";
+
+export interface Etiqueta {
+  campo: CampoEtiqueta;
+  texto: string;
+  tom: Tom;
+}
+
+type CampoComparado = "nome" | "cargo" | "tratamento" | "enderecamento";
+
+const ROTULO_CAMPO: Record<CampoComparado, string> = {
+  nome: "Nome",
+  cargo: "Cargo",
+  tratamento: "Tratamento",
+  enderecamento: "Endereçamento",
+};
+
+const ETIQUETA_ENDERECO: Record<Exclude<SituacaoEndereco, "sem_base">, { texto: string; tom: Tom }> = {
+  completo: { texto: "Endereço completo", tom: "ok" },
+  a_completar: { texto: "Endereço a completar", tom: "neutro" },
+  pendente: { texto: "Endereço a confirmar", tom: "atencao" },
+  nao_verificado: { texto: "Endereço não verificado", tom: "neutro" },
+};
+
+/** A comparação de VALOR do campo (site ou protocolo). Coerência é diagnóstico, não valor. */
+function comparacaoDeValor(c: ResultadoContato, campo: CampoComparado): ComparacaoCampo | undefined {
+  return c.comparacoes.find((x) => x.campo === campo && x.origemValor !== "coerencia");
+}
+
+function coerenciasDo(c: ResultadoContato, campo: CampoComparado): ComparacaoCampo[] {
+  return coerenciasVisiveis(c.comparacoes).filter((x) => x.campo === campo);
+}
+
+/**
+ * Etiqueta de um campo comparado. Coerência divergente (Camadas A e C) e valor divergente
+ * (Camada 1 ou B) viram o mesmo "diverge": para quem lê a linha, o campo precisa de revisão.
+ * `fonte_nao_informa` some; `sem_regra` fica neutro, porque não é divergência.
+ */
+function etiquetaDoCampo(c: ResultadoContato, campo: CampoComparado): Etiqueta | undefined {
+  const rotulo = ROTULO_CAMPO[campo];
+  const comp = comparacaoDeValor(c, campo);
+  if (coerenciasDo(c, campo).length > 0 || comp?.situacao === "divergente") {
+    return { campo, texto: `${rotulo} diverge`, tom: "atencao" };
+  }
+  if (!comp) return { campo, texto: `${rotulo} não verificado`, tom: "neutro" };
+  if (comp.situacao === "confere") return { campo, texto: `${rotulo} confere`, tom: "ok" };
+  if (comp.situacao === "sem_regra") return { campo, texto: `${rotulo} sem regra`, tom: "neutro" };
+  return undefined; // fonte_nao_informa
+}
+
+export function etiquetasDoContato(c: ResultadoContato, _g: ResultadoGrupo): Etiqueta[] {
+  const lista: Etiqueta[] = [];
+  if (c.possivelSaida) {
+    // Não há com o que comparar nome e cargo; só a Camada C (nome) ainda pode acusar.
+    lista.push({ campo: "fonte", texto: "Sem par na fonte", tom: "ruim" });
+    const nome = etiquetaDoCampo(c, "nome");
+    if (nome?.tom === "atencao") lista.push(nome);
+  } else {
+    for (const campo of ["nome", "cargo"] as const) {
+      const e = etiquetaDoCampo(c, campo);
+      if (e) lista.push(e);
+    }
+  }
+  for (const campo of ["tratamento", "enderecamento"] as const) {
+    const e = etiquetaDoCampo(c, campo);
+    if (e) lista.push(e);
+  }
+  const endereco = etiquetaDeEndereco(c);
+  if (endereco) lista.push(endereco);
+  return lista;
+}
+
+/** Etiqueta do endereço, sozinha: o bloco de endereço do detalhe a mostra de novo. */
+export function etiquetaDeEndereco(c: ResultadoContato): Etiqueta | undefined {
+  const situacao = c.endereco?.situacao;
+  if (!situacao || situacao === "sem_base") return undefined;
+  return { campo: "endereco", ...ETIQUETA_ENDERECO[situacao] };
+}
+
+const PRECISA_REVISAR: readonly Tom[] = ["atencao", "ruim"];
+
+export function situacaoDoContato(c: ResultadoContato, g: ResultadoGrupo): { texto: string; tom: Tom } {
+  if (c.possivelSaida) return { texto: "Possível saída", tom: "ruim" };
+  if (g.semFonte) return { texto: "Sem fonte", tom: "neutro" };
+  if (c.semaforo === "indeterminado") return { texto: "Não verificado", tom: "neutro" };
+  const aRevisar = etiquetasDoContato(c, g).filter((e) => PRECISA_REVISAR.includes(e.tom)).length;
+  return aRevisar === 0
+    ? { texto: "Tudo confere", tom: "ok" }
+    : { texto: `${aRevisar} a revisar`, tom: "atencao" };
+}
+
+export function motivoDoContato(c: ResultadoContato, g: ResultadoGrupo): string | undefined {
+  if (c.possivelSaida) return "Não consta na fonte: confirmar se saiu";
+  if (g.semFonte) return "Sem fonte cadastrada";
+  if (g.fonteInacessivel) return "Fonte fora do ar: confira à mão";
+  if (c.semaforo === "indeterminado") return "Não verificado: uma fonte não respondeu";
+  return undefined;
+}
+
+export interface DetalheCampo {
+  campo: CampoComparado;
+  rotulo: string;
+  etiqueta?: Etiqueta;
+  valorPlanilha: string;
+  origem: string;
+  valorReferencia: string;
+  copiavel?: string;
+  coerencias: string[];
+}
+
+const TEXTO_FONTE_NAO_INFORMA = "o site não informa";
+const TEXTO_SEM_REGRA = "sem regra de protocolo para este cargo";
+const SUFIXO_VIA_IA = " (via IA — confira)";
+
+function origemDe(campo: CampoComparado): string {
+  return campo === "nome" || campo === "cargo" ? "Site do órgão diz" : "Tabela de protocolo diz";
+}
+
+function valorReferenciaDe(comp: ComparacaoCampo | undefined): string {
+  if (!comp) return "";
+  if (comp.situacao === "fonte_nao_informa") return TEXTO_FONTE_NAO_INFORMA;
+  if (comp.situacao === "sem_regra") return TEXTO_SEM_REGRA;
+  const valor = comp.valorEsperado ?? "";
+  return valor && comp.origemValor === "conhecimento" ? `${valor}${SUFIXO_VIA_IA}` : valor;
+}
+
+/** Um cartão por campo que tem comparação de valor ou achado de coerência, na ordem fixa. */
+export function detalhesDoContato(c: ResultadoContato, _g: ResultadoGrupo): DetalheCampo[] {
+  const cartoes: DetalheCampo[] = [];
+  for (const campo of ["nome", "cargo", "tratamento", "enderecamento"] as const) {
+    const comp = comparacaoDeValor(c, campo);
+    const coerencias = coerenciasDo(c, campo);
+    if (!comp && coerencias.length === 0) continue;
+    const valorPlanilha = campo === "nome" ? c.contato.nome : (comp?.valorPlanilha ?? coerencias[0]?.valorPlanilha ?? "");
+    const copiavel = comp?.situacao === "divergente" && comp.valorEsperado ? comp.valorEsperado : undefined;
+    cartoes.push({
+      campo,
+      rotulo: ROTULO_CAMPO[campo],
+      etiqueta: etiquetaDoCampo(c, campo),
+      valorPlanilha,
+      origem: origemDe(campo),
+      valorReferencia: valorReferenciaDe(comp),
+      ...(copiavel ? { copiavel } : {}),
+      coerencias: coerencias.map(textoCoerencia),
+    });
+  }
+  return cartoes;
+}
+
+export type Filtro = "tudo" | "ressalva" | "endereco" | "saida" | "inclusao";
+
+export const FILTROS: readonly { id: Filtro; rotulo: string }[] = [
+  { id: "tudo", rotulo: "Tudo" },
+  { id: "ressalva", rotulo: "Só o que tem ressalva" },
+  { id: "endereco", rotulo: "Endereço a confirmar" },
+  { id: "saida", rotulo: "Possível saída" },
+  { id: "inclusao", rotulo: "Propostas de inclusão" },
+];
+
+/** Ressalva: tudo que não é verde com o endereço em ordem (completo, a completar ou sem base). */
+function temRessalva(c: ResultadoContato): boolean {
+  const e = c.endereco?.situacao;
+  return c.semaforo !== "verde" || e === "pendente" || e === "nao_verificado";
+}
+
+function passaFiltro(c: ResultadoContato, filtro: Filtro): boolean {
+  switch (filtro) {
+    case "tudo": return true;
+    case "ressalva": return temRessalva(c);
+    case "endereco": return c.endereco?.situacao === "pendente";
+    case "saida": return c.possivelSaida === true;
+    case "inclusao": return false;
+  }
+}
+
+const FILTROS_COM_NOVOS: readonly Filtro[] = ["tudo", "ressalva", "inclusao"];
+
+function casa(valor: string | undefined, busca: string): boolean {
+  return valor !== undefined && normalizarTexto(valor).includes(busca);
+}
+
+function contatoCasaBusca(c: ResultadoContato, busca: string): boolean {
+  return busca === "" || casa(c.contato.nome, busca) || casa(c.contato.cargo, busca) || casa(c.contato.orgao, busca);
+}
+
+function novoCasaBusca(n: PessoaSite, busca: string): boolean {
+  return busca === "" || casa(n.nome, busca) || casa(n.cargo, busca);
+}
+
+/** Filtro e busca no navegador. Grupo que fica sem linha some. Não muta a entrada. */
+export function filtrarGrupos(grupos: readonly ResultadoGrupo[], filtro: Filtro, busca: string): ResultadoGrupo[] {
+  const b = normalizarTexto(busca.trim());
+  return grupos
+    .map((g) => ({
+      ...g,
+      contatos: g.contatos.filter((c) => passaFiltro(c, filtro) && contatoCasaBusca(c, b)),
+      novos: FILTROS_COM_NOVOS.includes(filtro) ? g.novos.filter((n) => novoCasaBusca(n, b)) : [],
+    }))
+    .filter((g) => g.contatos.length > 0 || g.novos.length > 0);
+}
+
+export function contarContatos(grupos: readonly ResultadoGrupo[]): number {
+  return grupos.reduce((soma, g) => soma + g.contatos.length, 0);
+}
+
+/**
+ * Os seis cartões do mockup. Recebe `Partial` de propósito: um retrato gravado por uma
+ * versão anterior do código pode não ter os contadores mais novos, e o painel não pode
+ * mostrar NaN por isso.
+ */
+export function cartoesDoResumo(r: Partial<ResumoAnalise>): { rotulo: string; valor: number }[] {
+  const n = (v: number | undefined) => v ?? 0;
+  return [
+    { rotulo: "Conferem", valor: n(r.verde) },
+    { rotulo: "Com divergência", valor: n(r.amarelo) },
+    { rotulo: "Possível saída", valor: n(r.possivelSaida) },
+    { rotulo: "Não verificados", valor: n(r.indeterminado) + n(r.contatosSemFonte) },
+    { rotulo: "Propostas de inclusão", valor: n(r.novo) },
+    { rotulo: "Endereços a confirmar", valor: n(r.enderecosAConfirmar) },
+  ];
+}
+
+/**
+ * As três linhas do bloco de endereço e do botão Copiar. Não é o `formatado` da Fase 1
+ * (que só existe em `completo`): aqui o CEP sai como está no relatório, sem formatar nem
+ * propor zero à esquerda, porque isto é o que o relatório diz, não o que o app conclui.
+ */
+export function linhasDoEndereco(e: EnderecoEstruturado): string[] {
+  const primeira = [e.logradouro, e.numero, e.complemento].filter(Boolean).join(", ");
+  const segunda = e.bairro ?? "";
+  const cidadeUf = [e.cidade, e.uf].filter(Boolean).join(" - ");
+  const terceira = [e.cep, cidadeUf].filter(Boolean).join(" ");
+  return [primeira, segunda, terceira].filter((l) => l.length > 0);
+}
+
+export function textoEnderecoParaCopiar(e: EnderecoEstruturado): string {
+  return linhasDoEndereco(e).join("\n");
+}
+
+const FORMATO_DATA_HORA = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+  timeZone: "America/Sao_Paulo",
+});
+
+/** Linha "Nome e cargo" do rodapé de procedência. Sem URL http não há página: a composição veio do conhecimento da IA. */
+export function procedenciaNomeCargo(g: ResultadoGrupo): { texto: string; url?: string } | undefined {
+  if (g.semFonte) return undefined;
+  if (g.fonteUrl && g.fonteUrl.startsWith("http")) return { texto: g.fonteUrl, url: g.fonteUrl };
+  return { texto: "conhecimento da IA, confira" };
+}
+
+/** "01/10, 14h12", no fuso de Brasília, como o cabeçalho do mockup. */
+export function textoDataHora(iso: string): string {
+  const partes = FORMATO_DATA_HORA.formatToParts(new Date(iso));
+  const p = (tipo: Intl.DateTimeFormatPartTypes) => partes.find((x) => x.type === tipo)?.value ?? "";
+  return `${p("day")}/${p("month")}, ${p("hour")}h${p("minute")}`;
+}
+
+export function montarRetrato(
+  resultado: ResultadoAnalise,
+  planilhas: { contatos: { nome: string; linhas: number }; enderecos?: { nome: string; linhas: number } },
+  agora: Date,
+): Retrato {
+  return {
+    ...resultado,
+    geradoEm: agora.toISOString(),
+    planilhaContatos: planilhas.contatos,
+    ...(planilhas.enderecos ? { planilhaEnderecos: planilhas.enderecos } : {}),
+  };
+}

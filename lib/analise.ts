@@ -92,6 +92,11 @@ function identificarFonte(fonte: FonteCatalogo): string {
   return fonte.rotulo ?? fonte.url;
 }
 
+/** Carimba o responsável do catálogo no grupo, nos três caminhos (com fonte, sem fonte, inacessível). */
+function comResponsavel(grupo: ResultadoGrupo, responsavel?: string): ResultadoGrupo {
+  return responsavel ? { ...grupo, responsavel } : grupo;
+}
+
 async function analisarGrupo(
   grupo: string,
   contatos: ContatoPlanilha[],
@@ -101,9 +106,10 @@ async function analisarGrupo(
   // Grupo desconhecido (nenhum cadastro casa) → sem fonte; orienta com sugestões.
   if (!resolvida.grupoCanonico) {
     const base = compararGrupo(grupo, contatos, undefined);
-    return resolvida.sugestoes.length > 0
-      ? { ...base, sugestoesCadastro: resolvida.sugestoes }
-      : base;
+    return comResponsavel(
+      resolvida.sugestoes.length > 0 ? { ...base, sugestoesCadastro: resolvida.sugestoes } : base,
+      resolvida.responsavel,
+    );
   }
 
   // 1. Camada 1 (base): todas as fontes ativas, em paralelo. Uma falhar não derruba a outra.
@@ -144,9 +150,16 @@ async function analisarGrupo(
     if (urlPrimaria) {
       // Diferencia scrape que lançou erro de página que veio sem conteúdo legível (JS).
       const motivo = lidas[0]?.erro ?? MOTIVO_PAGINA_SEM_CONTEUDO;
-      return marcarFonteInacessivel(grupo, contatos, urlPrimaria, motivo, resolvida.grupoCanonico);
+      return comResponsavel(
+        marcarFonteInacessivel(grupo, contatos, urlPrimaria, motivo, resolvida.grupoCanonico),
+        resolvida.responsavel,
+      );
     }
-    return compararGrupo(grupo, contatos, undefined, resolvida.grupoCanonico); // sem URL → sem fonte
+    // sem URL → sem fonte
+    return comResponsavel(
+      compararGrupo(grupo, contatos, undefined, resolvida.grupoCanonico),
+      resolvida.responsavel,
+    );
   }
 
   // 4. Compara contra a composição (fontes que sobreviveram + resgates da IA).
@@ -177,11 +190,14 @@ async function analisarGrupo(
     : undefined;
   // Marca o grupo quando a composição dependeu do conhecimento da IA (não 100% oficial).
   const usouConhecimento = composicao.some((p) => p.origem === "conhecimento");
-  return {
-    ...r,
-    ...(erro ? { erroFonte: erro } : {}),
-    ...(usouConhecimento || !urlPrimaria ? { viaPesquisaAmpla: true } : {}),
-  };
+  return comResponsavel(
+    {
+      ...r,
+      ...(erro ? { erroFonte: erro } : {}),
+      ...(usouConhecimento || !urlPrimaria ? { viaPesquisaAmpla: true } : {}),
+    },
+    resolvida.responsavel,
+  );
 }
 
 /**
@@ -206,6 +222,8 @@ function resumir(grupos: ResultadoGrupo[]): ResumoAnalise {
     novo: 0,
     indeterminado: 0,
     enderecosAConfirmar: 0,
+    possivelSaida: 0,
+    contatosSemFonte: 0,
     gruposSemFonte: 0,
     gruposFonteInacessivel: 0,
     gruposViaPesquisaAmpla: 0,
@@ -219,6 +237,8 @@ function resumir(grupos: ResultadoGrupo[]): ResumoAnalise {
       resumo.total += 1;
       resumo[c.semaforo] += 1;
       if (c.endereco?.situacao === "pendente") resumo.enderecosAConfirmar += 1;
+      if (c.possivelSaida) resumo.possivelSaida += 1;
+      if (g.semFonte) resumo.contatosSemFonte += 1;
     }
   }
   return resumo;

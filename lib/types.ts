@@ -150,6 +150,8 @@ export interface ResultadoGrupo {
    * nomes cadastrados mais próximos para orientar o usuário a alinhar a planilha.
    */
   sugestoesCadastro?: string[];
+  /** `responsavel1` do grupo no catálogo. Só o nome; e-mails não saem do catálogo. */
+  responsavel?: string;
   contatos: ResultadoContato[];
   /** Pessoas no site sem correspondência na planilha. */
   novos: PessoaSite[];
@@ -164,6 +166,10 @@ export interface ResumoAnalise {
   indeterminado: number;
   /** Contatos cujo endereço precisa de confirmação humana (situacao `pendente`). */
   enderecosAConfirmar: number;
+  /** Contatos marcados `possivelSaida`. Subconjunto de `vermelho`. */
+  possivelSaida: number;
+  /** Contatos de grupo sem URL cadastrada. Subconjunto de `vermelho`. */
+  contatosSemFonte: number;
   gruposSemFonte: number;
   gruposFonteInacessivel: number;
   /** Grupos verificados pela 2ª etapa (pesquisa ampla via Gemini). */
@@ -174,6 +180,20 @@ export interface ResultadoAnalise {
   arquivoNome: string;
   grupos: ResultadoGrupo[];
   resumo: ResumoAnalise;
+}
+
+/**
+ * O que o app guarda entre uma abertura e outra: o resultado de uma varredura, a hora em
+ * que terminou e as planilhas que a alimentaram. Um só, em `.fiscal/retrato.json`, fora do
+ * git. Ver docs/superpowers/specs/2026-10-01-painel-local-retrato-em-arquivo.md
+ */
+export interface Retrato extends ResultadoAnalise {
+  /** Hora em que a varredura terminou, ISO 8601. */
+  geradoEm: string;
+  /** Nome e linhas lidas da planilha de contatos. */
+  planilhaContatos: { nome: string; linhas: number };
+  /** Presente só quando a planilha de endereços foi enviada. */
+  planilhaEnderecos?: { nome: string; linhas: number };
 }
 
 /** Grupo do catálogo com seus responsáveis e status de fonte (para a tela de visualização). */

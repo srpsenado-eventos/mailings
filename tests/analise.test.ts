@@ -223,6 +223,42 @@ describe("analisar", () => {
     expect(c.possivelSaida).toBeFalsy();
     expect(c.origem).toBe("pesquisa_ampla"); // resgatado pela IA
   });
+
+  test("resumo conta possível saída e contatos de grupo sem fonte, separados do vermelho", async () => {
+    // Arrange: "Pessoa Que Saiu" está no grupo com fonte mas não na página; "Pessoa Sem Fonte" está em grupo sem URL.
+    const lista: ContatoPlanilha[] = [
+      ...contatos,
+      { nome: "Pessoa Que Saiu Daqui", grupo: "ORG", ...CADASTRO_OK },
+    ];
+
+    // Act
+    const r = await analisar("c.xlsx", lista, deps);
+
+    // Assert
+    expect(r.resumo.possivelSaida).toBe(1);
+    expect(r.resumo.contatosSemFonte).toBe(1);
+    expect(r.resumo.vermelho).toBe(2);
+  });
+
+  test("grupo leva o responsável que o catálogo informa", async () => {
+    // Arrange
+    const comResponsavel: Dependencias = {
+      ...deps,
+      resolverFonte: (grupo) => ({ ...deps.resolverFonte(grupo), responsavel: "Fulana de Tal" }),
+    };
+
+    // Act
+    const r = await analisar("c.xlsx", contatos, comResponsavel);
+
+    // Assert: nos dois caminhos (com fonte e sem fonte)
+    expect(r.grupos[0].responsavel).toBe("Fulana de Tal");
+    expect(r.grupos[1].responsavel).toBe("Fulana de Tal");
+  });
+
+  test("sem responsável no catálogo, o campo fica ausente", async () => {
+    const r = await analisar("c.xlsx", contatos, deps);
+    expect(r.grupos[0].responsavel).toBeUndefined();
+  });
 });
 
 describe("analisar com duas fontes no mesmo grupo", () => {

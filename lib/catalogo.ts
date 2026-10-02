@@ -66,6 +66,8 @@ export interface FonteResolvida {
   fontes: FonteCatalogo[];
   /** Faixa de UFs do grupo casado, quando cadastrada. Filtra proposta de inclusão. */
   ufs?: readonly string[];
+  /** `responsavel1` do grupo casado, quando cadastrado. Só o nome. */
+  responsavel?: string;
   /** Quando nada casa: nomes cadastrados mais próximos, para orientar o usuário. */
   sugestoes: string[];
 }
@@ -115,6 +117,7 @@ export function resolverGrupoEFonte(
     grupoCanonico: grupo.nome,
     fontes,
     ...(grupo.ufs ? { ufs: grupo.ufs } : {}),
+    ...(grupo.responsavel1 ? { responsavel: grupo.responsavel1 } : {}),
     sugestoes: [],
   };
 }

@@ -6,6 +6,7 @@ import {
   mesclarComposicao,
   pontuarPessoa,
   sugerirGrupos,
+  unirFontes,
 } from "@/lib/match";
 import type { ContatoPlanilha, ConteudoFonte, PessoaSite } from "@/lib/types";
 
@@ -288,6 +289,39 @@ describe("mesclarComposicao (Camada 1 base + resgate da IA)", () => {
   });
 });
 
+describe("unirFontes", () => {
+  test("mantém a ordem das fontes e não duplica quem aparece nas duas", () => {
+    const primaria = [{ nome: "Alan Rick", fonteUrl: "https://a" }];
+    const secundaria = [
+      { nome: "Alan Rick", fonteUrl: "https://b", rotuloFonte: "fora de exercício" },
+      { nome: "Wellington Dias", fonteUrl: "https://b", rotuloFonte: "fora de exercício" },
+    ];
+    const unida = unirFontes([primaria, secundaria]);
+    expect(unida.map((p) => p.nome)).toEqual(["Alan Rick", "Wellington Dias"]);
+    expect(unida[0].fonteUrl).toBe("https://a");
+  });
+
+  test("lista vazia de fontes devolve composição vazia", () => {
+    expect(unirFontes([])).toEqual([]);
+  });
+
+  test("duas pessoas distintas da MESMA fonte não se comparam entre si, mesmo pontuando alto", () => {
+    // "Carlos Eduardo Silva" e "Carlos Eduardo Souza" compartilham 2 de 3 tokens fortes
+    // (score 0,667 ≥ LIMIAR_PESSOA) — mas são pessoas diferentes na mesma página, e a
+    // deduplicação só pode olhar fontes ANTERIORES, nunca a própria lista.
+    const fonte = [{ nome: "Carlos Eduardo Silva" }, { nome: "Carlos Eduardo Souza" }];
+    const unida = unirFontes([fonte]);
+    expect(unida.map((p) => p.nome)).toEqual(["Carlos Eduardo Silva", "Carlos Eduardo Souza"]);
+  });
+
+  test("nome de uma fonte anterior ainda funde com o de uma fonte seguinte (Weverton / Weverton Rocha)", () => {
+    const primaria = [{ nome: "Weverton" }];
+    const secundaria = [{ nome: "Weverton Rocha" }];
+    const unida = unirFontes([primaria, secundaria]);
+    expect(unida.map((p) => p.nome)).toEqual(["Weverton"]);
+  });
+});
+
 describe("sugerirGrupos", () => {
   const cadastrados = [
     "Governadores",
@@ -312,5 +346,135 @@ describe("sugerirGrupos", () => {
 
   test("segmentos vazios → sem sugestões", () => {
     expect(sugerirGrupos([], cadastrados)).toHaveLength(0);
+  });
+});
+
+describe("veredito com fonte rotulada", () => {
+  const CADASTRO_OK = { tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" };
+
+  const fonteSenadores: ConteudoFonte = {
+    url: "https://senado.leg.br/em-exercicio",
+    textoLimpo: "",
+    destaques: [],
+    pessoas: [
+      { nome: "Weverton", uf: "MA", origem: "pagina", fonteUrl: "https://senado.leg.br/em-exercicio" },
+      {
+        nome: "Wellington Dias",
+        uf: "PI",
+        origem: "pagina",
+        contexto: "Ocupação de cargo de ministro/secretário",
+        rotuloFonte: "fora de exercício",
+        fonteUrl: "https://senado.leg.br/fora-de-exercicio",
+        propoeInclusao: true,
+      },
+      {
+        nome: "Eduardo Girão",
+        uf: "CE",
+        origem: "pagina",
+        contexto: "Licença com convocação de suplente (superior a 120 dias)",
+        rotuloFonte: "fora de exercício",
+        fonteUrl: "https://senado.leg.br/fora-de-exercicio",
+        propoeInclusao: true,
+      },
+    ],
+  };
+
+  test("quem casa pela fonte rotulada sai verde, com a nota e o motivo", () => {
+    const r = compararGrupo(
+      "Senadores (Maranhão ao Piauí)",
+      [{ nome: "Wellington Dias", grupo: "Senadores (Maranhão ao Piauí)", ...CADASTRO_OK }],
+      fonteSenadores,
+      "Senadores (Maranhão ao Piauí)",
+      ["MA", "PI"],
+    );
+    const c = r.contatos[0];
+    expect(c.semaforo).toBe("verde");
+    expect(c.possivelSaida).toBeUndefined();
+    expect(c.observacao).toBe("fora de exercício — Ocupação de cargo de ministro/secretário");
+    expect(c.fonteUrl).toBe("https://senado.leg.br/fora-de-exercicio");
+  });
+
+  test("proposta de inclusão só sai no grupo da faixa de UF", () => {
+    const r = compararGrupo(
+      "Senadores (Maranhão ao Piauí)",
+      [{ nome: "Weverton", grupo: "Senadores (Maranhão ao Piauí)", ...CADASTRO_OK }],
+      fonteSenadores,
+      "Senadores (Maranhão ao Piauí)",
+      ["MA", "PI"],
+    );
+    expect(r.novos.map((n) => n.nome)).toEqual(["Wellington Dias"]);
+  });
+
+  test("pessoa de fonte que não propõe inclusão e não tem cargo não vira novo", () => {
+    const r = compararGrupo(
+      "Senadores (Maranhão ao Piauí)",
+      [{ nome: "Wellington Dias", grupo: "Senadores (Maranhão ao Piauí)", ...CADASTRO_OK }],
+      fonteSenadores,
+      "Senadores (Maranhão ao Piauí)",
+      ["MA", "PI"],
+    );
+    expect(r.novos.map((n) => n.nome)).not.toContain("Weverton");
+  });
+
+  test("proposta de inclusão sem UF publicada entra no grupo: o filtro não inventa exclusão", () => {
+    // Arrange: a fonte não publicou a UF desta pessoa. A direção é conservadora de
+    // propósito — é melhor propor no grupo errado do que deixar autoridade de fora.
+    const semUf: ConteudoFonte = {
+      ...fonteSenadores,
+      pessoas: [
+        {
+          nome: "Fulana de Tal",
+          origem: "pagina",
+          rotuloFonte: "fora de exercício",
+          propoeInclusao: true,
+        },
+      ],
+    };
+
+    // Act
+    const r = compararGrupo("Senadores (Maranhão ao Piauí)", [], semUf, undefined, ["MA", "PI"]);
+
+    // Assert
+    expect(r.novos.map((n) => n.nome)).toEqual(["Fulana de Tal"]);
+  });
+
+  test("grupo sem faixa de UF cadastrada não filtra proposta nenhuma", () => {
+    // Arrange/Act: mesmo cadastro, sem `ufs` — nada a filtrar, tudo passa.
+    const r = compararGrupo("Senadores (Maranhão ao Piauí)", [], fonteSenadores, undefined);
+
+    // Assert
+    expect(r.novos.map((n) => n.nome)).toEqual(["Wellington Dias", "Eduardo Girão"]);
+  });
+});
+
+describe("compararGrupo com fonte incompleta (alguma fonte do grupo não respondeu)", () => {
+  const CADASTRO_OK = { tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" };
+  const fonte: ConteudoFonte = {
+    url: "https://orgao.gov.br",
+    textoLimpo: "",
+    destaques: [],
+    pessoas: [{ nome: "Ana Maria Política Completa", origem: "pagina" }],
+  };
+  const ausente = { nome: "Beatriz Sousa Ausente", grupo: "ORG", ...CADASTRO_OK };
+
+  test("quem não casa fica indeterminado, nunca possível saída", () => {
+    // Arrange/Act
+    const r = compararGrupo("ORG", [ausente], fonte, "ORG", undefined, true);
+
+    // Assert
+    const c = r.contatos[0];
+    expect(c.semaforo).toBe("indeterminado");
+    expect(c.possivelSaida).toBeUndefined();
+    expect(c.observacao).toMatch(/não respondeu/);
+  });
+
+  test("com todas as fontes de pé, quem não casa segue possível saída", () => {
+    // Arrange/Act
+    const r = compararGrupo("ORG", [ausente], fonte, "ORG");
+
+    // Assert
+    const c = r.contatos[0];
+    expect(c.semaforo).toBe("vermelho");
+    expect(c.possivelSaida).toBe(true);
   });
 });

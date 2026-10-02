@@ -2,7 +2,7 @@ import * as cheerio from "cheerio";
 import { Agent } from "undici";
 import { normalizarTexto, nucleoDeNome } from "@/lib/normalize";
 import { CARGOS } from "@/lib/cargos";
-import type { ConteudoFonte, PessoaSite } from "@/lib/types";
+import type { ConteudoFonte, PessoaSite, ExtracaoTabela } from "@/lib/types";
 
 export class ScrapeError extends Error {
   constructor(
@@ -339,16 +339,79 @@ export function extrairConteudo(html: string, url: string): ConteudoFonte {
 }
 
 /**
+ * Extração estruturada de página-lista: lê a tabela linha a linha em vez de achatar o
+ * texto. Existe porque o caminho de texto depende de heurística de nome (precisa de
+ * sobrenome, corta linha curta) e, numa tabela, a célula JÁ é o dado — o que devolve os
+ * senadores de nome de uma palavra e mantém fora as seções que não são do grupo.
+ *
+ * Uma linha com uma célula só E `colspan` é cabeçalho de seção, e passa a valer para as
+ * linhas seguintes. Linha só de `<th>` é ignorada. Linha sem a célula do nome é ignorada:
+ * se a página mudar de estrutura, o resultado é composição vazia — e o orquestrador
+ * transforma isso em indeterminado, nunca em possível saída.
+ */
+export function extrairTabela(html: string, url: string, cfg: ExtracaoTabela): ConteudoFonte {
+  const $ = cheerio.load(html);
+  $("script, style, noscript").remove();
+  const tabela = $("table").eq(cfg.indice ?? 0);
+  const aceitas = (cfg.secoes ?? []).map(normalizarTexto).filter((s) => s.length > 0);
+  const pessoas: PessoaSite[] = [];
+  const linhas: string[] = [];
+  let secao = "";
+
+  tabela.find("tr").each((_, tr) => {
+    const celulas = $(tr).find("td");
+    if (celulas.length === 0) return; // linha só de cabeçalho (<th>)
+    const texto = (i: number): string | undefined =>
+      celulas.eq(i).text().replace(/\s+/g, " ").trim() || undefined;
+
+    if (celulas.length === 1) {
+      // Só é cabeçalho de seção a linha cuja única célula declara `colspan` — é assim que
+      // a página marca. Linha de uma célula sem `colspan` é dado malformado: ignorada SEM
+      // reescrever a seção corrente, senão uma linha estranha derrubaria todas as linhas
+      // seguintes da composição e o grupo cairia para indeterminado sem motivo.
+      if (celulas.eq(0).attr("colspan")) secao = texto(0) ?? "";
+      return;
+    }
+    const nome = texto(cfg.colunas.nome);
+    if (!nome) return;
+    if (aceitas.length > 0) {
+      const secaoNorm = normalizarTexto(secao);
+      if (!aceitas.some((s) => secaoNorm.startsWith(s))) return;
+    }
+    const uf = cfg.colunas.uf === undefined ? undefined : texto(cfg.colunas.uf);
+    const motivo = cfg.colunas.motivo === undefined ? undefined : texto(cfg.colunas.motivo);
+    pessoas.push({
+      nome,
+      origem: "pagina",
+      ...(uf ? { uf } : {}),
+      ...(motivo ? { contexto: motivo } : {}),
+    });
+    linhas.push([nome, uf, motivo].filter(Boolean).join(" — "));
+  });
+
+  return { url, textoLimpo: linhas.join("\n"), destaques: [], pessoas };
+}
+
+/** Opções de raspagem de uma fonte cadastrada. */
+export interface OpcoesRaspagem {
+  /** Extração estruturada declarada no catálogo. Ausente → extração de texto padrão. */
+  tabela?: ExtracaoTabela;
+  timeoutMs?: number;
+}
+
+/**
  * Baixa a página e extrai o conteúdo. Lança ScrapeError em falha de rede/timeout.
  * Tenta TLS estrito primeiro; só em erro de certificado repete com TLS relaxado.
  */
-export async function raspar(url: string, timeoutMs = 15000): Promise<ConteudoFonte> {
+export async function raspar(url: string, opcoes: OpcoesRaspagem = {}): Promise<ConteudoFonte> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  const timer = setTimeout(() => ctrl.abort(), opcoes.timeoutMs ?? 15000);
   try {
     const html = await baixarHtml(url, ctrl.signal);
     if (!html.trim()) throw new ScrapeError(url, "HTML vazio");
-    return extrairConteudo(html, url);
+    return opcoes.tabela
+      ? extrairTabela(html, url, opcoes.tabela)
+      : extrairConteudo(html, url);
   } catch (err) {
     if (err instanceof ScrapeError) throw err;
     throw new ScrapeError(url, err instanceof Error ? err.message : "erro desconhecido");

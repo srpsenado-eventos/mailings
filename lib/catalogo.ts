@@ -58,12 +58,16 @@ function fontePrimariaDe(grupos: readonly GrupoCatalogo[]): FonteCatalogo | unde
   return grupos.flatMap((g) => g.fontes).find((f) => f.ativo);
 }
 
-/** Resolução de grupo: casamento com o cadastro + fonte oficial + sugestões. */
+/** Resolução de grupo: casamento com o cadastro + fontes oficiais + sugestões. */
 export interface FonteResolvida {
   /** Nome do grupo como cadastrado. `undefined` quando nenhum grupo casa. */
   grupoCanonico?: string;
-  /** URL oficial primária ativa, se o grupo casado tiver fonte cadastrada. */
-  url?: string;
+  /** TODAS as fontes ativas do grupo dono da primária, na ordem do catálogo. A 1ª é a primária. */
+  fontes: FonteCatalogo[];
+  /** Faixa de UFs do grupo casado, quando cadastrada. Filtra proposta de inclusão. */
+  ufs?: readonly string[];
+  /** `responsavel1` do grupo casado, quando cadastrado. Só o nome. */
+  responsavel?: string;
   /** Quando nada casa: nomes cadastrados mais próximos, para orientar o usuário. */
   sugestoes: string[];
 }
@@ -84,27 +88,38 @@ export function buscarFontePrimaria(
 }
 
 /**
- * Resolve o rótulo da planilha para o grupo cadastrado e sua fonte oficial.
- * Sempre devolve um objeto: com `grupoCanonico` quando casa (e `url` se houver
- * fonte), ou só com `sugestoes` (nomes próximos) quando nenhum grupo casa — para
- * a UI orientar o usuário a alinhar a planilha em vez de um beco sem saída.
+ * Resolve o rótulo da planilha para o grupo cadastrado e suas fontes oficiais.
+ * Sempre devolve um objeto: com `grupoCanonico` quando casa (e `fontes` com o que
+ * houver ativo), ou só com `sugestoes` (nomes próximos) quando nenhum grupo casa —
+ * para a UI orientar o usuário a alinhar a planilha em vez de um beco sem saída.
  */
 export function resolverGrupoEFonte(
   grupoNome: string,
   catalogo: readonly GrupoCatalogo[] = CATALOGO,
 ): FonteResolvida {
   const segmentos = segmentarGrupo(grupoNome);
-  if (segmentos.length === 0) return { sugestoes: [] };
+  if (segmentos.length === 0) return { fontes: [], sugestoes: [] };
 
   const casados = gruposQueCasam(catalogo, segmentos);
   if (casados.length === 0) {
-    return { sugestoes: sugerirGrupos(segmentos, catalogo.map((g) => g.nome)) };
+    return { fontes: [], sugestoes: sugerirGrupos(segmentos, catalogo.map((g) => g.nome)) };
   }
 
-  const primaria = fontePrimariaDe(casados);
-  // Prefere o nome do grupo que de fato fornece a fonte primária; senão, o 1º casado.
-  const canonico = casados.find((g) => g.fontes.some((f) => f.ativo && f.url === primaria?.url));
-  return { grupoCanonico: (canonico ?? casados[0]).nome, url: primaria?.url, sugestoes: [] };
+  // O rótulo da planilha pode casar VÁRIOS grupos ("Ministros do STF; Ministros do TSE",
+  // ou "Senadores" solto, que cabe nos três grupos de faixa). Compõem o grupo apenas as
+  // fontes do grupo DONO da primária — juntar as páginas de órgãos diferentes numa
+  // composição só inventaria composição e faria autoridade de um órgão "confirmar" a de
+  // outro. Os demais casados continuam servindo só para escolher qual é esse dono.
+  const dono = casados.find((g) => g.fontes.some((f) => f.ativo));
+  const grupo = dono ?? casados[0];
+  const fontes = grupo.fontes.filter((f) => f.ativo);
+  return {
+    grupoCanonico: grupo.nome,
+    fontes,
+    ...(grupo.ufs ? { ufs: grupo.ufs } : {}),
+    ...(grupo.responsavel1 ? { responsavel: grupo.responsavel1 } : {}),
+    sugestoes: [],
+  };
 }
 
 function mapearGrupo(grupo: GrupoCatalogo): GrupoCadastro {

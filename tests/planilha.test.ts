@@ -86,6 +86,23 @@ describe("lerPlanilha", () => {
     expect(contatos).toHaveLength(1);
     expect(contatos[0]).toMatchObject({ nome: "Ana Lima", grupo: "CNJ", cargo: "Conselheira" });
   });
+
+  test("lê a coluna Id, chave da junção com a base de endereços", () => {
+    const buf = montarXlsx([{ Id: "4711", Nome: "Ana Lima", Grupo: "CNJ" }]);
+
+    const contatos = lerPlanilha(buf);
+
+    expect(contatos[0].id).toBe("4711");
+  });
+
+  test("planilha sem coluna Id continua lida normalmente, com id indefinido", () => {
+    const buf = montarXlsx([{ Nome: "Ana Lima", Grupo: "CNJ" }]);
+
+    const contatos = lerPlanilha(buf);
+
+    expect(contatos).toHaveLength(1);
+    expect(contatos[0].id).toBeUndefined();
+  });
 });
 
 describe("agruparPorGrupo", () => {

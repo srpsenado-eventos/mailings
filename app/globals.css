@@ -1,1 +1,27 @@
 @import "tailwindcss";
+
+/* Paleta e tipografia do mockup de 2026-09-30 (https://claude.ai/artifact/6HjpnkA5eS2Wd2DTfqv3u3). */
+@theme {
+  --font-sans: var(--font-plex), system-ui, sans-serif;
+  --font-serif: var(--font-newsreader), Georgia, serif;
+
+  --color-fundo: #f7f5f0;
+  --color-cartao: #ffffff;
+  --color-tinta: #1a1a17;
+  --color-cinza: #5b5b54;
+  --color-cinza-claro: #6b6b62;
+  --color-borda: #ddd8ce;
+  --color-borda-forte: #c9c3b6;
+  --color-separador: #f0ede5;
+  --color-acao: #1f5d7a;
+  --color-acao-escuro: #15404f;
+  --color-acao-borda: #bedae6;
+  --color-ok: #1f6b45;
+  --color-ok-fundo: #e3efe7;
+  --color-atencao: #8a5a00;
+  --color-atencao-fundo: #fbefd6;
+  --color-atencao-borda: #edd6a8;
+  --color-ruim: #9b2c2c;
+  --color-ruim-fundo: #f8e1e1;
+  --color-neutro-fundo: #f1efe9;
+}

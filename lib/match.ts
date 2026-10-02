@@ -13,7 +13,7 @@ import type {
 } from "@/lib/types";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import { CARGOS } from "@/lib/cargos";
-import { comparacoesCoerencia, comparacoesProtocolo } from "@/lib/tratamento";
+import { comparacaoRegraNome, comparacoesCoerencia, comparacoesProtocolo } from "@/lib/tratamento";
 
 const LIMIAR_PESSOA = 0.6;
 const LIMIAR_TOKEN = 0.85;
@@ -95,6 +95,36 @@ export function mesclarComposicao(
   return [...pessoasPagina, ...resgates];
 }
 
+/**
+ * Une as composições das várias fontes ativas de um grupo, na ordem do catálogo. A
+ * primeira fonte que publica alguém vence: a mesma autoridade pode constar em duas
+ * páginas do mesmo órgão, e contá-la duas vezes duplicaria a proposta de inclusão e
+ * bagunçaria o casamento por índice de `compararGrupo`.
+ *
+ * A comparação só olha para TRÁS: cada pessoa é testada contra quem as fontes ANTERIORES
+ * já contribuíram, nunca contra alguém da própria lista. Sem essa guarda, duas autoridades
+ * de verdade na mesma página que só compartilham sobrenomes (ex.: "Carlos Eduardo Silva" e
+ * "Carlos Eduardo Souza") ou um nome de uma palavra contido num mais completo pontuam ≥
+ * `LIMIAR_PESSOA` uma contra a outra e uma delas some da composição — exatamente o nome
+ * curto que a extração de tabela (Task 2) foi buscar recuperar.
+ */
+export function unirFontes(listas: PessoaSite[][]): PessoaSite[] {
+  const unida: PessoaSite[] = [];
+  let deFontesAnteriores: PessoaSite[] = [];
+  for (const lista of listas) {
+    for (const pessoa of lista) {
+      const repetida = deFontesAnteriores.some(
+        (p) => pontuarPessoa(p.nome, pessoa.nome) >= LIMIAR_PESSOA,
+      );
+      if (!repetida) unida.push(pessoa);
+    }
+    // Fecha a fonte com uma cópia: `unida` segue crescendo nas próximas fontes, e sem a
+    // cópia essa mesma referência faria a fonte seguinte se comparar contra si mesma.
+    deFontesAnteriores = [...unida];
+  }
+  return unida;
+}
+
 function melhorPessoa(nome: string, pessoas: PessoaSite[]): { indice: number; score: number } {
   let indice = -1;
   let score = 0;
@@ -160,14 +190,27 @@ function situacaoNome(planilha: string, site: string): SituacaoCampo {
 }
 
 /**
- * Auditoria de Tratamento e Endereçamento — Camada A (coerência interna do contato) e
- * Camada B (conformidade com a tabela de protocolo). Nenhuma das duas depende do site,
- * então valem nos quatro caminhos de veredito, inclusive naqueles em que a página não
- * pôde ser lida ou o grupo não tem fonte cadastrada.
- * Ver docs/superpowers/specs/2026-09-15-auditoria-tratamento-correcao-de-alvo.md.
+ * Auditoria de Tratamento, Endereçamento e Nome — Camada A (coerência interna do
+ * contato), Camada B (conformidade com a tabela de protocolo) e Camada C (regras de
+ * escrita do cadastro, por grupo canônico). Nenhuma das três depende do site, então
+ * valem nos quatro caminhos de veredito, inclusive naqueles em que a página não pôde
+ * ser lida ou o grupo não tem fonte cadastrada.
+ *
+ * `grupoCanonico` é o nome do grupo **cadastrado** (`data/catalogo.ts`), não o rótulo
+ * cru da coluna `Grupo` da planilha — que pode ser um apelido. Só a Camada C usa: é a
+ * chave de `data/regras-nome.ts`.
+ * Ver docs/superpowers/specs/2026-09-15-auditoria-tratamento-correcao-de-alvo.md e
+ * docs/superpowers/specs/2026-09-18-regras-de-escrita-do-cadastro.md.
  */
-function comparacoesTratamento(contato: ContatoPlanilha): ComparacaoCampo[] {
-  return [...comparacoesCoerencia(contato), ...comparacoesProtocolo(contato)];
+function comparacoesTratamento(
+  contato: ContatoPlanilha,
+  grupoCanonico: string | undefined,
+): ComparacaoCampo[] {
+  return [
+    ...comparacoesCoerencia(contato),
+    ...comparacoesProtocolo(contato),
+    ...comparacaoRegraNome(contato, grupoCanonico),
+  ];
 }
 
 /**
@@ -181,17 +224,40 @@ function divergenciasDe(comparacoes: readonly ComparacaoCampo[]): CampoDivergent
     .map((c) => ({ campo: c.campo, valorPlanilha: c.valorPlanilha, valorEncontrado: c.valorEsperado }));
 }
 
+/**
+ * Texto do contato não casado quando alguma fonte do grupo não respondeu. Diz o que
+ * aconteceu (verificação incompleta) sem afirmar o que não se sabe (saída).
+ */
+export const OBSERVACAO_VERIFICACAO_INCOMPLETA =
+  "Não consta nas fontes que responderam, mas uma fonte do grupo não respondeu — confira manualmente";
+
 /** Monta o veredito de um contato contra a pessoa casada (ou nenhuma → possível saída). */
 function montarResultado(
   contato: ContatoPlanilha,
   pessoa: PessoaSite | undefined,
   score: number,
+  grupoCanonico: string | undefined,
   url?: string,
+  leituraParcial?: boolean,
 ): ResultadoContato {
   if (!pessoa) {
     // A auditoria de tratamento vale também para quem saiu: não depende da fonte, e o
     // achado tem que chegar ao export junto com a possível saída, não no lugar dela.
-    const protocolo = comparacoesTratamento(contato);
+    const protocolo = comparacoesTratamento(contato, grupoCanonico);
+    if (leituraParcial) {
+      // Regra de ouro: parte das fontes ativas respondeu e parte não, então a composição
+      // oficial está incompleta e a ausência não prova nada. Indeterminado, nunca saída.
+      return {
+        contato,
+        semaforo: "indeterminado",
+        score,
+        comparacoes: protocolo,
+        camposDivergentes: divergenciasDe(protocolo),
+        origem: "oficial",
+        fonteUrl: url,
+        observacao: OBSERVACAO_VERIFICACAO_INCOMPLETA,
+      };
+    }
     return {
       contato,
       semaforo: "vermelho",
@@ -240,18 +306,46 @@ function montarResultado(
     const v = contato[campo];
     if (v) comparacoes.push({ campo, valorPlanilha: v, valorEsperado: undefined, situacao: "fonte_nao_informa" });
   }
-  comparacoes.push(...comparacoesTratamento(contato));
+  comparacoes.push(...comparacoesTratamento(contato, grupoCanonico));
   // Semáforo e divergências derivam de `comparacoes`: um achado de tratamento pinta
   // amarelo sozinho, e nunca "possível saída" — esta só existe sem pessoa casada.
   const camposDivergentes = divergenciasDe(comparacoes);
   const semaforo: Semaforo = camposDivergentes.length > 0 ? "amarelo" : "verde";
-  return { contato, semaforo, score, comparacoes, camposDivergentes, origem, fonteUrl: url };
+  // Casou por fonte rotulada (ex.: a lista de fora de exercício): o cadastro está certo,
+  // e o que o usuário precisa saber é a situação, não uma divergência.
+  const nota = pessoa.rotuloFonte
+    ? [pessoa.rotuloFonte, pessoa.contexto].filter(Boolean).join(" — ")
+    : undefined;
+  return {
+    contato,
+    semaforo,
+    score,
+    comparacoes,
+    camposDivergentes,
+    origem,
+    fonteUrl: pessoa.fonteUrl ?? url,
+    ...(nota ? { observacao: nota } : {}),
+  };
 }
 
+/**
+ * A pessoa pertence à faixa de UF do grupo? Sem faixa cadastrada, ou sem UF publicada
+ * pela fonte, não há o que filtrar e a resposta é sim — o filtro nunca inventa exclusão.
+ */
+function naFaixaDeUf(pessoa: PessoaSite, ufs?: readonly string[]): boolean {
+  if (!ufs || ufs.length === 0 || !pessoa.uf) return true;
+  return ufs.includes(pessoa.uf.toUpperCase());
+}
+
+/**
+ * Compara um contato isolado contra uma fonte, sem contexto de grupo — usado nos testes
+ * de campo a campo. Sem grupo canônico, a Camada C (por grupo) não entra; as demais
+ * camadas não dependem dele.
+ */
 export function compararContato(contato: ContatoPlanilha, fonte: ConteudoFonte): ResultadoContato {
   const { indice, score } = melhorPessoa(contato.nome, fonte.pessoas);
   const casou = indice >= 0 && score >= LIMIAR_PESSOA;
-  return montarResultado(contato, casou ? fonte.pessoas[indice] : undefined, score, fonte.url);
+  return montarResultado(contato, casou ? fonte.pessoas[indice] : undefined, score, undefined, fonte.url);
 }
 
 /**
@@ -264,6 +358,7 @@ export function marcarFonteInacessivel(
   contatos: ContatoPlanilha[],
   url: string,
   motivo: string,
+  grupoCanonico?: string,
 ): ResultadoGrupo {
   return {
     grupo,
@@ -272,10 +367,11 @@ export function marcarFonteInacessivel(
     fonteInacessivel: true,
     erroFonte: motivo,
     contatos: contatos.map((c) => {
-      // A página não pôde ser lida, mas Tratamento e Endereçamento continuam auditáveis.
-      // O semáforo segue "indeterminado": ele descreve a verificação contra o site, que
-      // de fato não aconteceu — as divergências, essas, precisam chegar ao export.
-      const protocolo = comparacoesTratamento(c);
+      // A página não pôde ser lida, mas Tratamento, Endereçamento e Nome continuam
+      // auditáveis. O semáforo segue "indeterminado": ele descreve a verificação contra
+      // o site, que de fato não aconteceu — as divergências, essas, precisam chegar ao
+      // export.
+      const protocolo = comparacoesTratamento(c, grupoCanonico);
       return {
         contato: c,
         semaforo: "indeterminado" as Semaforo,
@@ -291,19 +387,31 @@ export function marcarFonteInacessivel(
   };
 }
 
+/**
+ * @param leituraParcial Parte das fontes ativas do grupo respondeu e parte não (erro, ou 200
+ *   sem ninguém). Quem não casar fica `indeterminado` em vez de "possível saída": falta um
+ *   pedaço da composição oficial e a ausência não prova nada. **Só a leitura PARCIAL suspende
+ *   o veredito.** Composição inteiramente vinda da IA é composição real e segue podendo
+ *   apontar saída, marcada `viaPesquisaAmpla` — é a regra de ouro do CLAUDE.md ("página *ou
+ *   IA*") e o caminho documentado do TCU.
+ */
 export function compararGrupo(
   grupo: string,
   contatos: ContatoPlanilha[],
   fonte: ConteudoFonte | undefined,
+  grupoCanonico?: string,
+  ufsDoGrupo?: readonly string[],
+  leituraParcial?: boolean,
 ): ResultadoGrupo {
   if (!fonte) {
     return {
       grupo,
       semFonte: true,
       contatos: contatos.map((c) => {
-        // Sem URL cadastrada não há o que comparar com o site, mas o protocolo é
-        // auditável. O vermelho continua sendo do grupo (falta fonte), não do contato.
-        const protocolo = comparacoesTratamento(c);
+        // Sem URL cadastrada não há o que comparar com o site, mas o protocolo e as
+        // regras de escrita são auditáveis. O vermelho continua sendo do grupo (falta
+        // fonte), não do contato.
+        const protocolo = comparacoesTratamento(c, grupoCanonico);
         return {
           contato: c,
           semaforo: "vermelho" as Semaforo,
@@ -326,10 +434,21 @@ export function compararGrupo(
     const { indice, score } = melhorPessoa(c.nome, fonte.pessoas);
     const casou = indice >= 0 && score >= LIMIAR_PESSOA;
     if (casou) usados.add(indice);
-    return montarResultado(c, casou ? fonte.pessoas[indice] : undefined, score, fonte.url);
+    return montarResultado(
+      c,
+      casou ? fonte.pessoas[indice] : undefined,
+      score,
+      grupoCanonico,
+      fonte.url,
+      leituraParcial,
+    );
   });
-  // "novos" só pessoas com cargo de autoridade — item de menu não tem cargo,
-  // então fica de fora (reduz drasticamente o ruído de navegação).
-  const novos = fonte.pessoas.filter((p, i) => !usados.has(i) && Boolean(p.cargo));
+  // "novos": de fonte que propõe inclusão, só quem está na faixa de UF do grupo. Das
+  // demais fontes, mantém a regra antiga — só pessoa com cargo, que corta item de menu
+  // do texto achatado. Numa fonte tabular toda linha já é pessoa.
+  const novos = fonte.pessoas.filter((p, i) => {
+    if (usados.has(i)) return false;
+    return p.propoeInclusao ? naFaixaDeUf(p, ufsDoGrupo) : Boolean(p.cargo);
+  });
   return { grupo, fonteUrl: fonte.url, semFonte: false, contatos: resultados, novos };
 }

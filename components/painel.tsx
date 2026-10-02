@@ -1,0 +1,134 @@
+"use client";
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { ExportButtons } from "@/components/export-buttons";
+import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-contato";
+import { cartoesDoResumo, contarContatos, filtrarGrupos, FILTROS, textoDataHora, type Filtro } from "@/lib/painel";
+import type { ResultadoGrupo, Retrato } from "@/lib/types";
+
+function EstadoDaFonte({ g }: { g: ResultadoGrupo }) {
+  if (g.semFonte) {
+    return (
+      <span className="text-xs text-ruim">
+        Sem fonte cadastrada
+        {g.sugestoesCadastro && g.sugestoesCadastro.length > 0 ? ` (você quis dizer: ${g.sugestoesCadastro.join(" · ")}?)` : ""}
+        {" · "}<Link href="/grupos" className="underline">grupos cadastrados</Link>
+      </span>
+    );
+  }
+  if (g.fonteInacessivel) {
+    return (
+      <span className="text-xs text-atencao">
+        Fonte inacessível, confira à mão{g.erroFonte ? `: ${g.erroFonte}` : ""}
+        {g.fonteUrl && <> · <a href={g.fonteUrl} target="_blank" rel="noreferrer" className="underline">abrir</a></>}
+      </span>
+    );
+  }
+  return (
+    <span className="text-xs text-cinza">
+      {g.viaPesquisaAmpla && <span className="text-atencao">≈ via IA — confira · </span>}
+      {g.erroFonte && <span className="text-atencao">uma fonte não respondeu: {g.erroFonte} · </span>}
+      {g.fonteUrl && g.fonteUrl.startsWith("http") && (
+        <a href={g.fonteUrl} target="_blank" rel="noreferrer" className="text-acao underline">abrir fonte</a>
+      )}
+    </span>
+  );
+}
+
+export function Painel({ retrato, aviso, onNovaVarredura }: { retrato: Retrato; aviso?: string; onNovaVarredura?: () => void }) {
+  const [filtro, setFiltro] = useState<Filtro>("tudo");
+  const [busca, setBusca] = useState("");
+  const grupos = useMemo(() => filtrarGrupos(retrato.grupos, filtro, busca), [retrato, filtro, busca]);
+  const total = retrato.resumo.total;
+  const visiveis = contarContatos(grupos);
+  const filtrando = filtro !== "tudo" || busca.trim() !== "";
+
+  return (
+    <main className="mx-auto max-w-6xl px-6 py-8">
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="font-serif text-3xl font-semibold">Fiscal de Mailings</h1>
+          <p className="mt-1 text-sm text-cinza">
+            Contatos <strong className="font-medium text-tinta">{retrato.planilhaContatos.nome}</strong>
+            {retrato.planilhaEnderecos && <> · Endereços <strong className="font-medium text-tinta">{retrato.planilhaEnderecos.nome}</strong></>}
+            {" · "}varredura de {textoDataHora(retrato.geradoEm)}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link href="/grupos" className="text-sm text-acao underline">Grupos cadastrados</Link>
+          {onNovaVarredura ? (
+            <button type="button" onClick={onNovaVarredura} className="rounded-md border border-borda-forte bg-cartao px-3 py-1.5 text-sm">Nova varredura</button>
+          ) : (
+            <Link href="/nova-varredura" className="rounded-md border border-borda-forte bg-cartao px-3 py-1.5 text-sm">Nova varredura</Link>
+          )}
+          <ExportButtons analise={retrato} />
+        </div>
+      </header>
+
+      {aviso && <p className="mt-4 rounded-lg border border-atencao-borda bg-atencao-fundo p-3 text-sm text-atencao">{aviso}</p>}
+
+      <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {cartoesDoResumo(retrato.resumo).map((c) => (
+          <div key={c.rotulo} className="rounded-lg border border-borda bg-cartao px-4 py-3">
+            <div className="font-serif text-3xl font-semibold">{c.valor}</div>
+            <div className="text-xs text-cinza">{c.rotulo}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        <span className="text-xs text-cinza-claro">Mostrar</span>
+        {FILTROS.map((f) => (
+          <button
+            key={f.id}
+            type="button"
+            onClick={() => setFiltro(f.id)}
+            className={`rounded-full border px-3 py-1 text-xs ${filtro === f.id ? "border-acao bg-acao text-white" : "border-borda-forte bg-cartao text-tinta"}`}
+          >
+            {f.rotulo}
+          </button>
+        ))}
+        <div className="grow" />
+        <label htmlFor="busca" className="text-xs text-cinza-claro">Buscar</label>
+        <input
+          id="busca"
+          type="search"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="nome, cargo ou órgão"
+          className="w-56 rounded-md border border-borda-forte bg-cartao px-2.5 py-1 text-sm"
+        />
+      </div>
+      {filtrando && <p className="mt-2 text-xs text-cinza">{visiveis} contatos de {total}</p>}
+
+      <div className="mt-5 space-y-5">
+        {grupos.map((g) => (
+          <section key={g.grupo} className="overflow-hidden rounded-xl border border-borda bg-cartao">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-separador px-4 py-3">
+              <h2 className="font-serif text-lg font-semibold">{g.grupo}</h2>
+              <span className="text-xs text-cinza">
+                {g.contatos.length} contatos{g.responsavel ? ` · responsável ${g.responsavel}` : ""}
+              </span>
+              <div className="grow" />
+              <EstadoDaFonte g={g} />
+            </div>
+            <div className={`${CLASSES_COLUNAS} text-xs text-cinza-claro`}>
+              <div>Contato</div><div>Cargo no cadastro</div><div>Campos conferidos</div><div>Situação</div>
+            </div>
+            {g.contatos.map((c, i) => <LinhaContato key={`${c.contato.nome}-${i}`} c={c} g={g} retrato={retrato} />)}
+            {g.novos.map((n, i) => (
+              <LinhaNovo
+                key={`novo-${i}`}
+                nome={n.nome}
+                cargo={n.cargo}
+                viaIa={n.origem === "conhecimento"}
+                nota={n.rotuloFonte ? [n.rotuloFonte, n.contexto].filter(Boolean).join(": ") : undefined}
+              />
+            ))}
+          </section>
+        ))}
+        {grupos.length === 0 && <p className="text-sm text-cinza">Nada para mostrar com este filtro.</p>}
+      </div>
+    </main>
+  );
+}

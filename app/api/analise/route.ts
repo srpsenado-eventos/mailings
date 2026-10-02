@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analisar, type Dependencias } from "@/lib/analise";
 import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload";
+import { armazemPadrao } from "@/lib/armazem";
 import { resolverGrupoEFonte } from "@/lib/catalogo";
+import { montarRetrato } from "@/lib/painel";
 import { raspar } from "@/lib/scrape";
 import { extrairComposicao, diagnosticarIa } from "@/lib/gemini";
 
-export const runtime = "nodejs";
-export const maxDuration = 60;
+const AVISO_NAO_GUARDADO = "A varredura terminou, mas o retrato não pôde ser guardado: na próxima abertura o app não a terá.";
 
 /**
- * Recebe os contatos já extraídos no cliente (parse da planilha acontece no navegador — ver
- * docs/superpowers/specs/2026-06-06-upload-no-cliente-e-resiliencia.md). O corpo é JSON enxuto
- * (só texto), então não esbarra no limite de ~4,5 MB de corpo da plataforma.
+ * Recebe os contatos (e, opcionalmente, os endereços) já extraídos no navegador, varre as
+ * fontes a partir desta máquina e grava o retrato em `.fiscal/retrato.json`. Sem teto de
+ * tempo: o app é local (spec 2026-10-01, painel local). A rota não é testada diretamente;
+ * `analisar`, `montarRetrato` e o `Armazem` são.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -22,24 +24,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, message: "Corpo inválido (esperado JSON)." }, { status: 400 });
     }
 
-    const { arquivoNome, contatos } = parsePayloadAnalise(corpo);
+    const { arquivoNome, contatos, arquivoEnderecosNome, enderecos } = parsePayloadAnalise(corpo);
 
     const deps: Dependencias = {
       resolverFonte: (grupo) => resolverGrupoEFonte(grupo),
-      raspar,
+      raspar: (fonte) => raspar(fonte.url, fonte.tabela ? { tabela: fonte.tabela } : {}),
       extrairComposicao: (grupoCanonico, textoLimpo) => extrairComposicao(grupoCanonico, textoLimpo),
     };
 
-    const resultado = await analisar(arquivoNome, contatos, deps);
+    const resultado = await analisar(arquivoNome, contatos, deps, enderecos);
+    const retrato = montarRetrato(
+      resultado,
+      {
+        contatos: { nome: arquivoNome, linhas: contatos.length },
+        ...(enderecos
+          ? { enderecos: { nome: arquivoEnderecosNome ?? "endereços", linhas: enderecos.length } }
+          : {}),
+      },
+      new Date(),
+    );
+
+    let aviso: string | undefined;
+    try {
+      await armazemPadrao().gravarRetrato(retrato);
+    } catch (err) {
+      // Só o motivo técnico: o retrato tem PII e nunca vai para o log.
+      console.error("[/api/analise] retrato não guardado:", err instanceof Error ? err.message : "erro desconhecido");
+      aviso = AVISO_NAO_GUARDADO;
+    }
+
     // Diagnóstico temporário (não-PII): só roda com ?diag=1 (custo zero no fluxo normal).
-    const diag =
-      req.nextUrl.searchParams.get("diag") === "1" ? await diagnosticarIa() : undefined;
-    return NextResponse.json({ ok: true, resultado, ...(diag ? { diag } : {}) });
+    const diag = req.nextUrl.searchParams.get("diag") === "1" ? await diagnosticarIa() : undefined;
+    return NextResponse.json({ ok: true, retrato, ...(aviso ? { aviso } : {}), ...(diag ? { diag } : {}) });
   } catch (err) {
     if (err instanceof PayloadInvalidoError) {
       return NextResponse.json({ ok: false, message: err.message }, { status: 422 });
     }
-    // Log sem PII (só o motivo técnico) para diagnosticar falhas em produção.
+    // Log sem PII (só o motivo técnico).
     console.error("[/api/analise] falha:", err instanceof Error ? err.message : "erro desconhecido");
     const message = err instanceof Error ? err.message : "Erro inesperado.";
     return NextResponse.json({ ok: false, message }, { status: 500 });

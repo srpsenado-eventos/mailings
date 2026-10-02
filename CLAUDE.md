@@ -1,6 +1,6 @@
 # CLAUDE.md — Fiscal de Mailings
 
-Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui. Última revisão: 2026-10-01.
+Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui. Última revisão: 2026-10-02.
 
 ## Contexto rápido
 
@@ -8,7 +8,7 @@ Web app interno do Senado Federal (Secretaria de Relações Públicas, GT Gestã
 
 Repositório remoto: `github.com/srpsenado-eventos/mailings`, branch base `main`; o trabalho sai em branches `feat/*` mescladas por PR.
 
-## Estado do projeto (2026-10-01)
+## Estado do projeto (2026-10-02)
 
 - Suíte: 25 arquivos, 458 testes, verde (2026-10-02). `npm run typecheck` limpo.
 - Catálogo: 33 grupos, 24 fontes, 21 grupos com fonte, **12 sem fonte** (todo contato deles sai vermelho, ver semântica abaixo).
@@ -78,9 +78,9 @@ Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**
 
 Por campo (`ComparacaoCampo.situacao`): `confere`, `divergente`, `fonte_nao_informa`. Telefone e e-mail são sempre `fonte_nao_informa` (site não publica). `fonte_nao_informa` **não é** divergência e não pinta amarelo. O spec de tratamento acrescenta `sem_regra` (cargo não mapeado na tabela de protocolo), que também **não** é divergência.
 
-Cargo compara por **papel** (léxico em `lib/cargos.ts`): "Ministro (Decano)" confirma "Ministro do STF"; "Vice-Presidente" não confirma "Presidente"; "Ministra" não confirma "Ministro". Nome compara igualdade após `normalizarNome`.
+Cargo compara por **papel** (léxico em `lib/cargos.ts`): "Ministro (Decano)" confirma "Ministro do STF"; "Vice-Presidente" não confirma "Presidente"; "Ministra" não confirma "Ministro". A Camada B (tabela de protocolo) neutraliza o gênero do cargo só para ENCONTRAR a regra ("Senadora" acha a regra de "Senador"); a Camada 1 (site) e a Camada A (gênero entre tratamento, endereçamento e cargo) não mudam. Nome compara igualdade após `normalizarNome`.
 
-No painel, a situação da linha é "Tudo confere" só com todas as etiquetas verdes; com etiqueta neutra (sem regra, a completar, não verificado) e nada a revisar, "Nada a revisar". Cargo vazio é atenção.
+No painel, a situação da linha é "Tudo confere" só com todas as etiquetas verdes; com etiqueta neutra (sem regra, a completar, não verificado) e nada a revisar, "Nada a revisar". Cargo vazio é atenção, e as etiquetas de tratamento e endereçamento em atenção (achados da Camada A, que não dependem do cargo) continuam aparecendo; só as neutras ("sem regra") somem.
 
 ## Regras de negócio da fiscalização (orientação do GT, e-mail de 2026-07-20)
 

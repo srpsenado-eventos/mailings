@@ -62,5 +62,5 @@ const FEMININO_PARA_MASCULINO: Readonly<Record<string, string>> = Object.freeze(
 
 /** Recebe texto já normalizado (minúsculas, sem acento) e devolve o mesmo texto com os femininos do léxico no masculino. */
 export function neutralizarGenero(cargoNormalizado: string): string {
-  return cargoNormalizado.replace(/[a-z]+/g, (palavra) => FEMININO_PARA_MASCULINO[palavra] ?? palavra);
+  return cargoNormalizado.replace(/[a-z]+/g, (palavra) => (Object.hasOwn(FEMININO_PARA_MASCULINO, palavra) ? FEMININO_PARA_MASCULINO[palavra] : palavra));
 }

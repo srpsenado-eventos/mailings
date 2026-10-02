@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   resolverRegra,
   comparacoesProtocolo,
+  comparacoesCoerencia,
   linhaDeEnderecamento,
   formaNominal,
 } from "@/lib/tratamento";
@@ -496,5 +497,18 @@ describe("resolverRegra: gênero não muda a regra encontrada (tabela real)", ()
   test("Senadora encontra a regra de Senador (hoje caía em sem regra)", () => {
     expect(resolverRegra("Senadora")).toBeDefined();
     expect(resolverRegra("Senadora")?.cargoDestinatario).toBe(resolverRegra("Senador")?.cargoDestinatario);
+  });
+});
+
+describe("Senadora com tratamento e endereçamento femininos (tabela real)", () => {
+  test("Camada B confere tratamento e endereçamento, e a Camada A não acha nada", () => {
+    // Arrange
+    const contato: ContatoPlanilha = { nome: "Ana", grupo: "Senadores", cargo: "Senadora", tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" };
+    // Act
+    const protocolo = comparacoesProtocolo(contato);
+    // Assert
+    expect(protocolo.find((c) => c.campo === "tratamento")?.situacao).toBe("confere");
+    expect(protocolo.find((c) => c.campo === "enderecamento")?.situacao).toBe("confere");
+    expect(comparacoesCoerencia(contato)).toEqual([]);
   });
 });

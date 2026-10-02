@@ -44,6 +44,7 @@ const EXPLICACAO = {
 export const EXPLICACAO_NOVO = "Pessoa publicada pela fonte, sem par na planilha";
 
 function explicacaoSemRegra(cargo: string | undefined): string {
+  if ((cargo ?? "").trim().length === 0) return EXPLICACAO.cargoVazio;
   return `O cargo "${cargo ?? ""}" não foi encontrado na tabela de protocolo; nada foi conferido`;
 }
 
@@ -56,9 +57,8 @@ const ROTULO_CAMPO: Record<CampoComparado, string> = {
   enderecamento: "Endereçamento",
 };
 
-const ETIQUETA_ENDERECO: Record<Exclude<SituacaoEndereco, "sem_base" | "pendente">, { texto: string; tom: Tom; explicacao: string }> = {
+const ETIQUETA_ENDERECO: Record<Exclude<SituacaoEndereco, "sem_base" | "pendente" | "a_completar">, { texto: string; tom: Tom; explicacao: string }> = {
   completo: { texto: "Endereço completo", tom: "ok", explicacao: "Logradouro, número, bairro, CEP, cidade e UF presentes no relatório de endereços" },
-  a_completar: { texto: "Endereço a completar", tom: "neutro", explicacao: "Falta o bairro no relatório; ele sai do CEP na conferência dos Correios (Fase 2)" },
   nao_verificado: { texto: "Endereço não verificado", tom: "neutro", explicacao: "Nome ambíguo no relatório: mais de um contato com este nome; endereço não atribuído" },
 };
 
@@ -114,13 +114,13 @@ export function etiquetasDoContato(c: ResultadoContato, _g: ResultadoGrupo): Eti
     }
   }
   if (semCargo) {
-    // Cadastro sem cargo é dado faltante que a Posse precisa; sem cargo não há regra de protocolo a procurar.
+    // Cadastro sem cargo é dado faltante que a Posse precisa. Sem cargo não há regra de protocolo a
+    // procurar (as etiquetas neutras somem), mas os achados da Camada A não dependem do cargo e ficam.
     lista.push({ campo: "cargo", texto: "Cargo vazio", tom: "atencao", explicacao: EXPLICACAO.cargoVazio });
-  } else {
-    for (const campo of ["tratamento", "enderecamento"] as const) {
-      const e = etiquetaDoCampo(c, campo);
-      if (e) lista.push(e);
-    }
+  }
+  for (const campo of ["tratamento", "enderecamento"] as const) {
+    const e = etiquetaDoCampo(c, campo);
+    if (e && (!semCargo || e.tom === "atencao")) lista.push(e);
   }
   const endereco = etiquetaDeEndereco(c);
   if (endereco) lista.push(endereco);
@@ -134,6 +134,10 @@ export function etiquetaDeEndereco(c: ResultadoContato): Etiqueta | undefined {
   if (a.situacao === "pendente") {
     const motivos = a.achados.map(rotuloAchadoEndereco).join("; ");
     return { campo: "endereco", texto: "Endereço a confirmar", tom: "atencao", explicacao: `Precisa de confirmação por telefone: ${motivos}` };
+  }
+  if (a.situacao === "a_completar") {
+    const motivos = a.achados.map(rotuloAchadoEndereco).join("; ");
+    return { campo: "endereco", texto: "Endereço a completar", tom: "neutro", explicacao: `Pode ser completado na conferência dos Correios (Fase 2): ${motivos}` };
   }
   return { campo: "endereco", ...ETIQUETA_ENDERECO[a.situacao] };
 }
@@ -226,7 +230,7 @@ export const FILTROS: readonly { id: Filtro; rotulo: string }[] = [
 /** Ressalva: tudo que não é verde com o endereço em ordem (completo, a completar ou sem base). */
 function temRessalva(c: ResultadoContato): boolean {
   const e = c.endereco?.situacao;
-  return c.semaforo !== "verde" || e === "pendente" || e === "nao_verificado";
+  return c.semaforo !== "verde" || cargoEstaVazio(c) || e === "pendente" || e === "nao_verificado";
 }
 
 function passaFiltro(c: ResultadoContato, filtro: Filtro): boolean {

@@ -379,6 +379,62 @@ describe("cargo vazio", () => {
   });
 });
 
+describe("cargo vazio e Camada A", () => {
+  const semCargo = { nome: "Ana", grupo: "ORG", cargo: "", tratamento: "Senhor(a)", enderecamento: "A Sua Excelência a Senhora" };
+
+  test("forma genérica no tratamento continua aparecendo e conta na situação", () => {
+    const c = contato({ semaforo: "amarelo", contato: semCargo, comparacoes: [coerencia("tratamento", "forma_generica", "Senhor(a)")] });
+    const t = textos(c, grupoComFonte);
+    expect(t).toContain("Cargo vazio");
+    expect(t).toContain("Tratamento diverge");
+    expect(situacaoDoContato(c, grupoComFonte).texto).toBe("2 a revisar");
+  });
+
+  test("tudo coerente e sem cargo: nenhuma etiqueta de tratamento ou endereçamento", () => {
+    const c = contato({ contato: { ...semCargo, tratamento: "Senhora" }, comparacoes: [confere("nome", "pagina")] });
+    expect(textos(c, grupoComFonte).some((x) => x.startsWith("Tratamento") || x.startsWith("Endereçamento"))).toBe(false);
+  });
+
+  test("cargo vazio com possível saída: 'Sem par na fonte' primeiro, depois 'Cargo vazio'", () => {
+    const c = contato({ semaforo: "vermelho", possivelSaida: true, contato: { ...semCargo, tratamento: "Senhora" } });
+    expect(textos(c, grupoComFonte).slice(0, 2)).toEqual(["Sem par na fonte", "Cargo vazio"]);
+    expect(situacaoDoContato(c, grupoComFonte).texto).toBe("Possível saída");
+  });
+
+  test("grupo sem fonte e cargo vazio: situação 'Sem fonte', etiqueta 'Cargo vazio' continua", () => {
+    const c = contato({ semaforo: "vermelho", contato: { ...semCargo, tratamento: "Senhora" } });
+    expect(situacaoDoContato(c, grupoSemFonte).texto).toBe("Sem fonte");
+    expect(textos(c, grupoSemFonte)).toContain("Cargo vazio");
+  });
+
+  test("sem regra com cargo vazio explica que o cadastro não informa o cargo, sem aspas vazias", () => {
+    const c = contato({
+      contato: { ...semCargo, tratamento: "Senhora" },
+      comparacoes: [{ campo: "cargo", valorPlanilha: "", situacao: "sem_regra", origemValor: "pagina" }],
+    });
+    const cargo = detalhesDoContato(c, grupoComFonte).find((d) => d.campo === "cargo");
+    expect(cargo?.etiqueta?.explicacao).toBe("O cadastro não informa o cargo; sem ele não há regra de protocolo");
+  });
+});
+
+describe("filtro de ressalva × situação 'a revisar'", () => {
+  test("todo contato com situação 'N a revisar' passa pelo filtro de ressalva", () => {
+    const vazio = { nome: "Vazio", grupo: "ORG", cargo: "", tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" };
+    const contatos = [
+      contato({ contato: { ...vazio, nome: "Verde" , cargo: "Ministra" }, comparacoes: [confere("nome", "pagina"), confere("cargo", "pagina")] }),
+      contato({ contato: { ...vazio, nome: "Amarelo", cargo: "Ministra" }, semaforo: "amarelo", comparacoes: [diverge("cargo", "pagina", "a", "b")] }),
+      contato({ contato: { ...vazio, nome: "Vermelho" }, semaforo: "vermelho", possivelSaida: true }),
+      contato({ contato: vazio, comparacoes: [confere("nome", "pagina")] }),
+      contato({ contato: { ...vazio, nome: "Pendente", cargo: "Ministra" }, endereco: { situacao: "pendente", achados: ["sem_numero"] } }),
+    ];
+    const g: ResultadoGrupo = { ...grupoComFonte, contatos, novos: [] };
+    const passam = filtrarGrupos([g], "ressalva", "").flatMap((x) => x.contatos.map((c) => c.contato.nome));
+    const aRevisar = contatos.filter((c) => /^\d+ a revisar$/.test(situacaoDoContato(c, g).texto)).map((c) => c.contato.nome);
+    expect(aRevisar).toContain("Vazio");
+    for (const nome of aRevisar) expect(passam).toContain(nome);
+  });
+});
+
 describe("explicações", () => {
   test("endereço a confirmar lista os achados reais, na ordem", () => {
     const c = contato({ endereco: { situacao: "pendente", achados: ["sem_numero", "cep_ausente"] } });
@@ -390,6 +446,13 @@ describe("explicações", () => {
     const c = contato({ comparacoes: [{ campo: "tratamento", valorPlanilha: "Senhora", situacao: "sem_regra", origemValor: "protocolo" }] });
     expect(etiquetasDoContato(c, grupoComFonte).find((x) => x.campo === "tratamento")?.explicacao)
       .toBe('O cargo "Ministra" não foi encontrado na tabela de protocolo; nada foi conferido');
+  });
+
+  test("a completar explica pelos achados reais, na ordem", () => {
+    const explicacao = (achados: NonNullable<ResultadoContato["endereco"]>["achados"]) =>
+      etiquetasDoContato(contato({ endereco: { situacao: "a_completar", achados } }), grupoComFonte).find((x) => x.campo === "endereco")?.explicacao;
+    expect(explicacao(["cep_recuperavel"])).toBe("Pode ser completado na conferência dos Correios (Fase 2): CEP com dígito faltando (zero à esquerda; confirmar nos Correios)");
+    expect(explicacao(["sem_bairro", "cep_recuperavel"])).toBe("Pode ser completado na conferência dos Correios (Fase 2): sem bairro (sai do CEP); CEP com dígito faltando (zero à esquerda; confirmar nos Correios)");
   });
 
   test("a completar fala do bairro; sem par na fonte fala da composição", () => {

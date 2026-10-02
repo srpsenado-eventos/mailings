@@ -64,7 +64,7 @@ Teste de regressão com a tabela real: "Senadora" resolve para a mesma regra que
 
 ### 4.3 Cargo vazio
 
-Quando `contato.cargo` está vazio ou só espaço, a Camada B continua devolvendo `sem_regra` (não há tipo novo), e o painel apresenta: etiqueta **"Cargo vazio"** no campo cargo, tom **atenção** (é dado que a Posse precisa e falta no cadastro), contando em "N a revisar"; e **nenhuma** etiqueta de tratamento ou endereçamento, porque sem cargo não existe regra a procurar. No detalhe, o cartão de cargo diz "No cadastro: (vazio)" e "Site do órgão diz" como hoje. Medida esperada: 17 contatos, todos do grupo PILOTO.
+Quando `contato.cargo` está vazio ou só espaço, a Camada B continua devolvendo `sem_regra` (não há tipo novo), e o painel apresenta: etiqueta **"Cargo vazio"** no campo cargo, tom **atenção** (é dado que a Posse precisa e falta no cadastro), contando em "N a revisar"; e as etiquetas neutras de tratamento e endereçamento ("sem regra") somem, porque sem cargo não existe regra a procurar; as de atenção (Camada A: tratamento vazio, forma genérica, gênero entre campos) continuam, porque não dependem do cargo. No detalhe, o cartão de cargo diz "No cadastro: (vazio)" e "Site do órgão diz" como hoje. Medida esperada: 17 contatos, todos do grupo PILOTO.
 
 ### 4.4 Navegação por grupo
 
@@ -84,7 +84,7 @@ Na barra de filtros, um `<select>` "Grupo" com "Todos os grupos" e os grupos do 
 | Tratamento sem regra / Endereçamento sem regra | "O cargo \"X\" não foi encontrado na tabela de protocolo; nada foi conferido" |
 | Cargo vazio | "O cadastro não informa o cargo; sem ele não há regra de protocolo" |
 | Endereço completo | "Logradouro, número, bairro, CEP, cidade e UF presentes no relatório de endereços" |
-| Endereço a completar | "Falta o bairro no relatório; ele sai do CEP na conferência dos Correios (Fase 2)" |
+| Endereço a completar | "Pode ser completado na conferência dos Correios (Fase 2): " + os achados da linha com `rotuloAchadoEndereco`, separados por "; " (ex.: "sem bairro (sai do CEP); CEP com dígito faltando (zero à esquerda; confirmar nos Correios)") |
 | Endereço a confirmar | "Precisa de confirmação por telefone: " + os achados da linha, com `rotuloAchadoEndereco`, separados por "; " (ex.: "sem número; sem CEP") |
 | Endereço não verificado | "Nome ambíguo no relatório: mais de um contato com este nome; endereço não atribuído" |
 | Sem par na fonte | "Ninguém com este nome na composição oficial; confirmar se saiu" |
@@ -97,6 +97,11 @@ A situação da linha ganha explicação do mesmo jeito ("Nada a revisar" → "N
 - `tests/painel.test.ts`: "Nada a revisar" × "Tudo confere" × "N a revisar"; "Cargo vazio" com atenção e sem etiquetas de protocolo; filtro por grupo combinado com busca; cada explicação da tabela, em especial a de "Endereço a confirmar" com dois achados.
 - `tests/cargos.test.ts` (ou o arquivo existente do léxico): `neutralizarGenero` para cada par da lista e para texto sem feminino (devolve igual).
 - `tests/tratamento-comparacao.test.ts`: os três pares de gênero do §4.2 contra a tabela real; os dez casos já travados continuam iguais.
+
+**Emenda de 2026-10-02 (revisão final do Plano A).**
+
+- §4.3: com cargo vazio, só as etiquetas neutras de tratamento e endereçamento somem; as de atenção da Camada A continuam, e a linha com cargo vazio passa pelo filtro "Só o que tem ressalva".
+- §4.5: a explicação de "Endereço a completar" sai dos achados reais da linha (`rotuloAchadoEndereco`), não mais de uma frase fixa sobre o bairro.
 
 ## 5. Plano B: TCU por navegador
 

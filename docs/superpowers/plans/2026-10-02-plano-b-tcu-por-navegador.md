@@ -416,6 +416,33 @@ describe("título de seção (h1..h6) e a janela do cargo", () => {
     expect(c.pessoas.find((p) => p.nome.startsWith("Sicrano"))?.cargo).toBe("Conselheiro");
   });
 
+  test("UM título de seção acima da lista não inverte a orientação nem vira cargo do primeiro nome", () => {
+    // Hoje "Ministros" conta como cargo-antes do primeiro nome e, com "Presidente" entre
+    // os dois nomes, a página inteira sai como cargo-acima: o primeiro leva "Ministros"
+    // e o segundo rouba "Presidente".
+    const html = `<html><body><main>
+      <h2>Ministros</h2>
+      <ul>
+        <li><span>Ministro Fulano de Tal Silva</span><span>Presidente</span></li>
+        <li><span>Ministra Beltrana Souza Lima</span></li>
+      </ul></main></body></html>`;
+    const c = extrairConteudo(html, "https://x.gov.br/autoridades");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Fulano"))?.cargo).toBe("Presidente");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Beltrana"))?.cargo).toBeUndefined();
+  });
+
+  test("página com cargo ACIMA do nome em negrito (padrão Ministros de Estado) continua lendo os cargos", () => {
+    const html = `<html><body><main>
+      <h1>Ministros de Estado</h1>
+      <p><b>Ministro da Fazenda</b></p><p>Fulano de Tal Silva</p>
+      <p><b>Ministra da Saúde</b></p><p>Beltrana Souza Lima</p>
+      <p><b>Ministro da Educação</b></p><p>Sicrano Pereira Costa</p>
+    </main></body></html>`;
+    const c = extrairConteudo(html, "https://x.gov.br/ministros");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Fulano"))?.cargo).toBe("Ministro da Fazenda");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Sicrano"))?.cargo).toBe("Ministro da Educação");
+  });
+
   test("o texto limpo não carrega marcador de título", () => {
     const c = extrairConteudo("<html><body><main><h2>Ministros</h2><p>Fulano de Tal Silva</p></main></body></html>", "https://x.gov.br");
     expect(c.textoLimpo).toBe("Ministros Fulano de Tal Silva");
@@ -427,7 +454,7 @@ describe("título de seção (h1..h6) e a janela do cargo", () => {
 - [ ] **Step 2: Rode e confirme que falha**
 
 Run: `npx vitest run tests/scrape.test.ts`
-Expected: FAIL em "o título 'Ministros-Substitutos' não vira cargo", "nada de 'novo' falso" e "o título seguinte não é adotado como cargo". Os demais podem já passar.
+Expected: FAIL em "o título 'Ministros-Substitutos' não vira cargo", "nada de 'novo' falso", "o título seguinte não é adotado como cargo" e "UM título de seção acima da lista não inverte a orientação". Os demais podem já passar.
 
 - [ ] **Step 3: Implemente em `lib/scrape.ts`**
 
@@ -476,23 +503,79 @@ function extrairLinhas($: RaizCheerio): LinhasDaPagina {
 }
 ```
 
-Em `orientacaoDoCargo`, acrescente o parâmetro e ignore título na contagem "depois":
+Substitua o tipo `OrientacaoDoCargo` e a função `orientacaoDoCargo` por:
 
 ```ts
-function orientacaoDoCargo(linhas: string[], titulos: ReadonlySet<number>): OrientacaoDoCargo {
+/** De que lado da linha do nome a página publica o cargo. */
+type OrientacaoDoCargo = "depois" | "antes";
+
+/**
+ * Como a página publica o cargo, medido nela mesma. Um título (h1..h6) logo antes de UM
+ * nome é título de seção ("Ministros" acima da lista do TCU) e não conta como cargo; só
+ * quando a página repete o título antes de cada nome (o STM publica o cargo em `h5`,
+ * e o nome em `h6`) o título é o próprio cargo, e então vale como tal.
+ */
+interface LeituraDeCargo {
+  orientacao: OrientacaoDoCargo;
+  /** A página publica o cargo como título repetido acima do nome (STM). */
+  tituloEhCargo: boolean;
+}
+
+/** Quantos títulos-cargo antes de nomes a página precisa ter para o título contar como cargo. */
+const MIN_TITULOS_CARGO = 2;
+
+/**
+ * Mede a própria página antes de montar as pessoas. STF, STJ, STM, TST, TSE,
+ * Câmara e Defensoria põem o nome primeiro e o cargo embaixo; a página de
+ * Ministros de Estado do Planalto faz o contrário — o cargo em negrito e o nome
+ * recuado na linha seguinte. Olhando só para frente, cada ministro herdava o
+ * cargo do ministro SEGUINTE, e um homem chegava a sair rotulado "Ministra".
+ * Vence o padrão majoritário da página; empate ou nenhuma adjacência mantém
+ * "depois", que é o comportamento já validado pelas outras fontes.
+ * Título nunca conta como cargo "depois"; como cargo "antes", só quando se repete.
+ */
+function orientacaoDoCargo(linhas: string[], titulos: ReadonlySet<number>): LeituraDeCargo {
   let antes = 0;
+  let antesPorTitulo = 0;
   let depois = 0;
   for (let i = 0; i < linhas.length; i++) {
     if (pessoaEmLinhaUnica(linhas[i]) !== undefined) continue;
     if (!ehNome(linhas[i])) continue;
-    if (i > 0 && ehCargo(linhas[i - 1])) antes++;
+    if (i > 0 && ehCargo(linhas[i - 1])) {
+      if (titulos.has(i - 1)) antesPorTitulo++;
+      else antes++;
+    }
     if (i + 1 < linhas.length && !titulos.has(i + 1) && ehCargo(linhas[i + 1])) depois++;
   }
-  return antes > depois ? "antes" : "depois";
+  const tituloEhCargo = antesPorTitulo >= MIN_TITULOS_CARGO;
+  const totalAntes = tituloEhCargo ? antes + antesPorTitulo : antes;
+  return { orientacao: totalAntes > depois ? "antes" : "depois", tituloEhCargo };
 }
 ```
 
-Em `indiceDoCargoDepois`, o título encerra a janela (o cargo ACIMA do nome, caso STM em `h5`, continua valendo: `indiceDoCargoAntes` não muda):
+Em `indiceDoCargoAntes`, o título só vale como cargo quando a página o usa assim:
+
+```ts
+/**
+ * Só a linha imediatamente anterior, e só enquanto nenhuma outra pessoa já a
+ * tiver tomado: numa página cargo-antes-do-nome um mesmo título não pode servir
+ * a dois nomes. Título de seção ("Ministros") não é cargo; título repetido (STM) é.
+ */
+function indiceDoCargoAntes(
+  linhas: string[],
+  i: number,
+  consumidas: ReadonlySet<number>,
+  titulos: ReadonlySet<number>,
+  tituloEhCargo: boolean,
+): number | undefined {
+  const j = i - 1;
+  if (j < 0 || consumidas.has(j)) return undefined;
+  if (titulos.has(j) && !tituloEhCargo) return undefined;
+  return ehCargo(linhas[j]) ? j : undefined;
+}
+```
+
+Em `indiceDoCargoDepois`, o título encerra a janela:
 
 ```ts
 /** Janela curta para frente: o cargo vem logo abaixo do nome. */
@@ -515,7 +598,7 @@ Em `segmentarPessoas`:
 ```ts
 function segmentarPessoas(linhas: string[], titulos: ReadonlySet<number>): PessoaSite[] {
   const pessoas: PessoaSite[] = [];
-  const orientacao = orientacaoDoCargo(linhas, titulos);
+  const { orientacao, tituloEhCargo } = orientacaoDoCargo(linhas, titulos);
   const consumidas = new Set<number>();
   for (let i = 0; i < linhas.length; i++) {
     const emLinhaUnica = pessoaEmLinhaUnica(linhas[i]);
@@ -527,7 +610,7 @@ function segmentarPessoas(linhas: string[], titulos: ReadonlySet<number>): Pesso
     if (nome === undefined) continue;
     const indiceCargo =
       orientacao === "antes"
-        ? indiceDoCargoAntes(linhas, i, consumidas)
+        ? indiceDoCargoAntes(linhas, i, consumidas, titulos, tituloEhCargo)
         : indiceDoCargoDepois(linhas, i, titulos);
     if (indiceCargo !== undefined) consumidas.add(indiceCargo);
     const cargo = indiceCargo === undefined ? undefined : linhas[indiceCargo];

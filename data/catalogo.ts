@@ -251,7 +251,9 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp2: "andriele@senado.leg.br",
     emailBackup: "cleria.rosa@senado.leg.br",
     fontes: [
-      { url: "https://portal.tcu.gov.br/autoridades", ativo: true },
+      // Página em JavaScript: o fetch recebe o esqueleto vazio. Lida pelo navegador
+      // (spec 2026-10-02, §5); a Camada 2 deixa de ser a única composição do grupo.
+      { url: "https://portal.tcu.gov.br/autoridades", ativo: true, navegador: true },
     ],
   },
   {

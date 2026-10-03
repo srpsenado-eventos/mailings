@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { analisar, type Dependencias } from "@/lib/analise";
-import { extrairTabela } from "@/lib/scrape";
+import { extrairTabela, ScrapeError } from "@/lib/scrape";
+import { MOTIVO_NAVEGADOR_AUSENTE } from "@/lib/navegador";
 import { CATALOGO } from "@/data/catalogo";
 import type { ContatoPlanilha, ConteudoFonte } from "@/lib/types";
 
@@ -127,6 +128,20 @@ describe("analisar", () => {
     const beatriz = g.contatos.find((c) => c.contato.nome === "Beatriz Sousa Ausente");
     expect(beatriz?.possivelSaida).toBe(true);
     expect(beatriz?.semaforo).toBe("vermelho");
+  });
+
+  test("Chrome ausente: fonte inacessível com o motivo do navegador, ninguém vira possível saída", async () => {
+    const depsSemChrome: Dependencias = {
+      ...deps,
+      raspar: async () => { throw new ScrapeError("https://orgao.gov.br", MOTIVO_NAVEGADOR_AUSENTE); },
+      extrairComposicao: async () => [],
+    };
+    const r = await analisar("c.xlsx", [contatos[0]], depsSemChrome);
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBe(true);
+    expect(g.fonteUrl).toBe("https://orgao.gov.br");
+    expect(g.erroFonte).toBe(MOTIVO_NAVEGADOR_AUSENTE);
+    expect(g.contatos.every((c) => c.semaforo === "indeterminado" && !c.possivelSaida)).toBe(true);
   });
 
   test("página vazia (JS) + IA completa pelo conhecimento casa e marca viaPesquisaAmpla", async () => {

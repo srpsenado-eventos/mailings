@@ -4,7 +4,7 @@ import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload
 import { armazemPadrao } from "@/lib/armazem";
 import { resolverGrupoEFonte } from "@/lib/catalogo";
 import { montarRetrato } from "@/lib/painel";
-import { raspar } from "@/lib/scrape";
+import { rasparFonte } from "@/lib/raspagem";
 import { extrairComposicao, diagnosticarIa } from "@/lib/gemini";
 
 const AVISO_NAO_GUARDADO = "A varredura terminou, mas o retrato não pôde ser guardado: na próxima abertura o app não a terá.";
@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
     const deps: Dependencias = {
       resolverFonte: (grupo) => resolverGrupoEFonte(grupo),
-      raspar: (fonte) => raspar(fonte.url, fonte.tabela ? { tabela: fonte.tabela } : {}),
+      raspar: (fonte) => rasparFonte(fonte),
       extrairComposicao: (grupoCanonico, textoLimpo) => extrairComposicao(grupoCanonico, textoLimpo),
     };
 

@@ -11,6 +11,12 @@ describe("catálogo real (data/catalogo.ts)", () => {
     expect(total).toBe(24);
   });
 
+  test("só a fonte do TCU é lida por navegador, e ela é do domínio oficial", () => {
+    const porNavegador = CATALOGO.flatMap((g) => g.fontes.filter((f) => f.navegador).map((f) => ({ grupo: g.nome, url: f.url })));
+    expect(porNavegador).toEqual([{ grupo: "Ministros do TCU", url: "https://portal.tcu.gov.br/autoridades" }]);
+    expect(porNavegador[0].url).toMatch(/^https:\/\/[a-z.]+\.gov\.br\//);
+  });
+
   test("todo grupo tem nome não-vazio", () => {
     const semNome = CATALOGO.filter((g) => g.nome.trim().length === 0);
     expect(semNome).toEqual([]);

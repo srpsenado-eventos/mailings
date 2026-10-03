@@ -416,6 +416,7 @@ describe("título de seção encerra a janela do cargo (TCU, página montada pel
     const comCargo = c.pessoas.filter((p) => p.cargo).map((p) => p.nome);
     expect(comCargo).toEqual(["Vital do Rêgo Filho", "Jorge Antonio de Oliveira Francisco"]);
     expect(c.pessoas.some((p) => p.cargo === "Corregedoria")).toBe(false);
+    expect(c.pessoas.some((p) => p.cargo === "Sobre a Corregedoria")).toBe(false);
   });
 
   test("moldura fora: nada do cabeçalho ou do rodapé", () => {
@@ -525,5 +526,98 @@ describe("título de seção (h1..h6) e a janela do cargo", () => {
     const c = extrairConteudo(html, "https://x.gov.br/composicao");
     expect(c.pessoas.find((p) => p.nome.startsWith("Fulano"))?.cargo).toBe("Presidente");
     expect(c.pessoas.find((p) => p.nome.startsWith("Beltrano"))?.cargo).toBe("Conselheiro");
+  });
+});
+
+describe("cargo casa por palavra inteira, não por pedaço de palavra", () => {
+  const cargoApos = (linha: string) => {
+    const html = `<html><body><main><p>Fulano de Tal Silva</p><p>${linha}</p></main></body></html>`;
+    return extrairConteudo(html, "https://x.gov.br/composicao").pessoas.find((p) => p.nome === "Fulano de Tal Silva")?.cargo;
+  };
+
+  test.each([
+    "Sobre a Corregedoria",
+    "Diretoria de Pessoal",
+    "Procuradoria Regional",
+    "Defensoria Pública",
+    "Ouvidoria",
+    "Prefeitura Municipal",
+  ])("nome de órgão não é cargo: %s", (linha) => {
+    // Arrange + Act
+    const cargo = cargoApos(linha);
+
+    // Assert
+    expect(cargo).toBeUndefined();
+  });
+
+  test.each([
+    "Corregedor-Geral",
+    "Subprocurador-Geral da República",
+    "Procurador-Geral",
+    "Ministro-Substituto",
+    "Vice-Presidente",
+    "Ex-Ministro",
+    "Conselheiros",
+  ])("palavra de cargo, com prefixo, hífen ou plural, é cargo: %s", (linha) => {
+    // Arrange + Act
+    const cargo = cargoApos(linha);
+
+    // Assert
+    expect(cargo).toBe(linha);
+  });
+
+  test("'Sobre a Corregedoria' não vira cargo do item de menu acima (caso real do TCU)", () => {
+    // Arrange
+    const html = readFileSync(resolve(__dirname, "fixtures/tcu-autoridades.html"), "utf-8");
+
+    // Act
+    const c = extrairConteudo(html, "https://portal.tcu.gov.br/autoridades");
+
+    // Assert
+    expect(c.pessoas.some((p) => p.cargo === "Sobre a Corregedoria")).toBe(false);
+    expect(c.pessoas.filter((p) => p.cargo).map((p) => p.nome)).toEqual([
+      "Vital do Rêgo Filho",
+      "Jorge Antonio de Oliveira Francisco",
+    ]);
+  });
+});
+
+describe("título que abre seção não toma a linha de cima como cargo", () => {
+  test("dois títulos de seção com cara de cargo e nomes sem cargo: ninguém recebe cargo", () => {
+    // Arrange
+    const html = `<html><body><main>
+      <h2>Ministros</h2><p>Fulano de Tal Silva</p><p>Beltrano de Souza Lima</p>
+      <h2>Ministros-Substitutos</h2><p>Sicrano Pereira Costa</p>
+    </main></body></html>`;
+
+    // Act
+    const c = extrairConteudo(html, "https://x.gov.br/autoridades");
+
+    // Assert
+    expect(c.pessoas.map((p) => p.nome)).toEqual(["Fulano de Tal Silva", "Beltrano de Souza Lima", "Sicrano Pereira Costa"]);
+    expect(c.pessoas.every((p) => p.cargo === undefined)).toBe(true);
+  });
+
+  test("título com cara de nome depois de uma lista não herda a última linha da seção anterior", () => {
+    // Arrange: o desenho do TCU. Dois cargos depois do nome contra dois "antes" por acaso;
+    // "Primeira Câmara" (h2) logo abaixo da linha do último substituto (lida como cargo)
+    // seria o terceiro "antes" e viraria a página, trocando os cargos de dono.
+    const html = `<html><body><main>
+      <p>Fulano de Tal Silva</p><p>Presidente</p>
+      <p>Beltrano de Souza Lima</p><p>Vice-Presidente</p>
+      <p>Cicrano Alves Duarte</p>
+      <h2>Substitutos</h2>
+      <p>Ministro-Substituto Weder de Oliveira</p>
+      <h2>Primeira Câmara</h2>
+    </main></body></html>`;
+
+    // Act
+    const c = extrairConteudo(html, "https://x.gov.br/autoridades");
+
+    // Assert
+    expect(c.pessoas.find((p) => p.nome === "Fulano de Tal Silva")?.cargo).toBe("Presidente");
+    expect(c.pessoas.find((p) => p.nome === "Beltrano de Souza Lima")?.cargo).toBe("Vice-Presidente");
+    expect(c.pessoas.find((p) => p.nome === "Cicrano Alves Duarte")?.cargo).toBeUndefined();
+    expect(c.pessoas.find((p) => p.nome === "Primeira Câmara")?.cargo).toBeUndefined();
   });
 });

@@ -85,9 +85,37 @@ const ABERTURAS_DE_CARGO = new Set([
   "titular", "substituto", "substituta", "interino", "interina", "adjunto", "adjunta",
 ]);
 
+/**
+ * Palavras do léxico de cargos. A entrada composta ("vice-presidente") entra pelas partes,
+ * porque o texto é comparado quebrado também no hífen.
+ */
+const PALAVRAS_DE_CARGO = new Set<string>(CARGOS.flatMap((c) => c.split("-")));
+
+/** Prefixos que não mudam o papel: "subprocurador", "vicepresidente". */
+const PREFIXO_DE_CARGO = /^(sub|vice)(?=[a-z])/;
+
+/**
+ * Um token é cargo quando, sem o prefixo "sub" ou "vice", é palavra do léxico ou o seu
+ * plural ("ministros", "conselheiros", "embaixadores").
+ */
+function ehTokenDeCargo(token: string): boolean {
+  const base = token.replace(PREFIXO_DE_CARGO, "");
+  return [base, base.replace(/s$/, ""), base.replace(/es$/, "")].some((t) => PALAVRAS_DE_CARGO.has(t));
+}
+
+/**
+ * O trecho cita um cargo do léxico, comparado por TOKEN inteiro (quebrando em tudo o que
+ * não é letra: espaço, hífen, barra, parêntese, como em "Ministro(a)" e
+ * "ministro/secretário"). A busca por substring casava o nome do órgão: "Sobre a Corregedoria" contém
+ * "corregedor" e virava cargo, um "novo" falso no TCU. "Corregedoria", "Diretoria",
+ * "Procuradoria", "Defensoria", "Ouvidoria" e "Prefeitura" não são cargo;
+ * "Procurador-Geral", "Ministro-Substituto", "Subprocurador", "Vice-Presidente" e
+ * "Ex-Ministro" são.
+ */
 function contemCargo(valor: string): boolean {
-  const norm = normalizarTexto(valor);
-  return CARGOS.some((c) => norm.includes(c));
+  return normalizarTexto(valor)
+    .split(/[^a-z]+/)
+    .some((token) => token !== "" && ehTokenDeCargo(token));
 }
 
 /** Trecho curto o bastante para ser rótulo de cargo, e que cita um cargo do léxico. */
@@ -252,6 +280,17 @@ interface LeituraDeCargo {
 const MIN_PARES_TITULO_CARGO = 1;
 
 /**
+ * A linha `i` é um título e a anterior não: o título abre outra seção, e a linha de cima
+ * pertence à seção anterior. Espelho do que `indiceDoCargoDepois` já faz para frente. No
+ * TCU, "Colegiados, Comissões e Corregedoria" (h2, com cara de nome) tomava a última linha
+ * dos Ministros-Substitutos como cargo, desempatava a página para "antes" e trocava os
+ * cargos dos ministros. Título-cargo acima de título-nome (STM) não cruza fronteira.
+ */
+function tituloAbreSecao(titulos: ReadonlySet<number>, i: number): boolean {
+  return titulos.has(i) && !titulos.has(i - 1);
+}
+
+/**
  * Mede a própria página antes de montar as pessoas. STF, STJ, STM, TST, TSE,
  * Câmara e Defensoria põem o nome primeiro e o cargo embaixo; a página de
  * Ministros de Estado do Planalto faz o contrário — o cargo em negrito e o nome
@@ -274,7 +313,7 @@ function orientacaoDoCargo(linhas: string[], titulos: ReadonlySet<number>): Leit
     if (pessoaEmLinhaUnica(linhas[i]) !== undefined) continue;
     if (!ehNome(linhas[i])) continue;
     ordemDoNome++;
-    if (i > 0 && ehCargo(linhas[i - 1])) {
+    if (i > 0 && !tituloAbreSecao(titulos, i) && ehCargo(linhas[i - 1])) {
       if (titulos.has(i - 1)) {
         antesPorTitulo++;
         if (ultimaOrdemAposTitulo === ordemDoNome - 1) paresDeTitulo++;
@@ -319,6 +358,7 @@ function indiceDoCargoAntes(
   const j = i - 1;
   if (j < 0 || consumidas.has(j)) return undefined;
   if (titulos.has(j) && !tituloEhCargo) return undefined;
+  if (tituloAbreSecao(titulos, i)) return undefined;
   return ehCargo(linhas[j]) ? j : undefined;
 }
 

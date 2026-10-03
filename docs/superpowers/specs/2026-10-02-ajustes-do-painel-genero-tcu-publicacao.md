@@ -167,6 +167,7 @@ Em modo web, tudo fica atrás de uma senha única: `APP_SENHA` e `APP_SEGREDO_CO
 | Não adicionar autenticação | Senha única compartilhada em modo web, como o spec de 04/09 decidiu. Multiusuário continua fora |
 | Sem PII fora desta máquina | O retrato publicado vai sem telefone, e-mail e rede social |
 | Dependências sem registro | Entram `puppeteer-core` e `@vercel/blob`, registrados aqui |
+| Composição real (página ou IA) que não contém a pessoa gera possível saída | Composição que não casa nenhum contato de um grupo com 2+ contatos é leitura suspeita: grupo indeterminado com motivo, nunca saída (adendo de 2026-10-03, revisão final do Plano B) |
 
 O `CLAUDE.md` é atualizado na última tarefa de cada plano.
 

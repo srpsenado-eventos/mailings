@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { analisar, type Dependencias } from "@/lib/analise";
-import { extrairTabela, ScrapeError } from "@/lib/scrape";
+import { analisar, MOTIVO_LEITURA_SUSPEITA, type Dependencias } from "@/lib/analise";
+import { extrairConteudo, extrairTabela, ScrapeError } from "@/lib/scrape";
+import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { MOTIVO_NAVEGADOR_AUSENTE } from "@/lib/navegador";
 import { CATALOGO } from "@/data/catalogo";
 import type { ContatoPlanilha, ConteudoFonte } from "@/lib/types";
@@ -617,5 +618,124 @@ describe("auditoria de endereço anexada ao resultado", () => {
     expect(r.grupos[0].fonteInacessivel).toBe(true);
     expect(c.semaforo).toBe("indeterminado");
     expect(c.endereco?.situacao).toBe("completo");
+  });
+});
+
+describe("TCU de ponta a ponta (fixture real da página montada pelo navegador)", () => {
+  const URL_TCU = "https://portal.tcu.gov.br/autoridades";
+  const GRUPO = "Ministros do TCU";
+  const paginaCompleta = readFileSync(join(__dirname, "fixtures", "tcu-autoridades.html"), "utf8");
+  /** Os dois blocos de ministros são os únicos `article` com `p-4`; os cartões do menu não têm. */
+  const BLOCO_DE_MINISTROS = /<article class="bg-surface-primary rounded-2xl p-4">[\s\S]*?<\/article>/g;
+  /** A página pela metade: a requisição da lista não voltou, só o menu e os títulos. */
+  const paginaSemLista = paginaCompleta.replace(BLOCO_DE_MINISTROS, "");
+
+  const depsTcu = (html: string): Dependencias => ({
+    resolverFonte: () => ({
+      grupoCanonico: GRUPO,
+      fontes: [{ url: URL_TCU, ativo: true, navegador: true }],
+      sugestoes: [],
+    }),
+    raspar: async () => extrairConteudo(html, URL_TCU),
+    extrairComposicao: async () => [],
+  });
+
+  const contato = (nome: string, cargo?: string): ContatoPlanilha => ({
+    nome,
+    grupo: GRUPO,
+    ...(cargo ? { cargo } : {}),
+    ...CADASTRO_OK,
+  });
+
+  test("a fixture sem a lista perde exatamente os dois blocos de ministros", () => {
+    expect(paginaCompleta.match(BLOCO_DE_MINISTROS)).toHaveLength(2);
+    expect(paginaSemLista).not.toMatch(/Walton Alencar/);
+    expect(paginaSemLista).toMatch(/Comissão Permanente de Jurisprudência/);
+  });
+
+  test("página pela metade (só o menu) é leitura suspeita: grupo indeterminado, ninguém vira saída", async () => {
+    // Arrange: quatro contatos que ESTÃO na página completa. Sem a lista, o menu ("Primeira
+    // Câmara", "Comissão Permanente de Regimento") ainda forma uma composição "real".
+    const contatos = [
+      contato("Walton Alencar Rodrigues"),
+      contato("Vital do Rêgo"),
+      contato("Jorge Oliveira"),
+      contato("Benjamin Zymler"),
+    ];
+
+    // Act
+    const r = await analisar("c.xlsx", contatos, depsTcu(paginaSemLista));
+
+    // Assert
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBe(true);
+    expect(g.fonteUrl).toBe(URL_TCU);
+    expect(g.erroFonte).toBe(MOTIVO_LEITURA_SUSPEITA);
+    expect(g.contatos.every((c) => c.semaforo === "indeterminado")).toBe(true);
+    expect(g.contatos.some((c) => c.possivelSaida)).toBe(false);
+    expect(g.novos).toEqual([]);
+    expect(r.resumo.possivelSaida).toBe(0);
+  });
+
+  test("grupo de um contato só fica fora da regra: a ausência ainda é possível saída", async () => {
+    // Arrange
+    const contatos = [contato("Walton Alencar Rodrigues")];
+
+    // Act
+    const r = await analisar("c.xlsx", contatos, depsTcu(paginaSemLista));
+
+    // Assert
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBeFalsy();
+    expect(g.contatos[0].possivelSaida).toBe(true);
+  });
+
+  test("composição só da IA que não casa ninguém também é leitura suspeita", async () => {
+    // Arrange: grupo sem URL; a IA devolve gente que não é nenhum dos contatos.
+    const depsIa: Dependencias = {
+      resolverFonte: () => ({ grupoCanonico: GRUPO, fontes: [], sugestoes: [] }),
+      raspar: async () => {
+        throw new Error("não deveria raspar");
+      },
+      extrairComposicao: async () => [
+        { nome: "Fulano de Tal Silva", cargo: "Ministro", origem: "conhecimento" },
+      ],
+    };
+    const contatos = [contato("Walton Alencar Rodrigues"), contato("Benjamin Zymler")];
+
+    // Act
+    const r = await analisar("c.xlsx", contatos, depsIa);
+
+    // Assert
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBe(true);
+    expect(g.fonteUrl).toBe(URL_PESQUISA_AMPLA);
+    expect(g.erroFonte).toBe(MOTIVO_LEITURA_SUSPEITA);
+    expect(g.contatos.some((c) => c.possivelSaida)).toBe(false);
+  });
+
+  test("página completa: quem está casa, e só quem falta vira possível saída", async () => {
+    // Arrange
+    const contatos = [
+      contato("Walton Alencar Rodrigues", "Ministro do Tribunal de Contas da União"),
+      contato("Vital do Rêgo", "Presidente do Tribunal de Contas da União"),
+      contato("Jorge Oliveira"),
+      contato("Aroldo Cedraz"),
+    ];
+
+    // Act
+    const r = await analisar("c.xlsx", contatos, depsTcu(paginaCompleta));
+
+    // Assert
+    const g = r.grupos[0];
+    const de = (nome: string) => g.contatos.find((c) => c.contato.nome === nome);
+    expect(g.viaPesquisaAmpla).toBeFalsy();
+    expect(g.fonteInacessivel).toBeFalsy();
+    expect(g.erroFonte).toBeUndefined();
+    expect(de("Walton Alencar Rodrigues")?.semaforo).toBe("verde");
+    expect(de("Vital do Rêgo")?.possivelSaida).toBeFalsy();
+    expect(de("Jorge Oliveira")?.possivelSaida).toBeFalsy();
+    expect(de("Aroldo Cedraz")?.possivelSaida).toBe(true);
+    expect(de("Aroldo Cedraz")?.semaforo).toBe("vermelho");
   });
 });

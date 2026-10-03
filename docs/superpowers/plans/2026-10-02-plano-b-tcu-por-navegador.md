@@ -842,3 +842,6 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 - A página do TCU publica cargo só para Presidente e Vice-Presidente; os outros sete ministros ficam com cargo `fonte_nao_informa`, e um ministro novo sem cargo não vira proposta de inclusão (regra "novos só com cargo"). Aproveitar o "Ministro" que antecede o nome como cargo mudaria vereditos em STJ, STM e TSE; é spec próprio.
 - "Ministro-Substituto Fulano" não é reconhecido como nome (o tratamento composto não é removido); os três substitutos ficam fora da composição. A planilha não tem substituto no grupo. Se um dia tiver, ele sairia "possível saída": tratar no mesmo spec acima.
+- A orientação do cargo na página do TCU é decidida por um empate de 2 a 2 ("depois" contra "antes"), que cai em "depois" só porque o título de seção é `h1..h6`. Se o site trocasse o título por um `<p>`, a página viraria "antes" e produziria cargos falsos (comportamento anterior a este plano).
+- Duas seções de um nome cada, com títulos que parecem cargo, são indistinguíveis do padrão do STM e adotam o título como cargo.
+- Dois rótulos da planilha que resolvam para a mesma fonte `navegador` abrem dois Chromes. Aceitável hoje; deduplicar por URL se uma segunda fonte por navegador for cadastrada.

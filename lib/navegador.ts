@@ -73,7 +73,10 @@ export const lancarChrome: Lancador = async (caminhoChrome) => {
     async conteudo(url, timeoutMs) {
       const page = await browser.newPage();
       // Mesmo valor do teto de `comTeto`, cujo timer é armado antes do lançamento e dispara primeiro: o motivo fica exato.
-      await page.goto(url, { waitUntil: "networkidle2", timeout: timeoutMs });
+      // `networkidle0`: espera NENHUMA requisição pendente, para a lista dos ministros já ter
+      // chegado. Com `networkidle2` a página podia ser lida pela metade (só o menu). Página cuja
+      // rede nunca sossega termina em "tempo esgotado", o lado seguro (indeterminado, nunca saída).
+      await page.goto(url, { waitUntil: "networkidle0", timeout: timeoutMs });
       return page.content();
     },
     async fechar() {

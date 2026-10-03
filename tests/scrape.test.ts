@@ -387,3 +387,97 @@ describe("raspar", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("título de seção encerra a janela do cargo (TCU, página montada pelo navegador)", () => {
+  const html = readFileSync(resolve(__dirname, "fixtures/tcu-autoridades.html"), "utf-8");
+  const c = extrairConteudo(html, "https://portal.tcu.gov.br/autoridades");
+  const porTrecho = (t: string) => c.pessoas.find((p) => p.nome.includes(t));
+
+  test("lê os nove ministros, com o tratamento 'Ministro' fora do nome", () => {
+    const nomes = [
+      "Vital do Rêgo Filho", "Jorge Antonio de Oliveira Francisco", "Walton Alencar Rodrigues",
+      "Benjamin Zymler", "João Augusto Ribeiro Nardes", "Antonio Augusto Junho Anastasia",
+      "Jhonatan Pereira de Jesus", "Odair Jose da Cunha", "Rodrigo Otavio Soares Pacheco",
+    ];
+    for (const n of nomes) expect(c.pessoas.map((p) => p.nome)).toContain(n);
+  });
+
+  test("cargo só onde a página publica: Presidente e Vice-Presidente", () => {
+    expect(porTrecho("Vital do Rêgo")?.cargo).toBe("Presidente");
+    expect(porTrecho("Jorge Antonio")?.cargo).toBe("Vice-Presidente");
+    expect(porTrecho("Walton Alencar")?.cargo).toBeUndefined();
+  });
+
+  test("o título 'Ministros-Substitutos' não vira cargo do último ministro da lista", () => {
+    expect(porTrecho("Rodrigo Otavio")?.cargo).toBeUndefined();
+  });
+
+  test("título e item de menu não formam pessoa com cargo (nada de 'novo' falso)", () => {
+    const comCargo = c.pessoas.filter((p) => p.cargo).map((p) => p.nome);
+    expect(comCargo).toEqual(["Vital do Rêgo Filho", "Jorge Antonio de Oliveira Francisco"]);
+    expect(c.pessoas.some((p) => p.cargo === "Corregedoria")).toBe(false);
+  });
+
+  test("moldura fora: nada do cabeçalho ou do rodapé", () => {
+    expect(c.textoLimpo).not.toMatch(/Fale conosco|Assinatura de Conteúdo|CEP 70042/);
+  });
+});
+
+describe("título de seção (h1..h6) e a janela do cargo", () => {
+  test("em página com cargo ABAIXO do nome, o título seguinte não é adotado como cargo", () => {
+    const html = `<html><body><main>
+      <p>Fulano de Tal Silva</p><p>Conselheiro</p>
+      <p>Beltrano de Souza Lima</p>
+      <h2>Conselheiros Substitutos</h2>
+      <p>Sicrano Pereira Costa</p><p>Conselheiro Substituto</p>
+    </main></body></html>`;
+    const c = extrairConteudo(html, "https://x.gov.br/composicao");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Beltrano"))?.cargo).toBeUndefined();
+    expect(c.pessoas.find((p) => p.nome.startsWith("Fulano"))?.cargo).toBe("Conselheiro");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Sicrano"))?.cargo).toBe("Conselheiro Substituto");
+  });
+
+  test("em página com cargo ACIMA do nome, o título continua valendo como cargo (caso STM, h5)", () => {
+    const html = `<html><body><main>
+      <h5>Presidente</h5><h6>Fulano de Tal Silva</h6>
+      <h5>Vice-presidente</h5><h6>Beltrano de Souza Lima</h6>
+      <h5>Conselheiro</h5><h6>Sicrano Pereira Costa</h6>
+    </main></body></html>`;
+    const c = extrairConteudo(html, "https://x.gov.br/composicao");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Fulano"))?.cargo).toBe("Presidente");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Sicrano"))?.cargo).toBe("Conselheiro");
+  });
+
+  test("UM título de seção acima da lista não inverte a orientação nem vira cargo do primeiro nome", () => {
+    // Hoje "Ministros" conta como cargo-antes do primeiro nome e, com "Presidente" entre
+    // os dois nomes, a página inteira sai como cargo-acima: o primeiro leva "Ministros"
+    // e o segundo rouba "Presidente".
+    const html = `<html><body><main>
+      <h2>Ministros</h2>
+      <ul>
+        <li><span>Ministro Fulano de Tal Silva</span><span>Presidente</span></li>
+        <li><span>Ministra Beltrana Souza Lima</span></li>
+      </ul></main></body></html>`;
+    const c = extrairConteudo(html, "https://x.gov.br/autoridades");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Fulano"))?.cargo).toBe("Presidente");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Beltrana"))?.cargo).toBeUndefined();
+  });
+
+  test("página com cargo ACIMA do nome em negrito (padrão Ministros de Estado) continua lendo os cargos", () => {
+    const html = `<html><body><main>
+      <h1>Ministros de Estado</h1>
+      <p><b>Ministro da Fazenda</b></p><p>Fulano de Tal Silva</p>
+      <p><b>Ministra da Saúde</b></p><p>Beltrana Souza Lima</p>
+      <p><b>Ministro da Educação</b></p><p>Sicrano Pereira Costa</p>
+    </main></body></html>`;
+    const c = extrairConteudo(html, "https://x.gov.br/ministros");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Fulano"))?.cargo).toBe("Ministro da Fazenda");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Sicrano"))?.cargo).toBe("Ministro da Educação");
+  });
+
+  test("o texto limpo não carrega marcador de título", () => {
+    const c = extrairConteudo("<html><body><main><h2>Ministros</h2><p>Fulano de Tal Silva</p></main></body></html>", "https://x.gov.br");
+    expect(c.textoLimpo).toBe("Ministros Fulano de Tal Silva");
+    expect(c.textoLimpo).not.toMatch(/\uE000/);
+  });
+});

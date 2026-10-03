@@ -157,17 +157,41 @@ function ehCargo(linha: string): boolean {
   return ehTrechoDeCargo(linha) && !ehNome(linha);
 }
 
+/**
+ * Marca interna de linha que veio de um título (h1..h6). Caractere de uso privado:
+ * nunca aparece em página real, e sai do texto antes de qualquer uso.
+ */
+const MARCA_TITULO = "\uE000";
+const TAGS_TITULO = "h1,h2,h3,h4,h5,h6";
+
+interface LinhasDaPagina {
+  linhas: string[];
+  /** Índices, em `linhas`, das que vieram de um título. */
+  titulos: ReadonlySet<number>;
+}
+
 /** Quebra o corpo em linhas limpas, inserindo separador entre blocos antes do .text(). */
-function extrairLinhas($: RaizCheerio): string[] {
+function extrairLinhas($: RaizCheerio): LinhasDaPagina {
+  // Título vira texto plano marcado ANTES dos separadores: um `<a>` dentro do h2 geraria
+  // "\n" entre a marca e o texto e a linha do título ficaria vazia.
+  $(TAGS_TITULO).each((_, el) => {
+    const alvo = $(el);
+    alvo.text(MARCA_TITULO + alvo.text());
+  });
   $("br").replaceWith("\n");
   $(TAGS_SEPARAR).each((_, el) => {
     $(el).prepend("\n").append("\n");
   });
-  return $("body")
-    .text()
-    .split("\n")
-    .map((l) => l.replace(/\s+/g, " ").trim())
-    .filter((l) => l.length > 0);
+  const linhas: string[] = [];
+  const titulos = new Set<number>();
+  for (const bruta of $("body").text().split("\n")) {
+    const ehTitulo = bruta.includes(MARCA_TITULO);
+    const linha = bruta.replace(MARCA_TITULO, "").replace(/\s+/g, " ").trim();
+    if (linha.length === 0) continue;
+    if (ehTitulo) titulos.add(linhas.length);
+    linhas.push(linha);
+  }
+  return { linhas, titulos };
 }
 
 /** Ordinal que abre a linha em lista numerada ("01 - Fulano de Tal"). */
@@ -201,6 +225,21 @@ function pessoaEmLinhaUnica(linha: string): PessoaSite | undefined {
 type OrientacaoDoCargo = "depois" | "antes";
 
 /**
+ * Como a página publica o cargo, medido nela mesma. Um título (h1..h6) logo antes de UM
+ * nome é título de seção ("Ministros" acima da lista do TCU) e não conta como cargo; só
+ * quando a página repete o título antes de cada nome (o STM publica o cargo em `h5`,
+ * e o nome em `h6`) o título é o próprio cargo, e então vale como tal.
+ */
+interface LeituraDeCargo {
+  orientacao: OrientacaoDoCargo;
+  /** A página publica o cargo como título repetido acima do nome (STM). */
+  tituloEhCargo: boolean;
+}
+
+/** Quantos títulos-cargo antes de nomes a página precisa ter para o título contar como cargo. */
+const MIN_TITULOS_CARGO = 2;
+
+/**
  * Mede a própria página antes de montar as pessoas. STF, STJ, STM, TST, TSE,
  * Câmara e Defensoria põem o nome primeiro e o cargo embaixo; a página de
  * Ministros de Estado do Planalto faz o contrário — o cargo em negrito e o nome
@@ -208,22 +247,32 @@ type OrientacaoDoCargo = "depois" | "antes";
  * cargo do ministro SEGUINTE, e um homem chegava a sair rotulado "Ministra".
  * Vence o padrão majoritário da página; empate ou nenhuma adjacência mantém
  * "depois", que é o comportamento já validado pelas outras fontes.
+ * Título nunca conta como cargo "depois"; como cargo "antes", só quando se repete.
  */
-function orientacaoDoCargo(linhas: string[]): OrientacaoDoCargo {
+function orientacaoDoCargo(linhas: string[], titulos: ReadonlySet<number>): LeituraDeCargo {
   let antes = 0;
+  let antesPorTitulo = 0;
   let depois = 0;
   for (let i = 0; i < linhas.length; i++) {
     if (pessoaEmLinhaUnica(linhas[i]) !== undefined) continue;
     if (!ehNome(linhas[i])) continue;
-    if (i > 0 && ehCargo(linhas[i - 1])) antes++;
-    if (i + 1 < linhas.length && ehCargo(linhas[i + 1])) depois++;
+    if (i > 0 && ehCargo(linhas[i - 1])) {
+      if (titulos.has(i - 1)) antesPorTitulo++;
+      else antes++;
+    }
+    if (i + 1 < linhas.length && !titulos.has(i + 1) && ehCargo(linhas[i + 1])) depois++;
   }
-  return antes > depois ? "antes" : "depois";
+  const tituloEhCargo = antesPorTitulo >= MIN_TITULOS_CARGO;
+  const totalAntes = tituloEhCargo ? antes + antesPorTitulo : antes;
+  return { orientacao: totalAntes > depois ? "antes" : "depois", tituloEhCargo };
 }
 
 /** Janela curta para frente: o cargo vem logo abaixo do nome. */
-function indiceDoCargoDepois(linhas: string[], i: number): number | undefined {
+function indiceDoCargoDepois(linhas: string[], i: number, titulos: ReadonlySet<number>): number | undefined {
   for (let j = i + 1; j < Math.min(i + 3, linhas.length); j++) {
+    // Um título abre outra seção: "Ministros-Substitutos" não é o cargo do último ministro
+    // da lista anterior, e "Corregedoria" não é o cargo do item de menu que o antecede.
+    if (titulos.has(j)) break;
     // a linha da PRÓXIMA pessoa encerra a janela: no STJ ela cita um cargo
     // ("Fulano - Diretor-Geral da ENFAM") e era adotada como cargo desta.
     if (pessoaEmLinhaUnica(linhas[j]) !== undefined || ehNome(linhas[j])) break;
@@ -235,22 +284,25 @@ function indiceDoCargoDepois(linhas: string[], i: number): number | undefined {
 /**
  * Só a linha imediatamente anterior, e só enquanto nenhuma outra pessoa já a
  * tiver tomado: numa página cargo-antes-do-nome um mesmo título não pode servir
- * a dois nomes.
+ * a dois nomes. Título de seção ("Ministros") não é cargo; título repetido (STM) é.
  */
 function indiceDoCargoAntes(
   linhas: string[],
   i: number,
   consumidas: ReadonlySet<number>,
+  titulos: ReadonlySet<number>,
+  tituloEhCargo: boolean,
 ): number | undefined {
   const j = i - 1;
   if (j < 0 || consumidas.has(j)) return undefined;
+  if (titulos.has(j) && !tituloEhCargo) return undefined;
   return ehCargo(linhas[j]) ? j : undefined;
 }
 
 /** Segmenta linhas em pessoas: linha-nome + cargo adjacente, do lado que a página usa. */
-function segmentarPessoas(linhas: string[]): PessoaSite[] {
+function segmentarPessoas(linhas: string[], titulos: ReadonlySet<number>): PessoaSite[] {
   const pessoas: PessoaSite[] = [];
-  const orientacao = orientacaoDoCargo(linhas);
+  const { orientacao, tituloEhCargo } = orientacaoDoCargo(linhas, titulos);
   const consumidas = new Set<number>();
   for (let i = 0; i < linhas.length; i++) {
     const emLinhaUnica = pessoaEmLinhaUnica(linhas[i]);
@@ -262,8 +314,8 @@ function segmentarPessoas(linhas: string[]): PessoaSite[] {
     if (nome === undefined) continue;
     const indiceCargo =
       orientacao === "antes"
-        ? indiceDoCargoAntes(linhas, i, consumidas)
-        : indiceDoCargoDepois(linhas, i);
+        ? indiceDoCargoAntes(linhas, i, consumidas, titulos, tituloEhCargo)
+        : indiceDoCargoDepois(linhas, i, titulos);
     if (indiceCargo !== undefined) consumidas.add(indiceCargo);
     const cargo = indiceCargo === undefined ? undefined : linhas[indiceCargo];
     pessoas.push({ nome, cargo, contexto: linhas[i] });
@@ -331,8 +383,8 @@ export function extrairConteudo(html: string, url: string): ConteudoFonte {
     if (txt) destaquesBrutos.push(txt);
   });
 
-  const linhas = extrairLinhas($);
-  const pessoas = segmentarPessoas(linhas);
+  const { linhas, titulos } = extrairLinhas($);
+  const pessoas = segmentarPessoas(linhas, titulos);
   const destaques = [...new Set(destaquesBrutos.filter(ehNome))];
 
   return { url, textoLimpo: linhas.join(" "), destaques, pessoas };

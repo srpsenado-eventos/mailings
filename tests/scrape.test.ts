@@ -449,9 +449,9 @@ describe("título de seção (h1..h6) e a janela do cargo", () => {
   });
 
   test("UM título de seção acima da lista não inverte a orientação nem vira cargo do primeiro nome", () => {
-    // Hoje "Ministros" conta como cargo-antes do primeiro nome e, com "Presidente" entre
-    // os dois nomes, a página inteira sai como cargo-acima: o primeiro leva "Ministros"
-    // e o segundo rouba "Presidente".
+    // Defeito evitado: "Ministros" contado como cargo-antes do primeiro nome e, com
+    // "Presidente" entre os dois nomes, a página inteira lida como cargo-acima: o primeiro
+    // levaria "Ministros" e o segundo roubaria "Presidente".
     const html = `<html><body><main>
       <h2>Ministros</h2>
       <ul>
@@ -479,5 +479,51 @@ describe("título de seção (h1..h6) e a janela do cargo", () => {
     const c = extrairConteudo("<html><body><main><h2>Ministros</h2><p>Fulano de Tal Silva</p></main></body></html>", "https://x.gov.br");
     expect(c.textoLimpo).toBe("Ministros Fulano de Tal Silva");
     expect(c.textoLimpo).not.toMatch(/\uE000/);
+  });
+
+  test("título com <br> mantém as duas linhas e o cargo do título repetido", () => {
+    const html = `<html><body><main>
+      <h3>Presidente<br>Fulano de Tal Silva</h3>
+      <h3>Vice-presidente<br>Beltrano de Souza Lima</h3>
+    </main></body></html>`;
+    const c = extrairConteudo(html, "https://x.gov.br/composicao");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Fulano"))?.cargo).toBe("Presidente");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Beltrano"))?.cargo).toBe("Vice-presidente");
+    expect(c.textoLimpo).toBe("Presidente Fulano de Tal Silva Vice-presidente Beltrano de Souza Lima");
+  });
+
+  test("dois títulos de seção em página de cargo em negrito acima do nome não viram cargo", () => {
+    const html = `<html><body><main>
+      <h2>Ministros</h2>
+      <p><b>Ministro da Fazenda</b></p><p>Fulano de Tal Silva</p>
+      <p><b>Ministra da Saúde</b></p><p>Beltrana Souza Lima</p>
+      <h2>Ministros-Substitutos</h2>
+      <p><b>Ministro da Educação</b></p><p>Sicrano Pereira Costa</p>
+      <p><b>Ministro da Justiça</b></p><p>Cicrano Alves Duarte</p>
+    </main></body></html>`;
+    const c = extrairConteudo(html, "https://x.gov.br/ministros");
+    const cargos = c.pessoas.map((p) => p.cargo);
+    expect(cargos).not.toContain("Ministros");
+    expect(cargos).not.toContain("Ministros-Substitutos");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Fulano"))?.cargo).toBe("Ministro da Fazenda");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Sicrano"))?.cargo).toBe("Ministro da Educação");
+  });
+
+  test("um único par título-cargo e nome não basta para o título valer como cargo", () => {
+    const html = `<html><body><main>
+      <h5>Presidente</h5><h6>Fulano de Tal Silva</h6><p>Beltrano de Souza Lima</p>
+    </main></body></html>`;
+    const c = extrairConteudo(html, "https://x.gov.br/composicao");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Fulano"))?.cargo).toBeUndefined();
+  });
+
+  test("com dois pares consecutivos de título-cargo e nome, os dois cargos são adotados", () => {
+    const html = `<html><body><main>
+      <h5>Presidente</h5><h6>Fulano de Tal Silva</h6>
+      <h5>Conselheiro</h5><h6>Beltrano de Souza Lima</h6>
+    </main></body></html>`;
+    const c = extrairConteudo(html, "https://x.gov.br/composicao");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Fulano"))?.cargo).toBe("Presidente");
+    expect(c.pessoas.find((p) => p.nome.startsWith("Beltrano"))?.cargo).toBe("Conselheiro");
   });
 });

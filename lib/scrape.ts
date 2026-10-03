@@ -172,13 +172,20 @@ interface LinhasDaPagina {
 
 /** Quebra o corpo em linhas limpas, inserindo separador entre blocos antes do .text(). */
 function extrairLinhas($: RaizCheerio): LinhasDaPagina {
-  // Título vira texto plano marcado ANTES dos separadores: um `<a>` dentro do h2 geraria
+  // `<br>` primeiro: o título pode ter mais de uma linha, e cada uma leva a marca.
+  // O título vira texto plano marcado ANTES dos separadores: um `<a>` dentro do h2 geraria
   // "\n" entre a marca e o texto e a linha do título ficaria vazia.
+  $("br").replaceWith("\n");
   $(TAGS_TITULO).each((_, el) => {
     const alvo = $(el);
-    alvo.text(MARCA_TITULO + alvo.text());
+    alvo.text(
+      alvo
+        .text()
+        .split("\n")
+        .map((l) => MARCA_TITULO + l)
+        .join("\n"),
+    );
   });
-  $("br").replaceWith("\n");
   $(TAGS_SEPARAR).each((_, el) => {
     $(el).prepend("\n").append("\n");
   });
@@ -186,7 +193,7 @@ function extrairLinhas($: RaizCheerio): LinhasDaPagina {
   const titulos = new Set<number>();
   for (const bruta of $("body").text().split("\n")) {
     const ehTitulo = bruta.includes(MARCA_TITULO);
-    const linha = bruta.replace(MARCA_TITULO, "").replace(/\s+/g, " ").trim();
+    const linha = bruta.replaceAll(MARCA_TITULO, "").replace(/\s+/g, " ").trim();
     if (linha.length === 0) continue;
     if (ehTitulo) titulos.add(linhas.length);
     linhas.push(linha);
@@ -227,7 +234,7 @@ type OrientacaoDoCargo = "depois" | "antes";
 /**
  * Como a página publica o cargo, medido nela mesma. Um título (h1..h6) logo antes de UM
  * nome é título de seção ("Ministros" acima da lista do TCU) e não conta como cargo; só
- * quando a página repete o título antes de cada nome (o STM publica o cargo em `h5`,
+ * quando a página repete o título antes de nomes seguidos (o STM publica o cargo em `h5`,
  * e o nome em `h6`) o título é o próprio cargo, e então vale como tal.
  */
 interface LeituraDeCargo {
@@ -236,8 +243,13 @@ interface LeituraDeCargo {
   tituloEhCargo: boolean;
 }
 
-/** Quantos títulos-cargo antes de nomes a página precisa ter para o título contar como cargo. */
-const MIN_TITULOS_CARGO = 2;
+/**
+ * Quantos pares consecutivos a página precisa ter para o título contar como cargo. Um par
+ * consecutivo = dois nomes seguidos, cada um logo abaixo de um título-cargo (STM: h5 cargo
+ * + h6 nome, repetido). Título de seção abre uma lista de muitos nomes; título-cargo se
+ * repete antes de cada nome.
+ */
+const MIN_PARES_TITULO_CARGO = 1;
 
 /**
  * Mede a própria página antes de montar as pessoas. STF, STJ, STM, TST, TSE,
@@ -252,17 +264,28 @@ const MIN_TITULOS_CARGO = 2;
 function orientacaoDoCargo(linhas: string[], titulos: ReadonlySet<number>): LeituraDeCargo {
   let antes = 0;
   let antesPorTitulo = 0;
+  // Ordem do nome entre os nomes da página (e não a distância em linhas: no STM há
+  // data de nomeação e outras linhas entre um nome e o título seguinte).
+  let ordemDoNome = -1;
+  let ultimaOrdemAposTitulo = Number.NEGATIVE_INFINITY;
+  let paresDeTitulo = 0;
   let depois = 0;
   for (let i = 0; i < linhas.length; i++) {
     if (pessoaEmLinhaUnica(linhas[i]) !== undefined) continue;
     if (!ehNome(linhas[i])) continue;
+    ordemDoNome++;
     if (i > 0 && ehCargo(linhas[i - 1])) {
-      if (titulos.has(i - 1)) antesPorTitulo++;
-      else antes++;
+      if (titulos.has(i - 1)) {
+        antesPorTitulo++;
+        if (ultimaOrdemAposTitulo === ordemDoNome - 1) paresDeTitulo++;
+        ultimaOrdemAposTitulo = ordemDoNome;
+      } else {
+        antes++;
+      }
     }
     if (i + 1 < linhas.length && !titulos.has(i + 1) && ehCargo(linhas[i + 1])) depois++;
   }
-  const tituloEhCargo = antesPorTitulo >= MIN_TITULOS_CARGO;
+  const tituloEhCargo = paresDeTitulo >= MIN_PARES_TITULO_CARGO;
   const totalAntes = tituloEhCargo ? antes + antesPorTitulo : antes;
   return { orientacao: totalAntes > depois ? "antes" : "depois", tituloEhCargo };
 }

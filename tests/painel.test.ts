@@ -73,8 +73,8 @@ describe("etiquetasDoContato", () => {
       ],
     });
     const etiquetas = etiquetasDoContato(c, grupoComFonte);
-    expect(etiquetas.find((e) => e.campo === "cargo")).toEqual({ campo: "cargo", texto: "Cargo diverge", tom: "atencao" });
-    expect(etiquetas.find((e) => e.campo === "tratamento")).toEqual({ campo: "tratamento", texto: "Tratamento sem regra", tom: "neutro" });
+    expect(etiquetas.find((e) => e.campo === "cargo")).toMatchObject({ campo: "cargo", texto: "Cargo diverge", tom: "atencao" });
+    expect(etiquetas.find((e) => e.campo === "tratamento")).toMatchObject({ campo: "tratamento", texto: "Tratamento sem regra", tom: "neutro" });
   });
 
   test("cargo que o site não informa não ganha etiqueta", () => {
@@ -119,7 +119,7 @@ describe("etiquetasDoContato", () => {
       comparacoes: [diverge("tratamento", "protocolo", "Senhora", "Vossa Excelência"), confere("enderecamento", "protocolo")],
     });
     const etiquetas = etiquetasDoContato(c, grupoSemFonte);
-    expect(etiquetas.find((e) => e.campo === "nome")).toEqual({ campo: "nome", texto: "Nome não verificado", tom: "neutro" });
+    expect(etiquetas.find((e) => e.campo === "nome")).toMatchObject({ campo: "nome", texto: "Nome não verificado", tom: "neutro" });
     expect(etiquetas.find((e) => e.campo === "cargo")?.texto).toBe("Cargo não verificado");
     expect(etiquetas.find((e) => e.campo === "tratamento")?.texto).toBe("Tratamento diverge");
   });
@@ -127,19 +127,19 @@ describe("etiquetasDoContato", () => {
   test("endereço: a_completar é neutro, pendente é atenção, nao_verificado é neutro, sem_base não aparece", () => {
     const com = (situacao: NonNullable<ResultadoContato["endereco"]>["situacao"]) =>
       etiquetasDoContato(contato({ endereco: { situacao, achados: [] } }), grupoComFonte).find((e) => e.campo === "endereco");
-    expect(com("a_completar")).toEqual({ campo: "endereco", texto: "Endereço a completar", tom: "neutro" });
-    expect(com("pendente")).toEqual({ campo: "endereco", texto: "Endereço a confirmar", tom: "atencao" });
-    expect(com("nao_verificado")).toEqual({ campo: "endereco", texto: "Endereço não verificado", tom: "neutro" });
+    expect(com("a_completar")).toMatchObject({ campo: "endereco", texto: "Endereço a completar", tom: "neutro" });
+    expect(com("pendente")).toMatchObject({ campo: "endereco", texto: "Endereço a confirmar", tom: "atencao" });
+    expect(com("nao_verificado")).toMatchObject({ campo: "endereco", texto: "Endereço não verificado", tom: "neutro" });
     expect(com("sem_base")).toBeUndefined();
   });
 });
 
 describe("situacaoDoContato", () => {
   test("ordem: possível saída, sem fonte, não verificado, tudo confere, N a revisar", () => {
-    expect(situacaoDoContato(contato({ possivelSaida: true, semaforo: "vermelho" }), grupoComFonte)).toEqual({ texto: "Possível saída", tom: "ruim" });
-    expect(situacaoDoContato(contato({ semaforo: "vermelho" }), grupoSemFonte)).toEqual({ texto: "Sem fonte", tom: "neutro" });
-    expect(situacaoDoContato(contato({ semaforo: "indeterminado" }), grupoInacessivel)).toEqual({ texto: "Não verificado", tom: "neutro" });
-    expect(situacaoDoContato(contato({ comparacoes: [confere("nome", "pagina")] }), grupoComFonte)).toEqual({ texto: "Tudo confere", tom: "ok" });
+    expect(situacaoDoContato(contato({ possivelSaida: true, semaforo: "vermelho" }), grupoComFonte)).toMatchObject({ texto: "Possível saída", tom: "ruim" });
+    expect(situacaoDoContato(contato({ semaforo: "vermelho" }), grupoSemFonte)).toMatchObject({ texto: "Sem fonte", tom: "neutro" });
+    expect(situacaoDoContato(contato({ semaforo: "indeterminado" }), grupoInacessivel)).toMatchObject({ texto: "Não verificado", tom: "neutro" });
+    expect(situacaoDoContato(contato({ comparacoes: [confere("nome", "pagina")] }), grupoComFonte)).toMatchObject({ texto: "Nada a revisar", tom: "neutro" });
   });
 
   test("conta só etiquetas de atenção ou ruim; 'Endereço a completar' não entra", () => {
@@ -148,7 +148,7 @@ describe("situacaoDoContato", () => {
       comparacoes: [diverge("cargo", "pagina", "a", "b"), diverge("tratamento", "protocolo", "a", "b")],
       endereco: { situacao: "a_completar", achados: ["sem_bairro"] },
     });
-    expect(situacaoDoContato(c, grupoComFonte)).toEqual({ texto: "2 a revisar", tom: "atencao" });
+    expect(situacaoDoContato(c, grupoComFonte)).toMatchObject({ texto: "2 a revisar", tom: "atencao" });
   });
 
   test("endereço pendente sozinho é '1 a revisar'", () => {
@@ -342,5 +342,152 @@ describe("procedenciaNomeCargo", () => {
 
   test("grupo sem fonte não tem linha de procedência", () => {
     expect(procedenciaNomeCargo(grupoSemFonte)).toBeUndefined();
+  });
+});
+
+describe("situação: Tudo confere × Nada a revisar", () => {
+  test("todas as etiquetas verdes → Tudo confere", () => {
+    const c = contato({
+      comparacoes: [confere("nome", "pagina"), confere("cargo", "pagina"), confere("tratamento", "protocolo"), confere("enderecamento", "protocolo")],
+      endereco: { situacao: "completo", achados: [] },
+    });
+    expect(situacaoDoContato(c, grupoComFonte)).toMatchObject({ texto: "Tudo confere", tom: "ok" });
+  });
+
+  test("uma etiqueta neutra e nada a revisar → Nada a revisar", () => {
+    const c = contato({
+      comparacoes: [confere("nome", "pagina"), confere("cargo", "pagina"), { campo: "tratamento", valorPlanilha: "Senhora", situacao: "sem_regra", origemValor: "protocolo" }, confere("enderecamento", "protocolo")],
+      endereco: { situacao: "a_completar", achados: ["sem_bairro"] },
+    });
+    const s = situacaoDoContato(c, grupoComFonte);
+    expect(s).toMatchObject({ texto: "Nada a revisar", tom: "neutro" });
+    expect(s.explicacao).toContain("não puderam ser conferidos");
+  });
+});
+
+describe("cargo vazio", () => {
+  test.each(["", "   ", undefined])("cargo %j vira 'Cargo vazio' em atenção, sem etiquetas de protocolo, e conta como a revisar", (cargo) => {
+    const c = contato({
+      contato: { nome: "Ana", grupo: "ORG", cargo, tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" },
+      comparacoes: [confere("nome", "pagina"), { campo: "tratamento", valorPlanilha: "Senhora", situacao: "sem_regra", origemValor: "protocolo" }, { campo: "enderecamento", valorPlanilha: "x", situacao: "sem_regra", origemValor: "protocolo" }],
+    });
+    const t = textos(c, grupoComFonte);
+    expect(t).toContain("Cargo vazio");
+    expect(t.some((x) => x.startsWith("Tratamento") || x.startsWith("Endereçamento"))).toBe(false);
+    expect(etiquetasDoContato(c, grupoComFonte).find((e) => e.campo === "cargo")?.tom).toBe("atencao");
+    expect(situacaoDoContato(c, grupoComFonte).texto).toBe("1 a revisar");
+  });
+});
+
+describe("cargo vazio e Camada A", () => {
+  const semCargo = { nome: "Ana", grupo: "ORG", cargo: "", tratamento: "Senhor(a)", enderecamento: "A Sua Excelência a Senhora" };
+
+  test("forma genérica no tratamento continua aparecendo e conta na situação", () => {
+    const c = contato({ semaforo: "amarelo", contato: semCargo, comparacoes: [coerencia("tratamento", "forma_generica", "Senhor(a)")] });
+    const t = textos(c, grupoComFonte);
+    expect(t).toContain("Cargo vazio");
+    expect(t).toContain("Tratamento diverge");
+    expect(situacaoDoContato(c, grupoComFonte).texto).toBe("2 a revisar");
+  });
+
+  test("tudo coerente e sem cargo: nenhuma etiqueta de tratamento ou endereçamento", () => {
+    const c = contato({ contato: { ...semCargo, tratamento: "Senhora" }, comparacoes: [confere("nome", "pagina")] });
+    expect(textos(c, grupoComFonte).some((x) => x.startsWith("Tratamento") || x.startsWith("Endereçamento"))).toBe(false);
+  });
+
+  test("cargo vazio com possível saída: 'Sem par na fonte' primeiro, depois 'Cargo vazio'", () => {
+    const c = contato({ semaforo: "vermelho", possivelSaida: true, contato: { ...semCargo, tratamento: "Senhora" } });
+    expect(textos(c, grupoComFonte).slice(0, 2)).toEqual(["Sem par na fonte", "Cargo vazio"]);
+    expect(situacaoDoContato(c, grupoComFonte).texto).toBe("Possível saída");
+  });
+
+  test("grupo sem fonte e cargo vazio: situação 'Sem fonte', etiqueta 'Cargo vazio' continua", () => {
+    const c = contato({ semaforo: "vermelho", contato: { ...semCargo, tratamento: "Senhora" } });
+    expect(situacaoDoContato(c, grupoSemFonte).texto).toBe("Sem fonte");
+    expect(textos(c, grupoSemFonte)).toContain("Cargo vazio");
+  });
+
+  test("sem regra com cargo vazio explica que o cadastro não informa o cargo, sem aspas vazias", () => {
+    const c = contato({
+      contato: { ...semCargo, tratamento: "Senhora" },
+      comparacoes: [{ campo: "cargo", valorPlanilha: "", situacao: "sem_regra", origemValor: "pagina" }],
+    });
+    const cargo = detalhesDoContato(c, grupoComFonte).find((d) => d.campo === "cargo");
+    expect(cargo?.etiqueta?.explicacao).toBe("O cadastro não informa o cargo; sem ele não há regra de protocolo");
+  });
+});
+
+describe("filtro de ressalva × situação 'a revisar'", () => {
+  test("todo contato com situação 'N a revisar' passa pelo filtro de ressalva", () => {
+    const vazio = { nome: "Vazio", grupo: "ORG", cargo: "", tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" };
+    const contatos = [
+      contato({ contato: { ...vazio, nome: "Verde" , cargo: "Ministra" }, comparacoes: [confere("nome", "pagina"), confere("cargo", "pagina")] }),
+      contato({ contato: { ...vazio, nome: "Amarelo", cargo: "Ministra" }, semaforo: "amarelo", comparacoes: [diverge("cargo", "pagina", "a", "b")] }),
+      contato({ contato: { ...vazio, nome: "Vermelho" }, semaforo: "vermelho", possivelSaida: true }),
+      contato({ contato: vazio, comparacoes: [confere("nome", "pagina")] }),
+      contato({ contato: { ...vazio, nome: "Pendente", cargo: "Ministra" }, endereco: { situacao: "pendente", achados: ["sem_numero"] } }),
+    ];
+    const g: ResultadoGrupo = { ...grupoComFonte, contatos, novos: [] };
+    const passam = filtrarGrupos([g], "ressalva", "").flatMap((x) => x.contatos.map((c) => c.contato.nome));
+    const aRevisar = contatos.filter((c) => /^\d+ a revisar$/.test(situacaoDoContato(c, g).texto)).map((c) => c.contato.nome);
+    expect(aRevisar).toContain("Vazio");
+    for (const nome of aRevisar) expect(passam).toContain(nome);
+  });
+});
+
+describe("explicações", () => {
+  test("endereço a confirmar lista os achados reais, na ordem", () => {
+    const c = contato({ endereco: { situacao: "pendente", achados: ["sem_numero", "cep_ausente"] } });
+    const e = etiquetasDoContato(c, grupoComFonte).find((x) => x.campo === "endereco");
+    expect(e?.explicacao).toBe("Precisa de confirmação por telefone: sem número; sem CEP");
+  });
+
+  test("sem regra cita o cargo", () => {
+    const c = contato({ comparacoes: [{ campo: "tratamento", valorPlanilha: "Senhora", situacao: "sem_regra", origemValor: "protocolo" }] });
+    expect(etiquetasDoContato(c, grupoComFonte).find((x) => x.campo === "tratamento")?.explicacao)
+      .toBe('O cargo "Ministra" não foi encontrado na tabela de protocolo; nada foi conferido');
+  });
+
+  test("a completar explica pelos achados reais, na ordem", () => {
+    const explicacao = (achados: NonNullable<ResultadoContato["endereco"]>["achados"]) =>
+      etiquetasDoContato(contato({ endereco: { situacao: "a_completar", achados } }), grupoComFonte).find((x) => x.campo === "endereco")?.explicacao;
+    expect(explicacao(["cep_recuperavel"])).toBe("Pode ser completado na conferência dos Correios (Fase 2): CEP com dígito faltando (zero à esquerda; confirmar nos Correios)");
+    expect(explicacao(["sem_bairro", "cep_recuperavel"])).toBe("Pode ser completado na conferência dos Correios (Fase 2): sem bairro (sai do CEP); CEP com dígito faltando (zero à esquerda; confirmar nos Correios)");
+  });
+
+  test("a completar fala do bairro; sem par na fonte fala da composição", () => {
+    const a = contato({ endereco: { situacao: "a_completar", achados: ["sem_bairro"] } });
+    expect(etiquetasDoContato(a, grupoComFonte).find((x) => x.campo === "endereco")?.explicacao).toContain("bairro");
+    const s = contato({ possivelSaida: true, semaforo: "vermelho" });
+    expect(etiquetasDoContato(s, grupoComFonte)[0].explicacao).toContain("composição oficial");
+  });
+
+  test("toda etiqueta tem explicação não vazia", () => {
+    const c = contato({
+      semaforo: "amarelo",
+      comparacoes: [confere("nome", "pagina"), diverge("cargo", "pagina", "a", "b"), diverge("tratamento", "protocolo", "a", "b"), confere("enderecamento", "protocolo")],
+      endereco: { situacao: "nao_verificado", achados: ["nome_ambiguo"] },
+    });
+    for (const e of etiquetasDoContato(c, grupoComFonte)) expect(e.explicacao.length).toBeGreaterThan(10);
+  });
+});
+
+describe("filtro por grupo", () => {
+  const a = contato({ contato: { nome: "Ana", grupo: "A" } });
+  const b = contato({ contato: { nome: "Bia", grupo: "B" }, semaforo: "vermelho", possivelSaida: true });
+  const b2 = contato({ contato: { nome: "Bruno", grupo: "B" } });
+  const grupos: ResultadoGrupo[] = [
+    { ...grupoComFonte, grupo: "A", contatos: [a], novos: [] },
+    { ...grupoComFonte, grupo: "B", contatos: [b, b2], novos: [] },
+  ];
+  test("só o grupo escolhido, e os outros filtros valem dentro dele", () => {
+    expect(filtrarGrupos(grupos, "tudo", "", "B").map((g) => g.grupo)).toEqual(["B"]);
+    expect(filtrarGrupos(grupos, "saida", "", "B")[0].contatos.map((c) => c.contato.nome)).toEqual(["Bia"]);
+    expect(filtrarGrupos(grupos, "tudo", "bruno", "B")[0].contatos).toHaveLength(1);
+    expect(filtrarGrupos(grupos, "saida", "", "A")).toEqual([]);
+  });
+  test("sem grupo (undefined ou vazio) é como hoje", () => {
+    expect(filtrarGrupos(grupos, "tudo", "")).toHaveLength(2);
+    expect(filtrarGrupos(grupos, "tudo", "", "")).toHaveLength(2);
   });
 });

@@ -4,6 +4,7 @@ import { Etiqueta } from "@/components/etiqueta";
 import { rotuloAchadoEndereco } from "@/lib/endereco";
 import {
   detalhesDoContato,
+  EXPLICACAO_NOVO,
   etiquetaDeEndereco,
   etiquetasDoContato,
   linhasDoEndereco,
@@ -47,7 +48,7 @@ function BlocoEndereco({ c, retrato }: { c: ResultadoContato; retrato: Retrato }
     <div className="rounded-lg border border-atencao-borda bg-[#fffdf8] p-4">
       <div className="flex items-center gap-2">
         <span className="text-sm font-semibold">Endereço</span>
-        {etiqueta && <Etiqueta texto={etiqueta.texto} tom={etiqueta.tom} />}
+        {etiqueta && <Etiqueta texto={etiqueta.texto} tom={etiqueta.tom} explicacao={etiqueta.explicacao} />}
         {retrato.planilhaEnderecos && (
           <span className="ml-auto text-xs text-cinza-claro">{retrato.planilhaEnderecos.nome}{a.endereco?.enderecoId ? ` · id ${a.endereco.enderecoId}` : ""}</span>
         )}
@@ -90,7 +91,7 @@ function Detalhe({ c, g, retrato }: { c: ResultadoContato; g: ResultadoGrupo; re
             <div key={d.campo} className="rounded-lg border border-borda bg-cartao p-3.5">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold">{d.rotulo}</span>
-                {d.etiqueta && <Etiqueta texto={d.etiqueta.texto.replace(`${d.rotulo} `, "")} tom={d.etiqueta.tom} />}
+                {d.etiqueta && <Etiqueta texto={d.etiqueta.texto.replace(`${d.rotulo} `, "")} tom={d.etiqueta.tom} explicacao={d.etiqueta.explicacao} />}
               </div>
               <div className="mt-2 text-xs text-cinza-claro">No cadastro</div>
               <div className="text-sm">{d.valorPlanilha || "(vazio)"}</div>
@@ -132,9 +133,9 @@ export function LinhaContato({ c, g, retrato }: { c: ResultadoContato; g: Result
         </button>
         <div className="text-sm text-cinza">{c.contato.cargo ?? "—"}</div>
         <div className="flex flex-wrap gap-1.5">
-          {etiquetas.map((e) => <Etiqueta key={`${e.campo}-${e.texto}`} texto={e.texto} tom={e.tom} />)}
+          {etiquetas.map((e) => <Etiqueta key={`${e.campo}-${e.texto}`} texto={e.texto} tom={e.tom} explicacao={e.explicacao} />)}
         </div>
-        <div><Etiqueta texto={situacao.texto} tom={situacao.tom} /></div>
+        <div><Etiqueta texto={situacao.texto} tom={situacao.tom} explicacao={situacao.explicacao} /></div>
       </div>
       {aberto && <Detalhe c={c} g={g} retrato={retrato} />}
     </div>
@@ -152,7 +153,7 @@ export function LinhaNovo({ nome, cargo, viaIa, nota }: { nome: string; cargo?: 
         </div>
         <div className="text-sm text-cinza">—</div>
         <div className="flex flex-wrap gap-1.5">
-          {cargo && <Etiqueta texto={`Site: ${cargo}${viaIa ? " (via IA)" : ""}`} tom="neutro" />}
+          {cargo && <Etiqueta texto={`Site: ${cargo}${viaIa ? " (via IA)" : ""}`} tom="neutro" explicacao={EXPLICACAO_NOVO} />}
           {nota && <Etiqueta texto={nota} tom="neutro" />}
         </div>
         <div><Etiqueta texto="Avaliar inclusão" tom="atencao" /></div>

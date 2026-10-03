@@ -46,3 +46,21 @@ export const CARGOS_FEMININOS = [
   "corregedora", "ouvidora", "controladora", "advogada",
   "delegada", "reitora", "juiza",
 ];
+
+/**
+ * Feminino → masculino, só para ENCONTRAR a regra de protocolo (Camada B): a tabela
+ * escreve os cargos no masculino ("Senador / Deputado Federal"), e "Senadora" não chegava
+ * nela por similaridade. Serve só para a busca da regra; a Camada A continua exigindo
+ * gênero coerente entre tratamento e cargo, e a comparação com o site não muda.
+ * Só palavras da lista mudam, para "mesa" não virar "meso" e "secretaria" (órgão) ficar.
+ * Ver docs/superpowers/specs/2026-10-02-ajustes-do-painel-genero-tcu-publicacao.md §4.2
+ */
+const FEMININO_PARA_MASCULINO: Readonly<Record<string, string>> = Object.freeze({
+  ...Object.fromEntries(CARGOS_FEMININOS.map((f, i) => [f, CARGOS_MASCULINOS[i]])),
+  presidenta: "presidente",
+});
+
+/** Recebe texto já normalizado (minúsculas, sem acento) e devolve o mesmo texto com os femininos do léxico no masculino. */
+export function neutralizarGenero(cargoNormalizado: string): string {
+  return cargoNormalizado.replace(/[a-z]+/g, (palavra) => (Object.hasOwn(FEMININO_PARA_MASCULINO, palavra) ? FEMININO_PARA_MASCULINO[palavra] : palavra));
+}

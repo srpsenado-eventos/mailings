@@ -1,4 +1,5 @@
 import { coerenciasVisiveis, textoCoerencia } from "@/lib/tratamento";
+import { rotuloAchadoEndereco } from "@/lib/endereco";
 import { normalizarTexto } from "@/lib/normalize";
 import type {
   ComparacaoCampo,
@@ -25,6 +26,26 @@ export interface Etiqueta {
   campo: CampoEtiqueta;
   texto: string;
   tom: Tom;
+  /** Uma frase, mostrada ao passar o cursor: o que a etiqueta quer dizer e por quê. */
+  explicacao: string;
+}
+
+const EXPLICACAO = {
+  confereSite: "Igual ao que o site do órgão publica",
+  divergeSite: "O site do órgão publica outro valor; veja no detalhe",
+  naoVerificado: "A fonte oficial não pôde ser lida nesta varredura",
+  confereProtocolo: "Igual ao que a tabela de protocolo manda para este cargo",
+  divergeProtocolo: "Diferente do que a tabela de protocolo manda, ou incoerente com o cargo; veja no detalhe",
+  cargoVazio: "O cadastro não informa o cargo; sem ele não há regra de protocolo",
+  semParNaFonte: "Ninguém com este nome na composição oficial; confirmar se saiu",
+} as const;
+
+/** Explicação da etiqueta "Pessoa da fonte sem par na planilha" (linha de proposta de inclusão). */
+export const EXPLICACAO_NOVO = "Pessoa publicada pela fonte, sem par na planilha";
+
+function explicacaoSemRegra(cargo: string | undefined): string {
+  if ((cargo ?? "").trim().length === 0) return EXPLICACAO.cargoVazio;
+  return `O cargo "${cargo ?? ""}" não foi encontrado na tabela de protocolo; nada foi conferido`;
 }
 
 type CampoComparado = "nome" | "cargo" | "tratamento" | "enderecamento";
@@ -36,11 +57,9 @@ const ROTULO_CAMPO: Record<CampoComparado, string> = {
   enderecamento: "Endereçamento",
 };
 
-const ETIQUETA_ENDERECO: Record<Exclude<SituacaoEndereco, "sem_base">, { texto: string; tom: Tom }> = {
-  completo: { texto: "Endereço completo", tom: "ok" },
-  a_completar: { texto: "Endereço a completar", tom: "neutro" },
-  pendente: { texto: "Endereço a confirmar", tom: "atencao" },
-  nao_verificado: { texto: "Endereço não verificado", tom: "neutro" },
+const ETIQUETA_ENDERECO: Record<Exclude<SituacaoEndereco, "sem_base" | "pendente" | "a_completar">, { texto: string; tom: Tom; explicacao: string }> = {
+  completo: { texto: "Endereço completo", tom: "ok", explicacao: "Logradouro, número, bairro, CEP, cidade e UF presentes no relatório de endereços" },
+  nao_verificado: { texto: "Endereço não verificado", tom: "neutro", explicacao: "Nome ambíguo no relatório: mais de um contato com este nome; endereço não atribuído" },
 };
 
 /** A comparação de VALOR do campo (site ou protocolo). Coerência é diagnóstico, não valor. */
@@ -59,32 +78,49 @@ function coerenciasDo(c: ResultadoContato, campo: CampoComparado): ComparacaoCam
  */
 function etiquetaDoCampo(c: ResultadoContato, campo: CampoComparado): Etiqueta | undefined {
   const rotulo = ROTULO_CAMPO[campo];
+  const doSite = campo === "nome" || campo === "cargo";
   const comp = comparacaoDeValor(c, campo);
   if (coerenciasDo(c, campo).length > 0 || comp?.situacao === "divergente") {
-    return { campo, texto: `${rotulo} diverge`, tom: "atencao" };
+    return { campo, texto: `${rotulo} diverge`, tom: "atencao", explicacao: doSite ? EXPLICACAO.divergeSite : EXPLICACAO.divergeProtocolo };
   }
-  if (!comp) return { campo, texto: `${rotulo} não verificado`, tom: "neutro" };
-  if (comp.situacao === "confere") return { campo, texto: `${rotulo} confere`, tom: "ok" };
-  if (comp.situacao === "sem_regra") return { campo, texto: `${rotulo} sem regra`, tom: "neutro" };
+  if (!comp) return { campo, texto: `${rotulo} não verificado`, tom: "neutro", explicacao: EXPLICACAO.naoVerificado };
+  if (comp.situacao === "confere") {
+    return { campo, texto: `${rotulo} confere`, tom: "ok", explicacao: doSite ? EXPLICACAO.confereSite : EXPLICACAO.confereProtocolo };
+  }
+  if (comp.situacao === "sem_regra") {
+    return { campo, texto: `${rotulo} sem regra`, tom: "neutro", explicacao: explicacaoSemRegra(c.contato.cargo) };
+  }
   return undefined; // fonte_nao_informa
+}
+
+function cargoEstaVazio(c: ResultadoContato): boolean {
+  return (c.contato.cargo ?? "").trim().length === 0;
 }
 
 export function etiquetasDoContato(c: ResultadoContato, _g: ResultadoGrupo): Etiqueta[] {
   const lista: Etiqueta[] = [];
+  const semCargo = cargoEstaVazio(c);
   if (c.possivelSaida) {
     // Não há com o que comparar nome e cargo; só a Camada C (nome) ainda pode acusar.
-    lista.push({ campo: "fonte", texto: "Sem par na fonte", tom: "ruim" });
+    lista.push({ campo: "fonte", texto: "Sem par na fonte", tom: "ruim", explicacao: EXPLICACAO.semParNaFonte });
     const nome = etiquetaDoCampo(c, "nome");
     if (nome?.tom === "atencao") lista.push(nome);
   } else {
-    for (const campo of ["nome", "cargo"] as const) {
-      const e = etiquetaDoCampo(c, campo);
-      if (e) lista.push(e);
+    const nome = etiquetaDoCampo(c, "nome");
+    if (nome) lista.push(nome);
+    if (!semCargo) {
+      const cargo = etiquetaDoCampo(c, "cargo");
+      if (cargo) lista.push(cargo);
     }
+  }
+  if (semCargo) {
+    // Cadastro sem cargo é dado faltante que a Posse precisa. Sem cargo não há regra de protocolo a
+    // procurar (as etiquetas neutras somem), mas os achados da Camada A não dependem do cargo e ficam.
+    lista.push({ campo: "cargo", texto: "Cargo vazio", tom: "atencao", explicacao: EXPLICACAO.cargoVazio });
   }
   for (const campo of ["tratamento", "enderecamento"] as const) {
     const e = etiquetaDoCampo(c, campo);
-    if (e) lista.push(e);
+    if (e && (!semCargo || e.tom === "atencao")) lista.push(e);
   }
   const endereco = etiquetaDeEndereco(c);
   if (endereco) lista.push(endereco);
@@ -93,21 +129,34 @@ export function etiquetasDoContato(c: ResultadoContato, _g: ResultadoGrupo): Eti
 
 /** Etiqueta do endereço, sozinha: o bloco de endereço do detalhe a mostra de novo. */
 export function etiquetaDeEndereco(c: ResultadoContato): Etiqueta | undefined {
-  const situacao = c.endereco?.situacao;
-  if (!situacao || situacao === "sem_base") return undefined;
-  return { campo: "endereco", ...ETIQUETA_ENDERECO[situacao] };
+  const a = c.endereco;
+  if (!a || a.situacao === "sem_base") return undefined;
+  if (a.situacao === "pendente") {
+    const motivos = a.achados.map(rotuloAchadoEndereco).join("; ");
+    return { campo: "endereco", texto: "Endereço a confirmar", tom: "atencao", explicacao: `Precisa de confirmação por telefone: ${motivos}` };
+  }
+  if (a.situacao === "a_completar") {
+    const motivos = a.achados.map(rotuloAchadoEndereco).join("; ");
+    return { campo: "endereco", texto: "Endereço a completar", tom: "neutro", explicacao: `Pode ser completado na conferência dos Correios (Fase 2): ${motivos}` };
+  }
+  return { campo: "endereco", ...ETIQUETA_ENDERECO[a.situacao] };
 }
 
 const PRECISA_REVISAR: readonly Tom[] = ["atencao", "ruim"];
 
-export function situacaoDoContato(c: ResultadoContato, g: ResultadoGrupo): { texto: string; tom: Tom } {
-  if (c.possivelSaida) return { texto: "Possível saída", tom: "ruim" };
-  if (g.semFonte) return { texto: "Sem fonte", tom: "neutro" };
-  if (c.semaforo === "indeterminado") return { texto: "Não verificado", tom: "neutro" };
-  const aRevisar = etiquetasDoContato(c, g).filter((e) => PRECISA_REVISAR.includes(e.tom)).length;
-  return aRevisar === 0
-    ? { texto: "Tudo confere", tom: "ok" }
-    : { texto: `${aRevisar} a revisar`, tom: "atencao" };
+export interface Situacao { texto: string; tom: Tom; explicacao: string }
+
+export function situacaoDoContato(c: ResultadoContato, g: ResultadoGrupo): Situacao {
+  if (c.possivelSaida) return { texto: "Possível saída", tom: "ruim", explicacao: EXPLICACAO.semParNaFonte };
+  if (g.semFonte) return { texto: "Sem fonte", tom: "neutro", explicacao: "O grupo não tem fonte oficial cadastrada; nome e cargo não foram conferidos" };
+  if (c.semaforo === "indeterminado") return { texto: "Não verificado", tom: "neutro", explicacao: EXPLICACAO.naoVerificado };
+  const etiquetas = etiquetasDoContato(c, g);
+  const aRevisar = etiquetas.filter((e) => PRECISA_REVISAR.includes(e.tom)).length;
+  if (aRevisar > 0) return { texto: `${aRevisar} a revisar`, tom: "atencao", explicacao: "Campos em atenção pedem revisão; veja as etiquetas e o detalhe" };
+  if (etiquetas.some((e) => e.tom === "neutro")) {
+    return { texto: "Nada a revisar", tom: "neutro", explicacao: "Nenhum campo pede revisão; os campos neutros não puderam ser conferidos" };
+  }
+  return { texto: "Tudo confere", tom: "ok", explicacao: "Todos os campos conferidos batem com as referências" };
 }
 
 export function motivoDoContato(c: ResultadoContato, g: ResultadoGrupo): string | undefined {
@@ -181,7 +230,7 @@ export const FILTROS: readonly { id: Filtro; rotulo: string }[] = [
 /** Ressalva: tudo que não é verde com o endereço em ordem (completo, a completar ou sem base). */
 function temRessalva(c: ResultadoContato): boolean {
   const e = c.endereco?.situacao;
-  return c.semaforo !== "verde" || e === "pendente" || e === "nao_verificado";
+  return c.semaforo !== "verde" || cargoEstaVazio(c) || e === "pendente" || e === "nao_verificado";
 }
 
 function passaFiltro(c: ResultadoContato, filtro: Filtro): boolean {
@@ -209,9 +258,10 @@ function novoCasaBusca(n: PessoaSite, busca: string): boolean {
 }
 
 /** Filtro e busca no navegador. Grupo que fica sem linha some. Não muta a entrada. */
-export function filtrarGrupos(grupos: readonly ResultadoGrupo[], filtro: Filtro, busca: string): ResultadoGrupo[] {
+export function filtrarGrupos(grupos: readonly ResultadoGrupo[], filtro: Filtro, busca: string, grupo?: string): ResultadoGrupo[] {
   const b = normalizarTexto(busca.trim());
   return grupos
+    .filter((g) => !grupo || g.grupo === grupo)
     .map((g) => ({
       ...g,
       contatos: g.contatos.filter((c) => passaFiltro(c, filtro) && contatoCasaBusca(c, b)),

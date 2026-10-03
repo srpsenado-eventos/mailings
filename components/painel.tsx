@@ -38,10 +38,11 @@ function EstadoDaFonte({ g }: { g: ResultadoGrupo }) {
 export function Painel({ retrato, aviso, onNovaVarredura }: { retrato: Retrato; aviso?: string; onNovaVarredura?: () => void }) {
   const [filtro, setFiltro] = useState<Filtro>("tudo");
   const [busca, setBusca] = useState("");
-  const grupos = useMemo(() => filtrarGrupos(retrato.grupos, filtro, busca), [retrato, filtro, busca]);
+  const [grupo, setGrupo] = useState("");
+  const grupos = useMemo(() => filtrarGrupos(retrato.grupos, filtro, busca, grupo), [retrato, filtro, busca, grupo]);
   const total = retrato.resumo.total;
   const visiveis = contarContatos(grupos);
-  const filtrando = filtro !== "tudo" || busca.trim() !== "";
+  const filtrando = filtro !== "tudo" || busca.trim() !== "" || grupo !== "";
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-8">
@@ -88,6 +89,16 @@ export function Painel({ retrato, aviso, onNovaVarredura }: { retrato: Retrato; 
             {f.rotulo}
           </button>
         ))}
+        <label htmlFor="grupo" className="ml-2 text-xs text-cinza-claro">Grupo</label>
+        <select
+          id="grupo"
+          value={grupo}
+          onChange={(e) => setGrupo(e.target.value)}
+          className="max-w-72 rounded-md border border-borda-forte bg-cartao px-2 py-1 text-xs"
+        >
+          <option value="">Todos os grupos</option>
+          {retrato.grupos.map((g) => <option key={g.grupo} value={g.grupo}>{g.grupo}</option>)}
+        </select>
         <div className="grow" />
         <label htmlFor="busca" className="text-xs text-cinza-claro">Buscar</label>
         <input
@@ -103,8 +114,8 @@ export function Painel({ retrato, aviso, onNovaVarredura }: { retrato: Retrato; 
 
       <div className="mt-5 space-y-5">
         {grupos.map((g) => (
-          <section key={g.grupo} className="overflow-hidden rounded-xl border border-borda bg-cartao">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-separador px-4 py-3">
+          <section key={g.grupo} className="overflow-clip rounded-xl border border-borda bg-cartao">
+            <div className="sticky top-0 z-10 flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-separador bg-cartao px-4 py-3">
               <h2 className="font-serif text-lg font-semibold">{g.grupo}</h2>
               <span className="text-xs text-cinza">
                 {g.contatos.length} contatos{g.responsavel ? ` · responsável ${g.responsavel}` : ""}

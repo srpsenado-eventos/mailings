@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   resolverRegra,
   comparacoesProtocolo,
+  comparacoesCoerencia,
   linhaDeEnderecamento,
   formaNominal,
 } from "@/lib/tratamento";
@@ -481,5 +482,33 @@ describe("resolverRegra — tabela real, sem tabela injetada (guarda-corpo)", ()
     // ponto final; não há fronteira apertada entre masculino e feminino aqui hoje. Ver
     // relatório da correção para a divergência completa.
     expect(resolverRegra("Embaixadora de Gana")?.cargoDestinatario).toBe("Embaixador");
+  });
+});
+
+describe("resolverRegra: gênero não muda a regra encontrada (tabela real)", () => {
+  test.each([
+    ["Senadora", "Senador"],
+    ["Encarregada de Negócios", "Encarregado de Negócios"],
+    ["Governadora do Estado do Acre", "Governador do Estado do Acre"],
+  ])("%s resolve igual a %s", (feminino, masculino) => {
+    expect(resolverRegra(feminino)?.cargoDestinatario).toBe(resolverRegra(masculino)?.cargoDestinatario);
+  });
+
+  test("Senadora encontra a regra de Senador (hoje caía em sem regra)", () => {
+    expect(resolverRegra("Senadora")).toBeDefined();
+    expect(resolverRegra("Senadora")?.cargoDestinatario).toBe(resolverRegra("Senador")?.cargoDestinatario);
+  });
+});
+
+describe("Senadora com tratamento e endereçamento femininos (tabela real)", () => {
+  test("Camada B confere tratamento e endereçamento, e a Camada A não acha nada", () => {
+    // Arrange
+    const contato: ContatoPlanilha = { nome: "Ana", grupo: "Senadores", cargo: "Senadora", tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" };
+    // Act
+    const protocolo = comparacoesProtocolo(contato);
+    // Assert
+    expect(protocolo.find((c) => c.campo === "tratamento")?.situacao).toBe("confere");
+    expect(protocolo.find((c) => c.campo === "enderecamento")?.situacao).toBe("confere");
+    expect(comparacoesCoerencia(contato)).toEqual([]);
   });
 });

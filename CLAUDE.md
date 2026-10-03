@@ -10,7 +10,7 @@ Repositório remoto: `github.com/srpsenado-eventos/mailings`, branch base `main`
 
 ## Estado do projeto (2026-10-03)
 
-- Suíte: 27 arquivos, 519 testes, verde (2026-10-03). `npm run typecheck` limpo.
+- Suíte: 27 arquivos, 523 testes, verde (2026-10-03). `npm run typecheck` limpo.
 - Catálogo: 33 grupos, 24 fontes, 21 grupos com fonte, **12 sem fonte** (todo contato deles sai vermelho, ver semântica abaixo).
 - Auditoria de Tratamento e Endereçamento (spec de 2026-08-13) e Camada C (regras de nome, spec de 2026-09-18) estão em `main` desde setembro de 2026 (`lib/tratamento.ts`, `data/regras-nome.ts`).
 - **Dívidas conhecidas** (não corrigir de passagem; abrir tarefa própria):

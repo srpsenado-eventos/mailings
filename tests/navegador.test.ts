@@ -10,10 +10,9 @@ import {
 import { ScrapeError } from "@/lib/scrape";
 
 const HTML = `<html><body><main>
-  <h2>Ministros</h2>
   <ul>
     <li><span>Ministro Fulano de Tal Silva</span><span>Presidente</span></li>
-    <li><span>Ministra Beltrana Souza Lima</span></li>
+    <li><span>Ministra Beltrana Souza Lima</span><span>Vice-Presidente</span></li>
   </ul></main></body></html>`;
 
 /** Lançador falso: devolve o HTML dado e anota se foi fechado. */
@@ -62,7 +61,8 @@ describe("rasparComNavegador", () => {
     expect(estado.urlPedida).toBe("https://portal.tcu.gov.br/autoridades");
     expect(c.url).toBe("https://portal.tcu.gov.br/autoridades");
     expect(c.pessoas.map((p) => p.nome)).toEqual(["Fulano de Tal Silva", "Beltrana Souza Lima"]);
-    expect(c.pessoas[0].cargo).toBe("Ministros");
+    expect(c.pessoas[0].cargo).toBe("Presidente");
+    expect(c.pessoas[1].cargo).toBe("Vice-Presidente");
     expect(estado.fechado).toBe(true);
   });
 

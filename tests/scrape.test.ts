@@ -582,7 +582,7 @@ describe("cargo casa por palavra inteira, não por pedaço de palavra", () => {
   });
 });
 
-describe("título que abre seção não toma a linha de cima como cargo", () => {
+describe("títulos de seção com cara de cargo", () => {
   test("dois títulos de seção com cara de cargo e nomes sem cargo: ninguém recebe cargo", () => {
     // Arrange
     const html = `<html><body><main>
@@ -598,26 +598,77 @@ describe("título que abre seção não toma a linha de cima como cargo", () => 
     expect(c.pessoas.every((p) => p.cargo === undefined)).toBe(true);
   });
 
-  test("título com cara de nome depois de uma lista não herda a última linha da seção anterior", () => {
-    // Arrange: o desenho do TCU. Dois cargos depois do nome contra dois "antes" por acaso;
-    // "Primeira Câmara" (h2) logo abaixo da linha do último substituto (lida como cargo)
-    // seria o terceiro "antes" e viraria a página, trocando os cargos de dono.
-    const html = `<html><body><main>
-      <p>Fulano de Tal Silva</p><p>Presidente</p>
-      <p>Beltrano de Souza Lima</p><p>Vice-Presidente</p>
-      <p>Cicrano Alves Duarte</p>
-      <h2>Substitutos</h2>
-      <p>Ministro-Substituto Weder de Oliveira</p>
-      <h2>Primeira Câmara</h2>
-    </main></body></html>`;
+});
+
+describe("título composto é tratamento (Ministro-Substituto)", () => {
+  test("'Ministro-Substituto Fulano' é pessoa, sem cargo, e não vira cargo do item de baixo", () => {
+    // Arrange
+    const html = "<html><body><main><p>Ministro-Substituto Weder de Oliveira</p><p>Composição do TCU</p></main></body></html>";
 
     // Act
-    const c = extrairConteudo(html, "https://x.gov.br/autoridades");
+    const c = extrairConteudo(html, "https://portal.tcu.gov.br/autoridades");
 
     // Assert
-    expect(c.pessoas.find((p) => p.nome === "Fulano de Tal Silva")?.cargo).toBe("Presidente");
-    expect(c.pessoas.find((p) => p.nome === "Beltrano de Souza Lima")?.cargo).toBe("Vice-Presidente");
-    expect(c.pessoas.find((p) => p.nome === "Cicrano Alves Duarte")?.cargo).toBeUndefined();
-    expect(c.pessoas.find((p) => p.nome === "Primeira Câmara")?.cargo).toBeUndefined();
+    expect(c.pessoas.map((p) => p.nome)).toContain("Weder de Oliveira");
+    expect(c.pessoas.every((p) => p.cargo === undefined)).toBe(true);
+  });
+
+  test("na página do TCU os três substitutos entram como pessoas sem cargo", () => {
+    // Arrange
+    const html = readFileSync(resolve(__dirname, "fixtures/tcu-autoridades.html"), "utf-8");
+
+    // Act
+    const c = extrairConteudo(html, "https://portal.tcu.gov.br/autoridades");
+
+    // Assert
+    for (const nome of ["Augusto Sherman Cavalcanti", "Marcos Bemquerer Costa", "Weder de Oliveira"]) {
+      const pessoa = c.pessoas.find((p) => p.nome === nome);
+      expect(pessoa).toBeDefined();
+      expect(pessoa?.cargo).toBeUndefined();
+    }
+  });
+});
+
+describe("linha de cargo entre dois nomes não vota a orientação", () => {
+  const cargoDe = (html: string, nome: string) =>
+    extrairConteudo(html, "https://x.gov.br/composicao").pessoas.find((p) => p.nome === nome)?.cargo;
+
+  test("cargo em <p> acima de nome em <h3>: cada um fica com o próprio cargo", () => {
+    // Arrange
+    const html = `<html><body><main><p>Presidente</p><h3>Fulano de Tal Silva</h3><p>Vice-Presidente</p><h3>Beltrano de Souza Lima</h3><p>Conselheira</p><h3>Maria Pereira Costa</h3></main></body></html>`;
+
+    // Act + Assert
+    expect(cargoDe(html, "Fulano de Tal Silva")).toBe("Presidente");
+    expect(cargoDe(html, "Beltrano de Souza Lima")).toBe("Vice-Presidente");
+    expect(cargoDe(html, "Maria Pereira Costa")).toBe("Conselheira");
+  });
+
+  test("cargo em negrito acima de nome em <h4>: ninguém herda o cargo do seguinte", () => {
+    // Arrange
+    const html = `<html><body><main><p><strong>Ministro da Fazenda</strong></p><h4>Fulano de Tal Silva</h4><p><strong>Ministra da Saúde</strong></p><h4>Beltrana Souza Lima</h4><p><strong>Ministro da Defesa</strong></p><h4>Sicrano Pereira Costa</h4></main></body></html>`;
+
+    // Act + Assert
+    expect(cargoDe(html, "Fulano de Tal Silva")).toBe("Ministro da Fazenda");
+    expect(cargoDe(html, "Beltrana Souza Lima")).toBe("Ministra da Saúde");
+    expect(cargoDe(html, "Sicrano Pereira Costa")).toBe("Ministro da Defesa");
+  });
+
+  test("TCU com o DOM real (h2 dos colegiados apagado com a moldura): cargos no lugar certo", () => {
+    // Arrange
+    const html = readFileSync(resolve(__dirname, "fixtures/tcu-autoridades.html"), "utf-8");
+
+    // Act
+    const c = extrairConteudo(html, "https://portal.tcu.gov.br/autoridades");
+
+    // Assert
+    expect(c.pessoas.find((p) => p.nome === "Vital do Rêgo Filho")?.cargo).toBe("Presidente");
+    expect(c.pessoas.find((p) => p.nome === "Jorge Antonio de Oliveira Francisco")?.cargo).toBe("Vice-Presidente");
+    expect(c.pessoas.find((p) => p.nome === "Walton Alencar Rodrigues")?.cargo).toBeUndefined();
+    expect(c.pessoas.filter((p) => p.cargo).map((p) => p.nome)).toEqual([
+      "Vital do Rêgo Filho",
+      "Jorge Antonio de Oliveira Francisco",
+    ]);
+    expect(c.pessoas.some((p) => p.cargo?.startsWith("Ministro-Substituto"))).toBe(false);
+    expect(c.textoLimpo).not.toMatch(/Colegiados, Comissões e Corregedoria/);
   });
 });

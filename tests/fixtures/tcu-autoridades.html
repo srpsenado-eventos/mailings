@@ -12,6 +12,10 @@
   2026-10-03). O HTML que o servidor entrega não tem a lista: ela é montada por JavaScript,
   e é por isso que esta fonte é lida pelo Chrome local (spec 2026-10-02, §5).
   Links, imagens e atributos data-* foram removidos; a estrutura e os textos são os da página.
+  Como na página real, o h2 "Colegiados, Comissões e Corregedoria" fica dentro de um <header>
+  de <section>, e cada cartão tem o seu <header><p>: a remoção da moldura apaga os dois, e
+  "Composição do TCU" vem logo depois do último Ministro-Substituto, como no DOM medido.
+  Os h2 "Ministros" e "Ministros-Substitutos" não estão em <header> (aparecem no texto real).
 -->
 <header>
   <nav>
@@ -68,14 +72,14 @@
           </div>
         </article>
       </div>
-      <div class="flex flex-col gap-8">
-        <h2 class="text-title text-3xl">Colegiados, Comissões e Corregedoria</h2>
-        <div class="-mx-4 sm:-mx-6">
+      <section class="space-y-2 py-4 container">
+        <header class="flex flex-col space-y-4"><h2 class="flex-1 text-title text-2xl">Colegiados, Comissões e Corregedoria</h2></header>
+        <div class="-mx-4 sm:-mx-6 lg:mx-0 px-4">
           <div class="snap-center shrink-0"><a class="text-inherit hover:no-underline"><article class="bg-surface-primary rounded-2xl"><header><p class="mb-0 font-semibold">Colegiados</p></header><div class="flex flex-col"><ul class="space-y-2"><li>Composição do TCU</li><li>Plenário</li><li>Primeira Câmara</li><li>Segunda Câmara</li></ul></div></article></a></div>
           <div class="snap-center shrink-0"><a class="text-inherit hover:no-underline"><article class="bg-surface-primary rounded-2xl"><header><p class="mb-0 font-semibold">Comissões</p></header><div class="flex flex-col"><ul class="space-y-2"><li>Comissão Permanente de Regimento</li><li>Comissão Permanente de Jurisprudência</li></ul></div></article></a></div>
           <div class="snap-center shrink-0"><a class="text-inherit hover:no-underline"><article class="bg-surface-primary rounded-2xl"><header><p class="mb-0 font-semibold">Corregedoria</p></header><div class="flex flex-col"><ul class="space-y-2"><li>Sobre a Corregedoria</li><li>Normativos</li></ul></div></article></a></div>
         </div>
-      </div>
+      </section>
     </div>
   </div>
   <p>Autoridades do Tribunal de Contas da União: Dados Biográficos. Com o propósito de preservar e divulgar a memória institucional…</p>

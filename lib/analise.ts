@@ -204,15 +204,19 @@ async function analisarGrupo(
   // errada, nunca um grupo inteiro que saiu. Não se confia nela: o grupo fica indeterminado,
   // com o motivo, e o fiscal confere à mão; sem `novos`, que viriam da mesma leitura ruim. A
   // leitura parcial já suspende a saída (ninguém vira possível saída) e nunca dispara aqui.
+  // Grupo SEM URL no catálogo (composição só da IA) cai no caminho "sem fonte": a tela diz
+  // "cadastrar fonte", e não aparece um link "abrir" apontando para o sentinela da IA.
   if (leituraSuspeita(r)) {
     return comResponsavel(
-      marcarFonteInacessivel(
-        grupo,
-        contatos,
-        urlPrimaria ?? URL_PESQUISA_AMPLA,
-        MOTIVO_LEITURA_SUSPEITA,
-        resolvida.grupoCanonico,
-      ),
+      urlPrimaria
+        ? marcarFonteInacessivel(
+            grupo,
+            contatos,
+            urlPrimaria,
+            MOTIVO_LEITURA_SUSPEITA,
+            resolvida.grupoCanonico,
+          )
+        : compararGrupo(grupo, contatos, undefined, resolvida.grupoCanonico),
       resolvida.responsavel,
     );
   }

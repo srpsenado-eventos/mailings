@@ -159,6 +159,25 @@ function pareceNome(valor: string): boolean {
   return significativos.length >= 2 && significativos.every((t) => /^[A-ZÀ-Ý]/.test(t));
 }
 
+/** Segunda parte de um título composto ("Ministro-Substituto", "Secretário-Adjunto"). */
+const QUALIFICADORES_DE_TITULO = new Set([
+  "substituto", "substituta", "adjunto", "adjunta", "auxiliar", "interino", "interina", "titular",
+]);
+
+/**
+ * Tira do começo da linha um título composto `<cargo>-<qualificador>` ("Ministro-Substituto
+ * Weder de Oliveira" → "Weder de Oliveira"), como o tratamento de uma palavra já é tirado.
+ * Sem isto os três substitutos do TCU eram linhas de CARGO, não de pessoa: saíam da
+ * composição e ainda votavam a orientação da página.
+ */
+function semTituloComposto(linha: string): string {
+  const [primeiro = "", ...resto] = linha.trim().split(/\s+/);
+  const partes = normalizarTexto(primeiro).split("-");
+  const ehComposto =
+    partes.length === 2 && PALAVRAS_DE_CARGO.has(partes[0]) && QUALIFICADORES_DE_TITULO.has(partes[1]);
+  return ehComposto ? resto.join(" ") : linha;
+}
+
 /**
  * O nome que a linha carrega, ou `undefined` se ela não for linha de pessoa.
  * Vale a linha inteira quando ela já parece nome — é assim que sobrevive o nome
@@ -169,7 +188,7 @@ function pareceNome(valor: string): boolean {
  */
 function nomeDaLinha(linha: string): string | undefined {
   if (pareceNome(linha)) return linha;
-  const nucleo = nucleoDeNome(linha);
+  const nucleo = nucleoDeNome(semTituloComposto(linha));
   return pareceNome(nucleo) ? nucleo : undefined;
 }
 
@@ -280,14 +299,15 @@ interface LeituraDeCargo {
 const MIN_PARES_TITULO_CARGO = 1;
 
 /**
- * A linha `i` é um título e a anterior não: o título abre outra seção, e a linha de cima
- * pertence à seção anterior. Espelho do que `indiceDoCargoDepois` já faz para frente. No
- * TCU, "Colegiados, Comissões e Corregedoria" (h2, com cara de nome) tomava a última linha
- * dos Ministros-Substitutos como cargo, desempatava a página para "antes" e trocava os
- * cargos dos ministros. Título-cargo acima de título-nome (STM) não cruza fronteira.
+ * Linha de cargo espremida entre dois nomes: pode ser de qualquer um dos dois e não diz
+ * nada sobre a orientação. Numa lista simples "nome, cargo, nome, cargo" todo cargo do meio
+ * é assim; o voto sai só das pontas sem ambiguidade (o primeiro cargo acima do primeiro
+ * nome, ou o último cargo abaixo do último nome), e o empate mantém "depois". Foi o que
+ * virou a página real do TCU: uma linha "cargo" logo acima de "Composição do TCU" dava o
+ * terceiro voto "antes" contra dois "depois", que também eram ambíguos.
  */
-function tituloAbreSecao(titulos: ReadonlySet<number>, i: number): boolean {
-  return titulos.has(i) && !titulos.has(i - 1);
+function cargoEntreNomes(linhas: string[], j: number): boolean {
+  return j > 0 && j + 1 < linhas.length && ehNome(linhas[j - 1]) && ehNome(linhas[j + 1]);
 }
 
 /**
@@ -299,6 +319,7 @@ function tituloAbreSecao(titulos: ReadonlySet<number>, i: number): boolean {
  * Vence o padrão majoritário da página; empate ou nenhuma adjacência mantém
  * "depois", que é o comportamento já validado pelas outras fontes.
  * Título nunca conta como cargo "depois"; como cargo "antes", só quando se repete.
+ * Linha de cargo comum entre dois nomes não vota (ver `cargoEntreNomes`).
  */
 function orientacaoDoCargo(linhas: string[], titulos: ReadonlySet<number>): LeituraDeCargo {
   let antes = 0;
@@ -313,16 +334,24 @@ function orientacaoDoCargo(linhas: string[], titulos: ReadonlySet<number>): Leit
     if (pessoaEmLinhaUnica(linhas[i]) !== undefined) continue;
     if (!ehNome(linhas[i])) continue;
     ordemDoNome++;
-    if (i > 0 && !tituloAbreSecao(titulos, i) && ehCargo(linhas[i - 1])) {
+    if (i > 0 && ehCargo(linhas[i - 1])) {
       if (titulos.has(i - 1)) {
         antesPorTitulo++;
         if (ultimaOrdemAposTitulo === ordemDoNome - 1) paresDeTitulo++;
         ultimaOrdemAposTitulo = ordemDoNome;
-      } else {
+      } else if (!cargoEntreNomes(linhas, i - 1)) {
         antes++;
       }
     }
-    if (i + 1 < linhas.length && !titulos.has(i + 1) && ehCargo(linhas[i + 1])) depois++;
+    const proxima = i + 1;
+    if (
+      proxima < linhas.length &&
+      !titulos.has(proxima) &&
+      ehCargo(linhas[proxima]) &&
+      !cargoEntreNomes(linhas, proxima)
+    ) {
+      depois++;
+    }
   }
   const tituloEhCargo = paresDeTitulo >= MIN_PARES_TITULO_CARGO;
   const totalAntes = tituloEhCargo ? antes + antesPorTitulo : antes;
@@ -358,7 +387,6 @@ function indiceDoCargoAntes(
   const j = i - 1;
   if (j < 0 || consumidas.has(j)) return undefined;
   if (titulos.has(j) && !tituloEhCargo) return undefined;
-  if (tituloAbreSecao(titulos, i)) return undefined;
   return ehCargo(linhas[j]) ? j : undefined;
 }
 

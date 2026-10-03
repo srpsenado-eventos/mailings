@@ -690,8 +690,9 @@ describe("TCU de ponta a ponta (fixture real da página montada pelo navegador)"
     expect(g.contatos[0].possivelSaida).toBe(true);
   });
 
-  test("composição só da IA que não casa ninguém também é leitura suspeita", async () => {
-    // Arrange: grupo sem URL; a IA devolve gente que não é nenhum dos contatos.
+  test("grupo sem URL cuja IA não casa ninguém cai em 'sem fonte', sem saída e sem link quebrado", async () => {
+    // Arrange: grupo sem URL; a IA devolve gente que não é nenhum dos contatos. A leitura é
+    // suspeita, mas sem URL não há página a conferir: o caminho é o de "cadastrar fonte".
     const depsIa: Dependencias = {
       resolverFonte: () => ({ grupoCanonico: GRUPO, fontes: [], sugestoes: [] }),
       raspar: async () => {
@@ -708,10 +709,12 @@ describe("TCU de ponta a ponta (fixture real da página montada pelo navegador)"
 
     // Assert
     const g = r.grupos[0];
-    expect(g.fonteInacessivel).toBe(true);
-    expect(g.fonteUrl).toBe(URL_PESQUISA_AMPLA);
-    expect(g.erroFonte).toBe(MOTIVO_LEITURA_SUSPEITA);
+    expect(g.semFonte).toBe(true);
+    expect(g.fonteInacessivel).toBeFalsy();
+    expect(g.fonteUrl).not.toBe(URL_PESQUISA_AMPLA);
+    expect(g.viaPesquisaAmpla).toBeFalsy();
     expect(g.contatos.some((c) => c.possivelSaida)).toBe(false);
+    expect(g.novos).toEqual([]);
   });
 
   test("página completa: quem está casa, e só quem falta vira possível saída", async () => {

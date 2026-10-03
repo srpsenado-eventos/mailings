@@ -841,7 +841,8 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ## Limites conhecidos (não são defeito deste plano)
 
 - A página do TCU publica cargo só para Presidente e Vice-Presidente; os outros sete ministros ficam com cargo `fonte_nao_informa`, e um ministro novo sem cargo não vira proposta de inclusão (regra "novos só com cargo"). Aproveitar o "Ministro" que antecede o nome como cargo mudaria vereditos em STJ, STM e TSE; é spec próprio.
-- "Ministro-Substituto Fulano" não é reconhecido como nome (o tratamento composto não é removido); os três substitutos ficam fora da composição. A planilha não tem substituto no grupo. Se um dia tiver, ele sairia "possível saída": tratar no mesmo spec acima.
-- A orientação do cargo na página do TCU é decidida por um empate de 2 a 2 ("depois" contra "antes"), que cai em "depois" só porque o título de seção é `h1..h6`. Se o site trocasse o título por um `<p>`, a página viraria "antes" e produziria cargos falsos (comportamento anterior a este plano).
+- ~~"Ministro-Substituto Fulano" não é reconhecido como nome~~ Corrigido na revisão final (rodada 2): título composto `<cargo>-<qualificador>` é tirado como tratamento, e os três substitutos entram na composição, sem cargo.
+- A orientação do cargo na página do TCU sai de um empate: "Presidente" e "Vice-Presidente" estão entre dois nomes e não votam (rodada 2), o empate mantém "depois". Se o site trocasse o título "Ministros" (`h2`) por um `<p>`, ele viraria um voto "antes" sem ambiguidade, a página viraria "antes" e cada ministro herdaria o cargo de cima (cargos falsos).
 - Duas seções de um nome cada, com títulos que parecem cargo, são indistinguíveis do padrão do STM e adotam o título como cargo.
 - Dois rótulos da planilha que resolvam para a mesma fonte `navegador` abrem dois Chromes. Aceitável hoje; deduplicar por URL se uma segunda fonte por navegador for cadastrada.
+- A "leitura suspeita" também esconde uma troca total e verdadeira de um grupo (por exemplo, todos os Ministros de Estado substituídos depois de um governo novo): o grupo aparece indeterminado com o motivo e precisa ser conferido à mão, e os `novos` daquela página não são propostos.

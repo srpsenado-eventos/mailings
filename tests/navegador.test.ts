@@ -1,3 +1,4 @@
+import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import {
   localizarChrome,
@@ -45,7 +46,15 @@ describe("localizarChrome", () => {
 
   test("sem a variável, o primeiro caminho padrão que existe", () => {
     const existe = (c: string) => c.includes("Program Files (x86)");
-    expect(localizarChrome(ENV_VAZIO, existe)).toBe("C:\Program Files (x86)\Google\Chrome\Application\chrome.exe");
+    const resultado = localizarChrome(ENV_VAZIO, existe);
+    expect(resultado).toBe(path.win32.join("C:\\Program Files (x86)", "Google", "Chrome", "Application", "chrome.exe"));
+    expect(resultado).toMatch(/^C:\\Program Files \(x86\)\\Google\\Chrome\\Application\\chrome\.exe$/);
+  });
+
+  test("sem a variável nem Program Files, usa a instalação por usuário em LOCALAPPDATA", () => {
+    const env = { ...ENV_VAZIO, LOCALAPPDATA: "C:\\Users\\x\\AppData\\Local" };
+    const resultado = localizarChrome(env, (c) => c.startsWith("C:\\Users\\x\\"));
+    expect(resultado).toBe(path.win32.join("C:\\Users\\x\\AppData\\Local", "Google", "Chrome", "Application", "chrome.exe"));
   });
 
   test("nenhum caminho existe → undefined (variável apontando para arquivo inexistente também não vale)", () => {
@@ -63,6 +72,7 @@ describe("rasparComNavegador", () => {
     expect(c.pessoas.map((p) => p.nome)).toEqual(["Fulano de Tal Silva", "Beltrana Souza Lima"]);
     expect(c.pessoas[0].cargo).toBe("Presidente");
     expect(c.pessoas[1].cargo).toBe("Vice-Presidente");
+    await new Promise((r) => setTimeout(r, 0));
     expect(estado.fechado).toBe(true);
   });
 
@@ -77,7 +87,20 @@ describe("rasparComNavegador", () => {
     const { lancar, estado } = lancadorFalso(HTML, 500);
     await expect(rasparComNavegador("https://portal.tcu.gov.br/autoridades", { lancar, existe: existeSempre, env: ENV_VAZIO, timeoutMs: 20 }))
       .rejects.toMatchObject({ name: "ScrapeError", motivo: MOTIVO_NAVEGADOR_TEMPO });
+    await new Promise((r) => setTimeout(r, 0));
     expect(estado.fechado).toBe(true);
+  });
+
+  test("lançamento que passa do teto: rejeita com o motivo exato e fecha o navegador quando ele sobe", async () => {
+    const fechar = vi.fn(async () => undefined);
+    const lancar: Lancador = async () => {
+      await new Promise((r) => setTimeout(r, 300));
+      return { conteudo: async () => HTML, fechar };
+    };
+    await expect(rasparComNavegador("https://portal.tcu.gov.br/autoridades", { lancar, existe: existeSempre, env: ENV_VAZIO, timeoutMs: 20 }))
+      .rejects.toMatchObject({ name: "ScrapeError", motivo: MOTIVO_NAVEGADOR_TEMPO });
+    await new Promise((r) => setTimeout(r, 400));
+    expect(fechar).toHaveBeenCalledTimes(1);
   });
 
   test("HTML vazio é falha, como no fetch", async () => {
@@ -92,6 +115,7 @@ describe("rasparComNavegador", () => {
     const erro = await rasparComNavegador("https://portal.tcu.gov.br/autoridades", { lancar, existe: existeSempre, env: ENV_VAZIO }).catch((e: unknown) => e);
     expect(erro).toBeInstanceOf(ScrapeError);
     expect((erro as ScrapeError).motivo).toBe("net::ERR_NAME_NOT_RESOLVED");
+    await new Promise((r) => setTimeout(r, 0));
     expect(fechar).toHaveBeenCalledTimes(1);
   });
 

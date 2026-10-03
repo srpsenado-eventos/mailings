@@ -21,8 +21,8 @@ export const TETO_NAVEGADOR_MS = 30_000;
 
 /** Caminhos padrão do Chrome no Windows, na ordem de procura. */
 const CAMINHOS_PADRAO = [
-  "C:\Program Files\Google\Chrome\Application\chrome.exe",
-  "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
 ] as const;
 
 /** Uma página aberta num navegador lançado: lê uma URL e fecha o navegador. */
@@ -51,7 +51,7 @@ export function localizarChrome(
 ): string | undefined {
   const daVariavel = env.FISCAL_CHROME?.trim();
   if (daVariavel && existe(daVariavel)) return daVariavel;
-  const porUsuario = env.LOCALAPPDATA ? [`${env.LOCALAPPDATA}\Google\Chrome\Application\chrome.exe`] : [];
+  const porUsuario = env.LOCALAPPDATA ? [`${env.LOCALAPPDATA}\\Google\\Chrome\\Application\\chrome.exe`] : [];
   return [...CAMINHOS_PADRAO, ...porUsuario].find((caminho) => existe(caminho));
 }
 
@@ -72,6 +72,7 @@ export const lancarChrome: Lancador = async (caminhoChrome) => {
   return {
     async conteudo(url, timeoutMs) {
       const page = await browser.newPage();
+      // Mesmo valor do teto de `comTeto`, cujo timer é armado antes do lançamento e dispara primeiro: o motivo fica exato.
       await page.goto(url, { waitUntil: "networkidle2", timeout: timeoutMs });
       return page.content();
     },
@@ -87,12 +88,13 @@ export async function rasparComNavegador(url: string, opcoes: OpcoesNavegador = 
   if (!caminho) throw new ScrapeError(url, MOTIVO_NAVEGADOR_AUSENTE);
   const lancar = opcoes.lancar ?? lancarChrome;
 
-  let pagina: PaginaNavegador | undefined;
+  let lancamento: Promise<PaginaNavegador> | undefined;
   try {
     // O teto cobre lançar + carregar: um Chrome que não sobe também é tempo esgotado.
     const html = await comTeto(
       (async () => {
-        pagina = await lancar(caminho);
+        lancamento = lancar(caminho);
+        const pagina = await lancamento;
         return pagina.conteudo(url, timeoutMs);
       })(),
       timeoutMs,
@@ -104,7 +106,8 @@ export async function rasparComNavegador(url: string, opcoes: OpcoesNavegador = 
     if (err instanceof TempoEsgotadoError) throw new ScrapeError(url, MOTIVO_NAVEGADOR_TEMPO);
     throw new ScrapeError(url, err instanceof Error ? err.message : "erro desconhecido");
   } finally {
-    // Nunca deixar Chrome órfão: fecha mesmo em erro ou teto; falha ao fechar não muda o resultado.
-    await pagina?.fechar().catch(() => undefined);
+    // Nunca deixar Chrome órfão: fecha mesmo em erro ou teto. Se o lançamento ainda não
+    // terminou, fecha quando terminar, sem segurar a varredura; falha ao fechar não muda o resultado.
+    void lancamento?.then((p) => p.fechar()).catch(() => undefined);
   }
 }

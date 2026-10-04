@@ -1024,13 +1024,16 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ## O que fica com o Clovis (fora do código)
 
 1. Criar um store **privado** do Vercel Blob no projeto da Vercel e gerar o `BLOB_READ_WRITE_TOKEN`; colocar o token em `.env.local` nesta máquina (nunca no repositório) e nas variáveis do projeto na Vercel.
-2. Definir na Vercel `FISCAL_MODO=web`, `APP_SENHA` (a senha do GT) e `APP_SEGREDO_COOKIE` (string longa e aleatória). Nenhuma delas nesta máquina, exceto para a conferência local acima.
-3. Fazer o deploy do `main` na Vercel (o projeto `mailings-theta.vercel.app` existe com a versão de junho; decidir se é ele que recebe o `main` ou se cria outro). A build na Vercel não precisa de Chrome: `lib/navegador.ts` só roda em modo local.
+2. Definir na Vercel `FISCAL_MODO=web`, `APP_SENHA` (a senha do GT) e `APP_SEGREDO_COOKIE` (string longa e aleatória). Nenhuma delas nesta máquina, exceto para a conferência local acima. A senha deve ser longa e aleatória (ao menos 16 caracteres aleatórios, guardados num gerenciador de senhas), porque o atraso progressivo não segura rajadas paralelas.
+3. Fazer o deploy do `main` na Vercel (o projeto `mailings-theta.vercel.app` existe com a versão de junho; decidir se é ele que recebe o `main` ou se cria outro); antes de apontar o `main` para ele, conferir o que roda hoje em `mailings-theta.vercel.app`. A build na Vercel não precisa de Chrome: `lib/navegador.ts` só roda em modo local.
 4. Conferir no deploy: `/entrar`, senha, painel, `/nova-varredura` 404.
+5. Confirmar que o projeto da Vercel permite funções de ao menos 60 s (Fluid compute ou `maxDuration` respeitado, por causa do atraso de `/api/entrar`) e que o Node dele é 22 ou mais novo.
 
 ## Limites conhecidos (não são defeito deste plano)
 
 - Senha compartilhada: quem a tem vê tudo o que foi publicado (spec §10). Sem perfis, sem auditoria de acesso.
 - O atraso progressivo vive na memória de cada instância serverless; instâncias novas começam do zero (spec §10, aceito).
+- Trocar `APP_SENHA` não revoga os cookies já emitidos (30 dias); só trocar `APP_SEGREDO_COOKIE` revoga.
+- A chave global do atraso só zera depois de uma hora sem erros.
 - Um só retrato publicado, sem histórico, como no arquivo local.
 - Export CSV/XLSX no modo web exporta o retrato publicado, portanto também sem telefone e e-mail.

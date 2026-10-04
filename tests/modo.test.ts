@@ -11,4 +11,11 @@ describe("modoDoApp", () => {
     expect(modoDoApp({ FISCAL_MODO: " WEB " })).toBe("web");
     expect(modoDoApp({ FISCAL_MODO: "producao" })).toBe("local");
   });
+  test("na Vercel é sempre web, mesmo sem FISCAL_MODO ou com local", () => {
+    expect(modoDoApp({ VERCEL: "1" })).toBe("web");
+    expect(modoDoApp({ VERCEL: "1", FISCAL_MODO: "local" })).toBe("web");
+  });
+  test("sem Vercel e sem variável continua local", () => {
+    expect(modoDoApp({})).toBe("local");
+  });
 });

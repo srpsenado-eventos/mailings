@@ -27,6 +27,7 @@ export function clienteBlobPadrao(token: string): ClienteBlob {
     async ler(caminho) {
       // `useCache: false`: a leitura tem que refletir a publicação mais recente.
       const r = await get(caminho, { access: "private", token, useCache: false });
+      // 304 é inalcançável sem `ifNoneMatch`; se vier, sem stream, é tratado como ausente.
       if (!r || !r.stream) return undefined;
       return textoDe(r.stream);
     },

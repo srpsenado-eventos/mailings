@@ -1,7 +1,7 @@
 import type { ComparacaoCampo, ContatoPlanilha, Retrato } from "@/lib/types";
 
 /** Campos do contato que o painel não mostra e que não precisam sair desta máquina. */
-const CAMPOS_PESSOAIS = ["telefone", "email", "redeSocial"] as const;
+const CAMPOS_PESSOAIS: readonly (keyof ContatoPlanilha)[] = ["telefone", "email", "redeSocial", "foto"];
 /** Comparações cujo `valorPlanilha` carrega esses mesmos dados. */
 const COMPARACOES_PESSOAIS: ReadonlySet<ComparacaoCampo["campo"]> = new Set(["telefone", "email"]);
 

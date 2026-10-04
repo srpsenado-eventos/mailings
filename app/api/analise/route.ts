@@ -4,24 +4,12 @@ import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload
 import { armazemPadrao } from "@/lib/armazem";
 import { resolverGrupoEFonte } from "@/lib/catalogo";
 import { modoDoApp } from "@/lib/modo";
+import { origemPermitida } from "@/lib/origem";
 import { montarRetrato } from "@/lib/painel";
 import { rasparFonte } from "@/lib/raspagem";
 import { extrairComposicao, diagnosticarIa } from "@/lib/gemini";
 
 const AVISO_NAO_GUARDADO = "A varredura terminou, mas o retrato não pôde ser guardado: na próxima abertura o app não a terá.";
-
-/** Mesma origem: curl (sem Origin nem Sec-Fetch-Site) passa; página de outro site, não. */
-function origemPermitida(req: NextRequest): boolean {
-  const site = req.headers.get("sec-fetch-site");
-  if (site && site !== "same-origin" && site !== "none") return false;
-  const origem = req.headers.get("origin");
-  if (!origem) return true;
-  try {
-    return new URL(origem).host === req.headers.get("host");
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Recebe os contatos (e, opcionalmente, os endereços) já extraídos no navegador, varre as
@@ -30,7 +18,7 @@ function origemPermitida(req: NextRequest): boolean {
  * `analisar`, `montarRetrato` e o `Armazem` são.
  */
 export async function POST(req: NextRequest) {
-  if (!origemPermitida(req)) return NextResponse.json({ ok: false, message: "Origem não permitida." }, { status: 403 });
+  if (!origemPermitida(req.headers)) return NextResponse.json({ ok: false, message: "Origem não permitida." }, { status: 403 });
   // A Vercel nunca lê fonte (spec 2026-10-02 §6.5): em modo web a rota não existe.
   if (modoDoApp() === "web") return NextResponse.json({ ok: false, message: "Não disponível." }, { status: 404 });
   try {

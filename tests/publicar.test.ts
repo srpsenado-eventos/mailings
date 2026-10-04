@@ -23,6 +23,15 @@ const retrato: Retrato = {
 } as unknown as Retrato;
 
 describe("enxugarParaPublicar", () => {
+  test("remove a foto do contato", () => {
+    const comFoto: Retrato = {
+      ...retrato,
+      grupos: [{ ...retrato.grupos[0], contatos: [{ ...contato, contato: { ...contato.contato, foto: "data:image/png;base64,AAAA" } }] }],
+    };
+    const p = enxugarParaPublicar(comFoto, "2026-10-04T10:00:00.000Z");
+    expect(p.grupos[0].contatos[0].contato.foto).toBeUndefined();
+    expect(JSON.stringify(p)).not.toMatch(/base64/);
+  });
   test("remove telefone, e-mail e rede social do contato e as comparações de telefone e e-mail", () => {
     const p = enxugarParaPublicar(retrato, "2026-10-04T10:00:00.000Z");
     const c = p.grupos[0].contatos[0];

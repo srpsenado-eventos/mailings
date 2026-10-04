@@ -3,6 +3,9 @@ import { criarAtrasador, senhaConfere } from "@/lib/entrada";
 import { modoDoApp } from "@/lib/modo";
 import { COOKIE_SESSAO, criarToken, DURACAO_SESSAO_MS } from "@/lib/sessao";
 
+/** O atraso progressivo chega a 30 s; com o limite padrão de 10 s da função ele viraria bloqueio. */
+export const maxDuration = 60;
+
 const MENSAGEM_ERRO = "Senha incorreta.";
 /** Um registro por instância do servidor; spec 2026-09-04 §4 aceita. */
 const atrasador = criarAtrasador();

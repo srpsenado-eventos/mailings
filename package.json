@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Ferramenta interna do Senado Federal para auditar a base de autoridades do Sistema Contatos contra as listas oficiais publicadas nos sites dos próprios órgãos.",
   "private": true,
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -18,6 +21,7 @@
   "dependencies": {
     "@google/genai": "^2.8.0",
     "@mozilla/readability": "^0.6.0",
+    "@vercel/blob": "^2.8.0",
     "cheerio": "^1.2.0",
     "fuse.js": "^7.4.1",
     "jsdom": "^29.1.1",

@@ -2,8 +2,9 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ExportButtons } from "@/components/export-buttons";
+import { PublicarButton } from "@/components/publicar-button";
 import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-contato";
-import { cartoesDoResumo, contarContatos, filtrarGrupos, FILTROS, textoDataHora, type Filtro } from "@/lib/painel";
+import { cartoesDoResumo, contarContatos, filtrarGrupos, FILTROS, textoCabecalhoWeb, textoDataHora, type Filtro } from "@/lib/painel";
 import type { ResultadoGrupo, Retrato } from "@/lib/types";
 
 function EstadoDaFonte({ g }: { g: ResultadoGrupo }) {
@@ -35,7 +36,7 @@ function EstadoDaFonte({ g }: { g: ResultadoGrupo }) {
   );
 }
 
-export function Painel({ retrato, aviso, onNovaVarredura }: { retrato: Retrato; aviso?: string; onNovaVarredura?: () => void }) {
+export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePublicar = false }: { retrato: Retrato; aviso?: string; onNovaVarredura?: () => void; modo?: "local" | "web"; podePublicar?: boolean }) {
   const [filtro, setFiltro] = useState<Filtro>("tudo");
   const [busca, setBusca] = useState("");
   const [grupo, setGrupo] = useState("");
@@ -49,19 +50,24 @@ export function Painel({ retrato, aviso, onNovaVarredura }: { retrato: Retrato; 
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="font-serif text-3xl font-semibold">Fiscal de Mailings</h1>
-          <p className="mt-1 text-sm text-cinza">
-            Contatos <strong className="font-medium text-tinta">{retrato.planilhaContatos.nome}</strong>
-            {retrato.planilhaEnderecos && <> · Endereços <strong className="font-medium text-tinta">{retrato.planilhaEnderecos.nome}</strong></>}
-            {" · "}varredura de {textoDataHora(retrato.geradoEm)}
-          </p>
+          {modo === "web" ? (
+            <p className="mt-1 text-sm text-cinza">{textoCabecalhoWeb(retrato.geradoEm, retrato.publicadoEm)}</p>
+          ) : (
+            <p className="mt-1 text-sm text-cinza">
+              Contatos <strong className="font-medium text-tinta">{retrato.planilhaContatos.nome}</strong>
+              {retrato.planilhaEnderecos && <> · Endereços <strong className="font-medium text-tinta">{retrato.planilhaEnderecos.nome}</strong></>}
+              {" · "}varredura de {textoDataHora(retrato.geradoEm)}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Link href="/grupos" className="text-sm text-acao underline">Grupos cadastrados</Link>
-          {onNovaVarredura ? (
+          {modo !== "web" && (onNovaVarredura ? (
             <button type="button" onClick={onNovaVarredura} className="rounded-md border border-borda-forte bg-cartao px-3 py-1.5 text-sm">Nova varredura</button>
           ) : (
             <Link href="/nova-varredura" className="rounded-md border border-borda-forte bg-cartao px-3 py-1.5 text-sm">Nova varredura</Link>
-          )}
+          ))}
+          {modo !== "web" && podePublicar && <PublicarButton />}
           <ExportButtons analise={retrato} />
         </div>
       </header>

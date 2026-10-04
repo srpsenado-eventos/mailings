@@ -327,6 +327,12 @@ export function textoDataHora(iso: string): string {
   return `${p("day")}/${p("month")}, ${p("hour")}h${p("minute")}`;
 }
 
+/** Cabeçalho do painel publicado: quando a máquina do GT varreu e quando publicou (spec 2026-10-02 §6.2). */
+export function textoCabecalhoWeb(geradoEm: string, publicadoEm?: string): string {
+  const base = `Varredura feita na máquina do GT em ${textoDataHora(geradoEm)}.`;
+  return publicadoEm ? `${base} Publicada em ${textoDataHora(publicadoEm)}.` : base;
+}
+
 export function montarRetrato(
   resultado: ResultadoAnalise,
   planilhas: { contatos: { nome: string; linhas: number }; enderecos?: { nome: string; linhas: number } },

@@ -10,6 +10,7 @@ import {
   motivoDoContato,
   procedenciaNomeCargo,
   situacaoDoContato,
+  textoCabecalhoWeb,
   textoDataHora,
   textoEnderecoParaCopiar,
 } from "@/lib/painel";
@@ -489,5 +490,15 @@ describe("filtro por grupo", () => {
   test("sem grupo (undefined ou vazio) é como hoje", () => {
     expect(filtrarGrupos(grupos, "tudo", "")).toHaveLength(2);
     expect(filtrarGrupos(grupos, "tudo", "", "")).toHaveLength(2);
+  });
+});
+
+describe("cabeçalho do modo web", () => {
+  test("diz quando a varredura foi feita e quando foi publicada", () => {
+    const t = textoCabecalhoWeb("2026-10-03T14:20:22.969Z", "2026-10-04T10:05:00.000Z");
+    expect(t).toMatch(/^Varredura feita na máquina do GT em \d\d\/\d\d, \d\dh\d\d\. Publicada em \d\d\/\d\d, \d\dh\d\d\.$/);
+  });
+  test("sem publicadoEm (retrato antigo) omite a segunda frase", () => {
+    expect(textoCabecalhoWeb("2026-10-03T14:20:22.969Z")).toMatch(/^Varredura feita na máquina do GT em \d\d\/\d\d, \d\dh\d\d\.$/);
   });
 });

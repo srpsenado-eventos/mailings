@@ -4,8 +4,9 @@ import type { Retrato } from "@/lib/types";
 
 /**
  * Onde o último retrato vive entre uma abertura do app e outra. É a única persistência
- * do projeto: um arquivo, nesta máquina, fora do git. Interface injetável para a rota e
- * para o painel; em teste, a versão em memória.
+ * do projeto: um arquivo, nesta máquina, fora do git (e, em modo web, o espelho enxuto
+ * publicado no Blob privado). Interface injetável para a rota e para o painel; em teste,
+ * a versão em memória.
  * Ver docs/superpowers/specs/2026-10-01-painel-local-retrato-em-arquivo.md
  */
 export interface Armazem {
@@ -36,7 +37,7 @@ export function armazemEmMemoria(inicial?: Retrato): Armazem {
 }
 
 /** Checagem mínima: o que o painel precisa para não quebrar. O resto é o tipo gravado por nós. */
-function validarRetrato(valor: unknown): Retrato {
+export function validarRetrato(valor: unknown): Retrato {
   if (typeof valor !== "object" || valor === null) {
     throw new RetratoIlegivelError("retrato não é um objeto");
   }

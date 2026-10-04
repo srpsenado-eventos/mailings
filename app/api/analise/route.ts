@@ -3,6 +3,7 @@ import { analisar, type Dependencias } from "@/lib/analise";
 import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload";
 import { armazemPadrao } from "@/lib/armazem";
 import { resolverGrupoEFonte } from "@/lib/catalogo";
+import { modoDoApp } from "@/lib/modo";
 import { montarRetrato } from "@/lib/painel";
 import { rasparFonte } from "@/lib/raspagem";
 import { extrairComposicao, diagnosticarIa } from "@/lib/gemini";
@@ -16,6 +17,8 @@ const AVISO_NAO_GUARDADO = "A varredura terminou, mas o retrato não pôde ser g
  * `analisar`, `montarRetrato` e o `Armazem` são.
  */
 export async function POST(req: NextRequest) {
+  // A Vercel nunca lê fonte (spec 2026-10-02 §6.5): em modo web a rota não existe.
+  if (modoDoApp() === "web") return NextResponse.json({ ok: false, message: "Não disponível." }, { status: 404 });
   try {
     let corpo: unknown;
     try {

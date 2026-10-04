@@ -35,7 +35,7 @@ function EstadoDaFonte({ g }: { g: ResultadoGrupo }) {
   );
 }
 
-export function Painel({ retrato, aviso, onNovaVarredura }: { retrato: Retrato; aviso?: string; onNovaVarredura?: () => void }) {
+export function Painel({ retrato, aviso, onNovaVarredura }: { retrato: Retrato; aviso?: string; onNovaVarredura?: () => void; modo?: "local" | "web"; podePublicar?: boolean }) {
   const [filtro, setFiltro] = useState<Filtro>("tudo");
   const [busca, setBusca] = useState("");
   const [grupo, setGrupo] = useState("");

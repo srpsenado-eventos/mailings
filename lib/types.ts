@@ -244,6 +244,11 @@ export interface FonteCatalogo {
    * compõe o grupo; propor inclusão é decisão de cadastro.
    */
   propoeInclusao?: boolean;
+  /**
+   * A página monta a lista por JavaScript: é lida pelo Chrome local (`lib/navegador.ts`),
+   * não pelo `fetch`. Só em modo local; sem Chrome a fonte sai inacessível.
+   */
+  navegador?: true;
 }
 
 /**

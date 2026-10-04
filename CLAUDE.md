@@ -1,6 +1,6 @@
 # CLAUDE.md — Fiscal de Mailings
 
-Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui. Última revisão: 2026-10-02.
+Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui. Última revisão: 2026-10-03.
 
 ## Contexto rápido
 
@@ -8,20 +8,20 @@ Web app interno do Senado Federal (Secretaria de Relações Públicas, GT Gestã
 
 Repositório remoto: `github.com/srpsenado-eventos/mailings`, branch base `main`; o trabalho sai em branches `feat/*` mescladas por PR.
 
-## Estado do projeto (2026-10-02)
+## Estado do projeto (2026-10-03)
 
-- Suíte: 25 arquivos, 458 testes, verde (2026-10-02). `npm run typecheck` limpo.
+- Suíte: 27 arquivos, 523 testes, verde (2026-10-03). `npm run typecheck` limpo.
 - Catálogo: 33 grupos, 24 fontes, 21 grupos com fonte, **12 sem fonte** (todo contato deles sai vermelho, ver semântica abaixo).
 - Auditoria de Tratamento e Endereçamento (spec de 2026-08-13) e Camada C (regras de nome, spec de 2026-09-18) estão em `main` desde setembro de 2026 (`lib/tratamento.ts`, `data/regras-nome.ts`).
 - **Dívidas conhecidas** (não corrigir de passagem; abrir tarefa própria):
   - `lib/gemini.ts` e `GeminiCliente` são nomes históricos: o cliente é Anthropic Haiku desde 2026-06-14. Comentários em `lib/types.ts` ainda falam em "Gemini + Google Search".
   - `package.json` declara `@google/genai`, `fuse.js`, `@mozilla/readability`, `jsdom` e `pg` sem nenhum import em `lib/`, `app/` ou `components/`. `pg` só serve ao script legado `scripts/apply-migrations.mjs`.
-  - `diagnosticarIa` e o parâmetro `?diag=1` em `/api/analise` são diagnóstico temporário; remover quando o TCU estiver confirmado em produção.
+  - `diagnosticarIa` e o parâmetro `?diag=1` em `/api/analise` são diagnóstico temporário; remover depois que a leitura do TCU pelo navegador for confirmada numa varredura real.
   - Há `package-lock.json` versionado e `pnpm-lock.yaml` + `pnpm-workspace.yaml` soltos na raiz. O projeto usa **npm**; não commitar os arquivos do pnpm.
 
 ## Stack (em uso)
 
-Next.js 15 (App Router) + TypeScript + Tailwind · SheetJS (`xlsx`) · `fetch` (undici) + cheerio · string-similarity · Anthropic Claude Haiku via `fetch` na Messages API (Camada 2, opcional) · Vitest · roda local com `npm run dev` (a Vercel saiu da stack em 2026-10-01; o deploy antigo é sobra). **Sem banco de dados.** shadcn/ui está previsto no spec, mas não há `components/ui/`; os componentes são Tailwind puro.
+Next.js 15 (App Router) + TypeScript + Tailwind · SheetJS (`xlsx`) · `fetch` (undici) + cheerio · puppeteer-core (só fontes do catálogo com `navegador: true`, caso TCU; abre o Chrome local, nunca na Vercel; exige Node 22.12 ou superior; a máquina tem Node 24) · string-similarity · Anthropic Claude Haiku via `fetch` na Messages API (Camada 2, opcional) · Vitest · roda local com `npm run dev` (a Vercel saiu da stack em 2026-10-01; o deploy antigo é sobra). **Sem banco de dados.** shadcn/ui está previsto no spec, mas não há `components/ui/`; os componentes são Tailwind puro.
 
 Não trocar dependências sem registrar a decisão num novo doc em `docs/superpowers/specs/`.
 
@@ -46,7 +46,7 @@ Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**
 | 2026-09-24 | `segunda-fonte-senadores-fora-de-exercicio.md` | Todas as fontes ativas do grupo compõem a composição; extração por tabela; inclusão filtrada por UF | Vigente |
 | 2026-10-01 | `auditoria-de-endereco-camada-d.md` | **Camada D**: endereço estruturado da segunda planilha, junção por `Id`, prioritário, CEP classificado; não pinta o semáforo; conferência nos Correios é a Fase 2 | Vigente (Fase 1 implementada) |
 | 2026-10-01 | `painel-local-retrato-em-arquivo.md` | **App só local.** Retrato em `.fiscal/retrato.json`; painel do mockup (etiquetas por campo, linha expansível, Copiar); tela Nova varredura | Vigente |
-| 2026-10-02 | `ajustes-do-painel-genero-tcu-publicacao.md` | Gênero não muda a regra de protocolo; "Nada a revisar"; "Cargo vazio"; filtro por grupo; explicações; TCU por navegador (Plano B); retrato publicado com senha (Plano C) | Vigente; Plano A implementado |
+| 2026-10-02 | `ajustes-do-painel-genero-tcu-publicacao.md` | Gênero não muda a regra de protocolo; "Nada a revisar"; "Cargo vazio"; filtro por grupo; explicações; TCU por navegador (Plano B); retrato publicado com senha (Plano C) | Vigente; Planos A e B implementados |
 
 ## Princípios de implementação
 
@@ -55,8 +55,9 @@ Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**
 - **Server Components por padrão.** `"use client"` só com estado ou efeito real.
 - **Sem PII no log nem no prompt.** Nomes, telefones e e-mails das autoridades nunca vão para `console.*` nem para a IA. O prompt da Camada 2 recebe **só o nome do grupo e o texto público da página**, nunca os contatos da planilha. O único log do servidor é o motivo técnico do erro em `/api/analise`.
 - **Camada 1 antes da Camada 2.** A comparação determinística planilha × nomes realmente presentes na página oficial é sempre a base. A IA (Haiku) é opcional e roda **uma chamada por grupo**: `extrairComposicao(grupoCanonico, textoLimpo)` devolve pessoas com `origem: "pagina" | "conhecimento"`. `mesclarComposicao` usa a página como verdade e só **resgata** da IA quem casa um contato da planilha e não estava na página. Sem `ANTHROPIC_API_KEY` ou com erro, a IA devolve `[]` e nada muda.
-- **Todas as fontes ativas do grupo compõem a composição**, na ordem do catálogo; a primeira é a primária (vai em `fonteUrl` e alimenta a Camada 2). Só as fontes do grupo dono da primária entram — um rótulo da planilha que case dois grupos não mistura as páginas dos dois. Toda fonte que respondeu continua compondo, mesmo se outra caiu; mas na **leitura parcial** — uma fonte compôs o grupo e outra **falhou** (lançou erro, ou é a primária e voltou sem ninguém) — **ninguém do grupo vira possível saída**: falta um pedaço da composição oficial, quem não casa fica indeterminado, e `erroFonte` diz qual fonte falhou, na tela e no export. Fonte secundária que responde e não tem ninguém a listar (nenhum senador afastado) **não é falha**: vira só ressalva em `erroFonte` e a detecção de saída continua de pé. Se **nenhuma** fonte respondeu e a IA compôs o grupo, a composição é real e a ausência ainda aponta saída, marcada `viaPesquisaAmpla` (caminho do TCU); sem fonte e sem IA, o grupo inteiro é indeterminado.
-- **Regra de ouro do "possível saída":** só existe quando há **composição real** (página ou IA) que não contém a pessoa. Página ilegível (JS, ex.: TCU) e IA vazia geram **"indeterminado / não verificado"**, nunca "saída". Foi o defeito que derrubou a confiança no TCU em junho; não reintroduzir.
+- **Todas as fontes ativas do grupo compõem a composição**, na ordem do catálogo; a primeira é a primária (vai em `fonteUrl` e alimenta a Camada 2). Só as fontes do grupo dono da primária entram — um rótulo da planilha que case dois grupos não mistura as páginas dos dois. Toda fonte que respondeu continua compondo, mesmo se outra caiu; mas na **leitura parcial** — uma fonte compôs o grupo e outra **falhou** (lançou erro, ou é a primária e voltou sem ninguém) — **ninguém do grupo vira possível saída**: falta um pedaço da composição oficial, quem não casa fica indeterminado, e `erroFonte` diz qual fonte falhou, na tela e no export. Fonte secundária que responde e não tem ninguém a listar (nenhum senador afastado) **não é falha**: vira só ressalva em `erroFonte` e a detecção de saída continua de pé. Se **nenhuma** fonte respondeu e a IA compôs o grupo, a composição é real e a ausência ainda aponta saída, marcada `viaPesquisaAmpla` (caso de uma fonte em JavaScript sem Chrome disponível, como o TCU sem Chrome; com Chrome o TCU é lido pelo navegador); sem fonte e sem IA, o grupo inteiro é indeterminado.
+- **Fonte em JavaScript é lida pelo Chrome local.** `FonteCatalogo.navegador: true` manda `rasparFonte` (`lib/raspagem.ts`) usar `rasparComNavegador` (`lib/navegador.ts`, `puppeteer-core`) em vez do `fetch`; o HTML montado passa pelo mesmo `extrairConteudo`. Chrome ausente ou página que passa de 30 s viram `ScrapeError` ("navegador não encontrado", "navegador: tempo esgotado") e o grupo cai em fonte inacessível, como qualquer outra falha. Nenhum teste abre navegador: o lançador é injetado.
+- **Regra de ouro do "possível saída":** só existe quando há **composição real** (página ou IA) que não contém a pessoa. Página ilegível (uma fonte em JavaScript sem Chrome disponível, como o TCU sem Chrome) e IA vazia geram **"indeterminado / não verificado"**, nunca "saída". Composição que não casa **nenhum** contato de um grupo com 2 ou mais contatos é **leitura suspeita** (página que não montou, layout que mudou, página errada): o grupo fica indeterminado com o motivo `MOTIVO_LEITURA_SUSPEITA`, nunca saída; grupo de um contato só fica fora dessa regra. Foi o defeito que derrubou a confiança no TCU em junho; não reintroduzir.
 - **Não há mais "pesquisa ampla" com busca na web.** O sentinela `URL_PESQUISA_AMPLA` e a flag `viaPesquisaAmpla` significam hoje: "a composição dependeu do conhecimento da IA". O rótulo na UI é "≈ via IA — confira".
 - **Sem banco de dados.** Catálogo em `data/catalogo.ts`, versionado. Resultado da análise vive em memória durante a request e o último retrato é gravado em `.fiscal/retrato.json` (ver o princípio do retrato). Não reintroduzir Postgres/Supabase sem novo spec.
 - **Fontes cadastradas à mão.** Nenhuma URL entra no catálogo por descoberta automática, busca ou IA. O Clovis fornece e confere cada uma.
@@ -104,7 +105,7 @@ Nota: o spec de 2026-08-13 registra que o Clovis considerou esse PDF "de outra f
 ```
 app/                 ← rotas Next.js; /api/analise (POST JSON), /nova-varredura e /grupos; `/` lê o retrato
 components/          ← UI (Tailwind puro): painel, linha-contato, etiqueta, nova-varredura-form, export-buttons
-lib/                 ← lógica pura: planilha, catalogo, scrape, match, analise, gemini (=Haiku), normalize, cargos, export, armazem, painel
+lib/                 ← lógica pura: planilha, catalogo, scrape, navegador, raspagem, match, analise, gemini (=Haiku), normalize, cargos, export, armazem, painel
 data/catalogo.ts     ← FONTE DA VERDADE de grupos, responsáveis e URLs oficiais
 data/*.sql           ← histórico da fase Supabase; fora do caminho de execução
 supabase/migrations/ ← idem, histórico
@@ -134,7 +135,7 @@ Regras de Atualizacao/   ← material do GT, NÃO versionado (xlsx e pdf no .git
 ## Catálogo: como cadastrar ou trocar uma URL
 
 1. Confirmar que a URL é do **domínio oficial** do órgão (`.gov.br`, `.jus.br`, `.leg.br`, `.mp.br`, `.def.br`). Notícia, Wikipedia e portais de terceiros não entram.
-2. Testar com `fetch` simples se a página entrega os nomes em HTML. Se a lista vem por JavaScript (caso TCU), cadastrar mesmo assim e registrar no comentário da entrada que depende da Camada 2.
+2. Testar com `fetch` simples se a página entrega os nomes em HTML. Se a lista vem por JavaScript (caso TCU), cadastrar com `navegador: true` e registrar no comentário da entrada que a página é montada por JavaScript e lida pelo navegador.
 3. Acrescentar em `data/catalogo.ts`. A **primeira** fonte com `ativo: true` é a primária; a ordem do array importa.
 4. Se a página tem estrutura peculiar (nomes grudados, tabela sem separador), salvar um recorte anonimizável em `tests/fixtures/` e cobrir em `tests/scrape.test.ts`.
 5. Rodar `npm test` (inclui `tests/catalogo-dados.test.ts`) e `npm run typecheck`.
@@ -158,7 +159,7 @@ Regras de Atualizacao/   ← material do GT, NÃO versionado (xlsx e pdf no .git
 - `.claude/settings.local.json` **não é versionado** (adicionado ao `.gitignore` em 2026-09-03). Até essa data ele estava no repositório remoto com a string de conexão do Postgres do Supabase antigo, senha incluída; a senha precisa ser considerada exposta e o histórico, limpo ou o projeto Supabase encerrado.
 - Nunca colocar segredo em comando permitido do Claude Code, em spec ou em plano. Só `.env.local`.
 - Planilhas do Senado (`*.xlsx`) e o PDF do GT ficam fora do git. Só fixtures de teste em `tests/fixtures/`.
-- A única variável de ambiente é `ANTHROPIC_API_KEY`, opcional.
+- As variáveis de ambiente são `ANTHROPIC_API_KEY` e `FISCAL_CHROME`, ambas opcionais.
 
 ## O que NÃO fazer
 
@@ -166,7 +167,7 @@ Regras de Atualizacao/   ← material do GT, NÃO versionado (xlsx e pdf no .git
 - Não reintroduzir banco de dados (Supabase, Postgres, ORM) sem novo spec.
 - Não persistir nada além do último retrato em `.fiscal/`; não reintroduzir histórico, Blob ou banco sem novo spec.
 - Não voltar a depender da Vercel para ler fontes: ela é bloqueada por IP (medido em 2026-09-17).
-- Não usar Firecrawl, Puppeteer ou Playwright **dentro do app**. Scraping é `fetch` + cheerio. (Usar Firecrawl ou o navegador como ferramenta de desenvolvimento, para inspecionar uma página candidata antes de cadastrar, é permitido.)
+- Não usar Firecrawl, Puppeteer ou Playwright dentro do app **fora de `lib/navegador.ts`**: só fonte do catálogo marcada `navegador: true`, só em modo local, com `puppeteer-core` e o Chrome desta máquina (spec 2026-10-02 §8). Scraping padrão continua `fetch` + cheerio. (Usar Firecrawl ou o navegador como ferramenta de desenvolvimento, para inspecionar uma página candidata antes de cadastrar, é permitido.)
 - Não cadastrar URLs descobertas por busca ou IA. O Clovis fornece.
 - Não transformar "não conseguimos ler a página" em "possível saída". Ver regra de ouro.
 - Não enviar contatos da planilha para a IA.

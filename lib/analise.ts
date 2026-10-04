@@ -32,6 +32,26 @@ const MOTIVO_PAGINA_SEM_CONTEUDO = "página não retornou conteúdo legível (pr
  */
 const MOTIVO_FONTE_VAZIA = "não trouxe ninguém";
 
+/** Motivo do grupo cuja composição lida não casou nenhum contato (ver `leituraSuspeita`). */
+export const MOTIVO_LEITURA_SUSPEITA =
+  "leitura suspeita: nenhum contato do grupo foi encontrado na composição lida";
+
+/** A partir de quantos contatos "ninguém casou" deixa de ser crível como saída real. */
+export const MIN_CONTATOS_LEITURA_SUSPEITA = 2;
+
+/**
+ * A composição não casou NINGUÉM de um grupo com 2+ contatos: todos saíram como possível
+ * saída. Na prática isso é página que não terminou de montar (o TCU sem a lista, só com o
+ * menu), mudança de layout ou página errada, nunca um grupo inteiro que saiu. Grupo de um
+ * contato só fica de fora: uma pessoa pode mesmo ter saído.
+ */
+function leituraSuspeita(r: ResultadoGrupo): boolean {
+  return (
+    r.contatos.length >= MIN_CONTATOS_LEITURA_SUSPEITA &&
+    r.contatos.every((c) => c.possivelSaida === true)
+  );
+}
+
 /**
  * Dependências injetadas no orquestrador. Mantêm `lib/*` puro e testável: a
  * resolução de URL, o scraping e a composição via IA (Camada B) vêm de fora.
@@ -179,6 +199,27 @@ async function analisarGrupo(
     resolvida.ufs,
     leituraParcial,
   );
+  // LEITURA SUSPEITA: composição real (página e/ou IA) que não casa nenhum contato de um
+  // grupo com 2+ contatos é, na prática, página que não montou, layout que mudou ou página
+  // errada, nunca um grupo inteiro que saiu. Não se confia nela: o grupo fica indeterminado,
+  // com o motivo, e o fiscal confere à mão; sem `novos`, que viriam da mesma leitura ruim. A
+  // leitura parcial já suspende a saída (ninguém vira possível saída) e nunca dispara aqui.
+  // Grupo SEM URL no catálogo (composição só da IA) cai no caminho "sem fonte": a tela diz
+  // "cadastrar fonte", e não aparece um link "abrir" apontando para o sentinela da IA.
+  if (leituraSuspeita(r)) {
+    return comResponsavel(
+      urlPrimaria
+        ? marcarFonteInacessivel(
+            grupo,
+            contatos,
+            urlPrimaria,
+            MOTIVO_LEITURA_SUSPEITA,
+            resolvida.grupoCanonico,
+          )
+        : compararGrupo(grupo, contatos, undefined, resolvida.grupoCanonico),
+      resolvida.responsavel,
+    );
+  }
   // Ressalva atribuída A CADA fonte que não compôs — sem identificar qual, "HTTP 403"
   // parece falha da primária. Vale para as duas formas de não compor, inclusive a que NÃO
   // suspende o veredito: o usuário tem que saber que aquela fonte não trouxe nada. Só

@@ -1,14 +1,28 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { armazemPadrao, RetratoIlegivelError } from "@/lib/armazem";
 import { armazemEmBlob, clienteBlobPadrao } from "@/lib/armazem-blob";
 import { modoDoApp } from "@/lib/modo";
 import { enxugarParaPublicar } from "@/lib/publicar";
 
+/** Mesma origem: curl (sem Origin nem Sec-Fetch-Site) passa; página de outro site, não. */
+function origemPermitida(req: NextRequest): boolean {
+  const site = req.headers.get("sec-fetch-site");
+  if (site && site !== "same-origin" && site !== "none") return false;
+  const origem = req.headers.get("origin");
+  if (!origem) return true;
+  try {
+    return new URL(origem).host === req.headers.get("host");
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Publica o último retrato desta máquina no Blob, sem telefone, e-mail e rede social
  * (spec 2026-10-02 §6.3). Só em modo local; na Vercel não existe. O retrato local não muda.
  */
-export async function POST() {
+export async function POST(req: NextRequest) {
+  if (!origemPermitida(req)) return NextResponse.json({ ok: false, message: "Origem não permitida." }, { status: 403 });
   if (modoDoApp() === "web") return NextResponse.json({ ok: false, message: "Não disponível." }, { status: 404 });
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) return NextResponse.json({ ok: false, message: "Publicação não configurada: falta BLOB_READ_WRITE_TOKEN em .env.local." }, { status: 400 });

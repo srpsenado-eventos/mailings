@@ -1,9 +1,11 @@
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Painel } from "@/components/painel";
 import { armazemPadrao, RetratoIlegivelError, type Armazem } from "@/lib/armazem";
 import { armazemEmBlob, clienteBlobPadrao } from "@/lib/armazem-blob";
 import { modoDoApp } from "@/lib/modo";
+import { COOKIE_SESSAO, validarToken } from "@/lib/sessao";
 import type { Retrato } from "@/lib/types";
 
 // Lê a cada abertura: o retrato muda fora do ciclo de build.
@@ -25,6 +27,11 @@ export default async function Home() {
 
   if (modo === "web" && !token) {
     return <Aviso titulo="Ambiente não configurado" texto="Falta a variável BLOB_READ_WRITE_TOKEN neste ambiente. Nada quebrou; só não há de onde ler a varredura publicada." />;
+  }
+  if (modo === "web") {
+    // Defesa em profundidade: o middleware já barrou, aqui confere de novo.
+    const sessao = (await cookies()).get(COOKIE_SESSAO)?.value;
+    if (!(await validarToken(sessao, process.env.APP_SEGREDO_COOKIE ?? "", Date.now()))) redirect("/entrar");
   }
   const armazem: Armazem = modo === "web" ? armazemEmBlob(clienteBlobPadrao(token as string)) : armazemPadrao();
 

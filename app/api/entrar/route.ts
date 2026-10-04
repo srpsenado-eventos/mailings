@@ -7,8 +7,20 @@ const MENSAGEM_ERRO = "Senha incorreta.";
 /** Um registro por instância do servidor; spec 2026-09-04 §4 aceita. */
 const atrasador = criarAtrasador();
 
+/** Chave do contador global: quem troca de IP a cada tentativa ainda esbarra no teto de 30 s. */
+const CHAVE_GLOBAL = "*global*";
+
+/**
+ * Na Vercel o proxy sobrescreve estes cabeçalhos; fora dela o x-forwarded-for é forjável,
+ * por isso existe o contador global abaixo.
+ */
 function ipDe(req: NextRequest): string {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "desconhecido";
+  return (
+    req.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip")?.trim() ||
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "desconhecido"
+  );
 }
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -21,8 +33,10 @@ export async function POST(req: NextRequest) {
   if (!senha || !segredo) return NextResponse.json({ ok: false, message: "Ambiente não configurado." }, { status: 503 });
 
   const ip = ipDe(req);
+  const antes = Date.now();
+  // Durante um ataque todos esperam; ninguém fica trancado para fora.
+  await esperar(Math.max(atrasador.esperaAntes(ip, antes), atrasador.esperaAntes(CHAVE_GLOBAL, antes)));
   const agora = Date.now();
-  await esperar(atrasador.esperaAntes(ip, agora));
 
   let informada = "";
   try {
@@ -33,8 +47,10 @@ export async function POST(req: NextRequest) {
   }
   if (!senhaConfere(informada, senha)) {
     atrasador.registrarErro(ip, agora);
+    atrasador.registrarErro(CHAVE_GLOBAL, agora);
     return NextResponse.json({ ok: false, message: MENSAGEM_ERRO }, { status: 401 });
   }
+  // Só o IP: a chave global expira pela janela.
   atrasador.registrarAcerto(ip);
   const resposta = NextResponse.json({ ok: true });
   resposta.cookies.set({

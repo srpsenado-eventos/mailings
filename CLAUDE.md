@@ -4,13 +4,13 @@ Instruções específicas deste projeto para o Claude Code. Convenções globais
 
 ## Contexto rápido
 
-Web app interno do Senado Federal (Secretaria de Relações Públicas, GT Gestão de Convidados) que confronta o **Sistema Contatos** (planilha de autoridades) com as **listas oficiais publicadas nos sites dos órgãos** e aponta o que mudou. O motivo imediato é a **Posse Presidencial 2027**: convites, cartões e cintas saem desse cadastro, e um nome, cargo ou tratamento errado vira constrangimento institucional. Single-user, sem banco; persiste só o último retrato da varredura em arquivo local.
+Web app interno do Senado Federal (Secretaria de Relações Públicas, GT Gestão de Convidados) que confronta o **Sistema Contatos** (planilha de autoridades) com as **listas oficiais publicadas nos sites dos órgãos** e aponta o que mudou. O motivo imediato é a **Posse Presidencial 2027**: convites, cartões e cintas saem desse cadastro, e um nome, cargo ou tratamento errado vira constrangimento institucional. Single-user, sem banco; persiste só o último retrato da varredura em arquivo local, e pode publicá-lo na web (Vercel, atrás de senha) só para leitura.
 
 Repositório remoto: `github.com/srpsenado-eventos/mailings`, branch base `main`; o trabalho sai em branches `feat/*` mescladas por PR.
 
 ## Estado do projeto (2026-10-03)
 
-- Suíte: 27 arquivos, 523 testes, verde (2026-10-03). `npm run typecheck` limpo.
+- Suíte: 32 arquivos, 547 testes, verde (2026-10-04). `npm run typecheck` limpo.
 - Catálogo: 33 grupos, 24 fontes, 21 grupos com fonte, **12 sem fonte** (todo contato deles sai vermelho, ver semântica abaixo).
 - Auditoria de Tratamento e Endereçamento (spec de 2026-08-13) e Camada C (regras de nome, spec de 2026-09-18) estão em `main` desde setembro de 2026 (`lib/tratamento.ts`, `data/regras-nome.ts`).
 - **Dívidas conhecidas** (não corrigir de passagem; abrir tarefa própria):
@@ -21,7 +21,7 @@ Repositório remoto: `github.com/srpsenado-eventos/mailings`, branch base `main`
 
 ## Stack (em uso)
 
-Next.js 15 (App Router) + TypeScript + Tailwind · SheetJS (`xlsx`) · `fetch` (undici) + cheerio · puppeteer-core (só fontes do catálogo com `navegador: true`, caso TCU; abre o Chrome local, nunca na Vercel; exige Node 22.12 ou superior; a máquina tem Node 24) · string-similarity · Anthropic Claude Haiku via `fetch` na Messages API (Camada 2, opcional) · Vitest · roda local com `npm run dev` (a Vercel saiu da stack em 2026-10-01; o deploy antigo é sobra). **Sem banco de dados.** shadcn/ui está previsto no spec, mas não há `components/ui/`; os componentes são Tailwind puro.
+Next.js 15 (App Router) + TypeScript + Tailwind · SheetJS (`xlsx`) · `fetch` (undici) + cheerio · puppeteer-core (só fontes do catálogo com `navegador: true`, caso TCU; abre o Chrome local, nunca na Vercel; exige Node 22.12 ou superior; a máquina tem Node 24) · string-similarity · Anthropic Claude Haiku via `fetch` na Messages API (Camada 2, opcional) · Vitest · roda local com `npm run dev`; a Vercel exibe o retrato publicado em modo `web` (`FISCAL_MODO=web`, `@vercel/blob`), nunca varre. **Sem banco de dados.** shadcn/ui está previsto no spec, mas não há `components/ui/`; os componentes são Tailwind puro.
 
 Não trocar dependências sem registrar a decisão num novo doc em `docs/superpowers/specs/`.
 
@@ -46,7 +46,7 @@ Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**
 | 2026-09-24 | `segunda-fonte-senadores-fora-de-exercicio.md` | Todas as fontes ativas do grupo compõem a composição; extração por tabela; inclusão filtrada por UF | Vigente |
 | 2026-10-01 | `auditoria-de-endereco-camada-d.md` | **Camada D**: endereço estruturado da segunda planilha, junção por `Id`, prioritário, CEP classificado; não pinta o semáforo; conferência nos Correios é a Fase 2 | Vigente (Fase 1 implementada) |
 | 2026-10-01 | `painel-local-retrato-em-arquivo.md` | **App só local.** Retrato em `.fiscal/retrato.json`; painel do mockup (etiquetas por campo, linha expansível, Copiar); tela Nova varredura | Vigente |
-| 2026-10-02 | `ajustes-do-painel-genero-tcu-publicacao.md` | Gênero não muda a regra de protocolo; "Nada a revisar"; "Cargo vazio"; filtro por grupo; explicações; TCU por navegador (Plano B); retrato publicado com senha (Plano C) | Vigente; Planos A e B implementados |
+| 2026-10-02 | `ajustes-do-painel-genero-tcu-publicacao.md` | Gênero não muda a regra de protocolo; "Nada a revisar"; "Cargo vazio"; filtro por grupo; explicações; TCU por navegador (Plano B); retrato publicado com senha (Plano C) | Vigente; Planos A, B e C implementados |
 
 ## Princípios de implementação
 
@@ -63,6 +63,7 @@ Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**
 - **Fontes cadastradas à mão.** Nenhuma URL entra no catálogo por descoberta automática, busca ou IA. O Clovis fornece e confere cada uma.
 - **Camada D (endereço) é um eixo independente e não pinta o semáforo.** A planilha de endereços é opcional, lida no navegador (`lib/planilha-enderecos.ts`) e viaja no mesmo JSON (`enderecos`, `arquivoEnderecosNome`). A junção com o contato é pelo `Id` (nome só como fallback, e nome ambíguo não recebe endereço); entre várias linhas vale a marcada `Prioritário`, e várias prioritárias ou nenhuma é achado sem endereço. O orquestrador anexa `ResultadoContato.endereco` numa passada posterior, nos três caminhos (com fonte, sem fonte, fonte inacessível); ela não entra em `comparacoes` nem em `camposDivergentes` e nunca cria `possivelSaida`. `AuditoriaEndereco.formatado` **só existe quando `situacao === "completo"`**; tela e export não devem montar endereço "pronto para copiar" fora disso. CEP de 7 dígitos vira proposta de zero à esquerda **só em SP**, e continua proposta até os Correios confirmarem (Fase 2, bloqueada na chave). O contador próprio é `resumo.enderecosAConfirmar` (só `pendente`).
 - **O retrato é a única persistência.** `lib/armazem.ts` grava o último `Retrato` em `.fiscal/retrato.json`, fora do git, com escrita atômica; um só, sem histórico. O painel (`/`) lê o retrato; sem retrato, manda para `/nova-varredura`. A lógica de apresentação (etiquetas, situação, filtros, cartões, detalhe) é função pura em `lib/painel.ts`, testada; componentes só renderizam.
+- **Dois modos, um ponto de decisão.** `modoDoApp()` (`lib/modo.ts`, `FISCAL_MODO`) escolhe o armazém e a tela. Local (padrão): `.fiscal/`, Nova varredura, botão "Publicar na web" quando há `BLOB_READ_WRITE_TOKEN`. Web (Vercel): lê o Blob privado (`lib/armazem-blob.ts`), tudo atrás da senha única (`middleware.ts`, `/entrar`, cookie HMAC de `lib/sessao.ts`), sem `/nova-varredura` e com `/api/analise` em 404. `POST /api/publicar` (só local) manda o retrato **sem telefone, e-mail e rede social** (`lib/publicar.ts`), com `publicadoEm`.
 
 ## Semântica dos vereditos
 
@@ -103,9 +104,10 @@ Nota: o spec de 2026-08-13 registra que o Clovis considerou esse PDF "de outra f
 ## Layout do código
 
 ```
-app/                 ← rotas Next.js; /api/analise (POST JSON), /nova-varredura e /grupos; `/` lê o retrato
+app/                 ← rotas Next.js; /api/analise (POST JSON), /nova-varredura, /grupos, /entrar, /api/publicar e /api/entrar; `/` lê o retrato
 components/          ← UI (Tailwind puro): painel, linha-contato, etiqueta, nova-varredura-form, export-buttons
-lib/                 ← lógica pura: planilha, catalogo, scrape, navegador, raspagem, match, analise, gemini (=Haiku), normalize, cargos, export, armazem, painel
+lib/                 ← lógica pura: planilha, catalogo, scrape, navegador, raspagem, match, analise, gemini (=Haiku), normalize, cargos, export, armazem, painel, modo, publicar, sessao, entrada, armazem-blob
+middleware.ts        ← senha do modo web; em modo local deixa tudo passar
 data/catalogo.ts     ← FONTE DA VERDADE de grupos, responsáveis e URLs oficiais
 data/*.sql           ← histórico da fase Supabase; fora do caminho de execução
 supabase/migrations/ ← idem, histórico
@@ -159,14 +161,15 @@ Regras de Atualizacao/   ← material do GT, NÃO versionado (xlsx e pdf no .git
 - `.claude/settings.local.json` **não é versionado** (adicionado ao `.gitignore` em 2026-09-03). Até essa data ele estava no repositório remoto com a string de conexão do Postgres do Supabase antigo, senha incluída; a senha precisa ser considerada exposta e o histórico, limpo ou o projeto Supabase encerrado.
 - Nunca colocar segredo em comando permitido do Claude Code, em spec ou em plano. Só `.env.local`.
 - Planilhas do Senado (`*.xlsx`) e o PDF do GT ficam fora do git. Só fixtures de teste em `tests/fixtures/`.
-- As variáveis de ambiente são `ANTHROPIC_API_KEY` e `FISCAL_CHROME`, ambas opcionais.
+- As variáveis de ambiente são `ANTHROPIC_API_KEY`, `FISCAL_CHROME` e `BLOB_READ_WRITE_TOKEN` (opcionais, modo local) e, só na Vercel, `FISCAL_MODO=web`, `APP_SENHA` e `APP_SEGREDO_COOKIE`.
+- O retrato publicado vai sem telefone, e-mail e rede social; o resto fica atrás da senha. O token do Blob, a senha e o segredo do cookie nunca entram em código, spec, plano, commit ou comando permitido.
 
 ## O que NÃO fazer
 
-- Não adicionar autenticação, multi-tenant, RLS. Fora do MVP.
+- Não adicionar login individual, multi-tenant, RLS. A única autenticação é a senha compartilhada do modo web (spec 2026-10-02 §6.4).
 - Não reintroduzir banco de dados (Supabase, Postgres, ORM) sem novo spec.
 - Não persistir nada além do último retrato em `.fiscal/`; não reintroduzir histórico, Blob ou banco sem novo spec.
-- Não voltar a depender da Vercel para ler fontes: ela é bloqueada por IP (medido em 2026-09-17).
+- Não voltar a depender da Vercel para ler fontes: ela é bloqueada por IP (medido em 2026-09-17). Em modo web ela só exibe.
 - Não usar Firecrawl, Puppeteer ou Playwright dentro do app **fora de `lib/navegador.ts`**: só fonte do catálogo marcada `navegador: true`, só em modo local, com `puppeteer-core` e o Chrome desta máquina (spec 2026-10-02 §8). Scraping padrão continua `fetch` + cheerio. (Usar Firecrawl ou o navegador como ferramenta de desenvolvimento, para inspecionar uma página candidata antes de cadastrar, é permitido.)
 - Não cadastrar URLs descobertas por busca ou IA. O Clovis fornece.
 - Não transformar "não conseguimos ler a página" em "possível saída". Ver regra de ouro.

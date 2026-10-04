@@ -194,6 +194,8 @@ export interface Retrato extends ResultadoAnalise {
   planilhaContatos: { nome: string; linhas: number };
   /** Presente só quando a planilha de endereços foi enviada. */
   planilhaEnderecos?: { nome: string; linhas: number };
+  /** Presente só no retrato publicado na web: hora em que esta máquina o publicou, ISO 8601. */
+  publicadoEm?: string;
 }
 
 /** Grupo do catálogo com seus responsáveis e status de fonte (para a tela de visualização). */

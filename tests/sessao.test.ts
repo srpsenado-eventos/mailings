@@ -19,6 +19,8 @@ describe("sessão assinada", () => {
     const [expira, assinatura] = t.split(".");
     const trocada = assinatura.slice(0, -1) + (assinatura.endsWith("A") ? "B" : "A");
     expect(await validarToken(`${expira}.${trocada}`, SEGREDO, AGORA)).toBe(false);
+    const primeiraTrocada = (assinatura.startsWith("A") ? "B" : "A") + assinatura.slice(1);
+    expect(await validarToken(`${expira}.${primeiraTrocada}`, SEGREDO, AGORA)).toBe(false);
     expect(await validarToken(t, "outro-segredo", AGORA)).toBe(false);
     expect(await validarToken("lixo", SEGREDO, AGORA)).toBe(false);
     expect(await validarToken("", SEGREDO, AGORA)).toBe(false);
@@ -28,5 +30,17 @@ describe("sessão assinada", () => {
     const t = await criarToken(SEGREDO, AGORA);
     expect(t).toMatch(/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
     expect(t).not.toContain(SEGREDO);
+  });
+  test("trocar a expiração de um token por outra mais longa invalida a assinatura", async () => {
+    const t1 = await criarToken(SEGREDO, AGORA, 1000);
+    const t2 = await criarToken(SEGREDO, AGORA, 10 * DURACAO_SESSAO_MS);
+    const [expira2] = t2.split(".");
+    const [, assinatura1] = t1.split(".");
+    expect(await validarToken(`${expira2}.${assinatura1}`, SEGREDO, AGORA + 5000)).toBe(false);
+  });
+  test("limite exato: válido 1 ms antes de vencer, inválido no instante do vencimento", async () => {
+    const t = await criarToken(SEGREDO, AGORA, 1000);
+    expect(await validarToken(t, SEGREDO, AGORA + 999)).toBe(true);
+    expect(await validarToken(t, SEGREDO, AGORA + 1000)).toBe(false);
   });
 });

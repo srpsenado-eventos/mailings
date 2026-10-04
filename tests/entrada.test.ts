@@ -40,3 +40,22 @@ describe("atraso progressivo por IP", () => {
     expect(a.esperaAntes("1.1.1.1", 61 * 60 * 1000)).toBe(0);
   });
 });
+
+describe("teto do registro de IPs", () => {
+  test("com 1001 IPs distintos, o mais antigo é esquecido e o último responde certo", () => {
+    const a = criarAtrasador();
+    for (let i = 0; i <= 1000; i++) a.registrarErro(`ip-${i}`, i);
+    expect(a.esperaAntes("ip-0", 1000)).toBe(0);
+    expect(a.esperaAntes("ip-1000", 1000)).toBe(ATRASO_INICIAL_MS);
+    expect(a.esperaAntes("ip-1", 1000)).toBe(ATRASO_INICIAL_MS);
+  });
+  test("ao atingir o teto, os registros vencidos saem primeiro", () => {
+    const a = criarAtrasador();
+    for (let i = 0; i < 1000; i++) a.registrarErro(`ip-${i}`, 0);
+    const duasHoras = 2 * 60 * 60 * 1000;
+    a.registrarErro("novo", duasHoras);
+    expect(a.esperaAntes("novo", duasHoras)).toBe(ATRASO_INICIAL_MS);
+    expect(a.esperaAntes("ip-0", duasHoras)).toBe(0);
+    expect(a.esperaAntes("ip-999", duasHoras)).toBe(0);
+  });
+});

@@ -40,6 +40,11 @@ export async function validarToken(token: string | undefined, segredo: string, a
   if (partes.length !== 2 || !/^[A-Za-z0-9_-]+$/.test(partes[0]) || !/^[A-Za-z0-9_-]+$/.test(partes[1])) return false;
   const [expira, assinatura] = partes;
   if (!iguais(assinatura, await assinar(expira, segredo))) return false;
-  const expiraMs = Number(atob(expira.replace(/-/g, "+").replace(/_/g, "/")));
+  let expiraMs: number;
+  try {
+    expiraMs = Number(atob(expira.replace(/-/g, "+").replace(/_/g, "/")));
+  } catch {
+    return false;
+  }
   return Number.isFinite(expiraMs) && agoraMs < expiraMs;
 }

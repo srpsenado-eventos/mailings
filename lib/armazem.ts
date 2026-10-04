@@ -36,7 +36,7 @@ export function armazemEmMemoria(inicial?: Retrato): Armazem {
 }
 
 /** Checagem mínima: o que o painel precisa para não quebrar. O resto é o tipo gravado por nós. */
-function validarRetrato(valor: unknown): Retrato {
+export function validarRetrato(valor: unknown): Retrato {
   if (typeof valor !== "object" || valor === null) {
     throw new RetratoIlegivelError("retrato não é um objeto");
   }

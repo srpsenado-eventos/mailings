@@ -53,4 +53,19 @@ describe("enxugarParaPublicar", () => {
     expect(retrato.grupos[0].contatos[0].contato.telefone).toBe("(61) 99999-0000");
     expect(retrato.grupos[0].contatos[0].comparacoes).toHaveLength(3);
   });
+
+  test("o retrato publicado leva a eleição, mas sem a lista de deputados atuais (e-mail e telefone de gabinete)", () => {
+    const comEleicao: Retrato = {
+      ...retrato,
+      eleicao: {
+        arquivos: ["atuais.xlsx"], eleitos: [], camaraNoContatos: false,
+        deputadosAtuais: [{ uf: "MA", nomeParlamentar: "C", nomeCivil: "C D", email: "c@camara.leg.br", telefone: "3215-0000" }],
+      },
+    } as unknown as Retrato;
+    const pub = enxugarParaPublicar(comEleicao, "2026-10-05T12:00:00.000Z");
+    expect(pub.eleicao?.arquivos).toEqual(["atuais.xlsx"]);
+    expect(pub.eleicao?.deputadosAtuais).toBeUndefined();
+    expect(JSON.stringify(pub)).not.toContain("camara.leg.br");
+    expect(comEleicao.eleicao?.deputadosAtuais).toHaveLength(1);
+  });
 });

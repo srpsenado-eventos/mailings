@@ -1,4 +1,4 @@
-import type { ContatoPlanilha, EnderecoEstruturado } from "@/lib/types";
+import type { CasaLegislativa, ContatoPlanilha, DeputadoAtual, EleitoPlanilha, EnderecoEstruturado } from "@/lib/types";
 
 /** Corpo JSON do `/api/analise` inválido (estrutura inesperada vinda do cliente). */
 export class PayloadInvalidoError extends Error {
@@ -15,6 +15,10 @@ export interface PayloadAnalise {
   arquivoEnderecosNome?: string;
   /** Linhas da planilha de endereços. Ausente = auditoria de endereço não roda. */
   enderecos?: EnderecoEstruturado[];
+  /** Planilhas de eleitos (spec 2026-10-05 §2). Ausente = a eleição não roda. */
+  eleitos?: EleitoPlanilha[];
+  deputadosAtuais?: DeputadoAtual[];
+  arquivosEleicao?: string[];
 }
 
 /** Teto defensivo contra abuso/erro — não é o limite real de uso (uma base tem dezenas/centenas). */
@@ -67,6 +71,41 @@ function narrowEndereco(v: unknown): EnderecoEstruturado {
   };
 }
 
+const CASAS: readonly CasaLegislativa[] = ["senado", "camara"];
+
+function objeto(v: unknown): Record<string, unknown> {
+  return (typeof v === "object" && v !== null ? v : {}) as Record<string, unknown>;
+}
+
+function narrowEleito(v: unknown): EleitoPlanilha {
+  const o = objeto(v);
+  const casa = CASAS.find((c) => c === o.casa);
+  if (!casa) throw new PayloadInvalidoError("Eleito com casa legislativa inválida.");
+  const opcionais = { partido: textoOpcional(o.partido), baseStatus: textoOpcional(o.baseStatus), genero: textoOpcional(o.genero), nascimento: textoOpcional(o.nascimento) };
+  return {
+    casa, uf: texto(o.uf), nomeUrna: texto(o.nomeUrna), nomeCompleto: texto(o.nomeCompleto),
+    situacaoTse: texto(o.situacaoTse), statusMandato: texto(o.statusMandato),
+    ...Object.fromEntries(Object.entries(opcionais).filter(([, x]) => x !== undefined)),
+  };
+}
+
+const CAMPOS_DEPUTADO_OPCIONAIS = ["partido", "sexo", "condicao", "eleicao2026", "email", "predio", "sala", "telefone", "idCamara"] as const;
+
+function narrowDeputado(v: unknown): DeputadoAtual {
+  const o = objeto(v);
+  const opcionais = Object.fromEntries(
+    CAMPOS_DEPUTADO_OPCIONAIS.map((c) => [c, textoOpcional(o[c])] as const).filter(([, x]) => x !== undefined),
+  );
+  return { uf: texto(o.uf), nomeParlamentar: texto(o.nomeParlamentar), nomeCivil: texto(o.nomeCivil), ...opcionais };
+}
+
+function listaOpcional<T>(valor: unknown, rotulo: string, narrow: (v: unknown) => T): T[] | undefined {
+  if (valor === undefined) return undefined;
+  if (!Array.isArray(valor)) throw new PayloadInvalidoError(`Lista de ${rotulo} inválida.`);
+  if (valor.length > MAX_CONTATOS) throw new PayloadInvalidoError(`Lista de ${rotulo} muito grande (máximo ${MAX_CONTATOS} linhas).`);
+  return valor.map(narrow);
+}
+
 /**
  * Valida e normaliza o corpo JSON enviado pelo cliente (que faz o parse da planilha no navegador).
  * Lança `PayloadInvalidoError` para qualquer formato inesperado — o route devolve 422 com a mensagem.
@@ -92,6 +131,12 @@ export function parsePayloadAnalise(corpo: unknown): PayloadAnalise {
   if (Array.isArray(enderecos) && enderecos.length > MAX_CONTATOS) {
     throw new PayloadInvalidoError(`Planilha de endereços muito grande (máximo ${MAX_CONTATOS} linhas).`);
   }
+  const extra = corpo as Record<string, unknown>;
+  const eleitos = listaOpcional(extra.eleitos, "eleitos", narrowEleito);
+  const deputadosAtuais = listaOpcional(extra.deputadosAtuais, "deputados atuais", narrowDeputado);
+  const arquivosEleicao = Array.isArray(extra.arquivosEleicao)
+    ? extra.arquivosEleicao.filter((x): x is string => typeof x === "string" && x.length > 0)
+    : undefined;
   return {
     arquivoNome,
     contatos: contatos.map(narrowContato),
@@ -99,5 +144,8 @@ export function parsePayloadAnalise(corpo: unknown): PayloadAnalise {
       ? { arquivoEnderecosNome }
       : {}),
     ...(Array.isArray(enderecos) ? { enderecos: enderecos.map(narrowEndereco) } : {}),
+    ...(eleitos ? { eleitos } : {}),
+    ...(deputadosAtuais ? { deputadosAtuais } : {}),
+    ...(arquivosEleicao ? { arquivosEleicao } : {}),
   };
 }

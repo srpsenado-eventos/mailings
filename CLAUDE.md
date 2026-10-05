@@ -47,6 +47,7 @@ Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**
 | 2026-10-01 | `auditoria-de-endereco-camada-d.md` | **Camada D**: endereço estruturado da segunda planilha, junção por `Id`, prioritário, CEP classificado; não pinta o semáforo; conferência nos Correios é a Fase 2 | Vigente (Fase 1 implementada) |
 | 2026-10-01 | `painel-local-retrato-em-arquivo.md` | **App só local.** Retrato em `.fiscal/retrato.json`; painel do mockup (etiquetas por campo, linha expansível, Copiar); tela Nova varredura | Parcialmente substituído por 2026-10-02 (Plano C): a publicação na web é só leitura |
 | 2026-10-02 | `ajustes-do-painel-genero-tcu-publicacao.md` | Gênero não muda a regra de protocolo; "Nada a revisar"; "Cargo vazio"; filtro por grupo; explicações; TCU por navegador (Plano B); retrato publicado com senha (Plano C) | Vigente; Planos A, B e C implementados |
+| 2026-10-05 | `eleitos-2026-e-ajustes-prodasen-design.md` | Eleitos 2026: reeleito e quem troca de Casa ficam no grupo atual (Ata 14), mandato novo vai para "Senadores/Deputados Federais Eleitos"; chave "Eleição 2026" no painel; tela local `/prodasen` com cadastro em lote no layout do Contatos e ajuste de endereço no formato de 23/09 | Vigente (a implementar, dois planos) |
 
 ## Princípios de implementação
 

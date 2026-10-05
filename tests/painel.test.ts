@@ -282,6 +282,14 @@ describe("filtrarGrupos", () => {
   test("contarContatos soma os contatos dos grupos", () => {
     expect(contarContatos(grupos)).toBe(4);
   });
+
+  test("filtro da eleição 'reeleitos' passa por filtrarGrupos e não traz novos", () => {
+    const reeleita = contato({ contato: { nome: "Reeleita Teste", grupo: "ORG" }, eleicao: { casa: "senado", destino: "reeleito", projecao: false, uf: "MA", situacaoTse: "Eleito", statusMandato: "Reeleição", nomeUrna: "Reeleita Teste" } });
+    const gs: ResultadoGrupo[] = [{ ...grupoComFonte, contatos: [reeleita, verde], novos: [{ nome: "Nova", cargo: "Ministra", origem: "pagina" }] }];
+    const r = filtrarGrupos(gs, "reeleitos", "");
+    expect(nomes(r)).toEqual(["Reeleita Teste"]);
+    expect(r[0].novos).toEqual([]);
+  });
 });
 
 describe("cartoesDoResumo", () => {

@@ -1,6 +1,7 @@
 import { coerenciasVisiveis, textoCoerencia } from "@/lib/tratamento";
 import { excessoDoNumero, LIMITE_NUMERO, rotuloAchadoEndereco } from "@/lib/endereco";
 import { normalizarTexto } from "@/lib/normalize";
+import { ehFiltroEleicao, passaFiltroEleicao, type FiltroEleicao } from "@/lib/painel-eleicao";
 import type {
   AchadoEndereco,
   AuditoriaEndereco,
@@ -22,7 +23,7 @@ import type {
  */
 
 export type Tom = "ok" | "atencao" | "ruim" | "neutro";
-export type CampoEtiqueta = "nome" | "cargo" | "tratamento" | "enderecamento" | "endereco" | "fonte";
+export type CampoEtiqueta = "nome" | "cargo" | "tratamento" | "enderecamento" | "endereco" | "fonte" | "eleicao";
 
 export interface Etiqueta {
   campo: CampoEtiqueta;
@@ -245,7 +246,7 @@ export function detalhesDoContato(c: ResultadoContato, _g: ResultadoGrupo): Deta
   return cartoes;
 }
 
-export type Filtro = "tudo" | "ressalva" | "endereco" | "numero" | "saida" | "inclusao";
+export type Filtro = "tudo" | "ressalva" | "endereco" | "numero" | "saida" | "inclusao" | FiltroEleicao;
 
 export const FILTROS: readonly { id: Filtro; rotulo: string }[] = [
   { id: "tudo", rotulo: "Tudo" },
@@ -263,6 +264,7 @@ function temRessalva(c: ResultadoContato): boolean {
 }
 
 function passaFiltro(c: ResultadoContato, filtro: Filtro): boolean {
+  if (ehFiltroEleicao(filtro)) return passaFiltroEleicao(c, filtro);
   switch (filtro) {
     case "tudo": return true;
     case "ressalva": return temRessalva(c);

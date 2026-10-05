@@ -1,7 +1,9 @@
 "use client";
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ExportButtons } from "@/components/export-buttons";
+import { ExportButtons, ExportEleitosButton } from "@/components/export-buttons";
+import { SecaoEleitos } from "@/components/secao-eleitos";
+import { avisoDaEleicao, ehFiltroEleicao, FILTROS_ELEICAO, secoesDeEleicao } from "@/lib/painel-eleicao";
 import { PublicarButton } from "@/components/publicar-button";
 import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-contato";
 import { cartoesDoResumo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoCabecalhoWeb, textoDataHora, type Filtro } from "@/lib/painel";
@@ -40,6 +42,10 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
   const [filtro, setFiltro] = useState<Filtro>("tudo");
   const [busca, setBusca] = useState("");
   const [grupo, setGrupo] = useState("");
+  const temEleicao = retrato.eleicao !== undefined;
+  const [eleicaoLigada, setEleicaoLigada] = useState(false);
+  const secoes = useMemo(() => (eleicaoLigada ? secoesDeEleicao(retrato.eleicao, filtro, busca) : []), [eleicaoLigada, retrato, filtro, busca]);
+  const avisoEleicao = eleicaoLigada ? avisoDaEleicao(retrato.eleicao) : undefined;
   const grupos = useMemo(() => filtrarGrupos(retrato.grupos, filtro, busca, grupo), [retrato, filtro, busca, grupo]);
   const total = retrato.resumo.total;
   const visiveis = contarContatos(grupos);
@@ -54,6 +60,10 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
   });
   const abrirTodos = (abrir: boolean) => setAlternados(abrir === filtrando ? new Set() : new Set(grupos.map((g) => g.grupo)));
   const mudarFiltro = (aplicar: () => void) => { aplicar(); setAlternados(new Set()); };
+  const alternarEleicao = () => {
+    if (eleicaoLigada && ehFiltroEleicao(filtro)) mudarFiltro(() => setFiltro("tudo"));
+    setEleicaoLigada((v) => !v);
+  };
 
   return (
     <main className="mx-auto max-w-6xl px-6 py-8">
@@ -79,6 +89,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
           ))}
           {modo !== "web" && podePublicar && <PublicarButton />}
           <ExportButtons analise={retrato} />
+          {temEleicao && retrato.eleicao && <ExportEleitosButton eleicao={retrato.eleicao} />}
         </div>
       </header>
 
@@ -95,7 +106,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <span className="text-xs text-cinza-claro">Mostrar</span>
-        {FILTROS.map((f) => (
+        {[...FILTROS, ...(eleicaoLigada ? FILTROS_ELEICAO : [])].map((f) => (
           <button
             key={f.id}
             type="button"
@@ -105,6 +116,12 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
             {f.rotulo}
           </button>
         ))}
+        {temEleicao && (
+          <label className="ml-2 flex cursor-pointer items-center gap-1.5 text-xs">
+            <input type="checkbox" role="switch" aria-checked={eleicaoLigada} checked={eleicaoLigada} onChange={alternarEleicao} className="accent-acao" />
+            Eleição 2026
+          </label>
+        )}
         <label htmlFor="grupo" className="ml-2 text-xs text-cinza-claro">Grupo</label>
         <select
           id="grupo"
@@ -132,6 +149,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
         <button type="button" onClick={() => abrirTodos(true)} className="text-acao underline">Expandir todos</button>
         <button type="button" onClick={() => abrirTodos(false)} className="text-acao underline">Recolher todos</button>
       </div>
+      {avisoEleicao && <p className="mt-2 text-xs text-atencao">{avisoEleicao}</p>}
 
       <div className="mt-5 space-y-5">
         {grupos.map((g) => {
@@ -154,7 +172,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
                   <div className={`${CLASSES_COLUNAS} text-xs text-cinza-claro`}>
                     <div>Contato</div><div>Cargo no cadastro</div><div>Campos conferidos</div><div>Situação</div>
                   </div>
-                  {g.contatos.map((c, i) => <LinhaContato key={`${c.contato.nome}-${i}`} c={c} g={g} retrato={retrato} />)}
+                  {g.contatos.map((c, i) => <LinhaContato key={`${c.contato.nome}-${i}`} c={c} g={g} retrato={retrato} eleicaoLigada={eleicaoLigada} />)}
                   {g.novos.map((n, i) => (
                     <LinhaNovo
                       key={`novo-${i}`}
@@ -169,7 +187,8 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
             </section>
           );
         })}
-        {grupos.length === 0 && <p className="text-sm text-cinza">Nada para mostrar com este filtro.</p>}
+        {secoes.map((s) => <SecaoEleitos key={`${s.id}-${filtrando}`} secao={s} abertoInicial={filtrando} />)}
+        {grupos.length === 0 && secoes.length === 0 && <p className="text-sm text-cinza">Nada para mostrar com este filtro.</p>}
       </div>
     </main>
   );

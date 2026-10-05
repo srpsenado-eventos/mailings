@@ -15,7 +15,8 @@ import {
   textoEnderecoParaCopiar,
   type CampoEndereco,
 } from "@/lib/painel";
-import type { ResultadoContato, ResultadoGrupo, Retrato } from "@/lib/types";
+import { destacaLinha, detalheDaEleicao, etiquetasDeEleicao } from "@/lib/painel-eleicao";
+import type { EleicaoContato, ResultadoContato, ResultadoGrupo, Retrato } from "@/lib/types";
 
 const COLUNAS = "grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_minmax(0,2.6fr)_minmax(0,1fr)] items-start gap-4 px-4 py-3";
 
@@ -106,7 +107,28 @@ function BlocoEndereco({ c, retrato }: { c: ResultadoContato; retrato: Retrato }
   );
 }
 
-function Detalhe({ c, g, retrato }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato }) {
+function BlocoEleicao({ e }: { e: EleicaoContato }) {
+  const d = detalheDaEleicao(e);
+  return (
+    <div className={`rounded-lg border p-4 ${e.destino === "outra_casa" ? "border-atencao-borda bg-atencao-fundo/40" : "border-borda bg-cartao"}`}>
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-semibold">Eleição 2026</span>
+        {etiquetasDeEleicao(e).map((x) => <Etiqueta key={x.texto} texto={x.texto} tom={x.tom} explicacao={x.explicacao} />)}
+      </div>
+      <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+        {d.linhas.map((l) => (
+          <div key={l.rotulo} className="contents">
+            <dt className="text-xs leading-6 text-cinza-claro">{l.rotulo}</dt>
+            <dd>{l.valor}</dd>
+          </div>
+        ))}
+      </dl>
+      {d.orientacao && <p className="mt-2 text-sm font-medium text-atencao">{d.orientacao}</p>}
+    </div>
+  );
+}
+
+function Detalhe({ c, g, retrato, eleicaoLigada }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato; eleicaoLigada: boolean }) {
   const cartoes = detalhesDoContato(c, g);
   const p = procedenciaNomeCargo(g);
   return (
@@ -130,6 +152,7 @@ function Detalhe({ c, g, retrato }: { c: ResultadoContato; g: ResultadoGrupo; re
         </div>
       )}
       <BlocoEndereco c={c} retrato={retrato} />
+      {eleicaoLigada && c.eleicao && <BlocoEleicao e={c.eleicao} />}
       <div>
       <h3 className="text-xs font-semibold uppercase tracking-wide text-cinza-claro">De onde veio cada resposta</h3>
       <ul className="mt-1 text-xs leading-relaxed text-cinza">
@@ -144,14 +167,14 @@ function Detalhe({ c, g, retrato }: { c: ResultadoContato; g: ResultadoGrupo; re
   );
 }
 
-export function LinhaContato({ c, g, retrato }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato }) {
+export function LinhaContato({ c, g, retrato, eleicaoLigada = false }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato; eleicaoLigada?: boolean }) {
   const [aberto, setAberto] = useState(false);
-  const etiquetas = etiquetasDoContato(c, g);
+  const etiquetas = [...etiquetasDoContato(c, g), ...(eleicaoLigada ? etiquetasDeEleicao(c.eleicao) : [])];
   const situacao = situacaoDoContato(c, g);
   const motivo = motivoDoContato(c, g);
   const subtitulo = motivo ?? [c.contato.tratamento, c.contato.enderecamento].filter(Boolean).join(" · ");
   return (
-    <div className="border-t border-separador">
+    <div className={`border-t border-separador ${eleicaoLigada && destacaLinha(c.eleicao) ? "border-l-4 border-l-atencao" : ""}`}>
       <div className={`${COLUNAS} cursor-pointer hover:bg-fundo/60`} onClick={() => setAberto((v) => !v)}>
         <button type="button" aria-expanded={aberto} className="text-left">
           <span className="block text-sm font-medium text-tinta">{c.contato.nome}</span>
@@ -163,7 +186,7 @@ export function LinhaContato({ c, g, retrato }: { c: ResultadoContato; g: Result
         </div>
         <div><Etiqueta texto={situacao.texto} tom={situacao.tom} explicacao={situacao.explicacao} /></div>
       </div>
-      {aberto && <Detalhe c={c} g={g} retrato={retrato} />}
+      {aberto && <Detalhe c={c} g={g} retrato={retrato} eleicaoLigada={eleicaoLigada} />}
     </div>
   );
 }

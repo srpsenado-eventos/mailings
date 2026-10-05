@@ -1,6 +1,6 @@
 # CLAUDE.md — Fiscal de Mailings
 
-Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui. Última revisão: 2026-10-04.
+Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui. Última revisão: 2026-10-05.
 
 ## Contexto rápido
 
@@ -144,6 +144,44 @@ Regras de Atualizacao/   ← material do GT, NÃO versionado (xlsx e pdf no .git
 3. Acrescentar em `data/catalogo.ts`. A **primeira** fonte com `ativo: true` é a primária; a ordem do array importa.
 4. Se a página tem estrutura peculiar (nomes grudados, tabela sem separador), salvar um recorte anonimizável em `tests/fixtures/` e cobrir em `tests/scrape.test.ts`.
 5. Rodar `npm test` (inclui `tests/catalogo-dados.test.ts`) e `npm run typecheck`.
+
+## Rotina: coleta e publicação na web
+
+Regra do Clovis (2026-10-05): **toda coleta feita com arquivos novos nas pastas termina publicada na web**, na sequência, sem esperar outro pedido. A publicação só não acontece no caso da trava de qualidade (passo 5). Cada passo abaixo é obrigatório.
+
+**Onde ficam os arquivos**
+
+| Arquivo | Pasta | Passo da Nova varredura |
+|---|---|---|
+| `BASE GRUPOS POSSE - <DD MMM AAAA>.xlsx` (contatos) | `Bases de comparação -PLANILHAS CONTATOS/` | 1 |
+| `BASE ENDERECO - <DD MMM AAAA>.xlsx` (endereços) | `Bases de comparação -PLANILHAS CONTATOS/` | 2 |
+| `Senadores Eleitos 2026.xlsx`, `Deputados Federais Eleitos 2026.xlsx`, `Deputados Federais Atuais (57a legislatura).xlsx` | `../GT Posse/Eleitos 2026/` | 3 (as três de uma vez) |
+
+Havendo mais de uma base de contatos ou de endereços, vale a de data mais recente no nome. Na dúvida entre duas, perguntar.
+
+**Passos**
+
+1. **Um servidor só.** Antes de subir, ver se há processo escutando nas portas 3000 a 3003 (`Get-NetTCPConnection -LocalPort 3000`). Servidor do Fiscal esquecido de outra sessão é encerrado: em 2026-10-05, um servidor velho na 3000 recebeu o clique em "Publicar na web" e nada foi publicado. Subir com `npm run dev` e conferir no log que ficou em `http://localhost:3000`. O endereço só vai para o Clovis depois dessa conferência.
+2. **Guardar o retrato atual** em `.fiscal/retrato-anterior-<AAAA-MM-DD>.json`, antes de varrer.
+3. **Varrer pela tela** `/nova-varredura`, com os arquivos dos três passos. O navegador de automação só abre arquivos dentro da pasta do projeto: copiar as planilhas de `GT Posse/Eleitos 2026` para `.fiscal/eleitos-tmp/` (fora do git) e apagar a cópia ao terminar. Conferir na tela as contagens lidas (contatos, grupos, endereços, eleitos) antes de clicar em "Varrer".
+4. **Comparar com o retrato anterior**, só por contagens e por situação de cada grupo (lido, inacessível, via IA, sem fonte). Nada de nomes no log.
+5. **Trava de qualidade.** Não publicar sem falar com o Clovis quando um grupo que foi **lido** no retrato anterior vier **inacessível** ou **via IA** nesta coleta. É o caso de Ministros de Estado e Embaixadores (bloqueio intermitente do gov.br) e do TCU quando o Chrome falha. Nesse caso, rodar a coleta **mais uma vez**. Se persistir, mostrar ao Clovis o que piorou e perguntar se publica assim ou espera. Grupo **sem fonte** que a IA compôs sozinha (ex.: Governadores) não trava, mas as "possíveis saídas" dele vão no relatório como não confiáveis.
+6. **Publicar**: botão "Publicar na web" do painel local ou `POST http://localhost:3000/api/publicar` com `Origin: http://localhost:3000`. Leva uns 5 segundos e exige `BLOB_READ_WRITE_TOKEN` no `.env.local`.
+7. **Conferir na web**: entrar em `https://mailings-theta.vercel.app` com a senha do painel, sem exibi-la nem gravá-la em arquivo novo. Verificar:
+   - a linha "Varredura feita … Publicada em …" com a data e a hora desta coleta;
+   - nenhum e-mail ou telefone no HTML.
+8. **Relatório ao Clovis**:
+   - tabela antes × depois (Conferem, Com divergência, Possível saída, Não verificados, Propostas de inclusão, Endereços a confirmar, Número acima de 6);
+   - grupos lidos, inacessíveis e via IA;
+   - contagens da eleição;
+   - a hora publicada.
+
+**Código novo é outro fluxo.** Publicar o retrato não leva código para a web. O projeto `mailings` (equipe `srp-coeven`) **não** faz deploy automático do GitHub. Quando o `main` muda:
+- extrair `git archive origin/main` numa pasta limpa, com o `.vercel/project.json` copiado;
+- rodar `vercel deploy --prod --yes` (a CLI desta máquina está autenticada);
+- nunca fazer o deploy da pasta do projeto: o `pnpm-lock.yaml` solto quebra o build.
+
+Conferir com `vercel inspect` (status Ready, alias `mailings-theta.vercel.app`) e entrando no painel.
 
 ## Testes
 

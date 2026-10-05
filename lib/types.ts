@@ -125,6 +125,8 @@ export interface ResultadoContato {
    * `semaforo`: ver docs/superpowers/specs/2026-10-01-auditoria-de-endereco-camada-d.md
    */
   endereco?: AuditoriaEndereco;
+  /** Eleição 2026 (spec 2026-10-05). Eixo próprio: não muda `semaforo`. */
+  eleicao?: EleicaoContato;
 }
 
 export interface ResultadoGrupo {
@@ -180,6 +182,8 @@ export interface ResultadoAnalise {
   arquivoNome: string;
   grupos: ResultadoGrupo[];
   resumo: ResumoAnalise;
+  /** Presente só quando a varredura recebeu as planilhas de eleitos. */
+  eleicao?: ResultadoEleicao;
 }
 
 /**
@@ -339,4 +343,93 @@ export interface AuditoriaEndereco {
   formatado?: string;
   /** Quantas linhas de endereço o contato tem na base (para explicar a escolha). */
   linhas?: number;
+}
+
+/** Casa legislativa de um eleito ou de um grupo de parlamentares. */
+export type CasaLegislativa = "senado" | "camara";
+
+/**
+ * Uma linha das planilhas `Senadores Eleitos 2026.xlsx` ou `Deputados Federais Eleitos 2026.xlsx`
+ * (aba `Eleitos`, geradas na pasta `GT Posse/Eleitos 2026`). Dado público do TSE.
+ * Spec 2026-10-05 §2.
+ */
+export interface EleitoPlanilha {
+  casa: CasaLegislativa;
+  /** Sigla da UF, como na planilha ("AC"). */
+  uf: string;
+  nomeUrna: string;
+  nomeCompleto: string;
+  partido?: string;
+  /** Coluna `Situação (TSE)`: "Eleito", "Eleito por QP", "PROJEÇÃO da imprensa (...)". */
+  situacaoTse: string;
+  /** Coluna `Status do mandato`: base da classificação (spec §4). */
+  statusMandato: string;
+  baseStatus?: string;
+  genero?: string;
+  nascimento?: string;
+}
+
+/** Uma linha de `Deputados Federais Atuais (57a legislatura).xlsx`, aba `Em exercício`. */
+export interface DeputadoAtual {
+  uf: string;
+  nomeParlamentar: string;
+  nomeCivil: string;
+  partido?: string;
+  sexo?: string;
+  condicao?: string;
+  eleicao2026?: string;
+  email?: string;
+  predio?: string;
+  sala?: string;
+  telefone?: string;
+  idCamara?: string;
+}
+
+/**
+ * Para onde vai cada eleito no cadastro (spec §4): fica no grupo atual (`reeleito`, `outra_casa`),
+ * entra no grupo novo (`novo`) ou fica fora do lote até decisão (`conferir`).
+ */
+export type DestinoEleito = "reeleito" | "outra_casa" | "novo" | "conferir";
+
+/** Linha do Contatos que casou com o eleito. */
+export interface ContatoDoEleito {
+  grupo: string;
+  nome: string;
+  id?: string;
+}
+
+export interface EleitoClassificado {
+  eleito: EleitoPlanilha;
+  destino: DestinoEleito;
+  /** `Situação (TSE)` começa com "PROJEÇÃO": eleito ainda não homologado pelo TSE. */
+  projecao: boolean;
+  /** Por que está em `conferir`. */
+  motivo?: string;
+  /** Linhas do Contatos da pessoa (pode estar em mais de um grupo). Vazio = não está no Contatos. */
+  contatos: ContatoDoEleito[];
+  /** Mandato novo que já está cadastrado no grupo novo ("Senadores Eleitos" etc.). */
+  jaCadastrado?: boolean;
+}
+
+/** O que o painel mostra na linha de um contato que é eleito. Não pinta o semáforo. */
+export interface EleicaoContato {
+  casa: CasaLegislativa;
+  destino: DestinoEleito;
+  projecao: boolean;
+  uf: string;
+  partido?: string;
+  situacaoTse: string;
+  statusMandato: string;
+  baseStatus?: string;
+  nomeUrna: string;
+  motivo?: string;
+}
+
+/** Eleição 2026 no retrato. `deputadosAtuais` nunca vai para a web (lib/publicar.ts). */
+export interface ResultadoEleicao {
+  arquivos: string[];
+  eleitos: EleitoClassificado[];
+  deputadosAtuais?: DeputadoAtual[];
+  /** O grupo "Deputados Federais" existe no Contatos? Sem ele, deputados valem pela planilha. */
+  camaraNoContatos: boolean;
 }

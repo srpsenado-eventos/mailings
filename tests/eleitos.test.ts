@@ -36,6 +36,18 @@ describe("classificarEleitos: destino pelo Status do mandato", () => {
     expect(r.contatos[0].grupo).toBe("Deputados Federais");
   });
 
+  test("senador atual eleito deputado, na planilha da Câmara, fica no grupo Senadores como outra_casa", () => {
+    const e = eleito({ casa: "camara", statusMandato: "Mandato novo (atual senador)" });
+    const [r] = classificarEleitos([e], [senadores(joana)]);
+    expect(r.destino).toBe("outra_casa");
+    expect(r.contatos).toEqual([{ grupo: "Senadores", nome: "Joana Fictícia", id: "10" }]);
+  });
+
+  test("deputado suplente em exercício, na planilha da Câmara, conta como reeleito", () => {
+    const [r] = classificarEleitos([eleito({ casa: "camara", statusMandato: "Atual deputado (suplente em exercício)" })], []);
+    expect(r.destino).toBe("reeleito");
+  });
+
   test("mandato novo sem ninguém no Contatos vai para o grupo novo", () => {
     expect(dest(classificarEleitos([eleito({ statusMandato: "Mandato novo" })], [senadores()]))).toEqual(["novo"]);
   });
@@ -93,6 +105,38 @@ describe("classificarEleitos: contradições viram conferir", () => {
   test("deputado reeleito sem o grupo Deputados Federais no Contatos vale pela planilha", () => {
     const [r] = classificarEleitos([eleito({ casa: "camara" })], [senadores(joana)]);
     expect(r.destino).toBe("reeleito");
+  });
+
+  test("mandato novo que consta entre os deputados em exercício vai para conferir (Câmara)", () => {
+    const atuais: DeputadoAtual[] = [{ uf: "MA", nomeParlamentar: "Joana Fictícia", nomeCivil: "Joana Maria Fictícia Souza" }];
+    const [r] = classificarEleitos([eleito({ casa: "camara", statusMandato: "Mandato novo" })], [], atuais);
+    expect(r.destino).toBe("conferir");
+    expect(r.motivo).toBe("Planilha diz mandato novo, mas a pessoa está na lista de deputados em exercício");
+  });
+
+  test("senador eleito de mandato novo que está em exercício na Câmara vai para conferir", () => {
+    const atuais: DeputadoAtual[] = [{ uf: "MA", nomeParlamentar: "Joana Fictícia", nomeCivil: "Joana Maria Fictícia Souza" }];
+    const [r] = classificarEleitos([eleito({ statusMandato: "Mandato novo" })], [senadores()], atuais);
+    expect(r.destino).toBe("conferir");
+    expect(r.motivo).toBe("Planilha diz mandato novo, mas a pessoa está na lista de deputados em exercício");
+  });
+
+  test("mandato novo fora da lista de deputados em exercício continua novo", () => {
+    const atuais: DeputadoAtual[] = [{ uf: "MA", nomeParlamentar: "Outro Nome", nomeCivil: "Outra Pessoa" }];
+    const [r] = classificarEleitos([eleito({ casa: "camara", statusMandato: "Mandato novo" })], [], atuais);
+    expect(r.destino).toBe("novo");
+  });
+
+  test("'atual deputado federal' na planilha do Senado vale; na da Câmara é status não previsto", () => {
+    const [r] = classificarEleitos([eleito({ casa: "camara", statusMandato: "Mandato novo (atual deputado federal)" })], []);
+    expect(r.destino).toBe("conferir");
+    expect(r.motivo).toBe('Status do mandato não previsto: "Mandato novo (atual deputado federal)"');
+  });
+
+  test("'atual senador' na planilha do Senado é status não previsto", () => {
+    const [r] = classificarEleitos([eleito({ statusMandato: "Mandato novo (atual senador)" })], []);
+    expect(r.destino).toBe("conferir");
+    expect(r.motivo).toBe('Status do mandato não previsto: "Mandato novo (atual senador)"');
   });
 
   test("nome que casa duas pessoas diferentes do Contatos vai para conferir", () => {

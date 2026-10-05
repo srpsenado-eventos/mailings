@@ -118,16 +118,22 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
   async function lerEleicao(arquivos: File[]) {
     setErroEleicao(null);
     setErroVarredura(null);
-    try {
-      const lidos: ArquivoEleicaoLido[] = [];
-      for (const f of arquivos) lidos.push({ nome: f.name, arquivo: lerPlanilhaEleicao(await f.arrayBuffer()) });
+    const lidos: ArquivoEleicaoLido[] = [];
+    const erros: string[] = [];
+    for (const f of arquivos) {
+      try {
+        lidos.push({ nome: f.name, arquivo: lerPlanilhaEleicao(await f.arrayBuffer()) });
+      } catch (err) {
+        erros.push(`${f.name}: ${mensagemDeLeitura(err)}`);
+      }
+    }
+    if (lidos.length > 0) {
       setEleicao((atual) => {
         const tipos = new Set(lidos.map((l) => l.arquivo.tipo));
         return [...atual.filter((a) => !tipos.has(a.arquivo.tipo)), ...lidos];
       });
-    } catch (err) {
-      setErroEleicao(mensagemDeLeitura(err));
     }
+    if (erros.length > 0) setErroEleicao(erros.join(" | "));
   }
 
   async function varrer() {

@@ -144,7 +144,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
         />
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-cinza">
-        {filtrando && <span>{visiveis} contatos de {total}</span>}
+        {filtrando && filtro !== "a_cadastrar" && filtro !== "a_conferir" && <span>{visiveis} contatos de {total}</span>}
         <div className="grow" />
         <button type="button" onClick={() => abrirTodos(true)} className="text-acao underline">Expandir todos</button>
         <button type="button" onClick={() => abrirTodos(false)} className="text-acao underline">Recolher todos</button>

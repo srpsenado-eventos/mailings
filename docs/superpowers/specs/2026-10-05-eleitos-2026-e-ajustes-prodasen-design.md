@@ -43,6 +43,8 @@ Cada eleito cai em exatamente um destino. A classificação vem da coluna `Statu
 | `novo` (entra no grupo novo) | `Mandato novo` | 19 | 172 |
 | `conferir` (fora do lote até decisão) | `Mandato novo (verificar)`, qualquer valor não previsto, e as contradições abaixo | 2 | 33 |
 
+`Mandato novo (atual deputado federal)` só vale na planilha do Senado e `Mandato novo (atual senador)` só na da Câmara; fora desse par, o valor é tratado como não previsto e vai para `conferir`.
+
 Marca independente do destino: `projecao: true` quando `Situação (TSE)` começa com `PROJEÇÃO` (123 deputados de MG e SP em 05/10). A pessoa é classificada normalmente e a marca diz "projeção — aguarda TSE". Atualizar = rodar o script da pasta e fazer nova varredura.
 
 ### 4.1 Casamento com o Contatos
@@ -56,6 +58,9 @@ Marca independente do destino: `projecao: true` quando `Situação (TSE)` começ
 - Status `reeleito` ou `outra_casa`, mas a pessoa não está no grupo correspondente do Contatos.
 - Status `novo`, mas a pessoa já está num grupo de parlamentar do Contatos.
 - Status `outra_casa` na Câmara→Senado, mas a pessoa não consta da planilha de deputados atuais (quando enviada). Caso medido em 05/10: um eleito marcado "atual deputado federal" por ter sido eleito em 2022, sem estar na Câmara hoje.
+
+- Status `reeleito` da Câmara (inclusive suplente em exercício), mas a pessoa não consta da planilha de deputados atuais (quando enviada).
+- Status `novo`, mas a pessoa consta da planilha de deputados atuais (quando enviada). Vale para as duas Casas: um senador eleito de mandato novo que está em exercício na Câmara também é contradição.
 
 Enquanto o grupo "Deputados Federais" não existir no Contatos, a checagem com o Contatos não se aplica aos deputados: vale a planilha, e a tela diz isso ("Deputados classificados pela planilha; o grupo ainda não está no Contatos").
 

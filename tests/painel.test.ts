@@ -283,6 +283,12 @@ describe("filtrarGrupos", () => {
     expect(contarContatos(grupos)).toBe(4);
   });
 
+  test("a eleição de destino outra_casa não muda a situação do contato", () => {
+    const sem = contato({});
+    const com = contato({ eleicao: { casa: "camara", destino: "outra_casa", projecao: false, uf: "MA", situacaoTse: "Eleito", statusMandato: "Mandato novo (atual senador)", nomeUrna: "Ana" } });
+    expect(situacaoDoContato(com, grupoComFonte)).toEqual(situacaoDoContato(sem, grupoComFonte));
+  });
+
   test("filtro da eleição 'reeleitos' passa por filtrarGrupos e não traz novos", () => {
     const reeleita = contato({ contato: { nome: "Reeleita Teste", grupo: "ORG" }, eleicao: { casa: "senado", destino: "reeleito", projecao: false, uf: "MA", situacaoTse: "Eleito", statusMandato: "Reeleição", nomeUrna: "Reeleita Teste" } });
     const gs: ResultadoGrupo[] = [{ ...grupoComFonte, contatos: [reeleita, verde], novos: [{ nome: "Nova", cargo: "Ministra", origem: "pagina" }] }];

@@ -24,6 +24,7 @@ export const OBSERVACAO_NOME_URNA = "Nome de urna (TSE): aguarda aprovação do 
 export const ORIENTACAO_OUTRA_CASA = "Convidado pelo cargo atual (Ata 14 do GT Cerimonial, 09/06/2026)";
 
 const MOTIVO_AMBIGUO = "Nome casa mais de um contato do Contatos";
+const MOTIVO_NOVO_EM_EXERCICIO = "Planilha diz mandato novo, mas a pessoa está na lista de deputados em exercício";
 const MOTIVO_VERIFICAR = "Planilha pede verificação: provável deputado estadual ou distrital";
 
 type Regra =
@@ -31,7 +32,10 @@ type Regra =
   | { destino: "novo" }
   | { destino: "conferir"; motivo: string };
 
-const outra = (c: CasaLegislativa): CasaLegislativa => (c === "senado" ? "camara" : "senado");
+const naoPrevisto = (e: EleitoPlanilha): Regra => ({
+  destino: "conferir",
+  motivo: `Status do mandato não previsto: "${e.statusMandato.trim()}"`,
+});
 
 function regraDoStatus(e: EleitoPlanilha): Regra {
   const s = normalizarTexto(e.statusMandato);
@@ -41,14 +45,17 @@ function regraDoStatus(e: EleitoPlanilha): Regra {
     case "mandato novo (em exercicio como 1º suplente)":
       return { destino: "reeleito", casaAtual: e.casa };
     case "mandato novo (atual deputado federal)":
+      if (e.casa === "senado") return { destino: "outra_casa", casaAtual: "camara" };
+      return naoPrevisto(e);
     case "mandato novo (atual senador)":
-      return { destino: "outra_casa", casaAtual: outra(e.casa) };
+      if (e.casa === "camara") return { destino: "outra_casa", casaAtual: "senado" };
+      return naoPrevisto(e);
     case "mandato novo":
       return { destino: "novo" };
     case "mandato novo (verificar)":
       return { destino: "conferir", motivo: MOTIVO_VERIFICAR };
     default:
-      return { destino: "conferir", motivo: `Status do mandato não previsto: "${e.statusMandato.trim()}"` };
+      return naoPrevisto(e);
   }
 }
 
@@ -119,6 +126,9 @@ function classificarUm(
   }
 
   if (regra.destino === "novo") {
+    if (atuais && constaEntreAtuais(e, atuais)) {
+      return { ...base, destino: "conferir", motivo: MOTIVO_NOVO_EM_EXERCICIO, contatos: [] };
+    }
     const atual = achados.find((a) => !a.eleitos);
     if (atual) {
       return { ...base, destino: "conferir", motivo: `Planilha diz mandato novo, mas a pessoa já está em "${atual.grupo}"`, contatos: [referencia(atual)] };

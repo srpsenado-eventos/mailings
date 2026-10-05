@@ -321,6 +321,7 @@ export type AchadoEndereco =
   | "sem_linha"
   | "sem_logradouro"
   | "sem_numero"
+  | "numero_longo"
   | "sem_bairro"
   | "cep_ausente"
   | "cep_invalido"

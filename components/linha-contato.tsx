@@ -3,16 +3,17 @@ import { useState } from "react";
 import { Etiqueta } from "@/components/etiqueta";
 import { rotuloAchadoEndereco } from "@/lib/endereco";
 import {
+  camposDoEndereco,
   detalhesDoContato,
   EXPLICACAO_NOVO,
   etiquetaDeEndereco,
   etiquetasDoContato,
-  linhasDoEndereco,
   motivoDoContato,
   procedenciaNomeCargo,
   situacaoDoContato,
   textoDataHora,
   textoEnderecoParaCopiar,
+  type CampoEndereco,
 } from "@/lib/painel";
 import type { ResultadoContato, ResultadoGrupo, Retrato } from "@/lib/types";
 
@@ -40,6 +41,33 @@ function BotaoCopiar({ texto }: { texto: string }) {
   );
 }
 
+function ValorDoCampo({ campo }: { campo: CampoEndereco }) {
+  if (!campo.valor) return <span className="text-cinza">(vazio)</span>;
+  if (!campo.excedente) return <>{campo.valor}</>;
+  const cabe = campo.valor.slice(0, campo.valor.length - campo.excedente.length);
+  return (
+    <span className="whitespace-pre">
+      {cabe}<mark className="rounded-sm bg-atencao-fundo px-0.5 text-atencao underline decoration-2">{campo.excedente}</mark>
+    </span>
+  );
+}
+
+function CamposDoEndereco({ campos }: { campos: CampoEndereco[] }) {
+  return (
+    <dl className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+      {campos.map((campo) => (
+        <div key={campo.rotulo} className="contents">
+          <dt className="text-xs leading-6 text-cinza-claro">{campo.rotulo}</dt>
+          <dd className={campo.tom === "atencao" ? "font-medium text-atencao" : "font-medium"}>
+            <ValorDoCampo campo={campo} />
+            {campo.nota && <span className={`ml-2 text-xs font-normal ${campo.tom === "atencao" ? "text-atencao" : "text-cinza"}`}>{campo.nota}</span>}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function BlocoEndereco({ c, retrato }: { c: ResultadoContato; retrato: Retrato }) {
   const a = c.endereco;
   if (!a || a.situacao === "sem_base") return null;
@@ -62,9 +90,7 @@ function BlocoEndereco({ c, retrato }: { c: ResultadoContato; retrato: Retrato }
           <div className="text-xs text-cinza-claro">No relatório de endereços</div>
           {a.endereco ? (
             <>
-              <div className="mt-1 text-sm font-medium leading-relaxed">
-                {linhasDoEndereco(a.endereco).map((l, i) => <div key={i}>{l}</div>)}
-              </div>
+              <CamposDoEndereco campos={camposDoEndereco(a)} />
               <BotaoCopiar texto={textoEnderecoParaCopiar(a.endereco)} />
             </>
           ) : (
@@ -126,8 +152,8 @@ export function LinhaContato({ c, g, retrato }: { c: ResultadoContato; g: Result
   const subtitulo = motivo ?? [c.contato.tratamento, c.contato.enderecamento].filter(Boolean).join(" · ");
   return (
     <div className="border-t border-separador">
-      <div className={COLUNAS}>
-        <button type="button" aria-expanded={aberto} onClick={() => setAberto((v) => !v)} className="text-left">
+      <div className={`${COLUNAS} cursor-pointer hover:bg-fundo/60`} onClick={() => setAberto((v) => !v)}>
+        <button type="button" aria-expanded={aberto} className="text-left">
           <span className="block text-sm font-medium text-tinta">{c.contato.nome}</span>
           {subtitulo && <span className={`block text-xs ${motivo ? "text-atencao" : "text-cinza"}`}>{subtitulo}</span>}
         </button>

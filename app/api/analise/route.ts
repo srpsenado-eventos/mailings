@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { analisar, type Dependencias } from "@/lib/analise";
 import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload";
 import { armazemPadrao } from "@/lib/armazem";
+import { aplicarEleicao } from "@/lib/eleitos";
 import { resolverGrupoEFonte } from "@/lib/catalogo";
 import { modoDoApp } from "@/lib/modo";
 import { origemPermitida } from "@/lib/origem";
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, message: "Corpo inválido (esperado JSON)." }, { status: 400 });
     }
 
-    const { arquivoNome, contatos, arquivoEnderecosNome, enderecos } = parsePayloadAnalise(corpo);
+    const { arquivoNome, contatos, arquivoEnderecosNome, enderecos, eleitos, deputadosAtuais, arquivosEleicao } = parsePayloadAnalise(corpo);
 
     const deps: Dependencias = {
       resolverFonte: (grupo) => resolverGrupoEFonte(grupo),
@@ -37,7 +38,11 @@ export async function POST(req: NextRequest) {
       extrairComposicao: (grupoCanonico, textoLimpo) => extrairComposicao(grupoCanonico, textoLimpo),
     };
 
-    const resultado = await analisar(arquivoNome, contatos, deps, enderecos);
+    const analisado = await analisar(arquivoNome, contatos, deps, enderecos);
+    // Eleição 2026: passada posterior, eixo próprio (spec 2026-10-05 §4.3).
+    const resultado = eleitos || deputadosAtuais
+      ? aplicarEleicao(analisado, eleitos ?? [], arquivosEleicao ?? [], deputadosAtuais)
+      : analisado;
     const retrato = montarRetrato(
       resultado,
       {

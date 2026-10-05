@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  camposDoEndereco,
   cartoesDoResumo,
   contarContatos,
   detalhesDoContato,
@@ -9,6 +10,7 @@ import {
   montarRetrato,
   motivoDoContato,
   procedenciaNomeCargo,
+  resumoDoGrupo,
   situacaoDoContato,
   textoCabecalhoWeb,
   textoDataHora,
@@ -168,6 +170,12 @@ describe("motivoDoContato", () => {
   });
 });
 
+const cartao = (c: ResultadoContato, campo: string) => {
+  const achado = detalhesDoContato(c, grupoComFonte).find((x) => x.campo === campo);
+  if (!achado) throw new Error(`sem cartão de ${campo}`);
+  return achado;
+};
+
 describe("detalhesDoContato", () => {
   test("um cartão por campo com comparação, com origem certa e valor copiável só quando diverge", () => {
     const c = contato({
@@ -190,26 +198,38 @@ describe("detalhesDoContato", () => {
 
   test("site que não informa o cargo diz isso no cartão", () => {
     const c = contato({ comparacoes: [{ campo: "cargo", valorPlanilha: "Ministra", situacao: "fonte_nao_informa", origemValor: "pagina" }] });
-    expect(detalhesDoContato(c, grupoComFonte)[0].valorReferencia).toBe("o site não informa");
+    expect(cartao(c, "cargo").valorReferencia).toBe("o site não informa");
   });
 
   test("achados de coerência entram no cartão do campo, com o texto de textoCoerencia", () => {
     const c = contato({ comparacoes: [confere("tratamento", "protocolo", "Senhora"), coerencia("tratamento", "genero_cargo_tratamento")] });
-    const d = detalhesDoContato(c, grupoComFonte);
-    expect(d).toHaveLength(1);
-    expect(d[0].coerencias).toEqual(["gênero do Cargo discorda do Tratamento"]);
+    expect(cartao(c, "tratamento").coerencias).toEqual(["gênero do Cargo discorda do Tratamento"]);
   });
 
   test("campo só com achado de coerência (sem comparação de valor) ainda ganha cartão", () => {
     const c = contato({ comparacoes: [coerencia("enderecamento", "campo_vazio", "")] });
-    const d = detalhesDoContato(c, grupoComFonte);
-    expect(d[0]).toMatchObject({ campo: "enderecamento", valorPlanilha: "", origem: "Tabela de protocolo diz", valorReferencia: "" });
-    expect(d[0].coerencias[0]).toBe("campo vazio (Endereçamento)");
+    const d = cartao(c, "enderecamento");
+    expect(d).toMatchObject({ campo: "enderecamento", valorPlanilha: "", origem: "Tabela de protocolo diz", valorReferencia: "" });
+    expect(d.coerencias[0]).toBe("campo vazio (Endereçamento)");
   });
 
   test("campo vazio com valor de protocolo não duplica (coerenciasVisiveis colapsa)", () => {
     const c = contato({ comparacoes: [diverge("tratamento", "protocolo", "", "Vossa Excelência"), coerencia("tratamento", "campo_vazio", "")] });
-    expect(detalhesDoContato(c, grupoComFonte)[0].coerencias).toEqual([]);
+    expect(cartao(c, "tratamento").coerencias).toEqual([]);
+  });
+
+  test("os quatro campos fiscalizados aparecem sempre, mesmo sem comparação, com o valor do cadastro", () => {
+    const c = contato({ semaforo: "vermelho", possivelSaida: true, comparacoes: [] });
+    const d = detalhesDoContato(c, grupoComFonte);
+    expect(d.map((x) => x.campo)).toEqual(["nome", "cargo", "tratamento", "enderecamento"]);
+    expect(d.map((x) => x.valorPlanilha)).toEqual(["Ana", "Ministra", "Senhora", "A Sua Excelência a Senhora"]);
+    expect(d.every((x) => x.valorReferencia === "")).toBe(true);
+  });
+
+  test("campo fiscalizado vazio no cadastro aparece com valor vazio, não some", () => {
+    const c = contato({ contato: { nome: "Ana", grupo: "ORG" } });
+    expect(cartao(c, "cargo").valorPlanilha).toBe("");
+    expect(cartao(c, "tratamento").valorPlanilha).toBe("");
   });
 });
 
@@ -261,6 +281,20 @@ describe("filtrarGrupos", () => {
 
   test("contarContatos soma os contatos dos grupos", () => {
     expect(contarContatos(grupos)).toBe(4);
+  });
+
+  test("a eleição de destino outra_casa não muda a situação do contato", () => {
+    const sem = contato({});
+    const com = contato({ eleicao: { casa: "camara", destino: "outra_casa", projecao: false, uf: "MA", situacaoTse: "Eleito", statusMandato: "Mandato novo (atual senador)", nomeUrna: "Ana" } });
+    expect(situacaoDoContato(com, grupoComFonte)).toEqual(situacaoDoContato(sem, grupoComFonte));
+  });
+
+  test("filtro da eleição 'reeleitos' passa por filtrarGrupos e não traz novos", () => {
+    const reeleita = contato({ contato: { nome: "Reeleita Teste", grupo: "ORG" }, eleicao: { casa: "senado", destino: "reeleito", projecao: false, uf: "MA", situacaoTse: "Eleito", statusMandato: "Reeleição", nomeUrna: "Reeleita Teste" } });
+    const gs: ResultadoGrupo[] = [{ ...grupoComFonte, contatos: [reeleita, verde], novos: [{ nome: "Nova", cargo: "Ministra", origem: "pagina" }] }];
+    const r = filtrarGrupos(gs, "reeleitos", "");
+    expect(nomes(r)).toEqual(["Reeleita Teste"]);
+    expect(r[0].novos).toEqual([]);
   });
 });
 
@@ -500,5 +534,71 @@ describe("cabeçalho do modo web", () => {
   });
   test("sem publicadoEm (retrato antigo) omite a segunda frase", () => {
     expect(textoCabecalhoWeb("2026-10-03T14:20:22.969Z")).toMatch(/^Varredura feita na máquina do GT em \d\d\/\d\d, \d\dh\d\d\.$/);
+  });
+});
+
+describe("número do endereço acima do limite", () => {
+  const endereco = (numero: string | undefined): EnderecoEstruturado => ({
+    contatoId: "7", logradouro: "Praça dos Três Poderes", numero, complemento: "Anexo II",
+    bairro: "Zona Cívico-Administrativa", cep: "70165-900", cidade: "Brasília", uf: "DF", prioritario: true,
+  });
+  const comNumero = (nome: string, numero: string | undefined) =>
+    contato({ contato: { nome, grupo: "ORG", cargo: "Ministra" }, endereco: { situacao: "completo", achados: [], endereco: endereco(numero) } });
+  const longo = comNumero("Ana Longa", "Sala 12");
+  const noLimite = comNumero("Bia Limite", "Sala 1");
+
+  test("filtro 'numero' deixa só quem passa de 6 caracteres, mesmo em retrato gravado antes da regra", () => {
+    const grupos: ResultadoGrupo[] = [{ ...grupoComFonte, contatos: [longo, noLimite, comNumero("Caio Vazio", undefined)], novos: [{ nome: "Nova", cargo: "Ministra", origem: "pagina" }] }];
+    const r = filtrarGrupos(grupos, "numero", "");
+    expect(r[0].contatos.map((c) => c.contato.nome)).toEqual(["Ana Longa"]);
+    expect(r[0].novos).toEqual([]);
+  });
+
+  test("a linha ganha a etiqueta 'Número: 7 de 6' em atenção, e o contato entra na ressalva", () => {
+    const e = etiquetasDoContato(longo, grupoComFonte).find((x) => x.texto === "Número: 7 de 6");
+    expect(e).toMatchObject({ campo: "endereco", tom: "atencao" });
+    expect(e?.explicacao).toContain("contando espaços e sinais");
+    expect(textos(noLimite, grupoComFonte).some((t) => t.startsWith("Número:"))).toBe(false);
+    const grupos: ResultadoGrupo[] = [{ ...grupoComFonte, contatos: [longo, noLimite] }];
+    expect(filtrarGrupos(grupos, "numero", "")[0].contatos).toHaveLength(1);
+    expect(filtrarGrupos(grupos, "ressalva", "").flatMap((g) => g.contatos.map((c) => c.contato.nome))).toContain("Ana Longa");
+  });
+
+  test("camposDoEndereco lista campo a campo e marca o Número com a conta e o trecho que sobra", () => {
+    const campos = camposDoEndereco(longo.endereco ?? { situacao: "sem_base", achados: [] });
+    expect(campos.map((c) => c.rotulo)).toEqual(["Logradouro", "Número", "Complemento", "Bairro", "Cidade / UF", "CEP"]);
+    const numero = campos[1];
+    expect(numero).toMatchObject({ valor: "Sala 12", tom: "atencao", excedente: "2" });
+    expect(numero.nota).toBe("7 caracteres, contando espaços e sinais; o máximo é 6 (1 a mais)");
+    expect(campos[0]).toEqual({ rotulo: "Logradouro", valor: "Praça dos Três Poderes" });
+    expect(campos[4].valor).toBe("Brasília - DF");
+  });
+
+  test("número no limite não é marcado; campos com achado levam o rótulo do achado", () => {
+    expect(camposDoEndereco(noLimite.endereco ?? { situacao: "sem_base", achados: [] })[1]).toEqual({ rotulo: "Número", valor: "Sala 1" });
+    const campos = camposDoEndereco({ situacao: "pendente", achados: ["sem_numero", "cep_invalido", "sem_logradouro"], endereco: { contatoId: "1", cep: "123", prioritario: true } });
+    expect(campos[0]).toMatchObject({ valor: "", tom: "atencao", nota: "sem logradouro" });
+    expect(campos[1]).toMatchObject({ valor: "", tom: "atencao", nota: "sem número" });
+    expect(campos[5]).toMatchObject({ valor: "123", tom: "atencao", nota: "CEP inválido" });
+  });
+
+  test("sem linha escolhida não há campo a mostrar", () => {
+    expect(camposDoEndereco({ situacao: "pendente", achados: ["sem_linha"] })).toEqual([]);
+  });
+});
+
+describe("resumoDoGrupo", () => {
+  test("conta contatos, a revisar, possíveis saídas e propostas de inclusão; zero some", () => {
+    const g: ResultadoGrupo = {
+      ...grupoComFonte,
+      contatos: [
+        contato({ comparacoes: [confere("nome", "pagina"), confere("cargo", "pagina"), confere("tratamento", "protocolo"), confere("enderecamento", "protocolo")] }),
+        contato({ semaforo: "amarelo", comparacoes: [confere("nome", "pagina"), diverge("cargo", "pagina", "Ministra", "Ministra Presidente")] }),
+        contato({ semaforo: "vermelho", possivelSaida: true }),
+      ],
+      novos: [{ nome: "Nova", cargo: "Ministra", origem: "pagina" }],
+    };
+    expect(resumoDoGrupo(g)).toBe("3 contatos · 1 a revisar · 1 possível saída · 1 a incluir");
+    expect(resumoDoGrupo({ ...grupoComFonte, contatos: [g.contatos[0]] })).toBe("1 contato");
   });
 });

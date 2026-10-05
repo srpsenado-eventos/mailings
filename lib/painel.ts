@@ -1,7 +1,10 @@
 import { coerenciasVisiveis, textoCoerencia } from "@/lib/tratamento";
-import { rotuloAchadoEndereco } from "@/lib/endereco";
+import { excessoDoNumero, LIMITE_NUMERO, rotuloAchadoEndereco } from "@/lib/endereco";
 import { normalizarTexto } from "@/lib/normalize";
+import { ehFiltroEleicao, passaFiltroEleicao, type FiltroEleicao } from "@/lib/painel-eleicao";
 import type {
+  AchadoEndereco,
+  AuditoriaEndereco,
   ComparacaoCampo,
   EnderecoEstruturado,
   PessoaSite,
@@ -20,7 +23,7 @@ import type {
  */
 
 export type Tom = "ok" | "atencao" | "ruim" | "neutro";
-export type CampoEtiqueta = "nome" | "cargo" | "tratamento" | "enderecamento" | "endereco" | "fonte";
+export type CampoEtiqueta = "nome" | "cargo" | "tratamento" | "enderecamento" | "endereco" | "fonte" | "eleicao";
 
 export interface Etiqueta {
   campo: CampoEtiqueta;
@@ -124,7 +127,34 @@ export function etiquetasDoContato(c: ResultadoContato, _g: ResultadoGrupo): Eti
   }
   const endereco = etiquetaDeEndereco(c);
   if (endereco) lista.push(endereco);
+  const numero = etiquetaDoNumero(c);
+  if (numero) lista.push(numero);
   return lista;
+}
+
+const NOTA_CONTAGEM = "contando espaços e sinais";
+
+function numeroDoEndereco(c: ResultadoContato): string | undefined {
+  return c.endereco?.endereco?.numero;
+}
+
+/**
+ * Medido no valor do relatório, não no achado `numero_longo`: assim o painel acusa também
+ * num retrato gravado antes de a regra existir.
+ */
+function numeroAcimaDoLimite(c: ResultadoContato): boolean {
+  return excessoDoNumero(numeroDoEndereco(c)) > 0;
+}
+
+function etiquetaDoNumero(c: ResultadoContato): Etiqueta | undefined {
+  if (!numeroAcimaDoLimite(c)) return undefined;
+  const tamanho = (numeroDoEndereco(c) ?? "").length;
+  return {
+    campo: "endereco",
+    texto: `Número: ${tamanho} de ${LIMITE_NUMERO}`,
+    tom: "atencao",
+    explicacao: `O campo Número do endereço tem ${tamanho} caracteres, ${NOTA_CONTAGEM}; o máximo é ${LIMITE_NUMERO}`,
+  };
 }
 
 /** Etiqueta do endereço, sozinha: o bloco de endereço do detalhe a mostra de novo. */
@@ -194,14 +224,13 @@ function valorReferenciaDe(comp: ComparacaoCampo | undefined): string {
   return valor && comp.origemValor === "conhecimento" ? `${valor}${SUFIXO_VIA_IA}` : valor;
 }
 
-/** Um cartão por campo que tem comparação de valor ou achado de coerência, na ordem fixa. */
+/** Um cartão por campo fiscalizado, sempre os quatro e na ordem fixa: o detalhe mostra o que foi preenchido, com ou sem comparação. */
 export function detalhesDoContato(c: ResultadoContato, _g: ResultadoGrupo): DetalheCampo[] {
   const cartoes: DetalheCampo[] = [];
   for (const campo of ["nome", "cargo", "tratamento", "enderecamento"] as const) {
     const comp = comparacaoDeValor(c, campo);
     const coerencias = coerenciasDo(c, campo);
-    if (!comp && coerencias.length === 0) continue;
-    const valorPlanilha = campo === "nome" ? c.contato.nome : (comp?.valorPlanilha ?? coerencias[0]?.valorPlanilha ?? "");
+    const valorPlanilha = campo === "nome" ? c.contato.nome : (comp?.valorPlanilha ?? coerencias[0]?.valorPlanilha ?? c.contato[campo] ?? "");
     const copiavel = comp?.situacao === "divergente" && comp.valorEsperado ? comp.valorEsperado : undefined;
     cartoes.push({
       campo,
@@ -217,12 +246,13 @@ export function detalhesDoContato(c: ResultadoContato, _g: ResultadoGrupo): Deta
   return cartoes;
 }
 
-export type Filtro = "tudo" | "ressalva" | "endereco" | "saida" | "inclusao";
+export type Filtro = "tudo" | "ressalva" | "endereco" | "numero" | "saida" | "inclusao" | FiltroEleicao;
 
 export const FILTROS: readonly { id: Filtro; rotulo: string }[] = [
   { id: "tudo", rotulo: "Tudo" },
   { id: "ressalva", rotulo: "Só o que tem ressalva" },
   { id: "endereco", rotulo: "Endereço a confirmar" },
+  { id: "numero", rotulo: `Número acima de ${LIMITE_NUMERO} caracteres` },
   { id: "saida", rotulo: "Possível saída" },
   { id: "inclusao", rotulo: "Propostas de inclusão" },
 ];
@@ -230,14 +260,16 @@ export const FILTROS: readonly { id: Filtro; rotulo: string }[] = [
 /** Ressalva: tudo que não é verde com o endereço em ordem (completo, a completar ou sem base). */
 function temRessalva(c: ResultadoContato): boolean {
   const e = c.endereco?.situacao;
-  return c.semaforo !== "verde" || cargoEstaVazio(c) || e === "pendente" || e === "nao_verificado";
+  return c.semaforo !== "verde" || cargoEstaVazio(c) || e === "pendente" || e === "nao_verificado" || numeroAcimaDoLimite(c);
 }
 
 function passaFiltro(c: ResultadoContato, filtro: Filtro): boolean {
+  if (ehFiltroEleicao(filtro)) return passaFiltroEleicao(c, filtro);
   switch (filtro) {
     case "tudo": return true;
     case "ressalva": return temRessalva(c);
     case "endereco": return c.endereco?.situacao === "pendente";
+    case "numero": return numeroAcimaDoLimite(c);
     case "saida": return c.possivelSaida === true;
     case "inclusao": return false;
   }
@@ -268,6 +300,22 @@ export function filtrarGrupos(grupos: readonly ResultadoGrupo[], filtro: Filtro,
       novos: FILTROS_COM_NOVOS.includes(filtro) ? g.novos.filter((n) => novoCasaBusca(n, b)) : [],
     }))
     .filter((g) => g.contatos.length > 0 || g.novos.length > 0);
+}
+
+function plural(n: number, um: string, varios: string): string {
+  return `${n} ${n === 1 ? um : varios}`;
+}
+
+/** Linha do cabeçalho do grupo, lida com o grupo recolhido. Contagem zerada some. */
+export function resumoDoGrupo(g: ResultadoGrupo): string {
+  const aRevisar = g.contatos.filter((c) => situacaoDoContato(c, g).tom === "atencao").length;
+  const saidas = g.contatos.filter((c) => c.possivelSaida === true).length;
+  return [
+    plural(g.contatos.length, "contato", "contatos"),
+    aRevisar > 0 ? `${aRevisar} a revisar` : "",
+    saidas > 0 ? plural(saidas, "possível saída", "possíveis saídas") : "",
+    g.novos.length > 0 ? `${g.novos.length} a incluir` : "",
+  ].filter((p) => p.length > 0).join(" · ");
 }
 
 export function contarContatos(grupos: readonly ResultadoGrupo[]): number {
@@ -302,6 +350,55 @@ export function linhasDoEndereco(e: EnderecoEstruturado): string[] {
   const cidadeUf = [e.cidade, e.uf].filter(Boolean).join(" - ");
   const terceira = [e.cep, cidadeUf].filter(Boolean).join(" ");
   return [primeira, segunda, terceira].filter((l) => l.length > 0);
+}
+
+export interface CampoEndereco {
+  rotulo: string;
+  valor: string;
+  tom?: Tom;
+  /** Por que o campo está marcado. */
+  nota?: string;
+  /** Só no Número acima do limite: o fim do valor, que não cabe no cadastro. */
+  excedente?: string;
+}
+
+function marcaDoAchado(achados: readonly AchadoEndereco[], candidatos: readonly AchadoEndereco[], tom: Tom): Pick<CampoEndereco, "tom" | "nota"> {
+  const achado = candidatos.find((a) => achados.includes(a));
+  return achado ? { tom, nota: rotuloAchadoEndereco(achado) } : {};
+}
+
+function campoNumero(a: AuditoriaEndereco, numero: string): CampoEndereco {
+  const excesso = excessoDoNumero(numero);
+  if (excesso === 0) return { rotulo: "Número", valor: numero, ...marcaDoAchado(a.achados, ["sem_numero"], "atencao") };
+  return {
+    rotulo: "Número",
+    valor: numero,
+    tom: "atencao",
+    nota: `${numero.length} caracteres, ${NOTA_CONTAGEM}; o máximo é ${LIMITE_NUMERO} (${excesso} a mais)`,
+    excedente: numero.slice(LIMITE_NUMERO),
+  };
+}
+
+/**
+ * O endereço escolhido, campo a campo, como está no relatório: é onde se vê o ponto de
+ * ajuste. Campo com achado leva tom e nota; sem linha escolhida não há o que listar.
+ */
+export function camposDoEndereco(a: AuditoriaEndereco): CampoEndereco[] {
+  const e = a.endereco;
+  if (!e) return [];
+  return [
+    { rotulo: "Logradouro", valor: e.logradouro ?? "", ...marcaDoAchado(a.achados, ["sem_logradouro"], "atencao") },
+    campoNumero(a, e.numero ?? ""),
+    { rotulo: "Complemento", valor: e.complemento ?? "" },
+    { rotulo: "Bairro", valor: e.bairro ?? "", ...marcaDoAchado(a.achados, ["sem_bairro"], "neutro") },
+    { rotulo: "Cidade / UF", valor: [e.cidade, e.uf].filter(Boolean).join(" - ") },
+    {
+      rotulo: "CEP",
+      valor: e.cep ?? "",
+      ...marcaDoAchado(a.achados, ["cep_ausente", "cep_invalido"], "atencao"),
+      ...marcaDoAchado(a.achados, ["cep_recuperavel"], "neutro"),
+    },
+  ];
 }
 
 export function textoEnderecoParaCopiar(e: EnderecoEstruturado): string {

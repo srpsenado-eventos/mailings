@@ -45,10 +45,22 @@ export function formatarEnderecoContatos(e: EnderecoEstruturado): string {
   return [comComplemento, e.bairro ?? "", ultima].filter((l) => l.trim().length > 0).join("\n");
 }
 
+/**
+ * O campo `Número` do Sistema Contatos comporta até 6 caracteres, contando espaço e
+ * qualquer sinal (regra do GT, 2026-10-04). O que passa disso não cabe no cadastro.
+ */
+export const LIMITE_NUMERO = 6;
+
+/** Quantos caracteres o `Número` passa do limite; 0 quando cabe ou está vazio. */
+export function excessoDoNumero(numero: string | undefined): number {
+  return Math.max(0, (numero ?? "").length - LIMITE_NUMERO);
+}
+
 const ROTULOS: Record<AchadoEndereco, string> = {
   sem_linha: "sem endereço cadastrado",
   sem_logradouro: "sem logradouro",
   sem_numero: "sem número",
+  numero_longo: `número com mais de ${LIMITE_NUMERO} caracteres`,
   sem_bairro: "sem bairro (sai do CEP)",
   cep_ausente: "sem CEP",
   cep_invalido: "CEP inválido",
@@ -70,6 +82,7 @@ const PENDENCIAS: readonly AchadoEndereco[] = [
   "sem_linha",
   "sem_logradouro",
   "sem_numero",
+  "numero_longo",
   "cep_ausente",
   "cep_invalido",
   "sem_prioritario",
@@ -87,6 +100,7 @@ function achadosDe(e: EnderecoEstruturado): AchadoEndereco[] {
   const achados: AchadoEndereco[] = [];
   if (!e.logradouro) achados.push("sem_logradouro");
   if (!e.numero) achados.push("sem_numero");
+  if (excessoDoNumero(e.numero) > 0) achados.push("numero_longo");
   const cep = classificarCep(e.cep, e.uf);
   if (cep.situacao === "ausente") achados.push("cep_ausente");
   if (cep.situacao === "invalido") achados.push("cep_invalido");

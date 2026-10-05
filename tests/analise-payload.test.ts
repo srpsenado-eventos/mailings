@@ -80,3 +80,33 @@ describe("parsePayloadAnalise", () => {
     );
   });
 });
+
+describe("payload da eleição 2026", () => {
+  const base = { arquivoNome: "base.xlsx", contatos: [] };
+
+  test("aceita eleitos, deputados atuais e nomes dos arquivos", () => {
+    const p = parsePayloadAnalise({
+      ...base,
+      eleitos: [{ casa: "senado", uf: "MA", nomeUrna: "A", nomeCompleto: "A B", situacaoTse: "Eleito", statusMandato: "Reeleição", partido: "PXX", extra: 1 }],
+      deputadosAtuais: [{ uf: "MA", nomeParlamentar: "C", nomeCivil: "C D", email: "c@camara.leg.br" }],
+      arquivosEleicao: ["senado.xlsx", 7],
+    });
+    expect(p.eleitos).toEqual([{ casa: "senado", uf: "MA", nomeUrna: "A", nomeCompleto: "A B", situacaoTse: "Eleito", statusMandato: "Reeleição", partido: "PXX" }]);
+    expect(p.deputadosAtuais?.[0]).toMatchObject({ nomeParlamentar: "C", email: "c@camara.leg.br" });
+    expect(p.arquivosEleicao).toEqual(["senado.xlsx"]);
+  });
+
+  test("sem os campos da eleição, nada muda", () => {
+    const p = parsePayloadAnalise(base);
+    expect(p.eleitos).toBeUndefined();
+    expect(p.deputadosAtuais).toBeUndefined();
+  });
+
+  test("casa desconhecida é recusada", () => {
+    expect(() => parsePayloadAnalise({ ...base, eleitos: [{ casa: "assembleia" }] })).toThrow(PayloadInvalidoError);
+  });
+
+  test("lista de eleitos que não é array é recusada", () => {
+    expect(() => parsePayloadAnalise({ ...base, eleitos: "x" })).toThrow(PayloadInvalidoError);
+  });
+});

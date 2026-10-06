@@ -145,9 +145,22 @@ Regras de Atualizacao/   ← material do GT, NÃO versionado (xlsx e pdf no .git
 4. Se a página tem estrutura peculiar (nomes grudados, tabela sem separador), salvar um recorte anonimizável em `tests/fixtures/` e cobrir em `tests/scrape.test.ts`.
 5. Rodar `npm test` (inclui `tests/catalogo-dados.test.ts`) e `npm run typecheck`.
 
-## Rotina: coleta e publicação na web
+## Rotina: do código e da coleta até a web
 
-Regra do Clovis (2026-10-05): **toda coleta feita com arquivos novos nas pastas termina publicada na web**, na sequência, sem esperar outro pedido. A publicação só não acontece no caso da trava de qualidade (passo 5). Cada passo abaixo é obrigatório.
+Regra do Clovis (2026-10-05, ampliada em 2026-10-06): **nenhum trabalho termina só na máquina local.** Código novo chega à produção e coleta nova chega ao painel publicado, na sequência, sem esperar outro pedido. Só param no caminho: a trava de qualidade da coleta (passo 5 da coleta) e teste, typecheck ou build vermelho.
+
+**Ordem quando há código novo**
+
+1. **Branch pronta**: `npm test`, `npm run typecheck` e `npm run build` verdes; revisão feita.
+2. **PR para `main`**: push da branch `feat/*` e PR com resumo e plano de teste.
+3. **Merge** do PR (merge commit, como os anteriores) e `git fetch`.
+4. **Deploy de produção** pelo fluxo "Código novo" abaixo, a partir de `origin/main`, e conferência com `vercel inspect`.
+5. **Coleta nova** quando o código muda o retrato (campo novo, contagem nova, regra nova): o retrato antigo não traz o que o código novo mostra. Seguir os passos da coleta abaixo.
+6. **Conferir na web** o que mudou (passo 7 da coleta) e relatar ao Clovis.
+
+**Ordem quando há só arquivos novos nas pastas**: os passos da coleta abaixo, do 1 ao 8.
+
+Cada passo abaixo é obrigatório.
 
 **Onde ficam os arquivos**
 
@@ -170,8 +183,10 @@ Havendo mais de uma base de contatos ou de endereços, vale a de data mais recen
 7. **Conferir na web**: entrar em `https://mailings-theta.vercel.app` com a senha do painel, sem exibi-la nem gravá-la em arquivo novo. Verificar:
    - a linha "Varredura feita … Publicada em …" com a data e a hora desta coleta;
    - nenhum e-mail ou telefone no HTML.
-8. **Relatório ao Clovis**:
-   - tabela antes × depois (Conferem, Com divergência, Possível saída, Não verificados, Propostas de inclusão, Endereços a confirmar, Número acima de 6);
+8. **Planilhas do PRODASEN**: na tela local `/prodasen`, gerar `BASE DE ENDERECO - <data> - carga PRODASEN.xlsx` e `Numero mais de 6 caracteres - ajustes <data>.xlsx` e salvar as duas em `../GT Posse/Contatos/` (fora do git; têm dado pessoal e não vão para a web).
+9. **Relatório ao Clovis**:
+   - tabela antes × depois (Conferem, Com divergência, Possível saída, Não verificados, Propostas de inclusão, Endereços a confirmar, Número acima de 6 no painel e na base inteira);
+   - os dois arquivos do PRODASEN gerados, com o total de ajustes e os casos sem proposta;
    - grupos lidos, inacessíveis e via IA;
    - contagens da eleição;
    - a hora publicada.

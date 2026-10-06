@@ -1,16 +1,19 @@
 import { coerenciasVisiveis, textoCoerencia } from "@/lib/tratamento";
 import { excessoDoNumero, LIMITE_NUMERO, rotuloAchadoEndereco } from "@/lib/endereco";
+import { colunasDaBase, textoCelula } from "@/lib/ajuste-numero";
 import { normalizarTexto } from "@/lib/normalize";
 import { ehFiltroEleicao, passaFiltroEleicao, type FiltroEleicao } from "@/lib/painel-eleicao";
 import type {
   AchadoEndereco,
   AuditoriaEndereco,
+  BaseEnderecos,
   ComparacaoCampo,
   EnderecoEstruturado,
   PessoaSite,
   ResultadoAnalise,
   ResultadoContato,
   ResultadoGrupo,
+  NumeroNaBase,
   ResumoAnalise,
   Retrato,
   SituacaoEndereco,
@@ -430,9 +433,35 @@ export function textoCabecalhoWeb(geradoEm: string, publicadoEm?: string): strin
   return publicadoEm ? `${base} Publicada em ${textoDataHora(publicadoEm)}.` : base;
 }
 
+/**
+ * Contagens do Número acima de `LIMITE_NUMERO` na base inteira. "Fora do painel" é o endereço
+ * acima do limite cujo `Endereço Id` não é o de nenhum contato do retrato: se o Contato Id
+ * também não está no retrato, é `foraDaPosse`; senão, `naoPrioritarios`. Ids comparados como texto.
+ */
+export function contarNumeroNaBase(base: BaseEnderecos, grupos: readonly ResultadoGrupo[]): NumeroNaBase {
+  const c = colunasDaBase(base.cabecalho);
+  const contatosDoRetrato = grupos.flatMap((g) => g.contatos);
+  const idsDeContato = new Set(contatosDoRetrato.map((k) => k.contato.id ?? ""));
+  const idsDeEndereco = new Set(contatosDoRetrato.map((k) => k.endereco?.endereco?.enderecoId ?? ""));
+  const acima = base.linhas.filter((l) => textoCelula(l[c.numero] ?? null).length > LIMITE_NUMERO);
+  const foraDoPainel = acima.filter((l) => !idsDeEndereco.has(textoCelula(l[c.enderecoId] ?? null)));
+  const foraDaPosse = foraDoPainel.filter((l) => !idsDeContato.has(textoCelula(l[c.contatoId] ?? null))).length;
+  return {
+    enderecos: base.linhas.length,
+    acimaDoLimite: acima.length,
+    contatos: new Set(acima.map((l) => textoCelula(l[c.contatoId] ?? null))).size,
+    foraDaPosse,
+    naoPrioritarios: foraDoPainel.length - foraDaPosse,
+  };
+}
+
 export function montarRetrato(
   resultado: ResultadoAnalise,
-  planilhas: { contatos: { nome: string; linhas: number }; enderecos?: { nome: string; linhas: number } },
+  planilhas: {
+    contatos: { nome: string; linhas: number };
+    enderecos?: { nome: string; linhas: number };
+    baseEnderecos?: BaseEnderecos;
+  },
   agora: Date,
 ): Retrato {
   return {
@@ -440,5 +469,8 @@ export function montarRetrato(
     geradoEm: agora.toISOString(),
     planilhaContatos: planilhas.contatos,
     ...(planilhas.enderecos ? { planilhaEnderecos: planilhas.enderecos } : {}),
+    ...(planilhas.baseEnderecos
+      ? { baseEnderecos: planilhas.baseEnderecos, numeroNaBase: contarNumeroNaBase(planilhas.baseEnderecos, resultado.grupos) }
+      : {}),
   };
 }

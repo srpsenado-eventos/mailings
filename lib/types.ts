@@ -198,6 +198,10 @@ export interface Retrato extends ResultadoAnalise {
   planilhaContatos: { nome: string; linhas: number };
   /** Presente só quando a planilha de endereços foi enviada. */
   planilhaEnderecos?: { nome: string; linhas: number };
+  /** A base de endereços inteira, só no retrato local (PII: sai do retrato publicado). Spec 2026-10-06, §3. */
+  baseEnderecos?: BaseEnderecos;
+  /** Contagens do Número acima de 6 na base inteira; presente só com a base. */
+  numeroNaBase?: NumeroNaBase;
   /** Presente só no retrato publicado na web: hora em que esta máquina o publicou, ISO 8601. */
   publicadoEm?: string;
 }

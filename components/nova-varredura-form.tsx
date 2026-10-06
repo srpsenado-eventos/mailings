@@ -2,14 +2,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { lerPlanilha, ColunaFaltanteError } from "@/lib/planilha";
-import { lerPlanilhaEnderecos } from "@/lib/planilha-enderecos";
+import { lerBaseEnderecos, lerPlanilhaEnderecos } from "@/lib/planilha-enderecos";
 import { juntarArquivosEleicao, lerPlanilhaEleicao, PlanilhaEleicaoDesconhecidaError, resumoArquivoEleicao, type ArquivoEleicaoLido } from "@/lib/planilha-eleitos";
-import type { ContatoPlanilha, EnderecoEstruturado, Retrato } from "@/lib/types";
+import type { BaseEnderecos, ContatoPlanilha, EnderecoEstruturado, Retrato } from "@/lib/types";
 
 type Resposta = { ok: true; retrato: Retrato; aviso?: string } | { ok: false; message?: string };
 
 interface ArquivoContatos { nome: string; contatos: ContatoPlanilha[]; grupos: number }
-interface ArquivoEnderecos { nome: string; enderecos: EnderecoEstruturado[] }
+interface ArquivoEnderecos { nome: string; enderecos: EnderecoEstruturado[]; base: BaseEnderecos }
 
 async function lerJsonSeguro(resp: Response): Promise<Resposta | null> {
   try {
@@ -108,7 +108,8 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
     setErroEnderecos(null);
     setErroVarredura(null);
     try {
-      setEnderecos({ nome: arquivo.name, enderecos: lerPlanilhaEnderecos(await arquivo.arrayBuffer()) });
+      const buffer = await arquivo.arrayBuffer();
+      setEnderecos({ nome: arquivo.name, enderecos: lerPlanilhaEnderecos(buffer), base: lerBaseEnderecos(buffer) });
     } catch (err) {
       setEnderecos(null);
       setErroEnderecos(mensagemDeLeitura(err));
@@ -147,7 +148,7 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
         body: JSON.stringify({
           arquivoNome: contatos.nome,
           contatos: contatos.contatos,
-          ...(enderecos ? { enderecos: enderecos.enderecos, arquivoEnderecosNome: enderecos.nome } : {}),
+          ...(enderecos ? { enderecos: enderecos.enderecos, arquivoEnderecosNome: enderecos.nome, baseEnderecos: enderecos.base } : {}),
           ...(eleicao.length > 0 ? juntarArquivosEleicao(eleicao) : {}),
         }),
       });

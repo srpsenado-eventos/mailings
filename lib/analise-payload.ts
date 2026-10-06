@@ -1,4 +1,4 @@
-import type { CasaLegislativa, ContatoPlanilha, DeputadoAtual, EleitoPlanilha, EnderecoEstruturado } from "@/lib/types";
+import type { BaseEnderecos, CasaLegislativa, CelulaBase, ContatoPlanilha, DeputadoAtual, EleitoPlanilha, EnderecoEstruturado } from "@/lib/types";
 
 /** Corpo JSON do `/api/analise` inválido (estrutura inesperada vinda do cliente). */
 export class PayloadInvalidoError extends Error {
@@ -19,6 +19,8 @@ export interface PayloadAnalise {
   eleitos?: EleitoPlanilha[];
   deputadosAtuais?: DeputadoAtual[];
   arquivosEleicao?: string[];
+  /** A base de endereços inteira, para o ajuste do Número (spec 2026-10-06, §3). */
+  baseEnderecos?: BaseEnderecos;
 }
 
 /** Teto defensivo contra abuso/erro — não é o limite real de uso (uma base tem dezenas/centenas). */
@@ -99,6 +101,27 @@ function narrowDeputado(v: unknown): DeputadoAtual {
   return { uf: texto(o.uf), nomeParlamentar: texto(o.nomeParlamentar), nomeCivil: texto(o.nomeCivil), ...opcionais };
 }
 
+function narrowCelulaBase(v: unknown): CelulaBase {
+  if (v === null || typeof v === "string" || typeof v === "number") return v;
+  throw new PayloadInvalidoError("Base de endereços com célula inválida.");
+}
+
+function narrowBaseEnderecos(v: unknown): BaseEnderecos {
+  const o = objeto(v);
+  if (!Array.isArray(o.cabecalho) || !o.cabecalho.every((c) => typeof c === "string")) {
+    throw new PayloadInvalidoError("Base de endereços com cabeçalho inválido.");
+  }
+  if (!Array.isArray(o.linhas)) throw new PayloadInvalidoError("Base de endereços com linhas inválidas.");
+  if (o.linhas.length > MAX_CONTATOS) {
+    throw new PayloadInvalidoError(`Base de endereços muito grande (máximo ${MAX_CONTATOS} linhas).`);
+  }
+  const linhas = o.linhas.map((l): CelulaBase[] => {
+    if (!Array.isArray(l)) throw new PayloadInvalidoError("Base de endereços com linha inválida.");
+    return l.map(narrowCelulaBase);
+  });
+  return { cabecalho: [...(o.cabecalho as string[])], linhas };
+}
+
 function listaOpcional<T>(valor: unknown, rotulo: string, narrow: (v: unknown) => T): T[] | undefined {
   if (valor === undefined) return undefined;
   if (!Array.isArray(valor)) throw new PayloadInvalidoError(`Lista de ${rotulo} inválida.`);
@@ -137,6 +160,7 @@ export function parsePayloadAnalise(corpo: unknown): PayloadAnalise {
   const arquivosEleicao = Array.isArray(extra.arquivosEleicao)
     ? extra.arquivosEleicao.filter((x): x is string => typeof x === "string" && x.length > 0)
     : undefined;
+  const baseEnderecos = extra.baseEnderecos === undefined ? undefined : narrowBaseEnderecos(extra.baseEnderecos);
   return {
     arquivoNome,
     contatos: contatos.map(narrowContato),
@@ -147,5 +171,6 @@ export function parsePayloadAnalise(corpo: unknown): PayloadAnalise {
     ...(eleitos ? { eleitos } : {}),
     ...(deputadosAtuais ? { deputadosAtuais } : {}),
     ...(arquivosEleicao ? { arquivosEleicao } : {}),
+    ...(baseEnderecos ? { baseEnderecos } : {}),
   };
 }

@@ -3,6 +3,7 @@ import {
   camposDoEndereco,
   cartoesDoResumo,
   contarContatos,
+  contarNumeroNaBase,
   detalhesDoContato,
   etiquetasDoContato,
   filtrarGrupos,
@@ -16,7 +17,9 @@ import {
   textoDataHora,
   textoEnderecoParaCopiar,
 } from "@/lib/painel";
+import { ColunaFaltanteError } from "@/lib/planilha";
 import type {
+  BaseEnderecos,
   ComparacaoCampo,
   EnderecoEstruturado,
   ResultadoAnalise,
@@ -600,5 +603,59 @@ describe("resumoDoGrupo", () => {
     };
     expect(resumoDoGrupo(g)).toBe("3 contatos · 1 a revisar · 1 possível saída · 1 a incluir");
     expect(resumoDoGrupo({ ...grupoComFonte, contatos: [g.contatos[0]] })).toBe("1 contato");
+  });
+});
+
+describe("montarRetrato com a base de endereços", () => {
+  const resultado = { arquivoNome: "c.xlsx", grupos: [], resumo: {} } as unknown as ResultadoAnalise;
+  const baseEnderecos: BaseEnderecos = { cabecalho: ["x", "Contato Id", "Endereço Id", "Numero"], linhas: [[null, 1, 10, "LOTE 12"]] };
+
+  test("grava a base e as contagens do Número", () => {
+    const r = montarRetrato(resultado, { contatos: { nome: "c.xlsx", linhas: 1 }, baseEnderecos }, new Date());
+    expect(r.baseEnderecos).toEqual(baseEnderecos);
+    expect(r.numeroNaBase).toEqual({ enderecos: 1, acimaDoLimite: 1, contatos: 1, foraDaPosse: 1, naoPrioritarios: 0 });
+  });
+
+  test("sem a base, os dois campos ficam ausentes", () => {
+    const r = montarRetrato(resultado, { contatos: { nome: "c.xlsx", linhas: 1 } }, new Date());
+    expect("baseEnderecos" in r).toBe(false);
+    expect("numeroNaBase" in r).toBe(false);
+  });
+});
+
+describe("contarNumeroNaBase", () => {
+  const cabecalho = ["lixo", "Contato Id", "Endereço Id", "Numero"];
+  function contatoNoGrupo(id: string, enderecoId?: string): ResultadoContato {
+    return {
+      contato: { nome: `Pessoa ${id}`, grupo: "G", id },
+      semaforo: "verde", comparacoes: [], camposDivergentes: [],
+      ...(enderecoId ? { endereco: { endereco: { contatoId: id, enderecoId, prioritario: true } } } : {}),
+    } as unknown as ResultadoContato;
+  }
+  const grupos = [{ grupo: "G", contatos: [contatoNoGrupo("1", "10"), contatoNoGrupo("2")] }] as unknown as ResultadoGrupo[];
+
+  test("conta endereços na base, os acima de 6 e os Contato Id distintos entre eles", () => {
+    const base: BaseEnderecos = { cabecalho, linhas: [[null, 1, 10, "LOTE 12"], [null, 1, 11, "CASA 1234"], [null, 2, 20, "12"], [null, 3, 30, "ABCDEFG"]] };
+    const n = contarNumeroNaBase(base, grupos);
+    expect(n).toMatchObject({ enderecos: 4, acimaDoLimite: 3, contatos: 2 });
+  });
+
+  test("endereço acima de 6 que o painel mostra não conta como fora do painel", () => {
+    const base: BaseEnderecos = { cabecalho, linhas: [[null, 1, 10, "LOTE 12"]] };
+    expect(contarNumeroNaBase(base, grupos)).toMatchObject({ foraDaPosse: 0, naoPrioritarios: 0 });
+  });
+
+  test("fora do painel: contato fora do retrato é fora da posse; contato do retrato é não prioritário", () => {
+    const base: BaseEnderecos = { cabecalho, linhas: [[null, 1, 11, "CASA 1234"], [null, 2, 20, "LOTE 12"], [null, 3, 30, "LOTE 99"], [null, 3, 31, "LOTE 98"]] };
+    expect(contarNumeroNaBase(base, grupos)).toMatchObject({ acimaDoLimite: 4, foraDaPosse: 2, naoPrioritarios: 2 });
+  });
+
+  test("compara os Ids como texto, com número e texto equivalentes", () => {
+    const base: BaseEnderecos = { cabecalho, linhas: [[null, "1", "10", "LOTE 12"]] };
+    expect(contarNumeroNaBase(base, grupos)).toMatchObject({ foraDaPosse: 0, naoPrioritarios: 0 });
+  });
+
+  test("base sem a coluna Numero lança ColunaFaltanteError", () => {
+    expect(() => contarNumeroNaBase({ cabecalho: ["a"], linhas: [] }, grupos)).toThrow(ColunaFaltanteError);
   });
 });

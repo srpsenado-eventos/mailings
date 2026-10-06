@@ -110,3 +110,33 @@ describe("payload da eleição 2026", () => {
     expect(() => parsePayloadAnalise({ ...base, eleitos: "x" })).toThrow(PayloadInvalidoError);
   });
 });
+
+describe("payload da base de endereços inteira", () => {
+  const base = { arquivoNome: "c.xlsx", contatos: [] };
+  const baseEnderecos = { cabecalho: ["x", "Contato Id", "Numero"], linhas: [[null, 7, "LOTE 12"], [null, "8", 3]] };
+
+  test("aceita a base e a devolve igual", () => {
+    expect(parsePayloadAnalise({ ...base, baseEnderecos }).baseEnderecos).toEqual(baseEnderecos);
+  });
+
+  test("sem a base, o campo fica ausente", () => {
+    expect("baseEnderecos" in parsePayloadAnalise(base)).toBe(false);
+  });
+
+  test.each([
+    ["não é objeto", "texto"],
+    ["cabeçalho com item que não é texto", { cabecalho: ["a", 2], linhas: [] }],
+    ["cabeçalho que não é lista", { cabecalho: "a", linhas: [] }],
+    ["linhas que não é lista", { cabecalho: ["a"], linhas: "x" }],
+    ["linha que não é lista", { cabecalho: ["a"], linhas: ["x"] }],
+    ["célula booleana", { cabecalho: ["a"], linhas: [[true]] }],
+    ["célula objeto", { cabecalho: ["a"], linhas: [[{}]] }],
+  ])("recusa a base inválida: %s", (_nome, valor) => {
+    expect(() => parsePayloadAnalise({ ...base, baseEnderecos: valor })).toThrow(PayloadInvalidoError);
+  });
+
+  test("recusa a base com mais linhas que o teto", () => {
+    const linhas = Array.from({ length: 50_001 }, () => [null]);
+    expect(() => parsePayloadAnalise({ ...base, baseEnderecos: { cabecalho: ["a"], linhas } })).toThrow(PayloadInvalidoError);
+  });
+});

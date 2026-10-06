@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, message: "Corpo inválido (esperado JSON)." }, { status: 400 });
     }
 
-    const { arquivoNome, contatos, arquivoEnderecosNome, enderecos, eleitos, deputadosAtuais, arquivosEleicao } = parsePayloadAnalise(corpo);
+    const { arquivoNome, contatos, arquivoEnderecosNome, enderecos, eleitos, deputadosAtuais, arquivosEleicao, baseEnderecos } = parsePayloadAnalise(corpo);
 
     const deps: Dependencias = {
       resolverFonte: (grupo) => resolverGrupoEFonte(grupo),
@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
         ...(enderecos
           ? { enderecos: { nome: arquivoEnderecosNome ?? "endereços", linhas: enderecos.length } }
           : {}),
+        ...(baseEnderecos ? { baseEnderecos } : {}),
       },
       new Date(),
     );
@@ -65,7 +66,9 @@ export async function POST(req: NextRequest) {
 
     // Diagnóstico temporário (não-PII): só roda com ?diag=1 (custo zero no fluxo normal).
     const diag = req.nextUrl.searchParams.get("diag") === "1" ? await diagnosticarIa() : undefined;
-    return NextResponse.json({ ok: true, retrato, ...(aviso ? { aviso } : {}), ...(diag ? { diag } : {}) });
+    // A base inteira tem PII e já está no arquivo local: o navegador não precisa dela de volta.
+    const { baseEnderecos: _baseGuardada, ...retratoDaResposta } = retrato;
+    return NextResponse.json({ ok: true, retrato: retratoDaResposta, ...(aviso ? { aviso } : {}), ...(diag ? { diag } : {}) });
   } catch (err) {
     if (err instanceof PayloadInvalidoError) {
       return NextResponse.json({ ok: false, message: err.message }, { status: 422 });

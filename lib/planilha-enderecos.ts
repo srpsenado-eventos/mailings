@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import type { EnderecoEstruturado } from "@/lib/types";
+import type { BaseEnderecos, CelulaBase, EnderecoEstruturado } from "@/lib/types";
 import { normalizarTexto } from "@/lib/normalize";
 import { ColunaFaltanteError } from "@/lib/planilha";
 
@@ -71,4 +71,31 @@ export function lerPlanilhaEnderecos(buffer: ArrayBuffer): EnderecoEstruturado[]
     });
   }
   return enderecos;
+}
+
+function celulaDaBase(valor: unknown): CelulaBase {
+  if (valor === null || valor === undefined) return null;
+  if (typeof valor === "string" || typeof valor === "number") return valor;
+  return String(valor);
+}
+
+const celulaVazia = (v: CelulaBase): boolean => v === null || v === "";
+
+/**
+ * A base inteira como foi lida, para o ajuste do Número do PRODASEN (spec 2026-10-06, §3):
+ * cabeçalho em texto e células cruas. Descarta a linha sem valor da 2ª coluna em diante,
+ * como o script de origem (a 1ª coluna da exportação é lixo).
+ */
+export function lerBaseEnderecos(buffer: ArrayBuffer): BaseEnderecos {
+  const wb = XLSX.read(buffer, { type: "array" });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  if (!ws) return { cabecalho: [], linhas: [] };
+  const matriz = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, raw: true, defval: null });
+  if (matriz.length === 0) return { cabecalho: [], linhas: [] };
+  const cabecalho = matriz[0].map((c) => String(c ?? ""));
+  const linhas = matriz
+    .slice(1)
+    .map((l) => cabecalho.map((_, i) => celulaDaBase(l[i])))
+    .filter((l) => l.slice(1).some((v) => !celulaVazia(v)));
+  return { cabecalho, linhas };
 }

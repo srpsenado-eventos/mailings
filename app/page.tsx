@@ -55,5 +55,7 @@ export default async function Home() {
     if (modo === "web") return <Aviso titulo="Nenhuma varredura publicada ainda" texto="Quando a máquina do GT publicar uma varredura, ela aparece aqui." />;
     redirect("/nova-varredura");
   }
-  return <Painel retrato={retrato} modo={modo} podePublicar={modo === "local" && Boolean(token)} />;
+  // O painel não usa a base de endereços (só o /prodasen); não vai ao cliente.
+  const { baseEnderecos: _base, ...retratoDoPainel } = retrato;
+  return <Painel retrato={retratoDoPainel} modo={modo} podePublicar={modo === "local" && Boolean(token)} />;
 }

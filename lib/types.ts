@@ -198,6 +198,10 @@ export interface Retrato extends ResultadoAnalise {
   planilhaContatos: { nome: string; linhas: number };
   /** Presente só quando a planilha de endereços foi enviada. */
   planilhaEnderecos?: { nome: string; linhas: number };
+  /** A base de endereços inteira, só no retrato local (PII: sai do retrato publicado). Spec 2026-10-06, §3. */
+  baseEnderecos?: BaseEnderecos;
+  /** Contagens do Número acima de 6 na base inteira; presente só com a base. */
+  numeroNaBase?: NumeroNaBase;
   /** Presente só no retrato publicado na web: hora em que esta máquina o publicou, ISO 8601. */
   publicadoEm?: string;
 }
@@ -432,4 +436,22 @@ export interface ResultadoEleicao {
   deputadosAtuais?: DeputadoAtual[];
   /** O grupo "Deputados Federais" existe no Contatos? Sem ele, deputados valem pela planilha. */
   camaraNoContatos: boolean;
+}
+
+/** Célula da base de endereços como foi lida da planilha (Ids e CEP chegam numéricos). */
+export type CelulaBase = string | number | null;
+
+/** A base de endereços inteira, guardada como foi lida (spec 2026-10-06, §3). */
+export interface BaseEnderecos {
+  cabecalho: string[];
+  linhas: CelulaBase[][];
+}
+
+/** Contagens do Número acima de 6 na base inteira; sem dado pessoal (vão ao retrato publicado). */
+export interface NumeroNaBase {
+  enderecos: number;
+  acimaDoLimite: number;
+  contatos: number;
+  foraDaPosse: number;
+  naoPrioritarios: number;
 }

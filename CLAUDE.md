@@ -1,6 +1,6 @@
 # CLAUDE.md — Fiscal de Mailings
 
-Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui. Última revisão: 2026-10-04.
+Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui. Última revisão: 2026-10-05.
 
 ## Contexto rápido
 
@@ -10,7 +10,7 @@ Repositório remoto: `github.com/srpsenado-eventos/mailings`, branch base `main`
 
 ## Estado do projeto (2026-10-05)
 
-- Suíte: 38 arquivos, 635 testes, verde (2026-10-05). `npm run typecheck` limpo.
+- Suíte: 39 arquivos, 696 testes, verde (2026-10-06). `npm run typecheck` limpo.
 - Catálogo: 33 grupos, 24 fontes, 21 grupos com fonte, **12 sem fonte** (todo contato deles sai vermelho, ver semântica abaixo).
 - Auditoria de Tratamento e Endereçamento (spec de 2026-08-13) e Camada C (regras de nome, spec de 2026-09-18) estão em `main` desde setembro de 2026 (`lib/tratamento.ts`, `data/regras-nome.ts`).
 - **Dívidas conhecidas** (não corrigir de passagem; abrir tarefa própria):
@@ -47,7 +47,8 @@ Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**
 | 2026-10-01 | `auditoria-de-endereco-camada-d.md` | **Camada D**: endereço estruturado da segunda planilha, junção por `Id`, prioritário, CEP classificado; não pinta o semáforo; conferência nos Correios é a Fase 2 | Vigente (Fase 1 implementada) |
 | 2026-10-01 | `painel-local-retrato-em-arquivo.md` | **App só local.** Retrato em `.fiscal/retrato.json`; painel do mockup (etiquetas por campo, linha expansível, Copiar); tela Nova varredura | Parcialmente substituído por 2026-10-02 (Plano C): a publicação na web é só leitura |
 | 2026-10-02 | `ajustes-do-painel-genero-tcu-publicacao.md` | Gênero não muda a regra de protocolo; "Nada a revisar"; "Cargo vazio"; filtro por grupo; explicações; TCU por navegador (Plano B); retrato publicado com senha (Plano C) | Vigente; Planos A, B e C implementados |
-| 2026-10-05 | `eleitos-2026-e-ajustes-prodasen-design.md` | Eleitos 2026: reeleito e quem troca de Casa ficam no grupo atual (Ata 14), mandato novo vai para "Senadores/Deputados Federais Eleitos"; chave "Eleição 2026" no painel; tela local `/prodasen` com cadastro em lote no layout do Contatos e ajuste de endereço no formato de 23/09 | Vigente; D1 (eleitos no painel) implementado; D2 (/prodasen) a implementar |
+| 2026-10-05 | `eleitos-2026-e-ajustes-prodasen-design.md` | Eleitos 2026: reeleito e quem troca de Casa ficam no grupo atual (Ata 14), mandato novo vai para "Senadores/Deputados Federais Eleitos"; chave "Eleição 2026" no painel; tela local `/prodasen` com cadastro em lote no layout do Contatos e ajuste de endereço no formato de 23/09 | Vigente; D1 (eleitos no painel) implementado; D2 parcial: bloco do endereço de /prodasen implementado (spec 2026-10-06); cadastro em lote a implementar |
+| 2026-10-06 | `prodasen-ajuste-do-numero.md` | Ajuste do Número acima de 6 na base inteira; tela local `/prodasen` com a carga e os ajustes em .xlsx; total da base no painel | Vigente; substitui o formato de arquivo do §6.2 de 2026-10-05 |
 
 ## Princípios de implementação
 
@@ -65,7 +66,7 @@ Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**
 - **Camada D (endereço) é um eixo independente e não pinta o semáforo.** A planilha de endereços é opcional, lida no navegador (`lib/planilha-enderecos.ts`) e viaja no mesmo JSON (`enderecos`, `arquivoEnderecosNome`). A junção com o contato é pelo `Id` (nome só como fallback, e nome ambíguo não recebe endereço); entre várias linhas vale a marcada `Prioritário`, e várias prioritárias ou nenhuma é achado sem endereço. O orquestrador anexa `ResultadoContato.endereco` numa passada posterior, nos três caminhos (com fonte, sem fonte, fonte inacessível); ela não entra em `comparacoes` nem em `camposDivergentes` e nunca cria `possivelSaida`. `AuditoriaEndereco.formatado` **só existe quando `situacao === "completo"`**; tela e export não devem montar endereço "pronto para copiar" fora disso. CEP de 7 dígitos vira proposta de zero à esquerda **só em SP**, e continua proposta até os Correios confirmarem (Fase 2, bloqueada na chave). O campo `Número` comporta até 6 caracteres, contando espaço e qualquer sinal (regra do GT, 2026-10-04, `LIMITE_NUMERO` em `lib/endereco.ts`): acima disso é o achado `numero_longo`, pendência; o painel mede o valor do relatório (não o achado), então acusa e filtra também em retrato gravado antes da regra. O contador próprio é `resumo.enderecosAConfirmar` (só `pendente`).
 - **Eleição 2026 é um eixo independente e não pinta o semáforo.** As planilhas de `GT Posse/Eleitos 2026` são opcionais na Nova varredura (passo 3), lidas no navegador (`lib/planilha-eleitos.ts`, reconhecidas pela aba). `aplicarEleicao` (`lib/eleitos.ts`) roda depois de `analisar`: o destino vem do `Status do mandato` (reeleito e quem troca de Casa ficam no grupo atual, pela Ata 14 do GT Cerimonial; mandato novo vai para "Senadores/Deputados Federais Eleitos"); o Contatos só acha a linha e pega contradição, que vira `conferir`, nunca decisão. Casamento por nome com a UF do `Departamento` como guarda e `pontuarPessoa >= 1`. O retrato publicado vai sem `eleicao.deputadosAtuais`.
 - **O retrato é a única persistência.** `lib/armazem.ts` grava o último `Retrato` em `.fiscal/retrato.json`, fora do git, com escrita atômica; um só, sem histórico. A cópia publicada no Blob (modo web) é um espelho enxuto dele, nunca outra fonte. O painel (`/`) lê o retrato; sem retrato, manda para `/nova-varredura`. A lógica de apresentação (etiquetas, situação, filtros, cartões, detalhe) é função pura em `lib/painel.ts`, testada; componentes só renderizam.
-- **Dois modos, um ponto de decisão.** `modoDoApp()` (`lib/modo.ts`, `FISCAL_MODO`) escolhe o armazém e a tela. Na Vercel o modo é sempre `web` (variável `VERCEL`), mesmo sem `FISCAL_MODO`. Local (padrão): `.fiscal/`, Nova varredura, botão "Publicar na web" quando há `BLOB_READ_WRITE_TOKEN`. Web (Vercel): lê o Blob privado (`lib/armazem-blob.ts`), tudo atrás da senha única (`middleware.ts`, `/entrar`, cookie HMAC de `lib/sessao.ts`), sem `/nova-varredura` e com `/api/analise` em 404. `POST /api/publicar` (só local) manda o retrato **sem telefone, e-mail e rede social** (`lib/publicar.ts`), com `publicadoEm`.
+- **Dois modos, um ponto de decisão.** `modoDoApp()` (`lib/modo.ts`, `FISCAL_MODO`) escolhe o armazém e a tela. Na Vercel o modo é sempre `web` (variável `VERCEL`), mesmo sem `FISCAL_MODO`. Local (padrão): `.fiscal/`, Nova varredura, botão "Publicar na web" quando há `BLOB_READ_WRITE_TOKEN`. Web (Vercel): lê o Blob privado (`lib/armazem-blob.ts`), tudo atrás da senha única (`middleware.ts`, `/entrar`, cookie HMAC de `lib/sessao.ts`), sem `/nova-varredura` e com `/api/analise` em 404. `POST /api/publicar` (só local) manda o retrato **sem telefone, e-mail, rede social e `baseEnderecos`** (`lib/publicar.ts`), com `publicadoEm`.
 
 ## Semântica dos vereditos
 
@@ -106,9 +107,9 @@ Nota: o spec de 2026-08-13 registra que o Clovis considerou esse PDF "de outra f
 ## Layout do código
 
 ```
-app/                 ← rotas Next.js; /api/analise (POST JSON), /nova-varredura, /grupos, /entrar, /api/publicar e /api/entrar; `/` lê o retrato
+app/                 ← rotas Next.js; /api/analise (POST JSON), /nova-varredura, /prodasen, /grupos, /entrar, /api/publicar e /api/entrar; `/` lê o retrato
 components/          ← UI (Tailwind puro): painel, linha-contato, etiqueta, nova-varredura-form, export-buttons
-lib/                 ← lógica pura: planilha, catalogo, scrape, navegador, raspagem, match, analise, gemini (=Haiku), normalize, cargos, export, armazem, painel, modo, publicar, sessao, entrada, armazem-blob, uf, planilha-eleitos, eleitos, painel-eleicao, export-eleitos
+lib/                 ← lógica pura: planilha, catalogo, scrape, navegador, raspagem, match, analise, gemini (=Haiku), normalize, cargos, export, armazem, painel, modo, publicar, sessao, entrada, armazem-blob, uf, planilha-eleitos, eleitos, painel-eleicao, export-eleitos, ajuste-numero
 middleware.ts        ← senha do modo web; em modo local deixa tudo passar
 data/catalogo.ts     ← FONTE DA VERDADE de grupos, responsáveis e URLs oficiais
 data/*.sql           ← histórico da fase Supabase; fora do caminho de execução
@@ -143,6 +144,59 @@ Regras de Atualizacao/   ← material do GT, NÃO versionado (xlsx e pdf no .git
 3. Acrescentar em `data/catalogo.ts`. A **primeira** fonte com `ativo: true` é a primária; a ordem do array importa.
 4. Se a página tem estrutura peculiar (nomes grudados, tabela sem separador), salvar um recorte anonimizável em `tests/fixtures/` e cobrir em `tests/scrape.test.ts`.
 5. Rodar `npm test` (inclui `tests/catalogo-dados.test.ts`) e `npm run typecheck`.
+
+## Rotina: do código e da coleta até a web
+
+Regra do Clovis (2026-10-05, ampliada em 2026-10-06): **nenhum trabalho termina só na máquina local.** Código novo chega à produção e coleta nova chega ao painel publicado, na sequência, sem esperar outro pedido. Só param no caminho: a trava de qualidade da coleta (passo 5 da coleta) e teste, typecheck ou build vermelho.
+
+**Ordem quando há código novo**
+
+1. **Branch pronta**: `npm test`, `npm run typecheck` e `npm run build` verdes; revisão feita.
+2. **PR para `main`**: push da branch `feat/*` e PR com resumo e plano de teste.
+3. **Merge** do PR (merge commit, como os anteriores) e `git fetch`.
+4. **Deploy de produção** pelo fluxo "Código novo" abaixo, a partir de `origin/main`, e conferência com `vercel inspect`.
+5. **Coleta nova** quando o código muda o retrato (campo novo, contagem nova, regra nova): o retrato antigo não traz o que o código novo mostra. Seguir os passos da coleta abaixo.
+6. **Conferir na web** o que mudou (passo 7 da coleta) e relatar ao Clovis.
+
+**Ordem quando há só arquivos novos nas pastas**: os passos da coleta abaixo, do 1 ao 8.
+
+Cada passo abaixo é obrigatório.
+
+**Onde ficam os arquivos**
+
+| Arquivo | Pasta | Passo da Nova varredura |
+|---|---|---|
+| `BASE GRUPOS POSSE - <DD MMM AAAA>.xlsx` (contatos) | `Bases de comparação -PLANILHAS CONTATOS/` | 1 |
+| `BASE ENDERECO - <DD MMM AAAA>.xlsx` (endereços) | `Bases de comparação -PLANILHAS CONTATOS/` | 2 |
+| `Senadores Eleitos 2026.xlsx`, `Deputados Federais Eleitos 2026.xlsx`, `Deputados Federais Atuais (57a legislatura).xlsx` | `../GT Posse/Eleitos 2026/` | 3 (as três de uma vez) |
+
+Havendo mais de uma base de contatos ou de endereços, vale a de data mais recente no nome. Na dúvida entre duas, perguntar.
+
+**Passos**
+
+1. **Um servidor só.** Antes de subir, ver se há processo escutando nas portas 3000 a 3003 (`Get-NetTCPConnection -LocalPort 3000`). Servidor do Fiscal esquecido de outra sessão é encerrado: em 2026-10-05, um servidor velho na 3000 recebeu o clique em "Publicar na web" e nada foi publicado. Subir com `npm run dev` e conferir no log que ficou em `http://localhost:3000`. O endereço só vai para o Clovis depois dessa conferência.
+2. **Guardar o retrato atual** em `.fiscal/retrato-anterior-<AAAA-MM-DD>.json`, antes de varrer.
+3. **Varrer pela tela** `/nova-varredura`, com os arquivos dos três passos. O navegador de automação só abre arquivos dentro da pasta do projeto: copiar as planilhas de `GT Posse/Eleitos 2026` para `.fiscal/eleitos-tmp/` (fora do git) e apagar a cópia ao terminar. Conferir na tela as contagens lidas (contatos, grupos, endereços, eleitos) antes de clicar em "Varrer".
+4. **Comparar com o retrato anterior**, só por contagens e por situação de cada grupo (lido, inacessível, via IA, sem fonte). Nada de nomes no log.
+5. **Trava de qualidade.** Não publicar sem falar com o Clovis quando um grupo que foi **lido** no retrato anterior vier **inacessível** ou **via IA** nesta coleta. É o caso de Ministros de Estado e Embaixadores (bloqueio intermitente do gov.br) e do TCU quando o Chrome falha. Nesse caso, rodar a coleta **mais uma vez**. Se persistir, mostrar ao Clovis o que piorou e perguntar se publica assim ou espera. Grupo **sem fonte** que a IA compôs sozinha (ex.: Governadores) não trava, mas as "possíveis saídas" dele vão no relatório como não confiáveis.
+6. **Publicar**: botão "Publicar na web" do painel local ou `POST http://localhost:3000/api/publicar` com `Origin: http://localhost:3000`. Leva uns 5 segundos e exige `BLOB_READ_WRITE_TOKEN` no `.env.local`.
+7. **Conferir na web**: entrar em `https://mailings-theta.vercel.app` com a senha do painel, sem exibi-la nem gravá-la em arquivo novo. Verificar:
+   - a linha "Varredura feita … Publicada em …" com a data e a hora desta coleta;
+   - nenhum e-mail ou telefone no HTML.
+8. **Planilhas do PRODASEN**: na tela local `/prodasen`, gerar `BASE DE ENDERECO - <data> - carga PRODASEN.xlsx` e `Numero mais de 6 caracteres - ajustes <data>.xlsx` e salvar as duas em `../GT Posse/Contatos/` (fora do git; têm dado pessoal e não vão para a web).
+9. **Relatório ao Clovis**:
+   - tabela antes × depois (Conferem, Com divergência, Possível saída, Não verificados, Propostas de inclusão, Endereços a confirmar, Número acima de 6 no painel e na base inteira);
+   - os dois arquivos do PRODASEN gerados, com o total de ajustes e os casos sem proposta;
+   - grupos lidos, inacessíveis e via IA;
+   - contagens da eleição;
+   - a hora publicada.
+
+**Código novo é outro fluxo.** Publicar o retrato não leva código para a web. O projeto `mailings` (equipe `srp-coeven`) **não** faz deploy automático do GitHub. Quando o `main` muda:
+- extrair `git archive origin/main` numa pasta limpa, com o `.vercel/project.json` copiado;
+- rodar `vercel deploy --prod --yes` (a CLI desta máquina está autenticada);
+- nunca fazer o deploy da pasta do projeto: o `pnpm-lock.yaml` solto quebra o build.
+
+Conferir com `vercel inspect` (status Ready, alias `mailings-theta.vercel.app`) e entrando no painel.
 
 ## Testes
 

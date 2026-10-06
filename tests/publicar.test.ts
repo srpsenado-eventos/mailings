@@ -69,3 +69,24 @@ describe("enxugarParaPublicar", () => {
     expect(comEleicao.eleicao?.deputadosAtuais).toHaveLength(1);
   });
 });
+
+describe("enxugarParaPublicar com a base de endereços", () => {
+  const numeroNaBase = { enderecos: 3, acimaDoLimite: 2, contatos: 2, foraDaPosse: 1, naoPrioritarios: 0 };
+  const comBase: Retrato = {
+    ...retrato,
+    baseEnderecos: { cabecalho: ["x", "Contato Id", "Numero"], linhas: [[null, 7, "LOTE 12"]] },
+    numeroNaBase,
+  } as unknown as Retrato;
+
+  test("o retrato publicado perde a base inteira e mantém só as contagens", () => {
+    const pub = enxugarParaPublicar(comBase, "2026-10-06T12:00:00.000Z");
+    expect("baseEnderecos" in pub).toBe(false);
+    expect(pub.numeroNaBase).toEqual(numeroNaBase);
+    expect(JSON.stringify(pub)).not.toContain("LOTE 12");
+  });
+
+  test("não muta o retrato de entrada", () => {
+    enxugarParaPublicar(comBase, "2026-10-06T12:00:00.000Z");
+    expect(comBase.baseEnderecos?.linhas).toHaveLength(1);
+  });
+});

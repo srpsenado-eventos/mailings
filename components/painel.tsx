@@ -6,7 +6,7 @@ import { SecaoEleitos } from "@/components/secao-eleitos";
 import { avisoDaEleicao, ehFiltroEleicao, FILTROS_ELEICAO, secoesDeEleicao } from "@/lib/painel-eleicao";
 import { PublicarButton } from "@/components/publicar-button";
 import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-contato";
-import { cartoesDoResumo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoCabecalhoWeb, textoDataHora, type Filtro } from "@/lib/painel";
+import { cartoesDoResumo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoCabecalhoWeb, textoDataHora, textoNumeroNaBase, type Filtro } from "@/lib/painel";
 import type { ResultadoGrupo, Retrato } from "@/lib/types";
 
 function EstadoDaFonte({ g }: { g: ResultadoGrupo }) {
@@ -87,6 +87,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
           ) : (
             <Link href="/nova-varredura" className="rounded-md border border-borda-forte bg-cartao px-3 py-1.5 text-sm">Nova varredura</Link>
           ))}
+          {modo !== "web" && <Link href="/prodasen" className="text-sm text-acao underline">Ajustes PRODASEN</Link>}
           {modo !== "web" && podePublicar && <PublicarButton />}
           <ExportButtons analise={retrato} />
           {temEleicao && retrato.eleicao && <ExportEleitosButton eleicao={retrato.eleicao} />}
@@ -144,6 +145,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
         />
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-cinza">
+        {retrato.numeroNaBase && <span>{textoNumeroNaBase(retrato.numeroNaBase)}</span>}
         {filtrando && filtro !== "a_cadastrar" && filtro !== "a_conferir" && <span>{visiveis} contatos de {total}</span>}
         <div className="grow" />
         <button type="button" onClick={() => abrirTodos(true)} className="text-acao underline">Expandir todos</button>

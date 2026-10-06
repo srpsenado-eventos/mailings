@@ -1,16 +1,20 @@
 import { coerenciasVisiveis, textoCoerencia } from "@/lib/tratamento";
 import { excessoDoNumero, LIMITE_NUMERO, rotuloAchadoEndereco } from "@/lib/endereco";
+import { colunasDaBase, textoCelula } from "@/lib/ajuste-numero";
 import { normalizarTexto } from "@/lib/normalize";
+import { ColunaFaltanteError } from "@/lib/planilha";
 import { ehFiltroEleicao, passaFiltroEleicao, type FiltroEleicao } from "@/lib/painel-eleicao";
 import type {
   AchadoEndereco,
   AuditoriaEndereco,
+  BaseEnderecos,
   ComparacaoCampo,
   EnderecoEstruturado,
   PessoaSite,
   ResultadoAnalise,
   ResultadoContato,
   ResultadoGrupo,
+  NumeroNaBase,
   ResumoAnalise,
   Retrato,
   SituacaoEndereco,
@@ -430,9 +434,55 @@ export function textoCabecalhoWeb(geradoEm: string, publicadoEm?: string): strin
   return publicadoEm ? `${base} Publicada em ${textoDataHora(publicadoEm)}.` : base;
 }
 
+/**
+ * Contagens do Número acima de `LIMITE_NUMERO` na base inteira. "Fora do painel" é o endereço
+ * acima do limite cujo `Endereço Id` não é o de nenhum contato do retrato: se o Contato Id
+ * também não está no retrato, é `foraDaPosse`; senão, `naoPrioritarios`. Ids comparados como texto.
+ */
+export function contarNumeroNaBase(base: BaseEnderecos, grupos: readonly ResultadoGrupo[]): NumeroNaBase {
+  const c = colunasDaBase(base.cabecalho);
+  const contatosDoRetrato = grupos.flatMap((g) => g.contatos);
+  const comValor = (ids: readonly (string | undefined)[]): Set<string> => new Set(ids.filter((id): id is string => Boolean(id)));
+  const idsDeContato = comValor(contatosDoRetrato.map((k) => k.contato.id));
+  const idsDeEndereco = comValor(contatosDoRetrato.map((k) => k.endereco?.endereco?.enderecoId));
+  const acima = base.linhas.filter((l) => textoCelula(l[c.numero] ?? null).length > LIMITE_NUMERO);
+  const foraDoPainel = acima.filter((l) => !idsDeEndereco.has(textoCelula(l[c.enderecoId] ?? null)));
+  const foraDaPosse = foraDoPainel.filter((l) => !idsDeContato.has(textoCelula(l[c.contatoId] ?? null))).length;
+  return {
+    enderecos: base.linhas.length,
+    acimaDoLimite: acima.length,
+    contatos: new Set(acima.map((l) => textoCelula(l[c.contatoId] ?? null))).size,
+    foraDaPosse,
+    naoPrioritarios: foraDoPainel.length - foraDaPosse,
+  };
+}
+
+/** Frase do total da base inteira, ao lado dos filtros do painel (também no modo web). */
+export function textoNumeroNaBase(n: NumeroNaBase): string {
+  const total = `Número acima de ${LIMITE_NUMERO} na base inteira: ${n.acimaDoLimite} ${n.acimaDoLimite === 1 ? "endereço" : "endereços"}`;
+  const fora = n.foraDaPosse + n.naoPrioritarios;
+  if (fora === 0) return total;
+  const prioritarios = n.naoPrioritarios === 1 ? "não prioritário" : "não prioritários";
+  return `${total} (${fora} fora do painel: ${n.foraDaPosse} fora da Posse, ${n.naoPrioritarios} ${prioritarios})`;
+}
+
+/** Base sem coluna-chave não derruba a varredura: sem contagem; a tela do PRODASEN mostra o erro da coluna. */
+function contagemOuNada(base: BaseEnderecos, grupos: readonly ResultadoGrupo[]): { numeroNaBase?: NumeroNaBase } {
+  try {
+    return { numeroNaBase: contarNumeroNaBase(base, grupos) };
+  } catch (err) {
+    if (err instanceof ColunaFaltanteError) return {};
+    throw err;
+  }
+}
+
 export function montarRetrato(
   resultado: ResultadoAnalise,
-  planilhas: { contatos: { nome: string; linhas: number }; enderecos?: { nome: string; linhas: number } },
+  planilhas: {
+    contatos: { nome: string; linhas: number };
+    enderecos?: { nome: string; linhas: number };
+    baseEnderecos?: BaseEnderecos;
+  },
   agora: Date,
 ): Retrato {
   return {
@@ -440,5 +490,8 @@ export function montarRetrato(
     geradoEm: agora.toISOString(),
     planilhaContatos: planilhas.contatos,
     ...(planilhas.enderecos ? { planilhaEnderecos: planilhas.enderecos } : {}),
+    ...(planilhas.baseEnderecos
+      ? { baseEnderecos: planilhas.baseEnderecos, ...contagemOuNada(planilhas.baseEnderecos, resultado.grupos) }
+      : {}),
   };
 }

@@ -2,6 +2,7 @@ import { coerenciasVisiveis, textoCoerencia } from "@/lib/tratamento";
 import { excessoDoNumero, LIMITE_NUMERO, rotuloAchadoEndereco } from "@/lib/endereco";
 import { colunasDaBase, textoCelula } from "@/lib/ajuste-numero";
 import { normalizarTexto } from "@/lib/normalize";
+import { ColunaFaltanteError } from "@/lib/planilha";
 import { ehFiltroEleicao, passaFiltroEleicao, type FiltroEleicao } from "@/lib/painel-eleicao";
 import type {
   AchadoEndereco,
@@ -455,6 +456,16 @@ export function contarNumeroNaBase(base: BaseEnderecos, grupos: readonly Resulta
   };
 }
 
+/** Base sem coluna-chave não derruba a varredura: sem contagem; a tela do PRODASEN mostra o erro da coluna. */
+function contagemOuNada(base: BaseEnderecos, grupos: readonly ResultadoGrupo[]): { numeroNaBase?: NumeroNaBase } {
+  try {
+    return { numeroNaBase: contarNumeroNaBase(base, grupos) };
+  } catch (err) {
+    if (err instanceof ColunaFaltanteError) return {};
+    throw err;
+  }
+}
+
 export function montarRetrato(
   resultado: ResultadoAnalise,
   planilhas: {
@@ -470,7 +481,7 @@ export function montarRetrato(
     planilhaContatos: planilhas.contatos,
     ...(planilhas.enderecos ? { planilhaEnderecos: planilhas.enderecos } : {}),
     ...(planilhas.baseEnderecos
-      ? { baseEnderecos: planilhas.baseEnderecos, numeroNaBase: contarNumeroNaBase(planilhas.baseEnderecos, resultado.grupos) }
+      ? { baseEnderecos: planilhas.baseEnderecos, ...contagemOuNada(planilhas.baseEnderecos, resultado.grupos) }
       : {}),
   };
 }

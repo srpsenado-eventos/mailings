@@ -616,6 +616,13 @@ describe("montarRetrato com a base de endereços", () => {
     expect(r.numeroNaBase).toEqual({ enderecos: 1, acimaDoLimite: 1, contatos: 1, foraDaPosse: 1, naoPrioritarios: 0 });
   });
 
+  test("base sem a coluna Numero não derruba a varredura: guarda a base e deixa a contagem de fora", () => {
+    const semNumero: BaseEnderecos = { cabecalho: ["x", "Contato Id", "Endereço Id"], linhas: [[null, 1, 10]] };
+    const r = montarRetrato(resultado, { contatos: { nome: "c.xlsx", linhas: 1 }, baseEnderecos: semNumero }, new Date());
+    expect(r.baseEnderecos).toEqual(semNumero);
+    expect("numeroNaBase" in r).toBe(false);
+  });
+
   test("sem a base, os dois campos ficam ausentes", () => {
     const r = montarRetrato(resultado, { contatos: { nome: "c.xlsx", linhas: 1 } }, new Date());
     expect("baseEnderecos" in r).toBe(false);

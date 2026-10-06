@@ -663,6 +663,13 @@ describe("contarNumeroNaBase", () => {
     expect(contarNumeroNaBase(base, grupos)).toMatchObject({ foraDaPosse: 0, naoPrioritarios: 0 });
   });
 
+  test("Id vazio na base não conta como Id de contato nem de endereço do painel", () => {
+    const semId = { contato: { nome: "Sem Id", grupo: "G" }, semaforo: "verde", comparacoes: [], camposDivergentes: [] } as unknown as ResultadoContato;
+    const g = [{ grupo: "G", contatos: [contatoNoGrupo("2"), semId] }] as unknown as ResultadoGrupo[];
+    const base: BaseEnderecos = { cabecalho, linhas: [[null, null, null, "LOTE 12"]] };
+    expect(contarNumeroNaBase(base, g)).toMatchObject({ foraDaPosse: 1, naoPrioritarios: 0 });
+  });
+
   test("base sem a coluna Numero lança ColunaFaltanteError", () => {
     expect(() => contarNumeroNaBase({ cabecalho: ["a"], linhas: [] }, grupos)).toThrow(ColunaFaltanteError);
   });

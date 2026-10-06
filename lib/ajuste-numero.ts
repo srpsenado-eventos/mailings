@@ -185,9 +185,11 @@ function escreverXlsx(abas: readonly (readonly [string, unknown[][]])[]): ArrayB
 /** Base inteira no layout de carga, com só o Número trocado nos endereços ajustados. */
 export function gerarXlsxCarga(base: BaseEnderecos, ajuste: AjusteNumero): ArrayBuffer {
   const c = colunasDaBase(base.cabecalho);
-  const novo = new Map(ajuste.casos.map((k) => [textoCelula(k.enderecoId), k.numeroProposto]));
+  // Endereço sem Id não é chave: a proposta não pode cair em toda linha sem Id.
+  const novo = new Map(ajuste.casos.map((k) => [textoCelula(k.enderecoId), k.numeroProposto] as const).filter(([id]) => id !== ""));
   const linhas = base.linhas.map((l) => {
-    const proposta = novo.get(textoCelula(l[c.enderecoId] ?? null));
+    const id = textoCelula(l[c.enderecoId] ?? null);
+    const proposta = id === "" ? undefined : novo.get(id);
     return proposta === undefined ? [...l] : l.map((v, i) => (i === c.numero ? proposta : v));
   });
   return escreverXlsx([["Folha1", [[...base.cabecalho], ...linhas]]]);

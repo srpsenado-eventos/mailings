@@ -442,8 +442,9 @@ export function textoCabecalhoWeb(geradoEm: string, publicadoEm?: string): strin
 export function contarNumeroNaBase(base: BaseEnderecos, grupos: readonly ResultadoGrupo[]): NumeroNaBase {
   const c = colunasDaBase(base.cabecalho);
   const contatosDoRetrato = grupos.flatMap((g) => g.contatos);
-  const idsDeContato = new Set(contatosDoRetrato.map((k) => k.contato.id ?? ""));
-  const idsDeEndereco = new Set(contatosDoRetrato.map((k) => k.endereco?.endereco?.enderecoId ?? ""));
+  const comValor = (ids: readonly (string | undefined)[]): Set<string> => new Set(ids.filter((id): id is string => Boolean(id)));
+  const idsDeContato = comValor(contatosDoRetrato.map((k) => k.contato.id));
+  const idsDeEndereco = comValor(contatosDoRetrato.map((k) => k.endereco?.endereco?.enderecoId));
   const acima = base.linhas.filter((l) => textoCelula(l[c.numero] ?? null).length > LIMITE_NUMERO);
   const foraDoPainel = acima.filter((l) => !idsDeEndereco.has(textoCelula(l[c.enderecoId] ?? null)));
   const foraDaPosse = foraDoPainel.filter((l) => !idsDeContato.has(textoCelula(l[c.contatoId] ?? null))).length;

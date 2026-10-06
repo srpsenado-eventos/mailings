@@ -158,6 +158,14 @@ describe("gerarXlsxCarga", () => {
     expect(lido).toHaveLength(4);
     expect(b).toEqual(copia);
   });
+
+  test("endereço ajustado sem Endereço Id não troca o Número das outras linhas sem Id", () => {
+    const semId = (nome: string, numero: CelulaBase): CelulaBase[] => linha(1, 0, nome, numero).map((v, i) => (i === 2 ? null : v));
+    const b = base(semId("Ana", "Lote 05/06"), semId("Bia", "Lote 1"), linha(3, 30, "Caio", "Lote 2"));
+    const lido = lerAba(gerarXlsxCarga(b, montarAjusteNumero(b, new Map())), "Folha1");
+    expect(lido[2]).toEqual(b.linhas[1]);
+    expect(lido[3]).toEqual(b.linhas[2]);
+  });
 });
 
 describe("gerarXlsxAjustes", () => {

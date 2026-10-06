@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ProdasenEndereco } from "@/components/prodasen-endereco";
 import { gruposPorContatoDoRetrato, montarAjusteNumero } from "@/lib/ajuste-numero";
-import { armazemPadrao } from "@/lib/armazem";
+import { armazemPadrao, RetratoIlegivelError } from "@/lib/armazem";
 import { modoDoApp } from "@/lib/modo";
 import { ColunaFaltanteError } from "@/lib/planilha";
+import type { Retrato } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,15 @@ function Aviso({ texto, acao }: { texto: string; acao?: { href: string; rotulo: 
 
 export default async function ProdasenPage() {
   if (modoDoApp() === "web") notFound();
-  const retrato = await armazemPadrao().lerRetrato();
+  let retrato: Retrato | undefined;
+  try {
+    retrato = await armazemPadrao().lerRetrato();
+  } catch (err) {
+    if (err instanceof RetratoIlegivelError) {
+      return <Aviso texto="O arquivo .fiscal/retrato.json existe, mas não é um retrato válido. Faça uma nova varredura; ela substitui o arquivo." acao={{ href: "/nova-varredura", rotulo: "Nova varredura" }} />;
+    }
+    throw err;
+  }
   if (!retrato) {
     return <Aviso texto="Ainda não há varredura salva." acao={{ href: "/nova-varredura", rotulo: "Nova varredura" }} />;
   }

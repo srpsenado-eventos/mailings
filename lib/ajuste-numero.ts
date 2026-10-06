@@ -2,7 +2,7 @@ import * as XLSX from "xlsx";
 import { LIMITE_NUMERO } from "@/lib/endereco";
 import { normalizarTexto } from "@/lib/normalize";
 import { ColunaFaltanteError } from "@/lib/planilha";
-import type { BaseEnderecos, CelulaBase } from "@/lib/types";
+import type { BaseEnderecos, CelulaBase, ResultadoGrupo } from "@/lib/types";
 
 /**
  * Ajuste do campo Número acima de 6 caracteres para a carga do PRODASEN
@@ -239,4 +239,18 @@ export function gerarXlsxAjustes(ajuste: AjusteNumero, meta: { fonte: string; ge
     ["De-Para", [[...CABECALHO_DE_PARA], ...pares.map((p) => [p.atual, p.proposto, p.qtd])]],
     ["Sem proposta", [[...CABECALHO_SEM_PROPOSTA], ...ajuste.semProposta.map((s) => [s.contatoId, s.enderecoId, s.nome, s.numeroAtual])]],
   ]);
+}
+
+/** Grupos da Posse de cada contato do retrato, por Contato Id (texto), sem repetir grupo. */
+export function gruposPorContatoDoRetrato(grupos: readonly ResultadoGrupo[]): Map<string, string[]> {
+  const mapa = new Map<string, string[]>();
+  for (const g of grupos) {
+    for (const k of g.contatos) {
+      const id = k.contato.id;
+      if (id === undefined || id === "") continue;
+      const atuais = mapa.get(id) ?? [];
+      if (!atuais.includes(g.grupo)) mapa.set(id, [...atuais, g.grupo]);
+    }
+  }
+  return mapa;
 }

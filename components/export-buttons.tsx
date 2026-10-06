@@ -3,12 +3,7 @@ import type { ResultadoAnalise, ResultadoEleicao } from "@/lib/types";
 import { gerarXlsx, gerarCsv } from "@/lib/export";
 import { gerarXlsxEleitos } from "@/lib/export-eleitos";
 
-function baixar(nome: string, conteudo: BlobPart, tipo: string) {
-  const url = URL.createObjectURL(new Blob([conteudo], { type: tipo }));
-  const a = document.createElement("a");
-  a.href = url; a.download = nome; a.click();
-  URL.revokeObjectURL(url);
-}
+import { baixar } from "@/components/baixar";
 
 export function ExportButtons({ analise }: { analise: ResultadoAnalise }) {
   return (

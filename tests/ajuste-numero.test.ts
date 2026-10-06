@@ -4,6 +4,7 @@ import {
   colunasDaBase,
   gerarXlsxAjustes,
   gerarXlsxCarga,
+  gruposPorContatoDoRetrato,
   montarAjusteNumero,
   nomesArquivosProdasen,
   proporNumero,
@@ -11,7 +12,7 @@ import {
   textoCelula,
 } from "@/lib/ajuste-numero";
 import { ColunaFaltanteError } from "@/lib/planilha";
-import type { BaseEnderecos, CelulaBase } from "@/lib/types";
+import type { BaseEnderecos, CelulaBase, ResultadoGrupo } from "@/lib/types";
 
 const CABECALHO = ["&nbsp;", "Contato Id", "Endereço Id", "Tratamento", "Nome", "Logradouro", "Numero", "Complemento", "Bairro", "Cidade", "UF", "País", "CEP", "Prioritário"];
 
@@ -214,5 +215,21 @@ describe("gerarXlsxAjustes", () => {
     expect(l[13][0]).toBe("Lote → LT, Casa → CS, Chácara → CH, Bloco → BL.");
     expect(l[17][0]).toBe("O arquivo de carga traz a base inteira com só o campo Numero alterado nestes endereços.");
     expect(l.flat().some((v) => typeof v === "string" && v.startsWith("="))).toBe(false);
+  });
+});
+
+describe("gruposPorContatoDoRetrato", () => {
+  const grupo = (nome: string, ids: (string | undefined)[]): ResultadoGrupo =>
+    ({ grupo: nome, contatos: ids.map((id) => ({ contato: { id } })) }) as unknown as ResultadoGrupo;
+
+  test("mapeia o Contato Id para os grupos, sem repetir e ignorando contato sem Id", () => {
+    const mapa = gruposPorContatoDoRetrato([
+      grupo("Grupo A", ["1", "2", "1", undefined]),
+      grupo("Grupo B", ["1"]),
+    ]);
+
+    expect(mapa.get("1")).toEqual(["Grupo A", "Grupo B"]);
+    expect(mapa.get("2")).toEqual(["Grupo A"]);
+    expect(mapa.size).toBe(2);
   });
 });

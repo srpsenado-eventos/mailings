@@ -16,6 +16,7 @@ import {
   textoCabecalhoWeb,
   textoDataHora,
   textoEnderecoParaCopiar,
+  textoNumeroNaBase,
 } from "@/lib/painel";
 import { ColunaFaltanteError } from "@/lib/planilha";
 import type {
@@ -664,5 +665,25 @@ describe("contarNumeroNaBase", () => {
 
   test("base sem a coluna Numero lança ColunaFaltanteError", () => {
     expect(() => contarNumeroNaBase({ cabecalho: ["a"], linhas: [] }, grupos)).toThrow(ColunaFaltanteError);
+  });
+});
+
+describe("textoNumeroNaBase", () => {
+  const base = { enderecos: 100, acimaDoLimite: 5, contatos: 4, foraDaPosse: 0, naoPrioritarios: 0 };
+
+  test("sem endereços fora do painel, mostra só o total", () => {
+    expect(textoNumeroNaBase(base)).toBe("Número acima de 6 na base inteira: 5 endereços");
+  });
+
+  test("detalha os fora do painel somando os dois grupos", () => {
+    expect(textoNumeroNaBase({ ...base, foraDaPosse: 2, naoPrioritarios: 3 })).toBe(
+      "Número acima de 6 na base inteira: 5 endereços (5 fora do painel: 2 fora da Posse, 3 não prioritários)",
+    );
+  });
+
+  test("usa o singular quando há um só", () => {
+    expect(textoNumeroNaBase({ ...base, acimaDoLimite: 1, foraDaPosse: 0, naoPrioritarios: 1 })).toBe(
+      "Número acima de 6 na base inteira: 1 endereço (1 fora do painel: 0 fora da Posse, 1 não prioritário)",
+    );
   });
 });

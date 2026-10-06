@@ -456,6 +456,15 @@ export function contarNumeroNaBase(base: BaseEnderecos, grupos: readonly Resulta
   };
 }
 
+/** Frase do total da base inteira, ao lado dos filtros do painel (também no modo web). */
+export function textoNumeroNaBase(n: NumeroNaBase): string {
+  const total = `Número acima de ${LIMITE_NUMERO} na base inteira: ${n.acimaDoLimite} ${n.acimaDoLimite === 1 ? "endereço" : "endereços"}`;
+  const fora = n.foraDaPosse + n.naoPrioritarios;
+  if (fora === 0) return total;
+  const prioritarios = n.naoPrioritarios === 1 ? "não prioritário" : "não prioritários";
+  return `${total} (${fora} fora do painel: ${n.foraDaPosse} fora da Posse, ${n.naoPrioritarios} ${prioritarios})`;
+}
+
 /** Base sem coluna-chave não derruba a varredura: sem contagem; a tela do PRODASEN mostra o erro da coluna. */
 function contagemOuNada(base: BaseEnderecos, grupos: readonly ResultadoGrupo[]): { numeroNaBase?: NumeroNaBase } {
   try {

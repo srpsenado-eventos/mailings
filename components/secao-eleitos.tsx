@@ -31,6 +31,18 @@ export function SecaoEleitos({ secao, abertoInicial }: { secao: SecaoEleicao; ab
               </div>
             </div>
           ))}
+          {(secao.governo ?? []).map((x, i) => (
+            <div key={`governo-${x.eleito.uf}-${x.eleito.nomeUrna}-${i}`} className="grid grid-cols-[minmax(0,2fr)_minmax(0,2.4fr)_minmax(0,0.6fr)_minmax(0,1fr)_minmax(0,2fr)] items-start gap-4 border-t border-separador px-4 py-2.5 text-sm">
+              <div className="font-medium">
+                <span className="mr-2 text-xs font-normal text-cinza">Governador</span>
+                {x.eleito.nomeUrna}
+              </div>
+              <div className="text-cinza">{x.eleito.nomeCompleto}</div>
+              <div>{x.eleito.uf}</div>
+              <div className="text-cinza">{x.eleito.partido ?? "—"}</div>
+              <div className="text-xs text-atencao">{x.motivo}</div>
+            </div>
+          ))}
         </div>
       )}
     </section>

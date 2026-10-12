@@ -1,7 +1,8 @@
 import { ORIENTACAO_OUTRA_CASA } from "@/lib/eleitos";
 import { normalizarTexto } from "@/lib/normalize";
+import { temGrupoDeputados } from "@/lib/painel-deputados";
 import type { Etiqueta } from "@/lib/painel";
-import type { CasaLegislativa, EleicaoContato, EleitoClassificado, ResultadoContato, ResultadoEleicao } from "@/lib/types";
+import type { CasaLegislativa, EleicaoContato, EleicaoGovernoContato, EleitoClassificado, GovernadorClassificado, ResultadoContato, ResultadoEleicao, UfSegundoTurno } from "@/lib/types";
 
 /**
  * O que o painel mostra da Eleição 2026 (spec 2026-10-05 §5), decidido fora do JSX.
@@ -12,7 +13,7 @@ export type FiltroEleicao = "reeleitos" | "outra_casa" | "a_cadastrar" | "a_conf
 
 export const FILTROS_ELEICAO: readonly { id: FiltroEleicao; rotulo: string }[] = [
   { id: "reeleitos", rotulo: "Reeleitos" },
-  { id: "outra_casa", rotulo: "Eleitos para a outra Casa" },
+  { id: "outra_casa", rotulo: "Eleitos para outro cargo" },
   { id: "a_cadastrar", rotulo: "A cadastrar" },
   { id: "a_conferir", rotulo: "A conferir" },
 ];
@@ -45,8 +46,36 @@ export function etiquetasDeEleicao(e: EleicaoContato | undefined): Etiqueta[] {
   return lista;
 }
 
-export function destacaLinha(e: EleicaoContato | undefined): boolean {
-  return e?.destino === "outra_casa";
+export function etiquetasDeGoverno(e: EleicaoGovernoContato | undefined): Etiqueta[] {
+  if (!e) return [];
+  switch (e.destino) {
+    case "reeleito":
+      return [{ campo: "eleicao", texto: "Reeleito governador", tom: "ok", explicacao: "Reeleito governador em 04/10/2026: fica neste grupo" }];
+    case "outro_cargo":
+      return [{ campo: "eleicao", texto: "Eleito governador — atenção", tom: "atencao", explicacao: ORIENTACAO_OUTRA_CASA }];
+    case "novo":
+      return [{ campo: "eleicao", texto: "Eleito governador — grupo novo", tom: "neutro", explicacao: "Mandato novo de governador, já cadastrado no grupo dos eleitos" }];
+    case "conferir":
+      return [{ campo: "eleicao", texto: "Governo: a conferir", tom: "atencao", explicacao: e.motivo ?? "Caso a conferir antes do cadastro" }];
+  }
+}
+
+export function detalheDoGoverno(e: EleicaoGovernoContato): { linhas: { rotulo: string; valor: string }[]; orientacao?: string } {
+  const linhas = [
+    { rotulo: "Eleito para", valor: "Governo do Estado" },
+    { rotulo: "UF", valor: e.uf },
+    ...(e.partido ? [{ rotulo: "Partido", valor: e.partido }] : []),
+    { rotulo: "Situação no TSE", valor: e.situacaoTse },
+    { rotulo: "Status do mandato", valor: e.statusMandato },
+    ...(e.baseStatus ? [{ rotulo: "Base do status", valor: e.baseStatus }] : []),
+    ...(e.motivo ? [{ rotulo: "A conferir", valor: e.motivo }] : []),
+  ];
+  return { linhas, ...(e.destino === "outro_cargo" ? { orientacao: ORIENTACAO_OUTRA_CASA } : {}) };
+}
+
+/** Troca de Casa ou de cargo: a linha ganha destaque. */
+export function destacaLinha(e: EleicaoContato | undefined, g?: EleicaoGovernoContato): boolean {
+  return e?.destino === "outra_casa" || g?.destino === "outro_cargo";
 }
 
 export function detalheDaEleicao(e: EleicaoContato): { linhas: { rotulo: string; valor: string }[]; orientacao?: string } {
@@ -63,8 +92,8 @@ export function detalheDaEleicao(e: EleicaoContato): { linhas: { rotulo: string;
 }
 
 export function passaFiltroEleicao(c: ResultadoContato, f: FiltroEleicao): boolean {
-  if (f === "reeleitos") return c.eleicao?.destino === "reeleito";
-  if (f === "outra_casa") return c.eleicao?.destino === "outra_casa";
+  if (f === "reeleitos") return c.eleicao?.destino === "reeleito" || c.eleicaoGoverno?.destino === "reeleito";
+  if (f === "outra_casa") return c.eleicao?.destino === "outra_casa" || c.eleicaoGoverno?.destino === "outro_cargo";
   return false; // a_cadastrar e a_conferir são seções, não linhas do Contatos
 }
 
@@ -72,11 +101,19 @@ export interface SecaoEleicao {
   id: "senado_novos" | "camara_novos" | "conferir";
   titulo: string;
   linhas: EleitoClassificado[];
+  /** Governadores a conferir, na seção "conferir". Ausente nas seções montadas fora deste módulo. */
+  governo?: GovernadorClassificado[];
 }
 
 function casaBusca(x: EleitoClassificado, busca: string): boolean {
   if (busca === "") return true;
   const e = x.eleito;
+  return [e.nomeUrna, e.nomeCompleto, e.partido ?? "", e.uf].some((v) => normalizarTexto(v).includes(busca));
+}
+
+function governoBusca(g: GovernadorClassificado, busca: string): boolean {
+  if (busca === "") return true;
+  const e = g.eleito;
   return [e.nomeUrna, e.nomeCompleto, e.partido ?? "", e.uf].some((v) => normalizarTexto(v).includes(busca));
 }
 
@@ -92,14 +129,52 @@ export function secoesDeEleicao(eleicao: ResultadoEleicao | undefined, filtro: s
   const ids = SECOES_POR_FILTRO[filtro] ?? [];
   const visiveis = eleicao.eleitos.filter((x) => casaBusca(x, b));
   const novos = (casa: CasaLegislativa) => visiveis.filter((x) => x.destino === "novo" && !x.jaCadastrado && x.eleito.casa === casa);
+  const governoConferir = (eleicao.governadores?.eleitos ?? []).filter((g) => g.destino === "conferir" && governoBusca(g, b));
   const todas: SecaoEleicao[] = [
-    { id: "senado_novos", titulo: "Senadores Eleitos — a cadastrar", linhas: novos("senado") },
-    { id: "camara_novos", titulo: "Deputados Federais Eleitos — a cadastrar", linhas: novos("camara") },
-    { id: "conferir", titulo: "Eleitos — a conferir", linhas: visiveis.filter((x) => x.destino === "conferir") },
+    { id: "senado_novos", titulo: "Senadores Eleitos — a cadastrar", linhas: novos("senado"), governo: [] },
+    { id: "camara_novos", titulo: "Deputados Federais Eleitos — a cadastrar", linhas: novos("camara"), governo: [] },
+    { id: "conferir", titulo: "Eleitos — a conferir", linhas: visiveis.filter((x) => x.destino === "conferir"), governo: governoConferir },
   ];
+  // Com o grupo virtual "Deputados Federais" na tela, os eleitos novos da Câmara já aparecem dentro dele.
+  const grupoVirtual = temGrupoDeputados(eleicao);
   return todas
-    .filter((s) => ids.includes(s.id) && s.linhas.length > 0)
-    .map((s) => ({ ...s, titulo: `${s.titulo} (${s.linhas.length})` }));
+    .filter((s) => ids.includes(s.id) && s.linhas.length + (s.governo?.length ?? 0) > 0 && !(grupoVirtual && s.id === "camara_novos"))
+    .map((s) => ({ ...s, titulo: `${s.titulo} (${s.linhas.length + (s.governo?.length ?? 0)})` }));
+}
+
+export interface SecaoGoverno {
+  id: "governo_novos" | "governo_segundo_turno";
+  titulo: string;
+  novos: GovernadorClassificado[];
+  segundoTurno: UfSegundoTurno[];
+}
+
+const SECOES_GOVERNO_POR_FILTRO: Record<string, readonly SecaoGoverno["id"][]> = {
+  tudo: ["governo_novos", "governo_segundo_turno"],
+  a_cadastrar: ["governo_novos"],
+};
+
+function segundoTurnoBusca(u: UfSegundoTurno, busca: string): boolean {
+  if (busca === "") return true;
+  return [u.uf, ...u.candidatos.map((c) => c.nomeUrna)].some((v) => normalizarTexto(v).includes(busca));
+}
+
+export function secoesDeGoverno(eleicao: ResultadoEleicao | undefined, filtro: string, busca: string): SecaoGoverno[] {
+  const gov = eleicao?.governadores;
+  if (!gov) return [];
+  const b = normalizarTexto(busca.trim());
+  const ids = SECOES_GOVERNO_POR_FILTRO[filtro] ?? [];
+  const novos = gov.eleitos.filter((g) => g.destino === "novo" && !g.jaCadastrado && governoBusca(g, b));
+  const segundoTurno = gov.segundoTurno.filter((u) => segundoTurnoBusca(u, b));
+  const todas: SecaoGoverno[] = [
+    { id: "governo_novos", titulo: `Governadores Eleitos — a cadastrar (${novos.length})`, novos, segundoTurno: [] },
+    {
+      id: "governo_segundo_turno",
+      titulo: `Governadores — aguarda 2º turno, 25/10 (${segundoTurno.length} ${segundoTurno.length === 1 ? "UF" : "UFs"})`,
+      novos: [], segundoTurno,
+    },
+  ];
+  return todas.filter((s) => ids.includes(s.id) && s.novos.length + s.segundoTurno.length > 0);
 }
 
 export function avisoDaEleicao(eleicao: ResultadoEleicao | undefined): string | undefined {

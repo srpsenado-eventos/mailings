@@ -218,7 +218,7 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
             <span className="rounded-full bg-neutro-fundo px-2 py-0.5 text-[11px] text-cinza">opcional</span>
           </div>
           <p className="mt-3 text-sm leading-relaxed text-cinza">
-            As planilhas da pasta <strong className="font-medium">Eleitos 2026</strong>: senadores eleitos, deputados federais eleitos e deputados atuais. Pode escolher as três de uma vez.
+            As planilhas da pasta <strong className="font-medium">Eleitos 2026</strong>: senadores eleitos, deputados federais eleitos, deputados atuais e governadores eleitos. Pode escolher as quatro de uma vez.
           </p>
           {eleicao.map((l) => (
             <ArquivoLido

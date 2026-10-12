@@ -20,3 +20,17 @@ export function siglaDaUf(texto: string | undefined): string | undefined {
   if (sigla in UF_POR_EXTENSO) return sigla;
   return SIGLA_POR_NOME.get(normalizarTexto(t));
 }
+
+const NOMES_POR_TAMANHO = [...SIGLA_POR_NOME.entries()].sort(([a], [b]) => b.length - a.length);
+
+/**
+ * Sigla da UF citada no fim de um texto livre ("Governador do Estado de Goiás"), ou do Distrito
+ * Federal em qualquer ponto. Serve ao Cargo e ao Órgão dos governadores, cujo Departamento vem vazio.
+ */
+export function ufNoTexto(texto: string | undefined): string | undefined {
+  const t = normalizarTexto(texto ?? "");
+  if (!t) return undefined;
+  if (t.includes("distrito federal")) return "DF";
+  const achado = NOMES_POR_TAMANHO.find(([nome]) => t === nome || t.endsWith(` ${nome}`));
+  return achado?.[1];
+}

@@ -54,19 +54,38 @@ describe("enxugarParaPublicar", () => {
     expect(retrato.grupos[0].contatos[0].comparacoes).toHaveLength(3);
   });
 
-  test("o retrato publicado leva a eleição, mas sem a lista de deputados atuais (e-mail e telefone de gabinete)", () => {
+  test("deputado com campo extra desconhecido não leva esse campo à web (lista de permitidos)", () => {
+    const comExtra = {
+      ...retrato,
+      eleicao: {
+        arquivos: [], eleitos: [], camaraNoContatos: false,
+        deputadosAtuais: [{ uf: "MA", nomeParlamentar: "C", nomeCivil: "C D", sexo: "F", condicao: "Titular", idCamara: "1", campoNovo: "segredo-ficticio" }],
+      },
+    } as unknown as Retrato;
+    const pub = enxugarParaPublicar(comExtra, "2026-10-05T12:00:00.000Z");
+    expect(pub.eleicao?.deputadosAtuais).toEqual([{ uf: "MA", nomeParlamentar: "C", nomeCivil: "C D", sexo: "F", condicao: "Titular", idCamara: "1" }]);
+    expect(JSON.stringify(pub)).not.toContain("segredo-ficticio");
+  });
+
+  test("o retrato publicado leva os deputados atuais, mas sem e-mail, telefone, prédio e sala", () => {
     const comEleicao: Retrato = {
       ...retrato,
       eleicao: {
         arquivos: ["atuais.xlsx"], eleitos: [], camaraNoContatos: false,
-        deputadosAtuais: [{ uf: "MA", nomeParlamentar: "C", nomeCivil: "C D", email: "c@camara.leg.br", telefone: "3215-0000" }],
+        deputadosAtuais: [{
+          uf: "MA", nomeParlamentar: "C", nomeCivil: "C D", partido: "PX", eleicao2026: "Reeleito deputado federal",
+          email: "c@camara.leg.br", telefone: "3215-0000", predio: "Anexo Ficticio", sala: "sala-ficticia-9",
+        }],
       },
     } as unknown as Retrato;
     const pub = enxugarParaPublicar(comEleicao, "2026-10-05T12:00:00.000Z");
     expect(pub.eleicao?.arquivos).toEqual(["atuais.xlsx"]);
-    expect(pub.eleicao?.deputadosAtuais).toBeUndefined();
-    expect(JSON.stringify(pub)).not.toContain("camara.leg.br");
-    expect(comEleicao.eleicao?.deputadosAtuais).toHaveLength(1);
+    expect(pub.eleicao?.deputadosAtuais).toEqual([
+      { uf: "MA", nomeParlamentar: "C", nomeCivil: "C D", partido: "PX", eleicao2026: "Reeleito deputado federal" },
+    ]);
+    const json = JSON.stringify(pub);
+    for (const dado of ["camara.leg.br", "3215-0000", "Anexo Ficticio", "sala-ficticia-9"]) expect(json).not.toContain(dado);
+    expect(comEleicao.eleicao?.deputadosAtuais?.[0].email).toBe("c@camara.leg.br");
   });
 });
 

@@ -127,6 +127,8 @@ export interface ResultadoContato {
   endereco?: AuditoriaEndereco;
   /** Eleição 2026 (spec 2026-10-05). Eixo próprio: não muda `semaforo`. */
   eleicao?: EleicaoContato;
+  /** Governadores eleitos 2026 (spec 2026-10-12). Eixo próprio: não muda `semaforo`. */
+  eleicaoGoverno?: EleicaoGovernoContato;
 }
 
 export interface ResultadoGrupo {
@@ -373,6 +375,13 @@ export interface EleitoPlanilha {
   nascimento?: string;
 }
 
+/** Uma linha de `Governadores Eleitos 2026.xlsx` (abas "Eleitos 1º turno" e "2º turno"). Dado público do TSE. */
+export interface GovernadorPlanilha {
+  uf: string; nomeUrna: string; nomeCompleto: string; partido?: string;
+  situacaoTse: string; statusMandato: string; baseStatus?: string; genero?: string; vice?: string;
+}
+export interface PlanilhaGovernadores { eleitos: GovernadorPlanilha[]; segundoTurno: GovernadorPlanilha[] }
+
 /** Uma linha de `Deputados Federais Atuais (57a legislatura).xlsx`, aba `Em exercício`. */
 export interface DeputadoAtual {
   uf: string;
@@ -429,13 +438,45 @@ export interface EleicaoContato {
   motivo?: string;
 }
 
-/** Eleição 2026 no retrato. `deputadosAtuais` nunca vai para a web (lib/publicar.ts). */
+export type DestinoGoverno = "reeleito" | "outro_cargo" | "novo" | "conferir";
+
+export interface GovernadorClassificado {
+  eleito: GovernadorPlanilha;
+  destino: DestinoGoverno;
+  motivo?: string;
+  /** Linhas do Contatos casadas (Governadores, Senadores ou Deputados Federais). */
+  contatos: ContatoDoEleito[];
+  /** Mandato novo já cadastrado em "Governadores Eleitos". */
+  jaCadastrado?: boolean;
+  /** Deputado em exercício (planilha da Câmara) eleito governador, quando o grupo não está no Contatos. */
+  deputadoAtual?: { uf: string; nomeParlamentar: string };
+}
+
+export interface UfSegundoTurno {
+  uf: string;
+  candidatos: { nomeUrna: string; partido?: string; statusMandato: string }[];
+}
+
+/** O que o painel mostra na linha de um contato que é governador eleito. Não pinta o semáforo. */
+export interface EleicaoGovernoContato {
+  destino: DestinoGoverno;
+  uf: string;
+  partido?: string;
+  situacaoTse: string;
+  statusMandato: string;
+  baseStatus?: string;
+  nomeUrna: string;
+  motivo?: string;
+}
+
+/** Eleição 2026 no retrato. `deputadosAtuais` vai para a web sem e-mail, telefone, prédio e sala (lib/publicar.ts). */
 export interface ResultadoEleicao {
   arquivos: string[];
   eleitos: EleitoClassificado[];
   deputadosAtuais?: DeputadoAtual[];
   /** O grupo "Deputados Federais" existe no Contatos? Sem ele, deputados valem pela planilha. */
   camaraNoContatos: boolean;
+  governadores?: { eleitos: GovernadorClassificado[]; segundoTurno: UfSegundoTurno[] };
 }
 
 /** Célula da base de endereços como foi lida da planilha (Ids e CEP chegam numéricos). */

@@ -1,14 +1,15 @@
-import { pontuarPessoa } from "@/lib/match";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
-import { siglaDaUf } from "@/lib/uf";
+import { casaDoGrupo, casaPessoa, chavePessoa, constaEntreAtuais, MOTIVO_AMBIGUO, referencia } from "@/lib/eleitos-casamento";
+import { agruparSegundoTurno, classificarGovernadores, paraContatoGoverno } from "@/lib/eleitos-governo";
 import type {
   CasaLegislativa,
-  ContatoDoEleito,
   ContatoPlanilha,
   DeputadoAtual,
   EleicaoContato,
+  EleicaoGovernoContato,
   EleitoClassificado,
   EleitoPlanilha,
+  PlanilhaGovernadores,
   ResultadoAnalise,
   ResultadoGrupo,
 } from "@/lib/types";
@@ -20,10 +21,10 @@ import type {
  * Eixo próprio: não toca semáforo, comparações nem possível saída.
  */
 
+export { MOTIVO_AMBIGUO };
 export const OBSERVACAO_NOME_URNA = "Nome de urna (TSE): aguarda aprovação do nome político";
 export const ORIENTACAO_OUTRA_CASA = "Convidado pelo cargo atual (Ata 14 do GT Cerimonial, 09/06/2026)";
 
-const MOTIVO_AMBIGUO = "Nome casa mais de um contato do Contatos";
 const MOTIVO_NOVO_EM_EXERCICIO = "Planilha diz mandato novo, mas a pessoa está na lista de deputados em exercício";
 const MOTIVO_VERIFICAR = "Planilha pede verificação: provável deputado estadual ou distrital";
 
@@ -67,46 +68,12 @@ interface Candidato {
   eleitos: boolean;
 }
 
-function casaDoGrupo(grupo: string): { casa: CasaLegislativa; eleitos: boolean } | undefined {
-  const g = normalizarTexto(grupo);
-  if (g.startsWith("ex-") || g.startsWith("ex ")) return undefined;
-  if (g.includes("eleit")) {
-    if (g.includes("senador")) return { casa: "senado", eleitos: true };
-    if (g.includes("deputad")) return { casa: "camara", eleitos: true };
-    return undefined;
-  }
-  if (g.includes("senadores")) return { casa: "senado", eleitos: false };
-  if (g.includes("deputados federais")) return { casa: "camara", eleitos: false };
-  return undefined;
-}
-
 function candidatos(grupos: readonly ResultadoGrupo[]): Candidato[] {
   return grupos.flatMap((g) => {
     const casa = casaDoGrupo(g.grupo);
     return casa ? g.contatos.map((c) => ({ contato: c.contato, grupo: g.grupo, ...casa })) : [];
   });
 }
-
-function casaPessoa(contato: ContatoPlanilha, e: EleitoPlanilha): boolean {
-  const uf = siglaDaUf(contato.departamento);
-  if (uf && uf !== e.uf.toUpperCase()) return false;
-  const nomes = [e.nomeUrna, e.nomeCompleto].filter((n) => n.trim().length > 0);
-  const alvo = normalizarNome(contato.nome);
-  return nomes.some((n) => normalizarNome(n) === alvo || pontuarPessoa(contato.nome, n) >= 1);
-}
-
-function constaEntreAtuais(e: EleitoPlanilha, atuais: readonly DeputadoAtual[]): boolean {
-  const civil = normalizarNome(e.nomeCompleto);
-  const urna = normalizarNome(e.nomeUrna);
-  return atuais.some(
-    (d) => d.uf.toUpperCase() === e.uf.toUpperCase()
-      && (normalizarNome(d.nomeCivil) === civil || normalizarNome(d.nomeParlamentar) === urna),
-  );
-}
-
-const chavePessoa = (c: ContatoPlanilha): string => c.id ?? normalizarNome(c.nome);
-
-const referencia = (a: Candidato): ContatoDoEleito => ({ grupo: a.grupo, nome: a.contato.nome, ...(a.contato.id ? { id: a.contato.id } : {}) });
 
 const ROTULO_CASA_GRUPO: Record<CasaLegislativa, string> = { senado: "senadores", camara: "deputados federais" };
 
@@ -182,18 +149,26 @@ export function aplicarEleicao(
   eleitos: readonly EleitoPlanilha[],
   arquivos: readonly string[],
   deputadosAtuais?: readonly DeputadoAtual[],
+  governadores?: PlanilhaGovernadores,
 ): ResultadoAnalise {
   const classificados = classificarEleitos(eleitos, resultado.grupos, deputadosAtuais);
   const porLinha = new Map<string, EleicaoContato>();
   for (const x of classificados) for (const c of x.contatos) porLinha.set(chaveLinha(c.grupo, c), paraContato(x));
   const camaraNoContatos = candidatos(resultado.grupos).some((c) => c.casa === "camara" && !c.eleitos);
+  const gov = governadores ? classificarGovernadores(governadores.eleitos, resultado.grupos, deputadosAtuais) : undefined;
+  const govPorLinha = new Map<string, EleicaoGovernoContato>();
+  for (const x of gov ?? []) for (const c of x.contatos) govPorLinha.set(chaveLinha(c.grupo, c), paraContatoGoverno(x));
   return {
     ...resultado,
     grupos: resultado.grupos.map((g) => ({
       ...g,
       contatos: g.contatos.map((c) => {
-        const eleicao = porLinha.get(chaveLinha(g.grupo, c.contato));
-        return eleicao ? { ...c, eleicao } : c;
+        const chave = chaveLinha(g.grupo, c.contato);
+        const eleicao = porLinha.get(chave);
+        const eleicaoGoverno = govPorLinha.get(chave);
+        return eleicao || eleicaoGoverno
+          ? { ...c, ...(eleicao ? { eleicao } : {}), ...(eleicaoGoverno ? { eleicaoGoverno } : {}) }
+          : c;
       }),
     })),
     eleicao: {
@@ -201,6 +176,7 @@ export function aplicarEleicao(
       eleitos: classificados,
       ...(deputadosAtuais ? { deputadosAtuais: [...deputadosAtuais] } : {}),
       camaraNoContatos,
+      ...(gov && governadores ? { governadores: { eleitos: gov, segundoTurno: agruparSegundoTurno(governadores.segundoTurno) } } : {}),
     },
   };
 }

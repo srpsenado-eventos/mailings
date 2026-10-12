@@ -1,4 +1,4 @@
-import type { BaseEnderecos, CasaLegislativa, CelulaBase, ContatoPlanilha, DeputadoAtual, EleitoPlanilha, EnderecoEstruturado } from "@/lib/types";
+import type { BaseEnderecos, CasaLegislativa, CelulaBase, ContatoPlanilha, DeputadoAtual, EleitoPlanilha, EnderecoEstruturado, GovernadorPlanilha, PlanilhaGovernadores } from "@/lib/types";
 
 /** Corpo JSON do `/api/analise` inválido (estrutura inesperada vinda do cliente). */
 export class PayloadInvalidoError extends Error {
@@ -19,6 +19,8 @@ export interface PayloadAnalise {
   eleitos?: EleitoPlanilha[];
   deputadosAtuais?: DeputadoAtual[];
   arquivosEleicao?: string[];
+  /** Governadores eleitos (spec 2026-10-12). Ausente = a eleição de governo não roda. */
+  governadores?: PlanilhaGovernadores;
   /** A base de endereços inteira, para o ajuste do Número (spec 2026-10-06, §3). */
   baseEnderecos?: BaseEnderecos;
 }
@@ -91,6 +93,16 @@ function narrowEleito(v: unknown): EleitoPlanilha {
   };
 }
 
+function narrowGovernador(v: unknown): GovernadorPlanilha {
+  const o = objeto(v);
+  const opcionais = { partido: textoOpcional(o.partido), baseStatus: textoOpcional(o.baseStatus), genero: textoOpcional(o.genero), vice: textoOpcional(o.vice) };
+  return {
+    uf: texto(o.uf), nomeUrna: texto(o.nomeUrna), nomeCompleto: texto(o.nomeCompleto),
+    situacaoTse: texto(o.situacaoTse), statusMandato: texto(o.statusMandato),
+    ...Object.fromEntries(Object.entries(opcionais).filter(([, x]) => x !== undefined)),
+  };
+}
+
 const CAMPOS_DEPUTADO_OPCIONAIS = ["partido", "sexo", "condicao", "eleicao2026", "email", "predio", "sala", "telefone", "idCamara"] as const;
 
 function narrowDeputado(v: unknown): DeputadoAtual {
@@ -99,6 +111,14 @@ function narrowDeputado(v: unknown): DeputadoAtual {
     CAMPOS_DEPUTADO_OPCIONAIS.map((c) => [c, textoOpcional(o[c])] as const).filter(([, x]) => x !== undefined),
   );
   return { uf: texto(o.uf), nomeParlamentar: texto(o.nomeParlamentar), nomeCivil: texto(o.nomeCivil), ...opcionais };
+}
+
+function narrowGovernadores(v: unknown): PlanilhaGovernadores {
+  const o = objeto(v);
+  const eleitos = listaOpcional(o.eleitos, "governadores eleitos", narrowGovernador);
+  const segundoTurno = listaOpcional(o.segundoTurno, "governadores no 2º turno", narrowGovernador);
+  if (!eleitos) throw new PayloadInvalidoError("Lista de governadores eleitos ausente.");
+  return { eleitos, segundoTurno: segundoTurno ?? [] };
 }
 
 function narrowCelulaBase(v: unknown): CelulaBase {
@@ -171,6 +191,7 @@ export function parsePayloadAnalise(corpo: unknown): PayloadAnalise {
     ...(eleitos ? { eleitos } : {}),
     ...(deputadosAtuais ? { deputadosAtuais } : {}),
     ...(arquivosEleicao ? { arquivosEleicao } : {}),
+    ...(extra.governadores !== undefined ? { governadores: narrowGovernadores(extra.governadores) } : {}),
     ...(baseEnderecos ? { baseEnderecos } : {}),
   };
 }

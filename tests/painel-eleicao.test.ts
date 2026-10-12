@@ -4,11 +4,15 @@ import {
   destacaLinha,
   detalheDaEleicao,
   ehFiltroEleicao,
+  detalheDoGoverno,
   etiquetasDeEleicao,
+  etiquetasDeGoverno,
+  FILTROS_ELEICAO,
   passaFiltroEleicao,
   secoesDeEleicao,
+  secoesDeGoverno,
 } from "@/lib/painel-eleicao";
-import type { EleicaoContato, EleitoClassificado, ResultadoContato, ResultadoEleicao } from "@/lib/types";
+import type { EleicaoContato, EleicaoGovernoContato, EleitoClassificado, GovernadorClassificado, ResultadoContato, ResultadoEleicao, UfSegundoTurno } from "@/lib/types";
 
 const ec = (over: Partial<EleicaoContato> = {}): EleicaoContato => ({
   casa: "senado", destino: "reeleito", projecao: false, uf: "MA", situacaoTse: "Eleito",
@@ -108,6 +112,14 @@ describe("secoesDeEleicao", () => {
     expect(nomes(secoesDeEleicao(e, "tudo", "BIA"))).toEqual([["camara_novos", ["Bia Nova"]]]);
   });
 
+  test("com o grupo virtual de deputados a seção camara_novos some; sem deputados atuais, volta", () => {
+    const atual = { uf: "MA", nomeParlamentar: "Fulano Teste", nomeCivil: "Fulano de Tal Teste" };
+    const comGrupo: ResultadoEleicao = { ...e, deputadosAtuais: [atual] };
+    expect(secoesDeEleicao(comGrupo, "tudo", "").map((s) => s.id)).toEqual(["senado_novos", "conferir"]);
+    expect(secoesDeEleicao({ ...comGrupo, camaraNoContatos: true }, "tudo", "").map((s) => s.id)).toContain("camara_novos");
+    expect(secoesDeEleicao(e, "tudo", "").map((s) => s.id)).toContain("camara_novos");
+  });
+
   test("retrato sem eleição não tem seção nem aviso", () => {
     expect(secoesDeEleicao(undefined, "tudo", "")).toEqual([]);
     expect(avisoDaEleicao(undefined)).toBeUndefined();
@@ -117,5 +129,116 @@ describe("secoesDeEleicao", () => {
     expect(avisoDaEleicao(eleicao([classificado({ casa: "camara" })]))).toBe("Deputados classificados pela planilha: o grupo Deputados Federais ainda não está no Contatos.");
     expect(avisoDaEleicao(eleicao([classificado({ casa: "camara" })], true))).toBeUndefined();
     expect(avisoDaEleicao(eleicao([classificado()]))).toBeUndefined();
+  });
+});
+
+const eg = (over: Partial<EleicaoGovernoContato> = {}): EleicaoGovernoContato => ({
+  destino: "reeleito", uf: "MA", situacaoTse: "Eleito", statusMandato: "Reeleição", nomeUrna: "Gov Fictício", ...over,
+});
+const gov = (nome: string, over: Partial<GovernadorClassificado> & { uf?: string; partido?: string } = {}): GovernadorClassificado => ({
+  eleito: { uf: over.uf ?? "MA", nomeUrna: nome, nomeCompleto: `${nome} Completo`, partido: over.partido ?? "PXX", situacaoTse: "Eleito", statusMandato: "Mandato novo" },
+  destino: "novo", contatos: [], ...over,
+});
+const comGov = (eleitos: GovernadorClassificado[], segundoTurno: UfSegundoTurno[] = []): ResultadoEleicao =>
+  ({ ...eleicao([]), governadores: { eleitos, segundoTurno } });
+
+describe("etiquetasDeGoverno", () => {
+  test("reeleito é verde; novo é neutro; sem governo, nenhuma", () => {
+    expect(etiquetasDeGoverno(eg())).toEqual([expect.objectContaining({ campo: "eleicao", texto: "Reeleito governador", tom: "ok" })]);
+    expect(etiquetasDeGoverno(eg({ destino: "novo" }))[0]).toMatchObject({ texto: "Eleito governador — grupo novo", tom: "neutro" });
+    expect(etiquetasDeGoverno(undefined)).toEqual([]);
+  });
+  test("outro cargo é atenção com a Ata 14; conferir traz o motivo", () => {
+    const o = etiquetasDeGoverno(eg({ destino: "outro_cargo" }))[0];
+    expect(o).toMatchObject({ texto: "Eleito governador — atenção", tom: "atencao" });
+    expect(o.explicacao).toContain("Ata 14");
+    expect(etiquetasDeGoverno(eg({ destino: "conferir", motivo: "Homônimo em outra UF" }))[0]).toMatchObject({ texto: "Governo: a conferir", tom: "atencao", explicacao: "Homônimo em outra UF" });
+  });
+});
+
+describe("detalheDoGoverno", () => {
+  test("lista cargo, UF, partido, situação, status, base e a conferir; orientação só em outro cargo", () => {
+    const d = detalheDoGoverno(eg({ partido: "PXX", baseStatus: "Eleito em 2022", motivo: "Conferir" }));
+    expect(d.linhas).toEqual([
+      { rotulo: "Eleito para", valor: "Governo do Estado" },
+      { rotulo: "UF", valor: "MA" },
+      { rotulo: "Partido", valor: "PXX" },
+      { rotulo: "Situação no TSE", valor: "Eleito" },
+      { rotulo: "Status do mandato", valor: "Reeleição" },
+      { rotulo: "Base do status", valor: "Eleito em 2022" },
+      { rotulo: "A conferir", valor: "Conferir" },
+    ]);
+    expect(d.orientacao).toBeUndefined();
+    expect(detalheDoGoverno(eg({ destino: "outro_cargo" })).orientacao).toContain("Ata 14");
+  });
+});
+
+describe("destaque e filtros com governo", () => {
+  test("outro cargo destaca a linha, mesmo sem eleição de Casa", () => {
+    expect(destacaLinha(undefined, eg({ destino: "outro_cargo" }))).toBe(true);
+    expect(destacaLinha(undefined, eg())).toBe(false);
+    expect(destacaLinha(ec({ destino: "outra_casa" }), undefined)).toBe(true);
+  });
+  test("Reeleitos aceita governador reeleito; outra_casa aceita outro cargo", () => {
+    const c: ResultadoContato = { ...linha(), eleicaoGoverno: eg() };
+    expect(passaFiltroEleicao(c, "reeleitos")).toBe(true);
+    expect(passaFiltroEleicao({ ...c, eleicaoGoverno: eg({ destino: "outro_cargo" }) }, "outra_casa")).toBe(true);
+    expect(passaFiltroEleicao(c, "outra_casa")).toBe(false);
+  });
+  test("rótulo do filtro de troca de cargo", () => {
+    expect(FILTROS_ELEICAO.find((f) => f.id === "outra_casa")?.rotulo).toBe("Eleitos para outro cargo");
+  });
+});
+
+describe("secoesDeGoverno", () => {
+  const dois: UfSegundoTurno[] = [
+    { uf: "SP", candidatos: [{ nomeUrna: "Cand Um", partido: "PAA", statusMandato: "Disputa" }, { nomeUrna: "Cand Dois", statusMandato: "Disputa" }] },
+    { uf: "RJ", candidatos: [{ nomeUrna: "Cand Tres", partido: "PBB", statusMandato: "Disputa" }] },
+  ];
+  const e = comGov([gov("Ana Gov"), gov("Bia Gov", { uf: "AC", partido: "PZZ" }), gov("Caio Gov", { jaCadastrado: true }), gov("Davi Reeleito", { destino: "reeleito" })], dois);
+
+  test("tudo: novos a cadastrar e 2º turno, com contagem no título", () => {
+    const s = secoesDeGoverno(e, "tudo", "");
+    expect(s.map((x) => x.id)).toEqual(["governo_novos", "governo_segundo_turno"]);
+    expect(s[0].titulo).toBe("Governadores Eleitos — a cadastrar (2)");
+    expect(s[0].novos.map((g) => g.eleito.nomeUrna)).toEqual(["Ana Gov", "Bia Gov"]);
+    expect(s[1].titulo).toBe("Governadores — aguarda 2º turno, 25/10 (2 UFs)");
+    expect(s[1].segundoTurno).toHaveLength(2);
+  });
+  test("a_cadastrar só os novos; a_conferir nenhuma", () => {
+    expect(secoesDeGoverno(e, "a_cadastrar", "").map((x) => x.id)).toEqual(["governo_novos"]);
+    expect(secoesDeGoverno(e, "a_conferir", "")).toEqual([]);
+  });
+  test("seção vazia some e retrato sem governadores devolve vazio", () => {
+    expect(secoesDeGoverno(comGov([gov("Ana Gov")], []), "tudo", "").map((x) => x.id)).toEqual(["governo_novos"]);
+    expect(secoesDeGoverno(eleicao([]), "tudo", "")).toEqual([]);
+    expect(secoesDeGoverno(undefined, "tudo", "")).toEqual([]);
+  });
+  test("busca por nome de urna, completo, UF ou partido; no 2º turno por UF ou candidato", () => {
+    const ids = (b: string) => secoesDeGoverno(e, "tudo", b).map((x) => x.id);
+    expect(secoesDeGoverno(e, "tudo", "BIA")[0].novos).toHaveLength(1);
+    expect(secoesDeGoverno(e, "tudo", "ana gov completo")[0].novos).toHaveLength(1);
+    expect(secoesDeGoverno(e, "tudo", "pzz")[0].novos).toHaveLength(1);
+    expect(ids("ac")).toEqual(["governo_novos"]);
+    expect(ids("sp")).toEqual(["governo_segundo_turno"]);
+    expect(ids("cand tres")).toEqual(["governo_segundo_turno"]);
+    expect(secoesDeGoverno(e, "tudo", "cand tres")[0].segundoTurno.map((u) => u.uf)).toEqual(["RJ"]);
+  });
+});
+
+describe("secoesDeEleicao com governadores a conferir", () => {
+  test("a_conferir inclui o governador conferir na seção de eleitos a conferir", () => {
+    const e: ResultadoEleicao = { ...eleicao([classificado({ nome: "Davi Duvida", destino: "conferir", motivo: "x" })]), governadores: { eleitos: [gov("Gov Duvida", { destino: "conferir", motivo: "y" }), gov("Gov Novo")], segundoTurno: [] } };
+    const [s] = secoesDeEleicao(e, "a_conferir", "");
+    expect(s.titulo).toBe("Eleitos — a conferir (2)");
+    expect(s.governo?.map((g) => g.eleito.nomeUrna)).toEqual(["Gov Duvida"]);
+  });
+  test("só governador a conferir também gera a seção; busca filtra", () => {
+    const e: ResultadoEleicao = { ...eleicao([]), governadores: { eleitos: [gov("Gov Duvida", { destino: "conferir" })], segundoTurno: [] } };
+    expect(secoesDeEleicao(e, "tudo", "").map((x) => x.id)).toEqual(["conferir"]);
+    expect(secoesDeEleicao(e, "tudo", "zzz")).toEqual([]);
+  });
+  test("retrato antigo, sem governadores, não quebra", () => {
+    expect(secoesDeEleicao(eleicao([classificado({ destino: "conferir" })]), "tudo", "")[0].titulo).toBe("Eleitos — a conferir (1)");
   });
 });

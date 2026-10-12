@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { aplicarEleicao, classificarEleitos, ORIENTACAO_OUTRA_CASA } from "@/lib/eleitos";
-import type { ContatoPlanilha, DeputadoAtual, EleitoPlanilha, ResultadoAnalise, ResultadoContato, ResultadoGrupo } from "@/lib/types";
+import type { ContatoPlanilha, DeputadoAtual, EleitoPlanilha, GovernadorPlanilha, ResultadoAnalise, ResultadoContato, ResultadoGrupo } from "@/lib/types";
 
 const eleito = (over: Partial<EleitoPlanilha> = {}): EleitoPlanilha => ({
   casa: "senado", uf: "MA", nomeUrna: "Joana Fictícia", nomeCompleto: "Joana Maria Fictícia Souza",
@@ -205,5 +205,43 @@ describe("aplicarEleicao", () => {
 
   test("a orientação da troca de Casa cita a Ata 14", () => {
     expect(ORIENTACAO_OUTRA_CASA).toBe("Convidado pelo cargo atual (Ata 14 do GT Cerimonial, 09/06/2026)");
+  });
+});
+
+describe("aplicarEleicao: governadores", () => {
+  const reeleitoGO: GovernadorPlanilha = {
+    uf: "GO", nomeUrna: "Marta Fictícia", nomeCompleto: "Marta Aparecida Fictícia Lima", situacaoTse: "Eleito", statusMandato: "Reeleição",
+  };
+  const martaGov: ContatoPlanilha = { id: "1", nome: "Marta Fictícia", grupo: "Governadores", departamento: "GOIÁS" };
+  const base = (): ResultadoAnalise => ({
+    arquivoNome: "base.xlsx",
+    grupos: [grupo("Governadores", [martaGov])],
+    resumo: { total: 1, verde: 1, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0, gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0 },
+  });
+  const gs = { eleitos: [reeleitoGO], segundoTurno: [] };
+
+  test("anexa eleicaoGoverno à linha, grava eleicao.governadores e não mexe em resumo nem comparações", () => {
+    const entrada = base();
+    const r = aplicarEleicao(entrada, [], ["gov.xlsx"], undefined, gs);
+    const l = r.grupos[0].contatos[0];
+    expect(l.eleicaoGoverno).toMatchObject({ destino: "reeleito", uf: "GO" });
+    expect(l.comparacoes).toEqual([]);
+    expect(l.possivelSaida).toBeUndefined();
+    expect(r.resumo).toEqual(entrada.resumo);
+    expect(r.eleicao?.governadores?.eleitos).toHaveLength(1);
+    expect(r.eleicao?.governadores?.segundoTurno).toEqual([]);
+  });
+
+  test("sem governadores o retrato não ganha eleicao.governadores nem eleicaoGoverno", () => {
+    const r = aplicarEleicao(base(), [], ["a.xlsx"]);
+    expect(r.eleicao && "governadores" in r.eleicao).toBe(false);
+    expect("eleicaoGoverno" in r.grupos[0].contatos[0]).toBe(false);
+  });
+
+  test("não muta a entrada", () => {
+    const entrada = base();
+    const copia = structuredClone(entrada);
+    aplicarEleicao(entrada, [], ["gov.xlsx"], undefined, gs);
+    expect(entrada).toEqual(copia);
   });
 });

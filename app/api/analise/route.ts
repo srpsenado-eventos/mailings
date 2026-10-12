@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, message: "Corpo inválido (esperado JSON)." }, { status: 400 });
     }
 
-    const { arquivoNome, contatos, arquivoEnderecosNome, enderecos, eleitos, deputadosAtuais, arquivosEleicao, baseEnderecos } = parsePayloadAnalise(corpo);
+    const { arquivoNome, contatos, arquivoEnderecosNome, enderecos, eleitos, deputadosAtuais, governadores, arquivosEleicao, baseEnderecos } = parsePayloadAnalise(corpo);
 
     const deps: Dependencias = {
       resolverFonte: (grupo) => resolverGrupoEFonte(grupo),
@@ -40,8 +40,8 @@ export async function POST(req: NextRequest) {
 
     const analisado = await analisar(arquivoNome, contatos, deps, enderecos);
     // Eleição 2026: passada posterior, eixo próprio (spec 2026-10-05 §4.3).
-    const resultado = eleitos || deputadosAtuais
-      ? aplicarEleicao(analisado, eleitos ?? [], arquivosEleicao ?? [], deputadosAtuais)
+    const resultado = eleitos || deputadosAtuais || governadores
+      ? aplicarEleicao(analisado, eleitos ?? [], arquivosEleicao ?? [], deputadosAtuais, governadores)
       : analisado;
     const retrato = montarRetrato(
       resultado,

@@ -90,8 +90,12 @@ function candidatos(grupos: readonly ResultadoGrupo[]): Candidato[] {
   });
 }
 
-export function casaPessoa(contato: ContatoPlanilha, e: { uf: string; nomeUrna: string; nomeCompleto: string }): boolean {
-  const uf = siglaDaUf(contato.departamento);
+export function casaPessoa(
+  contato: ContatoPlanilha,
+  e: { uf: string; nomeUrna: string; nomeCompleto: string },
+  ufDoContato: string | undefined = siglaDaUf(contato.departamento),
+): boolean {
+  const uf = ufDoContato;
   if (uf && uf !== e.uf.toUpperCase()) return false;
   const nomes = [e.nomeUrna, e.nomeCompleto].filter((n) => n.trim().length > 0);
   const alvo = normalizarNome(contato.nome);

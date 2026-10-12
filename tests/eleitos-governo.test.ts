@@ -13,8 +13,9 @@ const linha = (contato: ContatoPlanilha): ResultadoContato => ({
 const grupo = (nome: string, contatos: ContatoPlanilha[]): ResultadoGrupo => ({
   grupo: nome, semFonte: false, contatos: contatos.map(linha), novos: [],
 });
-const marta = (g: string, departamento = "GOIÁS"): ContatoPlanilha => ({
-  id: "1", nome: "Marta Fictícia", grupo: g, departamento,
+// Formato real do Contatos: Departamento vazio, UF no Cargo.
+const marta = (g: string, cargo = "Governadora do Estado de Goiás"): ContatoPlanilha => ({
+  id: "1", nome: "Marta Fictícia", grupo: g, cargo, departamento: "",
 });
 
 describe("classificarGovernadores", () => {
@@ -31,7 +32,7 @@ describe("classificarGovernadores", () => {
   });
 
   test("homônimo em Governadores de outra UF não casa", () => {
-    const outra = marta("Governadores", "MINAS GERAIS");
+    const outra = marta("Governadores", "Governadora do Estado de Minas Gerais");
     const [r] = classificarGovernadores([gov()], [grupo("Governadores", [outra])]);
     expect(r.destino).toBe("conferir");
     expect(r.contatos).toEqual([]);
@@ -110,7 +111,7 @@ describe("classificarGovernadores", () => {
   });
 
   test("dois contatos diferentes casando viram conferir ambíguo", () => {
-    const outro: ContatoPlanilha = { id: "2", nome: "Marta Fictícia", grupo: "Governadores", departamento: "GOIÁS" };
+    const outro: ContatoPlanilha = { id: "2", nome: "Marta Fictícia", grupo: "Governadores", cargo: "Governadora do Estado de Goiás" };
     const [r] = classificarGovernadores([gov()], [grupo("Governadores", [marta("Governadores"), outro])]);
     expect(r).toMatchObject({ destino: "conferir", motivo: MOTIVO_AMBIGUO });
   });
@@ -119,6 +120,34 @@ describe("classificarGovernadores", () => {
     const [r] = classificarGovernadores([gov()], [grupo("Ex-Governadores", [marta("Ex-Governadores")])]);
     expect(r.destino).toBe("conferir");
     expect(r.contatos).toEqual([]);
+  });
+});
+
+describe("UF do contato do governador", () => {
+  test("UF só no Departamento ainda vale como guarda", () => {
+    const soDepto: ContatoPlanilha = { id: "1", nome: "Marta Fictícia", grupo: "Governadores", departamento: "MINAS GERAIS" };
+    const [r] = classificarGovernadores([gov()], [grupo("Governadores", [soDepto])]);
+    expect(r.destino).toBe("conferir");
+    const mesmo = { ...soDepto, departamento: "GOIÁS" };
+    expect(classificarGovernadores([gov()], [grupo("Governadores", [mesmo])])[0].destino).toBe("reeleito");
+  });
+
+  test("Departamento vazio e cargo de Goiás casa eleito de GO e não o homônimo de MG", () => {
+    const g = [grupo("Governadores", [marta("Governadores", "Governador do Estado de Goiás")])];
+    expect(classificarGovernadores([gov()], g)[0].destino).toBe("reeleito");
+    expect(classificarGovernadores([gov({ uf: "MG" })], g)[0].destino).toBe("conferir");
+  });
+
+  test("sem UF no Departamento nem no Cargo, a UF vem do Órgão", () => {
+    const c: ContatoPlanilha = { id: "1", nome: "Marta Fictícia", grupo: "Governadores", cargo: "Governadora", orgao: "Governo do Estado de Minas Gerais" };
+    const g = [grupo("Governadores", [c])];
+    expect(classificarGovernadores([gov({ uf: "MG" })], g)[0].destino).toBe("reeleito");
+    expect(classificarGovernadores([gov()], g)[0].destino).toBe("conferir");
+  });
+
+  test("sem UF em lugar nenhum, casa só por nome", () => {
+    const c: ContatoPlanilha = { id: "1", nome: "Marta Fictícia", grupo: "Governadores" };
+    expect(classificarGovernadores([gov()], [grupo("Governadores", [c])])[0].destino).toBe("reeleito");
   });
 });
 

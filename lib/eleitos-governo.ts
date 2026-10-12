@@ -1,4 +1,5 @@
 import { normalizarTexto } from "@/lib/normalize";
+import { siglaDaUf, ufNoTexto } from "@/lib/uf";
 import { casaDoGrupo, casaPessoa, chavePessoa, constaEntreAtuaisPor, MOTIVO_AMBIGUO, referencia } from "@/lib/eleitos";
 import type {
   ContatoPlanilha,
@@ -31,6 +32,10 @@ function candidatos(grupos: readonly ResultadoGrupo[]): Candidato[] {
   });
 }
 
+/** Departamento vem vazio nos governadores: a UF está no Cargo e no Órgão. Sem UF, não há guarda. */
+const ufDoContatoGoverno = (c: ContatoPlanilha): string | undefined =>
+  siglaDaUf(c.departamento) ?? ufNoTexto(c.cargo) ?? ufNoTexto(c.orgao);
+
 const naoPrevisto = (e: GovernadorPlanilha) => `Status do mandato não previsto: "${e.statusMandato.trim()}"`;
 
 const conferir = (e: GovernadorPlanilha, motivo: string, achados: readonly Candidato[] = []): GovernadorClassificado =>
@@ -42,7 +47,7 @@ function classificarUm(
   camaraNoContatos: boolean,
   atuais?: readonly DeputadoAtual[],
 ): GovernadorClassificado {
-  const achados = cands.filter((c) => casaPessoa(c.contato, e));
+  const achados = cands.filter((c) => casaPessoa(c.contato, e, ufDoContatoGoverno(c.contato)));
   if (new Set(achados.map((a) => chavePessoa(a.contato))).size > 1) return conferir(e, MOTIVO_AMBIGUO, achados);
   const em = (p: Papel) => achados.filter((a) => a.papel === p);
 

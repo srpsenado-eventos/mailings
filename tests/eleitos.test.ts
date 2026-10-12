@@ -212,7 +212,7 @@ describe("aplicarEleicao: governadores", () => {
   const reeleitoGO: GovernadorPlanilha = {
     uf: "GO", nomeUrna: "Marta Fictícia", nomeCompleto: "Marta Aparecida Fictícia Lima", situacaoTse: "Eleito", statusMandato: "Reeleição",
   };
-  const martaGov: ContatoPlanilha = { id: "1", nome: "Marta Fictícia", grupo: "Governadores", departamento: "GOIÁS" };
+  const martaGov: ContatoPlanilha = { id: "1", nome: "Marta Fictícia", grupo: "Governadores", departamento: "", cargo: "Governadora do Estado de Goiás" };
   const base = (): ResultadoAnalise => ({
     arquivoNome: "base.xlsx",
     grupos: [grupo("Governadores", [martaGov])],

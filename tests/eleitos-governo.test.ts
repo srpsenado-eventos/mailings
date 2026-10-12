@@ -88,6 +88,16 @@ describe("classificarGovernadores", () => {
       expect(r.destino).toBe("conferir");
     });
 
+    test("sem grupo de deputados e sem a lista de atuais vai para conferir com o motivo da planilha não enviada", () => {
+      const [r] = classificarGovernadores([e], []);
+      expect(r).toMatchObject({ destino: "conferir", motivo: "Planilha de deputados atuais não enviada: conferir se é deputado federal em exercício" });
+    });
+
+    test("com a lista enviada e a pessoa fora dela mantém o motivo de não estar em exercício", () => {
+      const [r] = classificarGovernadores([e], [], []);
+      expect(r.motivo).toBe("Planilha diz deputado federal atual, mas a pessoa não está na lista de deputados em exercício");
+    });
+
     test("com grupo Deputados Federais e contato lá fica outro_cargo com o contato", () => {
       const [r] = classificarGovernadores([e], [grupo("Deputados Federais", [marta("Deputados Federais")])]);
       expect(r.destino).toBe("outro_cargo");

@@ -80,7 +80,9 @@ export function grupoDeputados(
 export function resumoGrupoDeputados(g: GrupoDeputados): string {
   const n = g.aCadastrar.length;
   return [
-    `${g.atuais.length} ${g.atuais.length === 1 ? "deputado" : "deputados"} em exercício`,
+    g.atuais.length === g.totalAtuais
+      ? `${g.totalAtuais} ${g.totalAtuais === 1 ? "deputado" : "deputados"} em exercício`
+      : `${g.atuais.length} de ${g.totalAtuais} ${g.totalAtuais === 1 ? "deputado" : "deputados"} em exercício`,
     n > 0 ? `${n} ${n === 1 ? "eleito" : "eleitos"} a cadastrar` : "",
   ].filter(Boolean).join(" · ");
 }

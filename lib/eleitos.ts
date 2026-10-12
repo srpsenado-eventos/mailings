@@ -1,10 +1,8 @@
-import { pontuarPessoa } from "@/lib/match";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
+import { casaDoGrupo, casaPessoa, chavePessoa, constaEntreAtuais, MOTIVO_AMBIGUO, referencia } from "@/lib/eleitos-casamento";
 import { agruparSegundoTurno, classificarGovernadores, paraContatoGoverno } from "@/lib/eleitos-governo";
-import { siglaDaUf } from "@/lib/uf";
 import type {
   CasaLegislativa,
-  ContatoDoEleito,
   ContatoPlanilha,
   DeputadoAtual,
   EleicaoContato,
@@ -23,10 +21,10 @@ import type {
  * Eixo próprio: não toca semáforo, comparações nem possível saída.
  */
 
+export { MOTIVO_AMBIGUO };
 export const OBSERVACAO_NOME_URNA = "Nome de urna (TSE): aguarda aprovação do nome político";
 export const ORIENTACAO_OUTRA_CASA = "Convidado pelo cargo atual (Ata 14 do GT Cerimonial, 09/06/2026)";
 
-export const MOTIVO_AMBIGUO = "Nome casa mais de um contato do Contatos";
 const MOTIVO_NOVO_EM_EXERCICIO = "Planilha diz mandato novo, mas a pessoa está na lista de deputados em exercício";
 const MOTIVO_VERIFICAR = "Planilha pede verificação: provável deputado estadual ou distrital";
 
@@ -70,59 +68,12 @@ interface Candidato {
   eleitos: boolean;
 }
 
-export function casaDoGrupo(grupo: string): { casa: CasaLegislativa; eleitos: boolean } | undefined {
-  const g = normalizarTexto(grupo);
-  if (g.startsWith("ex-") || g.startsWith("ex ")) return undefined;
-  if (g.includes("eleit")) {
-    if (g.includes("senador")) return { casa: "senado", eleitos: true };
-    if (g.includes("deputad")) return { casa: "camara", eleitos: true };
-    return undefined;
-  }
-  if (g.includes("senadores")) return { casa: "senado", eleitos: false };
-  if (g.includes("deputados federais")) return { casa: "camara", eleitos: false };
-  return undefined;
-}
-
 function candidatos(grupos: readonly ResultadoGrupo[]): Candidato[] {
   return grupos.flatMap((g) => {
     const casa = casaDoGrupo(g.grupo);
     return casa ? g.contatos.map((c) => ({ contato: c.contato, grupo: g.grupo, ...casa })) : [];
   });
 }
-
-export function casaPessoa(
-  contato: ContatoPlanilha,
-  e: { uf: string; nomeUrna: string; nomeCompleto: string },
-  ufDoContato: string | undefined = siglaDaUf(contato.departamento),
-): boolean {
-  const uf = ufDoContato;
-  if (uf && uf !== e.uf.toUpperCase()) return false;
-  const nomes = [e.nomeUrna, e.nomeCompleto].filter((n) => n.trim().length > 0);
-  const alvo = normalizarNome(contato.nome);
-  return nomes.some((n) => normalizarNome(n) === alvo || pontuarPessoa(contato.nome, n) >= 1);
-}
-
-/** O deputado em exercício que é a pessoa (UF + nome civil ou de urna), se houver. */
-export function constaEntreAtuaisPor(
-  uf: string,
-  nomeCompleto: string,
-  nomeUrna: string,
-  atuais: readonly DeputadoAtual[],
-): DeputadoAtual | undefined {
-  const civil = normalizarNome(nomeCompleto);
-  const urna = normalizarNome(nomeUrna);
-  return atuais.find(
-    (d) => d.uf.toUpperCase() === uf.toUpperCase()
-      && (normalizarNome(d.nomeCivil) === civil || normalizarNome(d.nomeParlamentar) === urna),
-  );
-}
-
-const constaEntreAtuais = (e: EleitoPlanilha, atuais: readonly DeputadoAtual[]): boolean =>
-  constaEntreAtuaisPor(e.uf, e.nomeCompleto, e.nomeUrna, atuais) !== undefined;
-
-export const chavePessoa = (c: ContatoPlanilha): string => c.id ?? normalizarNome(c.nome);
-
-export const referencia = (a: { grupo: string; contato: ContatoPlanilha }): ContatoDoEleito => ({ grupo: a.grupo, nome: a.contato.nome, ...(a.contato.id ? { id: a.contato.id } : {}) });
 
 const ROTULO_CASA_GRUPO: Record<CasaLegislativa, string> = { senado: "senadores", camara: "deputados federais" };
 

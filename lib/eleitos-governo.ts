@@ -1,6 +1,6 @@
 import { normalizarTexto } from "@/lib/normalize";
 import { siglaDaUf, ufNoTexto } from "@/lib/uf";
-import { casaDoGrupo, casaPessoa, chavePessoa, constaEntreAtuaisPor, MOTIVO_AMBIGUO, referencia } from "@/lib/eleitos";
+import { casaDoGrupo, casaPessoa, chavePessoa, constaEntreAtuaisPor, MOTIVO_AMBIGUO, referencia } from "@/lib/eleitos-casamento";
 import type {
   ContatoPlanilha,
   DeputadoAtual,
@@ -35,6 +35,8 @@ function candidatos(grupos: readonly ResultadoGrupo[]): Candidato[] {
 /** Departamento vem vazio nos governadores: a UF está no Cargo e no Órgão. Sem UF, não há guarda. */
 const ufDoContatoGoverno = (c: ContatoPlanilha): string | undefined =>
   siglaDaUf(c.departamento) ?? ufNoTexto(c.cargo) ?? ufNoTexto(c.orgao);
+
+const MOTIVO_SEM_LISTA_DEPUTADOS = "Planilha de deputados atuais não enviada: conferir se é deputado federal em exercício";
 
 const naoPrevisto = (e: GovernadorPlanilha) => `Status do mandato não previsto: "${e.statusMandato.trim()}"`;
 
@@ -77,7 +79,8 @@ function classificarUm(
           ? { eleito: e, destino: "outro_cargo", contatos: dep.map(referencia) }
           : conferir(e, "Planilha diz deputado federal atual, mas a pessoa não está no grupo de deputados federais do Contatos");
       }
-      const d = atuais ? constaEntreAtuaisPor(e.uf, e.nomeCompleto, e.nomeUrna, atuais) : undefined;
+      if (!atuais) return conferir(e, MOTIVO_SEM_LISTA_DEPUTADOS);
+      const d = constaEntreAtuaisPor(e.uf, e.nomeCompleto, e.nomeUrna, atuais);
       return d
         ? { eleito: e, destino: "outro_cargo", contatos: [], deputadoAtual: { uf: d.uf, nomeParlamentar: d.nomeParlamentar } }
         : conferir(e, "Planilha diz deputado federal atual, mas a pessoa não está na lista de deputados em exercício");

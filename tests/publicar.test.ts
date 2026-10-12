@@ -54,6 +54,19 @@ describe("enxugarParaPublicar", () => {
     expect(retrato.grupos[0].contatos[0].comparacoes).toHaveLength(3);
   });
 
+  test("deputado com campo extra desconhecido não leva esse campo à web (lista de permitidos)", () => {
+    const comExtra = {
+      ...retrato,
+      eleicao: {
+        arquivos: [], eleitos: [], camaraNoContatos: false,
+        deputadosAtuais: [{ uf: "MA", nomeParlamentar: "C", nomeCivil: "C D", sexo: "F", condicao: "Titular", idCamara: "1", campoNovo: "segredo-ficticio" }],
+      },
+    } as unknown as Retrato;
+    const pub = enxugarParaPublicar(comExtra, "2026-10-05T12:00:00.000Z");
+    expect(pub.eleicao?.deputadosAtuais).toEqual([{ uf: "MA", nomeParlamentar: "C", nomeCivil: "C D", sexo: "F", condicao: "Titular", idCamara: "1" }]);
+    expect(JSON.stringify(pub)).not.toContain("segredo-ficticio");
+  });
+
   test("o retrato publicado leva os deputados atuais, mas sem e-mail, telefone, prédio e sala", () => {
     const comEleicao: Retrato = {
       ...retrato,

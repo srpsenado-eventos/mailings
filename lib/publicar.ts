@@ -5,13 +5,12 @@ const CAMPOS_PESSOAIS: readonly (keyof ContatoPlanilha)[] = ["telefone", "email"
 /** Comparações cujo `valorPlanilha` carrega esses mesmos dados. */
 const COMPARACOES_PESSOAIS: ReadonlySet<ComparacaoCampo["campo"]> = new Set(["telefone", "email"]);
 
-/** Dados de gabinete do deputado: ficam nesta máquina. Nome, UF, partido e situação na eleição seguem. */
-const CAMPOS_DEPUTADO_PESSOAIS = ["email", "telefone", "predio", "sala"] as const;
+/** Lista de permitidos: só estes campos do deputado vão para a web. E-mail, telefone, prédio, sala e qualquer campo futuro ficam nesta máquina. */
+const CAMPOS_DEPUTADO_PUBLICOS = ["partido", "sexo", "condicao", "eleicao2026", "idCamara"] as const;
 
-function deputadoSemContato(d: DeputadoAtual): DeputadoAtual {
-  const copia: DeputadoAtual = { ...d };
-  for (const c of CAMPOS_DEPUTADO_PESSOAIS) delete copia[c];
-  return copia;
+function deputadoPublicavel(d: DeputadoAtual): DeputadoAtual {
+  const publicos = CAMPOS_DEPUTADO_PUBLICOS.flatMap((c) => (d[c] === undefined ? [] : [[c, d[c]] as const]));
+  return { uf: d.uf, nomeParlamentar: d.nomeParlamentar, nomeCivil: d.nomeCivil, ...Object.fromEntries(publicos) };
 }
 
 function semCamposPessoais(contato: ContatoPlanilha): ContatoPlanilha {
@@ -33,7 +32,7 @@ export function enxugarParaPublicar(retrato: Retrato, publicadoEm: string): Retr
     publicadoEm,
     // A lista de deputados atuais traz e-mail e telefone de gabinete: só esses dados ficam nesta máquina.
     ...(retrato.eleicao
-      ? { eleicao: { ...retrato.eleicao, ...(retrato.eleicao.deputadosAtuais ? { deputadosAtuais: retrato.eleicao.deputadosAtuais.map(deputadoSemContato) } : {}) } }
+      ? { eleicao: { ...retrato.eleicao, ...(retrato.eleicao.deputadosAtuais ? { deputadosAtuais: retrato.eleicao.deputadosAtuais.map(deputadoPublicavel) } : {}) } }
       : {}),
     grupos: retrato.grupos.map((g) => ({
       ...g,

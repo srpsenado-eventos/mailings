@@ -77,6 +77,10 @@ describe("grupoDeputados", () => {
     const g = grupoDeputados(eleicao({ eleitos: [novo("Novato")] }), tudo)!;
     expect(resumoGrupoDeputados(g)).toBe("2 deputados em exercício · 1 eleito a cadastrar");
   });
+  it("resumo com filtro ou busca mostra quantos de quantos", () => {
+    const g = grupoDeputados(eleicao(), { ...tudo, busca: "Beltrano" })!;
+    expect(resumoGrupoDeputados(g)).toBe("1 de 2 deputados em exercício");
+  });
 });
 
 describe("explicações neutras", () => {

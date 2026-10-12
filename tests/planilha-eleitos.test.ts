@@ -68,6 +68,7 @@ describe("lerPlanilhaEleicao", () => {
 
   test("planilha sem as abas esperadas é recusada", () => {
     expect(() => lerPlanilhaEleicao(montar({ Folha1: [{ a: "1" }] }))).toThrow(PlanilhaEleicaoDesconhecidaError);
+    expect(() => lerPlanilhaEleicao(montar({ Folha1: [{ a: "1" }] }))).toThrow('Planilha não reconhecida: esperada a aba "Eleitos" (senadores ou deputados eleitos), "Em exercício" (deputados atuais) ou "Eleitos 1º turno" (governadores).');
   });
 });
 

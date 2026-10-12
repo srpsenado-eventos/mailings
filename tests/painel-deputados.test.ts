@@ -79,7 +79,6 @@ describe("grupoDeputados", () => {
   });
 });
 
-
 describe("explicações neutras", () => {
   it("só citam a coluna da planilha da Câmara", () => {
     for (const r of ["Concorreu e não se elegeu / aguarda definição", "Não concorreu em 2026", "Algo novo"]) {

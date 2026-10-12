@@ -21,7 +21,7 @@ export interface ArquivoEleicaoLido {
 
 export class PlanilhaEleicaoDesconhecidaError extends Error {
   constructor() {
-    super("Planilha não reconhecida: esperada a aba \"Eleitos\" (senadores ou deputados eleitos) \"Em exercício\" (deputados atuais) ou \"Eleitos 1º turno\" (governadores).");
+    super("Planilha não reconhecida: esperada a aba \"Eleitos\" (senadores ou deputados eleitos), \"Em exercício\" (deputados atuais) ou \"Eleitos 1º turno\" (governadores).");
     this.name = "PlanilhaEleicaoDesconhecidaError";
   }
 }

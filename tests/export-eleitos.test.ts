@@ -34,7 +34,6 @@ describe("gerarXlsxEleitos", () => {
   });
 });
 
-
 const g = (nome: string, uf: string, destino: GovernadorClassificado["destino"], over: Partial<GovernadorClassificado> = {}): GovernadorClassificado => ({
   eleito: { uf, nomeUrna: nome, nomeCompleto: `${nome} Completo`, partido: "PXX", situacaoTse: "Eleito", statusMandato: "Mandato novo" },
   destino, contatos: [], ...over,

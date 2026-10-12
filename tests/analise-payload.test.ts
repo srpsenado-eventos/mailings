@@ -102,6 +102,23 @@ describe("payload da eleição 2026", () => {
     expect(p.deputadosAtuais).toBeUndefined();
   });
 
+  test("aceita governadores e descarta campos extras", () => {
+    const gov = { uf: "AC", nomeUrna: "A", nomeCompleto: "A B", situacaoTse: "Eleito", statusMandato: "Mandato novo", vice: "V", extra: 1 };
+    const p = parsePayloadAnalise({ ...base, governadores: { eleitos: [gov], segundoTurno: [] } });
+    expect(p.governadores).toEqual({
+      eleitos: [{ uf: "AC", nomeUrna: "A", nomeCompleto: "A B", situacaoTse: "Eleito", statusMandato: "Mandato novo", vice: "V" }],
+      segundoTurno: [],
+    });
+  });
+
+  test("governadores ausente continua ausente", () => {
+    expect(parsePayloadAnalise(base).governadores).toBeUndefined();
+  });
+
+  test("governadores com lista de eleitos inválida é recusado", () => {
+    expect(() => parsePayloadAnalise({ ...base, governadores: { eleitos: "x" } })).toThrow(PayloadInvalidoError);
+  });
+
   test("casa desconhecida é recusada", () => {
     expect(() => parsePayloadAnalise({ ...base, eleitos: [{ casa: "assembleia" }] })).toThrow(PayloadInvalidoError);
   });

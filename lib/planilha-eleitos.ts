@@ -1,7 +1,7 @@
 import * as XLSX from "xlsx";
 import { normalizarTexto } from "@/lib/normalize";
 import { ColunaFaltanteError } from "@/lib/planilha";
-import type { CasaLegislativa, DeputadoAtual, EleitoPlanilha } from "@/lib/types";
+import type { CasaLegislativa, DeputadoAtual, EleitoPlanilha, GovernadorPlanilha, PlanilhaGovernadores } from "@/lib/types";
 
 /**
  * Leitura, no navegador, das planilhas de `GT Posse/Eleitos 2026` (spec 2026-10-05 §2).
@@ -11,7 +11,8 @@ import type { CasaLegislativa, DeputadoAtual, EleitoPlanilha } from "@/lib/types
 export type ArquivoEleicao =
   | { tipo: "senado"; eleitos: EleitoPlanilha[] }
   | { tipo: "camara"; eleitos: EleitoPlanilha[] }
-  | { tipo: "atuais"; deputados: DeputadoAtual[] };
+  | { tipo: "atuais"; deputados: DeputadoAtual[] }
+  | { tipo: "governo"; governadores: PlanilhaGovernadores };
 
 export interface ArquivoEleicaoLido {
   nome: string;
@@ -20,7 +21,7 @@ export interface ArquivoEleicaoLido {
 
 export class PlanilhaEleicaoDesconhecidaError extends Error {
   constructor() {
-    super("Planilha não reconhecida: esperada a aba \"Eleitos\" (senadores ou deputados eleitos) ou \"Em exercício\" (deputados atuais).");
+    super("Planilha não reconhecida: esperada a aba \"Eleitos\" (senadores ou deputados eleitos) \"Em exercício\" (deputados atuais) ou \"Eleitos 1º turno\" (governadores).");
     this.name = "PlanilhaEleicaoDesconhecidaError";
   }
 }
@@ -38,6 +39,13 @@ const COLUNAS_ATUAIS = {
   sala: "sala", telefone: "telefone", idCamara: "id camara",
 } as const;
 const OBRIGATORIAS_ATUAIS = ["uf", "nomeParlamentar", "nomeCivil"] as const;
+
+const COLUNAS_GOVERNO = {
+  uf: "uf", nomeUrna: "nome de urna", nomeCompleto: "nome completo", partido: "partido",
+  situacaoTse: "situacao (tse)", statusMandato: "status do mandato", baseStatus: "base do status",
+  genero: "genero (tse)", vice: "vice na chapa",
+} as const;
+const OBRIGATORIAS_GOVERNO = ["uf", "nomeUrna", "nomeCompleto", "situacaoTse", "statusMandato"] as const;
 
 /** Coluna que só a planilha de senadores tem. */
 const MARCA_SENADO = normalizarTexto("1º suplente");
@@ -75,6 +83,21 @@ function aba(wb: XLSX.WorkBook, alvo: string): XLSX.WorkSheet | undefined {
   return nome ? wb.Sheets[nome] : undefined;
 }
 
+function lerGovernadores(ws: XLSX.WorkSheet): GovernadorPlanilha[] {
+  return lerTabela(ws, COLUNAS_GOVERNO, OBRIGATORIAS_GOVERNO)
+    .filter((l) => l.nomeUrna || l.nomeCompleto)
+    .map((l): GovernadorPlanilha => ({
+      uf: l.uf.toUpperCase(), nomeUrna: l.nomeUrna, nomeCompleto: l.nomeCompleto, situacaoTse: l.situacaoTse,
+      statusMandato: l.statusMandato,
+      ...Object.fromEntries(
+        ([["partido", l.partido], ["baseStatus", l.baseStatus], ["genero", l.genero], ["vice", l.vice]] as const)
+          .filter(([, v]) => v.length > 0),
+      ),
+    }));
+}
+
+const abaVazia = (ws: XLSX.WorkSheet): boolean => XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 }).length <= 1;
+
 export function lerPlanilhaEleicao(buffer: ArrayBuffer): ArquivoEleicao {
   const wb = XLSX.read(buffer, { type: "array" });
 
@@ -89,6 +112,18 @@ export function lerPlanilhaEleicao(buffer: ArrayBuffer): ArquivoEleicao {
         sala: opcional(l.sala), telefone: opcional(l.telefone), idCamara: opcional(l.idCamara),
       }));
     return { tipo: "atuais", deputados };
+  }
+
+  const primeiroTurno = aba(wb, normalizarTexto("Eleitos 1º turno"));
+  if (primeiroTurno) {
+    const segunda = aba(wb, normalizarTexto("2º turno"));
+    return {
+      tipo: "governo",
+      governadores: {
+        eleitos: lerGovernadores(primeiroTurno),
+        segundoTurno: segunda && !abaVazia(segunda) ? lerGovernadores(segunda) : [],
+      },
+    };
   }
 
   const eleitosAba = aba(wb, "eleitos");
@@ -108,15 +143,18 @@ export function lerPlanilhaEleicao(buffer: ArrayBuffer): ArquivoEleicao {
 export function juntarArquivosEleicao(lidos: readonly ArquivoEleicaoLido[]): {
   eleitos: EleitoPlanilha[];
   deputadosAtuais?: DeputadoAtual[];
+  governadores?: PlanilhaGovernadores;
   arquivosEleicao: string[];
 } {
   const ultimo = new Map<ArquivoEleicao["tipo"], ArquivoEleicaoLido>();
   for (const l of lidos) ultimo.set(l.arquivo.tipo, l);
   const escolhidos = [...ultimo.values()];
-  const eleitos = escolhidos.flatMap((l) => (l.arquivo.tipo === "atuais" ? [] : l.arquivo.eleitos));
+  const eleitos = escolhidos.flatMap((l) => (l.arquivo.tipo === "atuais" || l.arquivo.tipo === "governo" ? [] : l.arquivo.eleitos));
   const atuais = ultimo.get("atuais");
+  const governo = ultimo.get("governo");
   return {
     eleitos,
+    ...(governo && governo.arquivo.tipo === "governo" ? { governadores: governo.arquivo.governadores } : {}),
     ...(atuais && atuais.arquivo.tipo === "atuais" ? { deputadosAtuais: atuais.arquivo.deputados } : {}),
     arquivosEleicao: escolhidos.map((l) => l.nome),
   };
@@ -125,5 +163,9 @@ export function juntarArquivosEleicao(lidos: readonly ArquivoEleicaoLido[]): {
 export function resumoArquivoEleicao(a: ArquivoEleicao): string {
   if (a.tipo === "senado") return `${a.eleitos.length} senadores eleitos`;
   if (a.tipo === "camara") return `${a.eleitos.length} deputados federais eleitos`;
-  return `${a.deputados.length} deputados federais em exercício`;
+  if (a.tipo === "atuais") return `${a.deputados.length} deputados federais em exercício`;
+  const { eleitos, segundoTurno } = a.governadores;
+  const base = `${eleitos.length} governadores eleitos`;
+  if (segundoTurno.length === 0) return base;
+  return `${base} · ${new Set(segundoTurno.map((g) => g.uf)).size} UFs no 2º turno`;
 }

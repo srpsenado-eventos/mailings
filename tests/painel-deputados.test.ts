@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { etiquetasDoDeputado, grupoDeputados, resumoGrupoDeputados, temGrupoDeputados } from "@/lib/painel-deputados";
-import type { DeputadoAtual, EleitoClassificado, ResultadoEleicao } from "@/lib/types";
+import type { DeputadoAtual, EleitoClassificado, GovernadorClassificado, ResultadoEleicao } from "@/lib/types";
 
 const dep = (p: Partial<DeputadoAtual>): DeputadoAtual => ({ uf: "AC", nomeParlamentar: "Fulano Teste", nomeCivil: "Fulano de Tal Teste", ...p });
 const novo = (nome: string, uf = "AC"): EleitoClassificado => ({
@@ -76,5 +76,52 @@ describe("grupoDeputados", () => {
   it("resumo do cabeçalho", () => {
     const g = grupoDeputados(eleicao({ eleitos: [novo("Novato")] }), tudo)!;
     expect(resumoGrupoDeputados(g)).toBe("2 deputados em exercício · 1 eleito a cadastrar");
+  });
+});
+
+
+describe("explicações neutras", () => {
+  it("só citam a coluna da planilha da Câmara", () => {
+    for (const r of ["Concorreu e não se elegeu / aguarda definição", "Não concorreu em 2026", "Algo novo"]) {
+      expect(etiquetasDoDeputado(r)[0].explicacao).toBe("Coluna Eleição 2026 da planilha da Câmara");
+    }
+  });
+});
+
+describe("grupo virtual com deputadosAtuais vazio", () => {
+  it("não existe grupo nem opção do seletor", () => {
+    expect(temGrupoDeputados(eleicao({ deputadosAtuais: [] }))).toBe(false);
+    expect(grupoDeputados(eleicao({ deputadosAtuais: [] }), tudo)).toBeUndefined();
+  });
+});
+
+describe("governador eleito que é deputado atual", () => {
+  const governador = (deputadoAtual?: { uf: string; nomeParlamentar: string }): GovernadorClassificado => ({
+    eleito: { uf: "AC", nomeUrna: "Fulano Gov", nomeCompleto: "Fulano de Tal Teste", situacaoTse: "Eleito", statusMandato: "Mandato novo" },
+    destino: "outro_cargo", contatos: [], ...(deputadoAtual ? { deputadoAtual } : {}),
+  });
+  const comGov = (g: GovernadorClassificado) => eleicao({ governadores: { eleitos: [g], segundoTurno: [] } });
+
+  it("a linha do deputado ganha a etiqueta de governador, além da da Câmara", () => {
+    const g = grupoDeputados(comGov(governador({ uf: "AC", nomeParlamentar: "Fulano Teste" })), tudo)!;
+    const fulano = g.atuais.find((d) => d.nome === "Fulano Teste")!;
+    expect(fulano.etiquetas.map((e) => e.texto)).toEqual(["Não concorreu", "Eleito governador — atenção"]);
+    expect(fulano.etiquetas[1].explicacao).toContain("Ata 14");
+    expect(g.atuais.find((d) => d.nome === "Beltrano")!.etiquetas.map((e) => e.texto)).toEqual(["Reeleito"]);
+  });
+  it("não casa quando a UF é outra", () => {
+    const g = grupoDeputados(comGov(governador({ uf: "SP", nomeParlamentar: "Fulano Teste" })), tudo)!;
+    expect(g.atuais.find((d) => d.nome === "Fulano Teste")!.etiquetas.map((e) => e.texto)).toEqual(["Não concorreu"]);
+  });
+  it("o filtro outra_casa mostra o deputado eleito governador e o eleito senador", () => {
+    const e = eleicao({
+      deputadosAtuais: [dep({ eleicao2026: "Eleito senador", nomeParlamentar: "Senadorável" }), dep({ nomeParlamentar: "Fulano Teste" }), dep({ nomeParlamentar: "Outro" })],
+      governadores: { eleitos: [governador({ uf: "AC", nomeParlamentar: "Fulano Teste" })], segundoTurno: [] },
+    });
+    const g = grupoDeputados(e, { ...tudo, filtro: "outra_casa" })!;
+    expect(g.atuais.map((d) => d.nome).sort()).toEqual(["Fulano Teste", "Senadorável"]);
+  });
+  it("retrato sem governadores não quebra", () => {
+    expect(grupoDeputados(eleicao({ governadores: undefined }), tudo)!.atuais).toHaveLength(2);
   });
 });

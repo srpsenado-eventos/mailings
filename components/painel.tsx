@@ -4,8 +4,9 @@ import Link from "next/link";
 import { ExportButtons, ExportEleitosButton } from "@/components/export-buttons";
 import { GrupoDeputados } from "@/components/grupo-deputados";
 import { SecaoEleitos } from "@/components/secao-eleitos";
+import { SecaoGoverno } from "@/components/secao-governo";
 import { grupoDeputados, NOME_GRUPO_DEPUTADOS, temGrupoDeputados } from "@/lib/painel-deputados";
-import { avisoDaEleicao, ehFiltroEleicao, FILTROS_ELEICAO, secoesDeEleicao } from "@/lib/painel-eleicao";
+import { avisoDaEleicao, ehFiltroEleicao, FILTROS_ELEICAO, secoesDeEleicao, secoesDeGoverno } from "@/lib/painel-eleicao";
 import { PublicarButton } from "@/components/publicar-button";
 import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-contato";
 import { cartoesDoResumo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoCabecalhoWeb, textoDataHora, textoNumeroNaBase, type Filtro } from "@/lib/painel";
@@ -47,6 +48,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
   const temEleicao = retrato.eleicao !== undefined;
   const [eleicaoLigada, setEleicaoLigada] = useState(false);
   const secoes = useMemo(() => (eleicaoLigada ? secoesDeEleicao(retrato.eleicao, filtro, busca) : []), [eleicaoLigada, retrato, filtro, busca]);
+  const secoesGov = useMemo(() => (eleicaoLigada ? secoesDeGoverno(retrato.eleicao, filtro, busca) : []), [eleicaoLigada, retrato, filtro, busca]);
   const avisoEleicao = eleicaoLigada ? avisoDaEleicao(retrato.eleicao) : undefined;
   const grupos = useMemo(() => filtrarGrupos(retrato.grupos, filtro, busca, grupo), [retrato, filtro, busca, grupo]);
   const deputados = useMemo(() => grupoDeputados(retrato.eleicao, { busca, filtro, grupo }), [retrato, busca, filtro, grupo]);
@@ -195,7 +197,8 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
         })}
         {deputados && <GrupoDeputados grupo={deputados} aberto={estaAberto(NOME_GRUPO_DEPUTADOS)} onAlternar={() => alternar(NOME_GRUPO_DEPUTADOS)} />}
         {secoes.map((s) => <SecaoEleitos key={`${s.id}-${filtrando}`} secao={s} abertoInicial={filtrando} />)}
-        {grupos.length === 0 && secoes.length === 0 && !deputados && <p className="text-sm text-cinza">Nada para mostrar com este filtro.</p>}
+        {secoesGov.map((s) => <SecaoGoverno key={`${s.id}-${filtrando}`} secao={s} abertoInicial={filtrando} />)}
+        {grupos.length === 0 && secoes.length === 0 && secoesGov.length === 0 && !deputados && <p className="text-sm text-cinza">Nada para mostrar com este filtro.</p>}
       </div>
     </main>
   );

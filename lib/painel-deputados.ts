@@ -1,5 +1,5 @@
 import { ORIENTACAO_OUTRA_CASA } from "@/lib/eleitos";
-import { normalizarTexto } from "@/lib/normalize";
+import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import type { Etiqueta } from "@/lib/painel";
 import type { DeputadoAtual, EleitoClassificado, ResultadoEleicao } from "@/lib/types";
 
@@ -14,6 +14,7 @@ const PROJECAO: Etiqueta = { campo: "eleicao", texto: "Projeção — aguarda TS
 export interface LinhaDeputado { nome: string; nomeCivil: string; uf: string; partido?: string; condicao?: string; etiquetas: Etiqueta[] }
 export interface GrupoDeputados { titulo: string; aviso: string; atuais: LinhaDeputado[]; aCadastrar: EleitoClassificado[]; totalAtuais: number }
 
+const EXPLICACAO_COLUNA = "Coluna Eleição 2026 da planilha da Câmara";
 const reeleito: Etiqueta = { campo: "eleicao", texto: "Reeleito", tom: "ok", explicacao: "Reeleito em 04/10/2026: fica neste grupo" };
 
 export function etiquetasDoDeputado(resumo: string | undefined): Etiqueta[] {
@@ -23,22 +24,25 @@ export function etiquetasDoDeputado(resumo: string | undefined): Etiqueta[] {
   if (r === "reeleito deputado federal") return [reeleito];
   if (r === "reeleito deputado federal (projecao)") return [reeleito, PROJECAO];
   if (r === "eleito senador") return [{ campo: "eleicao", texto: "Eleito senador — atenção", tom: "atencao", explicacao: ORIENTACAO_OUTRA_CASA }];
-  if (r.startsWith("concorreu e nao se elegeu")) return [{ campo: "eleicao", texto: "Não reeleito / aguarda definição", tom: "neutro", explicacao: "Sem mandato novo confirmado: aguarde a definição antes de mudar o cadastro" }];
-  if (r === "nao concorreu em 2026") return [{ campo: "eleicao", texto: "Não concorreu", tom: "neutro", explicacao: "Não disputou a eleição de 2026; o mandato atual segue até o fim da legislatura" }];
-  return [{ campo: "eleicao", texto: bruto, tom: "neutro", explicacao: "Situação lida da planilha da Câmara" }];
+  if (r.startsWith("concorreu e nao se elegeu")) return [{ campo: "eleicao", texto: "Não reeleito / aguarda definição", tom: "neutro", explicacao: EXPLICACAO_COLUNA }];
+  if (r === "nao concorreu em 2026") return [{ campo: "eleicao", texto: "Não concorreu", tom: "neutro", explicacao: EXPLICACAO_COLUNA }];
+  return [{ campo: "eleicao", texto: bruto, tom: "neutro", explicacao: EXPLICACAO_COLUNA }];
 }
 
 export function temGrupoDeputados(eleicao: ResultadoEleicao | undefined): boolean {
-  return !!eleicao?.deputadosAtuais && !eleicao.camaraNoContatos;
+  return (eleicao?.deputadosAtuais?.length ?? 0) > 0 && !eleicao?.camaraNoContatos;
 }
 
 const casaBusca = (valores: readonly (string | undefined)[], b: string) =>
   b === "" || valores.some((v) => v !== undefined && normalizarTexto(v).includes(b));
 
-const linha = (d: DeputadoAtual): LinhaDeputado => ({
+const chaveGovernador = (uf: string, nome: string) => `${uf}|${normalizarNome(nome)}`;
+const ETIQUETA_GOVERNADOR: Etiqueta = { campo: "eleicao", texto: "Eleito governador — atenção", tom: "atencao", explicacao: ORIENTACAO_OUTRA_CASA };
+
+const linha = (d: DeputadoAtual, eleitosGovernador: ReadonlySet<string>): LinhaDeputado => ({
   nome: d.nomeParlamentar, nomeCivil: d.nomeCivil, uf: d.uf,
   ...(d.partido ? { partido: d.partido } : {}), ...(d.condicao ? { condicao: d.condicao } : {}),
-  etiquetas: etiquetasDoDeputado(d.eleicao2026),
+  etiquetas: [...etiquetasDoDeputado(d.eleicao2026), ...(eleitosGovernador.has(chaveGovernador(d.uf, d.nomeParlamentar)) ? [ETIQUETA_GOVERNADOR] : [])],
 });
 
 /** Quais linhas cada filtro deixa passar. Filtro fora desta tabela (situação do Contatos) esconde o grupo. */
@@ -58,9 +62,12 @@ export function grupoDeputados(
   const regra = FILTRO[filtro];
   if (!regra) return undefined;
   const b = normalizarTexto(busca.trim());
+  const eleitosGovernador = new Set(
+    (eleicao.governadores?.eleitos ?? []).flatMap((g) => (g.deputadoAtual ? [chaveGovernador(g.deputadoAtual.uf, g.deputadoAtual.nomeParlamentar)] : [])),
+  );
   const todos = [...(eleicao.deputadosAtuais ?? [])]
     .sort((a, c) => a.uf.localeCompare(c.uf, "pt-BR") || a.nomeParlamentar.localeCompare(c.nomeParlamentar, "pt-BR"))
-    .map(linha);
+    .map((d) => linha(d, eleitosGovernador));
   const atuais = todos.filter((l) => regra.atual(l) && casaBusca([l.nome, l.nomeCivil, l.uf, l.partido], b));
   const aCadastrar = regra.novos
     ? eleicao.eleitos.filter((x) => x.eleito.casa === "camara" && x.destino === "novo" && !x.jaCadastrado

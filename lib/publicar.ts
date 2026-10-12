@@ -1,9 +1,18 @@
-import type { ComparacaoCampo, ContatoPlanilha, Retrato } from "@/lib/types";
+import type { ComparacaoCampo, ContatoPlanilha, DeputadoAtual, Retrato } from "@/lib/types";
 
 /** Campos do contato que o painel não mostra e que não precisam sair desta máquina. */
 const CAMPOS_PESSOAIS: readonly (keyof ContatoPlanilha)[] = ["telefone", "email", "redeSocial", "foto"];
 /** Comparações cujo `valorPlanilha` carrega esses mesmos dados. */
 const COMPARACOES_PESSOAIS: ReadonlySet<ComparacaoCampo["campo"]> = new Set(["telefone", "email"]);
+
+/** Dados de gabinete do deputado: ficam nesta máquina. Nome, UF, partido e situação na eleição seguem. */
+const CAMPOS_DEPUTADO_PESSOAIS = ["email", "telefone", "predio", "sala"] as const;
+
+function deputadoSemContato(d: DeputadoAtual): DeputadoAtual {
+  const copia: DeputadoAtual = { ...d };
+  for (const c of CAMPOS_DEPUTADO_PESSOAIS) delete copia[c];
+  return copia;
+}
 
 function semCamposPessoais(contato: ContatoPlanilha): ContatoPlanilha {
   const copia: ContatoPlanilha = { ...contato };
@@ -14,7 +23,7 @@ function semCamposPessoais(contato: ContatoPlanilha): ContatoPlanilha {
 /**
  * O retrato que vai para o Blob: o mesmo da máquina, sem telefone, e-mail e rede social, e
  * com `publicadoEm`. Nome, cargo, tratamento, endereçamento e endereço ficam, porque são o
- * objeto do painel e viajam atrás da senha. A eleição vai sem `deputadosAtuais` e o retrato sem `baseEnderecos`. Spec 2026-10-02, §6.3 e §6.5. Não muta a entrada.
+ * objeto do painel e viajam atrás da senha. Os deputados atuais da eleição vão sem e-mail, telefone, prédio e sala, e o retrato sem `baseEnderecos`. Spec 2026-10-02, §6.3 e §6.5. Não muta a entrada.
  */
 export function enxugarParaPublicar(retrato: Retrato, publicadoEm: string): Retrato {
   // A base de endereços inteira (PII) fica nesta máquina; só `numeroNaBase` segue (spec 2026-10-06, §3).
@@ -22,8 +31,10 @@ export function enxugarParaPublicar(retrato: Retrato, publicadoEm: string): Retr
   return {
     ...semBase,
     publicadoEm,
-    // A lista de deputados atuais traz e-mail e telefone de gabinete: fica nesta máquina.
-    ...(retrato.eleicao ? { eleicao: { ...retrato.eleicao, deputadosAtuais: undefined } } : {}),
+    // A lista de deputados atuais traz e-mail e telefone de gabinete: só esses dados ficam nesta máquina.
+    ...(retrato.eleicao
+      ? { eleicao: { ...retrato.eleicao, ...(retrato.eleicao.deputadosAtuais ? { deputadosAtuais: retrato.eleicao.deputadosAtuais.map(deputadoSemContato) } : {}) } }
+      : {}),
     grupos: retrato.grupos.map((g) => ({
       ...g,
       contatos: g.contatos.map((c) => ({

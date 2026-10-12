@@ -1,5 +1,6 @@
 import { ORIENTACAO_OUTRA_CASA } from "@/lib/eleitos";
 import { normalizarTexto } from "@/lib/normalize";
+import { temGrupoDeputados } from "@/lib/painel-deputados";
 import type { Etiqueta } from "@/lib/painel";
 import type { CasaLegislativa, EleicaoContato, EleitoClassificado, ResultadoContato, ResultadoEleicao } from "@/lib/types";
 
@@ -97,8 +98,10 @@ export function secoesDeEleicao(eleicao: ResultadoEleicao | undefined, filtro: s
     { id: "camara_novos", titulo: "Deputados Federais Eleitos — a cadastrar", linhas: novos("camara") },
     { id: "conferir", titulo: "Eleitos — a conferir", linhas: visiveis.filter((x) => x.destino === "conferir") },
   ];
+  // Com o grupo virtual "Deputados Federais" na tela, os eleitos novos da Câmara já aparecem dentro dele.
+  const grupoVirtual = temGrupoDeputados(eleicao);
   return todas
-    .filter((s) => ids.includes(s.id) && s.linhas.length > 0)
+    .filter((s) => ids.includes(s.id) && s.linhas.length > 0 && !(grupoVirtual && s.id === "camara_novos"))
     .map((s) => ({ ...s, titulo: `${s.titulo} (${s.linhas.length})` }));
 }
 

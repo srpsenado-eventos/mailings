@@ -108,6 +108,14 @@ describe("secoesDeEleicao", () => {
     expect(nomes(secoesDeEleicao(e, "tudo", "BIA"))).toEqual([["camara_novos", ["Bia Nova"]]]);
   });
 
+  test("com o grupo virtual de deputados a seção camara_novos some; sem deputados atuais, volta", () => {
+    const atual = { uf: "MA", nomeParlamentar: "Fulano Teste", nomeCivil: "Fulano de Tal Teste" };
+    const comGrupo: ResultadoEleicao = { ...e, deputadosAtuais: [atual] };
+    expect(secoesDeEleicao(comGrupo, "tudo", "").map((s) => s.id)).toEqual(["senado_novos", "conferir"]);
+    expect(secoesDeEleicao({ ...comGrupo, camaraNoContatos: true }, "tudo", "").map((s) => s.id)).toContain("camara_novos");
+    expect(secoesDeEleicao(e, "tudo", "").map((s) => s.id)).toContain("camara_novos");
+  });
+
   test("retrato sem eleição não tem seção nem aviso", () => {
     expect(secoesDeEleicao(undefined, "tudo", "")).toEqual([]);
     expect(avisoDaEleicao(undefined)).toBeUndefined();

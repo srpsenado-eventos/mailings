@@ -429,7 +429,7 @@ export interface EleicaoContato {
   motivo?: string;
 }
 
-/** Eleição 2026 no retrato. `deputadosAtuais` nunca vai para a web (lib/publicar.ts). */
+/** Eleição 2026 no retrato. `deputadosAtuais` vai para a web sem e-mail, telefone, prédio e sala (lib/publicar.ts). */
 export interface ResultadoEleicao {
   arquivos: string[];
   eleitos: EleitoClassificado[];

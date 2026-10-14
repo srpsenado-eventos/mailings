@@ -14,6 +14,7 @@ import {
   textoDataHora,
   textoEnderecoParaCopiar,
   type CampoEndereco,
+  type Etiqueta as EtiquetaPainel,
 } from "@/lib/painel";
 import { destacaLinha, detalheDaEleicao, detalheDoGoverno, etiquetasDeEleicao, etiquetasDeGoverno } from "@/lib/painel-eleicao";
 import type { EleicaoContato, EleicaoGovernoContato, ResultadoContato, ResultadoGrupo, Retrato } from "@/lib/types";
@@ -189,9 +190,9 @@ function Detalhe({ c, g, retrato, eleicaoLigada }: { c: ResultadoContato; g: Res
   );
 }
 
-export function LinhaContato({ c, g, retrato, eleicaoLigada = false }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato; eleicaoLigada?: boolean }) {
+export function LinhaContato({ c, g, retrato, eleicaoLigada = false, repeticao }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato; eleicaoLigada?: boolean; repeticao?: EtiquetaPainel }) {
   const [aberto, setAberto] = useState(false);
-  const etiquetas = [...etiquetasDoContato(c, g), ...(eleicaoLigada ? [...etiquetasDeEleicao(c.eleicao), ...etiquetasDeGoverno(c.eleicaoGoverno)] : [])];
+  const etiquetas = [...(repeticao ? [repeticao] : []), ...etiquetasDoContato(c, g), ...(eleicaoLigada ? [...etiquetasDeEleicao(c.eleicao), ...etiquetasDeGoverno(c.eleicaoGoverno)] : [])];
   const situacao = situacaoDoContato(c, g);
   const motivo = motivoDoContato(c, g);
   const subtitulo = motivo ?? [c.contato.tratamento, c.contato.enderecamento].filter(Boolean).join(" · ");

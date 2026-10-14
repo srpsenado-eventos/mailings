@@ -1,6 +1,6 @@
 # CLAUDE.md — Fiscal de Mailings
 
-Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui. Última revisão: 2026-10-12.
+Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui. Última revisão: 2026-10-14.
 
 ## Contexto rápido
 
@@ -8,9 +8,9 @@ Web app interno do Senado Federal (Secretaria de Relações Públicas, GT Gestã
 
 Repositório remoto: `github.com/srpsenado-eventos/mailings`, branch base `main`; o trabalho sai em branches `feat/*` mescladas por PR.
 
-## Estado do projeto (2026-10-12)
+## Estado do projeto (2026-10-14)
 
-- Suíte: 41 arquivos, 788 testes, verde (2026-10-12). `npm run typecheck` limpo.
+- Suíte: 44 arquivos, 840 testes, verde (2026-10-14). `npm run typecheck` limpo.
 - Catálogo: 33 grupos, 24 fontes, 21 grupos com fonte, **12 sem fonte** (todo contato deles sai vermelho, ver semântica abaixo).
 - Auditoria de Tratamento e Endereçamento (spec de 2026-08-13) e Camada C (regras de nome, spec de 2026-09-18) estão em `main` desde setembro de 2026 (`lib/tratamento.ts`, `data/regras-nome.ts`).
 - **Dívidas conhecidas** (não corrigir de passagem; abrir tarefa própria):
@@ -195,9 +195,9 @@ Havendo mais de uma base de contatos ou de endereços, vale a de data mais recen
    - contagens da eleição;
    - a hora publicada.
 
-**Código novo é outro fluxo.** Publicar o retrato não leva código para a web. O projeto `mailings` (equipe `srp-coeven`) **não** faz deploy automático do GitHub. Quando o `main` muda:
+**Código novo é outro fluxo.** Publicar o retrato não leva código para a web. Desde o merge do PR #11 (2026-10-12), o projeto `mailings` (equipe `srp-coeven`) **faz deploy automático** do GitHub quando o `main` muda: depois do merge, basta conferir que o deploy de produção trouxe o commit (`vercel api /v13/deployments/<url> --scope srp-coeven`, alias `mailings-theta.vercel.app`) e entrar no painel. Se o automático falhar, o caminho manual é:
 - extrair `git archive origin/main` numa pasta limpa, com o `.vercel/project.json` copiado;
-- rodar `vercel deploy --prod --yes --scope srp-coeven` (sem `--scope` dá "Not authorized"; a CLI desta máquina está autenticada);
+- rodar `vercel deploy --prod --yes --scope srp-coeven` (sem `--scope` dá "Not authorized");
 - nunca fazer o deploy da pasta do projeto: o `pnpm-lock.yaml` solto quebra o build.
 
 Conferir com `vercel inspect <url> --scope srp-coeven --wait` (status Ready, alias `mailings-theta.vercel.app`) e entrando no painel.

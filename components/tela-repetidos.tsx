@@ -73,10 +73,10 @@ export function TelaRepetidos({ repetidas, geradoEm }: { repetidas: AutoridadeRe
             </thead>
             <tbody>
               {lista.map((a) => (
-                <tr key={`${a.nome}-${a.ocorrencias[0]?.grupo}`} className="border-t border-separador align-top">
+                <tr key={`${a.ocorrencias[0]?.chave}-${a.ocorrencias[0]?.grupo}`} className="border-t border-separador align-top">
                   <td className="px-4 py-3 font-medium text-tinta">{a.nome}</td>
                   <td className="px-4 py-3 text-cinza">
-                    <ul>{a.ocorrencias.map((o) => <li key={`${o.grupo}-${o.grupoRegra}`}>{descreverOcorrencia(o)}</li>)}</ul>
+                    <ul>{a.ocorrencias.map((o) => <li key={`${o.grupo}-${o.grupoRegra}-${o.chave}`}>{descreverOcorrencia(o)}</li>)}</ul>
                   </td>
                   <td className="px-4 py-3">
                     <span className="font-medium text-tinta">{a.convidaPor?.grupoRegra ?? "—"}</span>

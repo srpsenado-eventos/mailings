@@ -51,11 +51,18 @@ describe("regraDoSegmento", () => {
   test.each([
     "senadores eleitos",
     "governadores eleitos",
+    "governadoras eleitas",
     "grupo eventos - pp 2027 - piloto",
     "mailing rp - sessao especial",
     "presidente",
   ])("%s fica fora", (seg) => {
     expect(regraDoSegmento(seg)).toBeUndefined();
+  });
+});
+
+describe("regraDoSegmento e o filtro de eleitos", () => {
+  test("eleitoral não é barrado como eleitos: casa por contenção", () => {
+    expect(regraDoSegmento("ministros do tse (eleitoral)")?.grupo).toBe("Ministros do TSE");
   });
 });
 
@@ -65,6 +72,23 @@ describe("nivelDoCargo", () => {
     expect(nivelDoCargo(regra("Ministros do STF"), "Vice-Presidente do Supremo Tribunal Federal")?.nivel).toBe("4.9");
     expect(nivelDoCargo(regra("Ministros do TSE"), "Presidenta do Tribunal Superior Eleitoral")?.nivel).toBe("4.8");
     expect(nivelDoCargo(regra("Ministros do TSE"), "Ministra do Tribunal Superior Eleitoral")?.nivel).toBe("5.9");
+  });
+
+  test("Ministro Presidente do tribunal também sobe de nível", () => {
+    const tse = regra("Ministros do TSE");
+    expect(nivelDoCargo(tse, "Ministro Presidente do Tribunal Superior Eleitoral")?.nivel).toBe("4.8");
+    expect(nivelDoCargo(tse, "Ministra Presidente do Tribunal Superior Eleitoral")?.nivel).toBe("4.8");
+    expect(nivelDoCargo(tse, "Ministro-Presidente do Tribunal Superior Eleitoral")?.nivel).toBe("4.8");
+  });
+
+  test("presidência de turma, seção, comissão ou conselho fica no nível do grupo", () => {
+    const stj = regra("Ministros do STF");
+    for (const cargo of [
+      "Presidente da Primeira Turma", "Presidente da Segunda Seção", "Ministro Presidente da Terceira Turma",
+      "Presidente da Comissão de Regimento", "Presidente do Conselho Nacional",
+    ]) {
+      expect(nivelDoCargo(stj, cargo)?.nivel, cargo).toBe(stj.nivel?.nivel);
+    }
   });
 
   test("governador do Distrito Federal tem nível próprio", () => {

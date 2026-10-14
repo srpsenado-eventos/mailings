@@ -3,6 +3,7 @@ import {
   autoridadesRepetidas, escolherGrupo, etiquetaDeRepeticao, filtrarRepetidas, MOTIVO_PARCIAL, MOTIVO_SEM_NIVEL,
   textoRepetidas, type OcorrenciaRepetida,
 } from "@/lib/repetidos";
+import { situacaoDoContato } from "@/lib/painel";
 import type { ResultadoContato, ResultadoGrupo } from "@/lib/types";
 
 const linha = (nome: string, cargo: string, extra: Partial<ResultadoContato> = {}): ResultadoContato => ({
@@ -84,6 +85,27 @@ describe("autoridadesRepetidas", () => {
     expect(a.motivo).toBe("Possível saída em Ministros do STF: confirmar o cargo antes de decidir");
   });
 
+  test("a mesma pessoa em três rótulos de ex- e Senadores é decidida por Senadores", () => {
+    const [a] = autoridadesRepetidas([
+      grupo("Senadores", [linha("Rui Fictício", "Senador")]),
+      grupo("Senadores (Acre a Goiás)", [linha("Rui Fictício", "Senador")]),
+      grupo("Ex-Presidentes do Senado", [linha("Rui Fictício", "Ex-Presidente do Senado Federal")]),
+    ]);
+    expect(a.situacao).toBe("decidido");
+    expect(a.convidaPor?.grupoRegra).toBe("Senadores");
+    expect(a.motivo).toBe("Cargo atual (Senadores) vence cargo de ex- (Ex-Presidentes do Senado)");
+    expect(a.ocorrencias).toHaveLength(3);
+  });
+
+  test("possível saída no único cargo atual vai para conferir", () => {
+    const [a] = autoridadesRepetidas([
+      grupo("Senadores", [linha("Rui Fictício", "Senador", { possivelSaida: true })]),
+      grupo("Ex-Presidentes do Senado", [linha("Rui Fictício", "Ex-Presidente do Senado Federal")]),
+    ]);
+    expect(a.situacao).toBe("conferir");
+    expect(a.motivo).toBe("Possível saída em Senadores: confirmar o cargo antes de decidir");
+  });
+
   test("célula com dois grupos conta como duas ocorrências", () => {
     const [a] = autoridadesRepetidas([grupo("Presidente do Senado Federal; Senadores", [linha("Davi Fictício", "Presidente do Senado Federal")])]);
     expect(a.ocorrencias.map((o) => o.grupoRegra)).toEqual(["Presidente do Senado", "Senadores"]);
@@ -153,6 +175,13 @@ describe("etiquetaDeRepeticao", () => {
     expect(etiquetaDeRepeticao(conferir, linha("Carmem Fictícia", "Ministra"), "Ministros do STF")).toEqual({
       campo: "grupo", tom: "atencao", texto: "Em mais de um grupo: conferir", explicacao: MOTIVO_PARCIAL,
     });
+  });
+
+  test("a etiqueta de repetição não entra na situação do contato", () => {
+    const g = grupo("Ministros do TSE", [ana]);
+    const igual = grupo("Outro grupo", [linha("Ana Fictícia", "Ministra")]);
+    expect(etiquetaDeRepeticao(repetidas, ana, "Ministros do TSE")?.tom).toBe("ruim");
+    expect(situacaoDoContato(ana, g)).toEqual(situacaoDoContato(linha("Ana Fictícia", "Ministra"), igual));
   });
 
   test("contato que não se repete fica sem etiqueta", () => {

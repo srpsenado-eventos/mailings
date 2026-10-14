@@ -5,7 +5,7 @@ import type { Etiqueta } from "@/lib/painel";
 import type { ResultadoContato, ResultadoGrupo } from "@/lib/types";
 
 /** Grupos fora deste eixo: os de eleitos (Eleição 2026, Ata 14) e o piloto de eventos. */
-const GRUPO_FORA = /eleit|piloto/;
+const GRUPO_FORA = /\beleit[oa]s?\b|piloto/;
 
 /**
  * Regra de precedência de um segmento (já normalizado) do rótulo "Grupo" do Contatos.
@@ -20,12 +20,13 @@ export function regraDoSegmento(segmento: string): RegraPrecedencia | undefined 
   return contidas.length === 1 ? contidas[0] : undefined;
 }
 
-const PRESIDENTE = /^president[ea]\b/;
+const PRESIDENTE = /^(ministr[oa][- ])?president[ea]\b/;
+const PRESIDENCIA_DE_ORGAO_INTERNO = /\b(turma|secao|comissao|conselho)\b/;
 
 /** Nível da Nominata para o cargo dentro do grupo da regra; `undefined` = fora da Nominata. */
 export function nivelDoCargo(regra: RegraPrecedencia, cargo: string): NivelPrecedencia | undefined {
   const c = normalizarTexto(cargo);
-  if (regra.presidente && PRESIDENTE.test(c)) return regra.presidente;
+  if (regra.presidente && PRESIDENTE.test(c) && !PRESIDENCIA_DE_ORGAO_INTERNO.test(c)) return regra.presidente;
   if (regra.distritoFederal && c.includes("distrito federal")) return regra.distritoFederal;
   return regra.nivel;
 }
@@ -84,6 +85,16 @@ function ordemDePrecedencia(a: OcorrenciaRepetida, b: OcorrenciaRepetida): numbe
   return 0;
 }
 
+/** Uma ocorrência por grupo da tabela (rótulos repetidos do mesmo grupo não disputam entre si): a de melhor nível. */
+function melhorPorGrupoRegra(ocorrencias: readonly OcorrenciaRepetida[]): OcorrenciaRepetida[] {
+  const melhores = new Map<string, OcorrenciaRepetida>();
+  for (const o of ocorrencias) {
+    const atual = melhores.get(o.grupoRegra);
+    if (!atual || ordemDePrecedencia(o, atual) < 0) melhores.set(o.grupoRegra, o);
+  }
+  return [...melhores.values()];
+}
+
 /**
  * Regra do Clovis (2026-10-13): cargo atual vence cargo de "ex-"; entre os que restam,
  * vence o nível mais alto da Nominata. Empate, nenhum nível, nome parcial ou possível
@@ -92,7 +103,7 @@ function ordemDePrecedencia(a: OcorrenciaRepetida, b: OcorrenciaRepetida): numbe
 export function escolherGrupo(ocorrencias: readonly OcorrenciaRepetida[], parcial: boolean): Escolha {
   if (parcial) return { situacao: "conferir", motivo: MOTIVO_PARCIAL };
   const atuais = ocorrencias.filter((o) => !o.ex);
-  const disputa = atuais.length > 0 ? atuais : [...ocorrencias];
+  const disputa = melhorPorGrupoRegra(atuais.length > 0 ? atuais : ocorrencias);
   let vencedor: OcorrenciaRepetida;
   let motivo: string;
   if (disputa.length === 1) {

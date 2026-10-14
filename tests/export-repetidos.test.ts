@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import * as XLSX from "xlsx";
 import { CABECALHO_REPETIDAS, descreverOcorrencia, gerarXlsxRepetidas, linhasRepetidas } from "@/lib/export-repetidos";
-import { autoridadesRepetidas } from "@/lib/repetidos";
+import { autoridadesRepetidas, type OcorrenciaRepetida } from "@/lib/repetidos";
 import type { ResultadoContato, ResultadoGrupo } from "@/lib/types";
 
 const linha = (nome: string, cargo: string): ResultadoContato => ({
@@ -36,6 +36,24 @@ describe("export das autoridades em mais de um grupo", () => {
       Motivo: "Ministros do STF (4.9) antes de Ministros do TSE (5.9)",
       "Grupos em que está": "Ministros do STF: Ministra do Supremo Tribunal Federal (4.9); Ministros do TSE: Ministra do Tribunal Superior Eleitoral (5.9)",
     });
+  });
+
+  test("linha de caso a conferir deixa convite e nível vazios", () => {
+    const conferir = autoridadesRepetidas([
+      grupo("Conselho Nacional de Justiça (CNJ)", [linha("Ana Fictícia", "Conselheira")]),
+      grupo("Conselho Nacional do Ministério Público (CNMP)", [linha("Ana Fictícia", "Conselheira")]),
+    ]);
+    const [l] = linhasRepetidas(conferir);
+    expect(l["Situação"]).toBe("Conferir");
+    expect(l["Convidar pelo grupo"]).toBe("");
+    expect(l["Nível na Nominata"]).toBe("");
+  });
+
+  test("ocorrência sem nível aparece como fora da Nominata", () => {
+    const o: OcorrenciaRepetida = {
+      grupo: "g", grupoRegra: "Embaixadores", chave: "ana", cargo: "Embaixadora", ex: false, possivelSaida: false,
+    };
+    expect(descreverOcorrencia(o)).toBe("Embaixadores: Embaixadora (fora da Nominata)");
   });
 
   test("gera a aba com o cabeçalho, mesmo vazia", () => {

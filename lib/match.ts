@@ -478,19 +478,79 @@ function soPalavras(valor: string): string {
   return normalizarTexto(valor).replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
 }
 
+/** Conectivos de nome: não contam como nome a mais na janela nem precisam casar. */
+const CONECTIVOS_NOME = new Set(["de", "da", "do", "das", "dos", "e"]);
+/** Nomes do meio a mais que a janela tolera entre o primeiro e o último nome do Contatos (R9). */
+const MAX_NOMES_A_MAIS = 3;
+
+/** Palavra da página: o texto original (para exibir) e a forma normalizada (para casar). */
+interface PalavraPagina { original: string; norma: string }
+
+function palavrasDe(texto: string): PalavraPagina[] {
+  return texto
+    .split(/\s+/)
+    .filter((o) => o.length > 0)
+    .flatMap((original) => soPalavras(original).split(" ").filter(Boolean).map((norma) => ({ original, norma })));
+}
+
 /**
- * O nome do contato está na página individual? Duas vias (spec §4.3): uma `PessoaSite` com o
- * mesmo nome normalizado, ou o nome inteiro como trecho contíguo do texto, com fronteira de
- * palavra. `{}` (sem `pessoa`) é a segunda via; `undefined` é nome ausente.
+ * Janela de palavras consecutivas que começa no primeiro nome de `alvo`, termina no último,
+ * traz todos os nomes na ordem e tem no máximo `alvo.length + MAX_NOMES_A_MAIS` palavras que
+ * não são conectivo. Devolve o trecho original da janela, ou `undefined`.
  */
-export function nomeNaPagina(nome: string, c: ConteudoFonte): { pessoa?: PessoaSite } | undefined {
+function janelaDoNome(alvo: readonly string[], palavras: readonly PalavraPagina[]): string | undefined {
+  const limite = alvo.length + MAX_NOMES_A_MAIS;
+  for (let i = 0; i < palavras.length; i += 1) {
+    if (palavras[i].norma !== alvo[0]) continue;
+    let k = 1;
+    let contadas = 1;
+    for (let j = i + 1; j < palavras.length && contadas < limite; j += 1) {
+      if (CONECTIVOS_NOME.has(palavras[j].norma)) continue;
+      contadas += 1;
+      if (palavras[j].norma === alvo[k]) k += 1;
+      if (k === alvo.length) return trechoOriginal(palavras.slice(i, j + 1));
+    }
+  }
+  return undefined;
+}
+
+/** Junta as palavras originais da janela (uma vez cada) e apara a pontuação das pontas. */
+function trechoOriginal(janela: readonly PalavraPagina[]): string {
+  const originais = janela.map((p) => p.original).filter((o, n, todas) => n === 0 || o !== todas[n - 1]);
+  return originais.join(" ").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+}
+
+/** Resultado de `nomeNaPagina`: `exato` falso quando a página traz o nome mais longo (R9). */
+export interface NomeAchado {
+  pessoa?: PessoaSite;
+  /** O nome como a página o escreve (valor esperado quando não é exato). */
+  nomeNaPagina?: string;
+  exato: boolean;
+}
+
+/**
+ * O nome do contato está na página individual? Vias exatas (spec §4.3): uma `PessoaSite` com
+ * o mesmo nome normalizado, ou o nome inteiro como trecho contíguo do texto, com fronteira de
+ * palavra. Vias não exatas (decisão R9, spec §9), para nome de duas ou mais palavras: uma
+ * `PessoaSite`, ou um trecho do texto, com todos os nomes do Contatos na ordem numa janela
+ * com até três nomes a mais ("Guilherme Boulos" acha "Guilherme Castro Boulos").
+ * `undefined` é nome ausente.
+ */
+export function nomeNaPagina(nome: string, c: ConteudoFonte): NomeAchado | undefined {
   const alvo = normalizarNome(nome);
   if (!alvo) return undefined;
   const pessoa = c.pessoas.find((p) => normalizarNome(p.nome) === alvo);
-  if (pessoa) return { pessoa };
+  if (pessoa) return { pessoa, nomeNaPagina: pessoa.nome, exato: true };
   const trecho = soPalavras(alvo);
   if (!trecho) return undefined;
-  return ` ${soPalavras(c.textoLimpo)} `.includes(` ${trecho} `) ? {} : undefined;
+  if (` ${soPalavras(c.textoLimpo)} `.includes(` ${trecho} `)) return { nomeNaPagina: nome, exato: true };
+
+  const tokens = trecho.split(" ").filter((t) => !CONECTIVOS_NOME.has(t));
+  if (tokens.length < 2) return undefined;
+  const pessoaLonga = c.pessoas.find((p) => janelaDoNome(tokens, palavrasDe(normalizarNome(p.nome))) !== undefined);
+  if (pessoaLonga) return { pessoa: pessoaLonga, nomeNaPagina: pessoaLonga.nome, exato: false };
+  const doTexto = janelaDoNome(tokens, palavrasDe(c.textoLimpo));
+  return doTexto ? { nomeNaPagina: doTexto, exato: false } : undefined;
 }
 
 /** Denominações de cargo publicadas por uma fonte `casamento: "cargo"`, únicas, na ordem da página. */
@@ -653,7 +713,11 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
       : comparacaoCargoPelaLista(contato.cargo, listaCargos)
     : undefined;
   const comparacoes: ComparacaoCampo[] = [
-    { campo: "nome", valorPlanilha: contato.nome, valorEsperado: achado.pessoa?.nome ?? contato.nome, origemValor: "pagina", situacao: "confere", fonteUrl: url },
+    // Nome mais longo na página (R9): a pessoa está lá, mas o GT quer o nome como o site o
+    // escreve; sai "divergente" (amarelo) com o nome da página para copiar.
+    achado.exato
+      ? { campo: "nome", valorPlanilha: contato.nome, valorEsperado: achado.pessoa?.nome ?? contato.nome, origemValor: "pagina", situacao: "confere", fonteUrl: url }
+      : { campo: "nome", valorPlanilha: contato.nome, valorEsperado: achado.nomeNaPagina, origemValor: "pagina", situacao: "divergente", fonteUrl: url },
     ...cargoDe(cargo),
     ...comparacoesSemSite(contato),
     ...protocolo,

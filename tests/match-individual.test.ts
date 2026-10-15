@@ -51,11 +51,74 @@ describe("paginaComConteudo e nomeNaPagina", () => {
     expect(achado?.pessoa).toBeUndefined();
   });
 
-  test("nome parcial ou outro nome não é confirmado; CAPTCHA é página sem conteúdo", () => {
-    expect(nomeNaPagina("João Carlos Silva", estado)).toBeUndefined();
+  test("nome mais curto que o da página é reconhecido como não exato; outro nome não é confirmado; CAPTCHA é página sem conteúdo", () => {
+    expect(nomeNaPagina("João Carlos Silva", estado)).toMatchObject({ exato: false, nomeNaPagina: "João Carlos Destaque Silva" });
+    expect(nomeNaPagina("João Carlos Destaque Silva", estado)?.exato).toBe(true);
     expect(nomeNaPagina("Fulano de Tal", ministerio)).toBeUndefined();
     expect(captcha.textoLimpo.length).toBeLessThan(MIN_TEXTO_PAGINA_INDIVIDUAL);
     expect(paginaComConteudo(captcha)).toBe(false);
+  });
+});
+
+describe("nome mais longo na página (decisão R9, spec §9)", () => {
+  const ENCHIMENTO = " Página institucional do ministério, com a agenda, a biografia, os contatos do gabinete e as notícias recentes da pasta.".repeat(4);
+  const paginaCom = (trecho: string): ConteudoFonte => ({
+    url: ministerio.url,
+    textoLimpo: `Ministro de Estado ${trecho}, nomeado em janeiro.${ENCHIMENTO}`,
+    destaques: [],
+    pessoas: [],
+  });
+  const fonte: FonteIndividual = { ...indNome, chave: { nome: "Guilherme Boulos" } };
+
+  test("nome mais longo na página (nomes do meio a mais) reconhece a pessoa e marca nome divergente com o nome da página", () => {
+    const conteudo = paginaCom("Guilherme Castro Boulos");
+    expect(conteudo.textoLimpo.length).toBeGreaterThanOrEqual(MIN_TEXTO_PAGINA_INDIVIDUAL);
+    const v = compararContatoIndividual({ contato: contato({ nome: "Guilherme Boulos" }), fonte, lida: { conteudo } });
+    expect(v.resultado.semaforo).toBe("amarelo");
+    expect(v.resultado.possivelSaida).toBeUndefined();
+    expect(v.nomeConfirmado).toBe(true);
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")).toMatchObject({
+      situacao: "divergente", valorEsperado: "Guilherme Castro Boulos", origemValor: "pagina", fonteUrl: ministerio.url,
+    });
+    expect(v.resultado.camposDivergentes).toContainEqual({ campo: "nome", valorPlanilha: "Guilherme Boulos", valorEncontrado: "Guilherme Castro Boulos" });
+  });
+
+  test("nome mais longo numa pessoa estruturada da página: divergente com o nome dela", () => {
+    const conteudo: ConteudoFonte = { ...paginaCom("Fulano Qualquer"), pessoas: [{ nome: "Paulo Henrique Rodrigues Pereira", cargo: "Ministro de Estado" }] };
+    const achado = nomeNaPagina("Paulo Henrique Pereira", conteudo);
+    expect(achado).toMatchObject({ exato: false, nomeNaPagina: "Paulo Henrique Rodrigues Pereira" });
+    expect(achado?.pessoa?.cargo).toBe("Ministro de Estado");
+    const v = compararContatoIndividual({ contato: contato({ nome: "Paulo Henrique Pereira" }), fonte, lida: { conteudo } });
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")).toMatchObject({ situacao: "divergente", valorEsperado: "Paulo Henrique Rodrigues Pereira" });
+    expect(v.nomeConfirmado).toBe(true);
+  });
+
+  test("janela longa demais (mais de três nomes a mais) não reconhece", () => {
+    expect(nomeNaPagina("Ana Silva", paginaCom("Ana Maria Política Completa Souza Lima Silva"))).toBeUndefined();
+  });
+
+  test("conectivos da página não contam como nome a mais e entram no nome exibido", () => {
+    expect(nomeNaPagina("Ana Silva", paginaCom("Ana Maria da Costa e Silva"))).toMatchObject({ exato: false, nomeNaPagina: "Ana Maria da Costa e Silva" });
+  });
+
+  test("a ordem importa: nomes trocados não reconhecem", () => {
+    expect(nomeNaPagina("Boulos Guilherme", paginaCom("Guilherme Castro Boulos"))).toBeUndefined();
+  });
+
+  test("nome de uma palavra só não usa a terceira via", () => {
+    expect(nomeNaPagina("Boulos", paginaCom("Guilherme Castro Boulos Filho"))?.exato).toBe(true);
+    expect(nomeNaPagina("Boulinhos", paginaCom("Guilherme Castro Boulos"))).toBeUndefined();
+  });
+
+  test("nome igual continua exato e verde, sem divergência de nome", () => {
+    const v = compararContatoIndividual({ contato: contato({ nome: "Guilherme Castro Boulos" }), fonte, lida: { conteudo: paginaCom("Guilherme Castro Boulos") } });
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")).toMatchObject({ situacao: "confere" });
+    expect(v.resultado.camposDivergentes.find((d) => d.campo === "nome")).toBeUndefined();
+  });
+
+  test("outro nome continua possível saída", () => {
+    const v = compararContatoIndividual({ contato: contato({ nome: "Fulano de Tal" }), fonte, lida: { conteudo: paginaCom("Guilherme Castro Boulos") } });
+    expect(v.resultado.possivelSaida).toBe(true);
   });
 });
 

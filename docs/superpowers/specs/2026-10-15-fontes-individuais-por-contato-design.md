@@ -277,3 +277,4 @@ O nome do contato não é usado nesta fonte. Ela não gera `possivelSaida` nem `
 
 - §5.3: "confere" na lista de cargos exige também o mesmo conjunto de tokens distintivos entre o cargo do Contatos e a denominação (decisão do controlador R3, para evitar verde falso entre pastas que compartilham um token).
 - §6.2: a coluna "Fonte do cargo" entra depois de "Observacao", no fim das colunas existentes (R4).
+- §4.3: decisão do Clovis em 2026-10-15 (R9): a página individual também reconhece o nome quando todos os tokens do nome do Contatos aparecem na página, na ordem, numa janela curta (até três nomes a mais); nesse caso o nome sai 'divergente' (amarelo) com o nome da página como valor esperado, e possível saída só quando nem assim o nome aparece. A ligação contato→chave continua por igualdade.

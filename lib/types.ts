@@ -240,6 +240,9 @@ export interface ExtracaoTabela {
   secoes?: readonly string[];
 }
 
+/** Campos de que uma fonte é referência (spec 2026-10-15 §3.1). */
+export type CampoFonte = "nome" | "cargo";
+
 /** Fonte oficial de um grupo no catálogo versionado (`data/catalogo.ts`). */
 export interface FonteCatalogo {
   url: string;
@@ -257,11 +260,40 @@ export interface FonteCatalogo {
    */
   propoeInclusao?: boolean;
   /**
-   * A página monta a lista por JavaScript: é lida pelo Chrome local (`lib/navegador.ts`),
-   * não pelo `fetch`. Só em modo local; sem Chrome a fonte sai inacessível.
+   * `true`: a página monta a lista por JavaScript e é lida pelo Chrome local sem janela
+   * (`lib/navegador.ts`, caso TCU). `"janela"`: lida pelo Chrome com janela visível, numa
+   * sessão só por varredura — o gov.br responde CAPTCHA ao `fetch` e ao headless (spec
+   * 2026-10-15 §2.9). Só em modo local; sem Chrome a fonte sai inacessível.
    */
-  navegador?: true;
+  navegador?: true | "janela";
+  /** De quais campos esta fonte é referência. Ausente: nome e cargo (composição do grupo, regra atual). */
+  campos?: readonly CampoFonte[];
+  /**
+   * Ausente ou "pessoa": compõe o grupo com pessoas (regra atual). "cargo": a página é só
+   * uma lista de denominações de cargo — não casa ninguém pelo nome, não gera possível
+   * saída nem proposta de inclusão (spec 2026-10-15 §5.3).
+   */
+  casamento?: "pessoa" | "cargo";
 }
+
+/** Chave que liga uma fonte individual ao contato: a UF do cargo, ou o nome como está no Contatos. */
+export type ChaveFonteIndividual = { uf: string } | { nome: string };
+
+/**
+ * Página oficial de UM contato (spec 2026-10-15 §3). A ligação é pela chave, comparada com
+ * `ufDoContato` ou com `normalizarNome`; a página é a referência dos `campos` declarados.
+ */
+export interface FonteIndividual {
+  url: string;
+  ativo: boolean;
+  chave: ChaveFonteIndividual;
+  /** Obrigatório e sempre com "nome": `["nome", "cargo"]` ou `["nome"]`. */
+  campos: readonly CampoFonte[];
+  navegador?: true | "janela";
+}
+
+/** Uma fonte que o raspador sabe ler: o que `FonteCatalogo` e `FonteIndividual` têm em comum. */
+export type FonteLegivel = Pick<FonteCatalogo, "url" | "tabela" | "navegador">;
 
 /**
  * Grupo no catálogo versionado (`data/catalogo.ts`), com responsáveis internos
@@ -277,6 +309,8 @@ export interface GrupoCatalogo {
   emailResp2?: string;
   emailBackup?: string;
   fontes: FonteCatalogo[];
+  /** Páginas individuais, uma por contato, ligadas por UF ou por nome (spec 2026-10-15). */
+  fontesIndividuais?: readonly FonteIndividual[];
   /**
    * UFs que pertencem ao grupo, quando ele é uma faixa geográfica ("Senadores (Acre a
    * Goiás)"). Filtra **apenas** a proposta de inclusão: para casar contato existente a

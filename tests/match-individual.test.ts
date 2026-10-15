@@ -1,0 +1,202 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, test } from "vitest";
+import {
+  compararCargoNaLista,
+  compararContatoIndividual,
+  compararContatoSemIndividual,
+  listaDeCargos,
+  marcarFonteInacessivel,
+  MIN_TEXTO_PAGINA_INDIVIDUAL,
+  MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO,
+  nomeNaPagina,
+  novosForaDaPlanilha,
+  OBSERVACAO_NAO_CONSTA_INDIVIDUAL,
+  OBSERVACAO_SEM_INDIVIDUAL,
+  paginaComConteudo,
+} from "@/lib/match";
+import { extrairConteudo } from "@/lib/scrape";
+import type { ContatoPlanilha, ConteudoFonte, FonteIndividual } from "@/lib/types";
+
+const fixture = (nome: string) => readFileSync(resolve(__dirname, `fixtures/${nome}`), "utf-8");
+const ministerio = extrairConteudo(fixture("ministerio-individual.html"), "https://www.gov.br/exemplo/pt-br/composicao/ministra");
+const estado = extrairConteudo(fixture("governo-estadual.html"), "https://www.exemplar.gov.br/governo");
+
+/** Contato com protocolo coerente: o que está sob teste é o site, não a tabela de tratamentos. */
+function contato(p: Partial<ContatoPlanilha>): ContatoPlanilha {
+  return { nome: "", grupo: "G", tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora", ...p };
+}
+const ministra = contato({ nome: "Ana Maria Política Completa", cargo: "Ministra de Estado do Exemplo" });
+const governador = contato({ nome: "João Carlos Destaque Silva", cargo: "Governador do Estado Exemplar", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" });
+
+const indNome: FonteIndividual = { url: ministerio.url, ativo: true, chave: { nome: ministra.nome }, campos: ["nome"], navegador: "janela" };
+const indNomeCargo: FonteIndividual = { url: estado.url, ativo: true, chave: { uf: "EX" }, campos: ["nome", "cargo"] };
+const LISTA = { url: "https://www.gov.br/planalto/lista", cargos: ["Ministra de Estado do Exemplo", "Ministro de Estado da Fazenda", "Ministro de Estado das Cidades"] };
+
+const captcha: ConteudoFonte = { url: ministerio.url, textoLimpo: "This question is for testing whether you are a human visitor. What code is in the image?", destaques: [], pessoas: [] };
+
+describe("paginaComConteudo e nomeNaPagina", () => {
+  test("fixture do ministério tem conteúdo e traz a pessoa estruturada", () => {
+    expect(paginaComConteudo(ministerio)).toBe(true);
+    expect(nomeNaPagina("Ministra ANA MARIA POLÍTICA COMPLETA", ministerio)?.pessoa?.nome).toBe("Ana Maria Política Completa");
+  });
+
+  test("fixture do governo confirma o nome pelo texto corrido, mesmo sem pessoa estruturada", () => {
+    expect(paginaComConteudo(estado)).toBe(true);
+    expect(nomeNaPagina("João Carlos Destaque Silva", estado)).toBeDefined();
+    const soTexto: ConteudoFonte = { ...estado, pessoas: [] };
+    const achado = nomeNaPagina("João Carlos Destaque Silva", soTexto);
+    expect(achado).toBeDefined();
+    expect(achado?.pessoa).toBeUndefined();
+  });
+
+  test("nome parcial ou outro nome não é confirmado; CAPTCHA é página sem conteúdo", () => {
+    expect(nomeNaPagina("João Carlos Silva", estado)).toBeUndefined();
+    expect(nomeNaPagina("Fulano de Tal", ministerio)).toBeUndefined();
+    expect(captcha.textoLimpo.length).toBeLessThan(MIN_TEXTO_PAGINA_INDIVIDUAL);
+    expect(paginaComConteudo(captcha)).toBe(false);
+  });
+});
+
+describe("compararCargoNaLista (cargo pela lista geral, spec §5.3)", () => {
+  test("denominação com mais tokens em comum é a esperada; confere pela régua de cargo", () => {
+    const c = compararCargoNaLista("Ministra de Estado do Exemplo", LISTA.cargos, LISTA.url);
+    expect(c).toMatchObject({ campo: "cargo", situacao: "confere", valorEsperado: "Ministra de Estado do Exemplo", fonteUrl: LISTA.url, origemValor: "pagina" });
+  });
+
+  test("gênero diferente da denominação oficial é divergente, com o texto oficial", () => {
+    const c = compararCargoNaLista("Ministro de Estado do Exemplo", LISTA.cargos, LISTA.url);
+    expect(c).toMatchObject({ situacao: "divergente", valorEsperado: "Ministra de Estado do Exemplo" });
+  });
+
+  test("sem token em comum, fonte não informa (pasta renomeada), sem exceção", () => {
+    const c = compararCargoNaLista("Ministro de Estado da Economia", LISTA.cargos, LISTA.url);
+    expect(c).toMatchObject({ situacao: "fonte_nao_informa", fonteUrl: LISTA.url });
+    expect(c.valorEsperado).toBeUndefined();
+  });
+
+  test("listaDeCargos tira os cargos únicos das pessoas da página", () => {
+    const pagina: ConteudoFonte = { url: "u", textoLimpo: "", destaques: [], pessoas: [{ nome: "A", cargo: "X" }, { nome: "B", cargo: "X" }, { nome: "C" }] };
+    expect(listaDeCargos(pagina)).toEqual(["X"]);
+  });
+});
+
+describe("compararContatoIndividual (tabela §5.2)", () => {
+  test("individual lida, nome presente, cargo pela lista confere: verde, nome e cargo com a URL de cada fonte", () => {
+    const v = compararContatoIndividual({ contato: ministra, fonte: indNome, lida: { conteudo: ministerio }, listaCargos: LISTA });
+    expect(v.resultado.semaforo).toBe("verde");
+    expect(v.nomeConfirmado).toBe(true);
+    expect(v.lidaComConteudo).toBe(true);
+    expect(v.resultado.fonteUrl).toBe(ministerio.url);
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")).toMatchObject({ situacao: "confere", fonteUrl: ministerio.url });
+    expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "confere", fonteUrl: LISTA.url });
+    expect(v.novos).toEqual([]);
+  });
+
+  test("cargo diverge da lista: amarelo com o texto oficial em valorEsperado", () => {
+    const v = compararContatoIndividual({ contato: { ...ministra, cargo: "Ministro de Estado do Exemplo", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" }, fonte: indNome, lida: { conteudo: ministerio }, listaCargos: LISTA });
+    expect(v.resultado.semaforo).toBe("amarelo");
+    expect(v.resultado.camposDivergentes).toEqual([{ campo: "cargo", valorPlanilha: "Ministro de Estado do Exemplo", valorEncontrado: "Ministra de Estado do Exemplo" }]);
+  });
+
+  test("fonte do cargo caiu: cargo 'nao_verificado' com a URL da lista, semáforo pelo nome (verde)", () => {
+    const v = compararContatoIndividual({ contato: ministra, fonte: indNome, lida: { conteudo: ministerio }, listaCargos: { url: LISTA.url, erro: "HTTP 403" } });
+    expect(v.resultado.semaforo).toBe("verde");
+    expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "nao_verificado", fonteUrl: LISTA.url });
+    expect(v.resultado.camposDivergentes).toEqual([]);
+  });
+
+  test("individual cobre cargo (governador): cargo pela pessoa da página, ou fonte não informa sem pessoa estruturada", () => {
+    const soTexto: ConteudoFonte = { ...estado, pessoas: [] };
+    const v = compararContatoIndividual({ contato: governador, fonte: indNomeCargo, lida: { conteudo: soTexto } });
+    expect(v.resultado.semaforo).toBe("verde");
+    expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "fonte_nao_informa", fonteUrl: estado.url });
+    const comPessoa: ConteudoFonte = { ...estado, pessoas: [{ nome: governador.nome, cargo: "Governador do Estado Exemplar" }] };
+    const v2 = compararContatoIndividual({ contato: governador, fonte: indNomeCargo, lida: { conteudo: comPessoa } });
+    expect(v2.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "confere", valorEsperado: "Governador do Estado Exemplar" });
+  });
+
+  test("individual lida com conteúdo e nome ausente: vermelho, possível saída, pessoas com cargo viram novos com a URL", () => {
+    const v = compararContatoIndividual({ contato: { ...ministra, nome: "Outra Pessoa Qualquer" }, fonte: indNome, lida: { conteudo: ministerio }, listaCargos: LISTA });
+    expect(v.resultado).toMatchObject({ semaforo: "vermelho", possivelSaida: true, observacao: OBSERVACAO_NAO_CONSTA_INDIVIDUAL, fonteUrl: ministerio.url });
+    expect(v.resultado.camposDivergentes[0]).toEqual({ campo: "nome", valorPlanilha: "Outra Pessoa Qualquer" });
+    expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toBeUndefined();
+    expect(v.nomeConfirmado).toBe(false);
+    expect(v.lidaComConteudo).toBe(true);
+    expect(v.novos.map((n) => [n.nome, n.fonteUrl])).toEqual([["Ana Maria Política Completa", ministerio.url]]);
+  });
+
+  test("individual caiu (erro): indeterminado, nome 'nao_verificado', cargo ainda pela lista, motivo na observação", () => {
+    const v = compararContatoIndividual({ contato: ministra, fonte: indNome, lida: { erro: "navegador: tempo esgotado" }, listaCargos: LISTA });
+    expect(v.resultado.semaforo).toBe("indeterminado");
+    expect(v.resultado.possivelSaida).toBeUndefined();
+    expect(v.resultado.observacao).toContain("navegador: tempo esgotado");
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")).toMatchObject({ situacao: "nao_verificado", fonteUrl: ministerio.url });
+    expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "confere", fonteUrl: LISTA.url });
+    expect(v.lidaComConteudo).toBe(false);
+    expect(v.novos).toEqual([]);
+  });
+
+  test("página com texto abaixo do mínimo (CAPTCHA, só menu) é inacessível, não ausência: nunca possível saída", () => {
+    const v = compararContatoIndividual({ contato: ministra, fonte: indNome, lida: { conteudo: captcha }, listaCargos: LISTA });
+    expect(v.resultado.semaforo).toBe("indeterminado");
+    expect(v.resultado.possivelSaida).toBeUndefined();
+    expect(v.resultado.observacao).toContain(MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO);
+    expect(v.lidaComConteudo).toBe(false);
+  });
+
+  test("individual caiu e cobre cargo: cargo também 'nao_verificado' com a URL da individual", () => {
+    const v = compararContatoIndividual({ contato: governador, fonte: indNomeCargo, lida: { erro: "HTTP 500" } });
+    expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "nao_verificado", fonteUrl: estado.url });
+  });
+
+  test("contato sem cargo não ganha comparação de cargo, em nenhum caminho", () => {
+    const semCargo = { ...ministra, cargo: undefined };
+    const lida = compararContatoIndividual({ contato: semCargo, fonte: indNome, lida: { conteudo: ministerio }, listaCargos: LISTA });
+    const caida = compararContatoIndividual({ contato: semCargo, fonte: indNome, lida: { erro: "x" }, listaCargos: LISTA });
+    expect(lida.resultado.comparacoes.find((c) => c.campo === "cargo")).toBeUndefined();
+    expect(caida.resultado.comparacoes.find((c) => c.campo === "cargo")).toBeUndefined();
+  });
+
+  test("tratamento e endereçamento continuam auditados em todos os caminhos", () => {
+    const incoerente = { ...ministra, tratamento: "Senhor" };
+    for (const lida of [{ conteudo: ministerio }, { erro: "x" }]) {
+      const v = compararContatoIndividual({ contato: incoerente, fonte: indNome, lida, listaCargos: LISTA });
+      expect(v.resultado.comparacoes.some((c) => c.origemValor === "coerencia" || c.origemValor === "protocolo")).toBe(true);
+    }
+  });
+});
+
+describe("compararContatoSemIndividual (§5.4)", () => {
+  test("grupo com lista de cargos (ministro): indeterminado, nome nao_verificado, cargo pela lista", () => {
+    const r = compararContatoSemIndividual(ministra, { listaCargos: LISTA });
+    expect(r).toMatchObject({ semaforo: "indeterminado", observacao: OBSERVACAO_SEM_INDIVIDUAL });
+    expect(r.fonteUrl).toBeUndefined();
+    expect(r.comparacoes.find((c) => c.campo === "nome")).toMatchObject({ situacao: "nao_verificado" });
+    expect(r.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "confere", fonteUrl: LISTA.url });
+    expect(r.camposDivergentes).toEqual([]);
+  });
+
+  test("grupo sem lista de cargos (governador): vermelho com campo 'fonte', observação com a UF", () => {
+    const r = compararContatoSemIndividual(governador, { uf: "MT" });
+    expect(r.semaforo).toBe("vermelho");
+    expect(r.possivelSaida).toBeUndefined();
+    expect(r.camposDivergentes[0]).toEqual({ campo: "fonte", valorPlanilha: "sem URL cadastrada" });
+    expect(r.observacao).toBe("Sem fonte individual para a UF MT");
+    expect(compararContatoSemIndividual(governador, {}).observacao).toBe("UF não reconhecida no cadastro");
+  });
+});
+
+describe("novosForaDaPlanilha e marcarFonteInacessivel sem URL", () => {
+  test("pessoa com cargo que não casa nenhum contato vira novo; quem casa (tokens) não", () => {
+    const pessoas = [{ nome: "Ana Maria Política Completa", cargo: "X" }, { nome: "Pessoa Nova da Silva", cargo: "Y" }, { nome: "Sem Cargo Algum" }];
+    expect(novosForaDaPlanilha(pessoas, [ministra]).map((p) => p.nome)).toEqual(["Pessoa Nova da Silva"]);
+  });
+
+  test("marcarFonteInacessivel aceita url ausente e não grava fonteUrl", () => {
+    const g = marcarFonteInacessivel("Governadores", [governador], undefined, "motivo");
+    expect(g.fonteUrl).toBeUndefined();
+    expect(g.contatos[0].fonteUrl).toBeUndefined();
+    expect(g.contatos[0].semaforo).toBe("indeterminado");
+  });
+});

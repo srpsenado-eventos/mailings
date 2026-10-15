@@ -86,9 +86,11 @@ export interface CampoDivergente {
  * `fonte_nao_informa` = o site não publica esse campo.
  * `sem_regra` = não há regra de protocolo aplicável (cargo não mapeado, ou contato sem cargo).
  * São coisas diferentes: a primeira é limite da fonte, a segunda é limite do cadastro de regras.
- * Nenhuma das duas é divergência.
+ * `nao_verificado` = a fonte daquele campo caiu, ou não existe para o contato; como
+ * `fonte_nao_informa`, não é divergência.
+ * Nenhuma das três é divergência.
  */
-export type SituacaoCampo = "confere" | "divergente" | "fonte_nao_informa" | "sem_regra";
+export type SituacaoCampo = "confere" | "divergente" | "fonte_nao_informa" | "sem_regra" | "nao_verificado";
 
 export interface ComparacaoCampo {
   campo: string;
@@ -105,6 +107,8 @@ export interface ComparacaoCampo {
    * há: a regra do grupo dá a correção objetiva, e `valorEsperado` a carrega.
    */
   achado?: AchadoCoerencia;
+  /** Página de onde saiu o valor esperado, ou que se tentou ler quando `nao_verificado` (spec 2026-10-15 §5.1). */
+  fonteUrl?: string;
 }
 
 export interface ResultadoContato {

@@ -51,6 +51,7 @@ Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**
 | 2026-10-06 | `prodasen-ajuste-do-numero.md` | Ajuste do Número acima de 6 na base inteira; tela local `/prodasen` com a carga e os ajustes em .xlsx; total da base no painel | Vigente; substitui o formato de arquivo do §6.2 de 2026-10-05 |
 | 2026-10-12 | `deputados-no-painel-e-governadores-eleitos-design.md` | Grupo Deputados Federais montado da planilha da Câmara no painel e na web (sem e-mail, telefone, prédio e sala); governadores eleitos no eixo Eleição 2026; 2º turno só como UF pendente | Vigente; implementado |
 | 2026-10-14 | `autoridades-em-mais-de-um-grupo-design.md` | Pessoa em mais de um grupo: grupo do convite pela Nominata do GT (cargo atual vence "ex-"; entre atuais, o nível mais alto); página `/repetidos` e etiqueta vermelha "a ser convidada pelo grupo X"; cálculo na tela, sem coleta nova | Vigente; implementado |
+| 2026-10-15 | `2026-10-15-fontes-individuais-por-contato-design.md` | **Fontes individuais por contato**: Governadores por UF (22 UFs; MT, MG, SC, PE, DF sem individual), Ministros por nome (individual é fonte do nome; a geral do Planalto vira lista de cargos, `casamento: "cargo"`; AGU e CGU individual para nome e cargo); `nao_verificado`; gov.br lido pelo Chrome com janela (`navegador: "janela"`) | Spec aprovada em 2026-10-15; a implementar |
 
 ## Princípios de implementação
 

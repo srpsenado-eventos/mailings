@@ -508,9 +508,12 @@ function tokensDistintivos(valor: string): string[] {
 
 /**
  * Cargo do contato contra a lista de denominações da página geral (spec §5.3). A denominação
- * esperada é a de maior sobreposição de tokens distintivos ("fazenda", "casa civil"); sobre
- * ela vale a régua de cargo de sempre (`situacaoCampo`: papel, gênero, prefixo). Sem token em
- * comum com denominação alguma, a lista não informa este cargo. Nome não entra aqui.
+ * esperada é a de maior sobreposição de tokens distintivos ("fazenda", "casa civil"; empate:
+ * a primeira da lista). `confere` exige DUAS coisas: a régua de cargo de sempre
+ * (`situacaoCampo`: papel, gênero, prefixo) e o MESMO conjunto de tokens distintivos nos dois
+ * cargos (ordem e repetição não contam). Pasta diferente que divide um token, ou qualificador
+ * a mais ou a menos, é `divergente`, com a denominação oficial em `valorEsperado`. Sem token
+ * em comum com denominação alguma, a lista não informa este cargo. Nome não entra aqui.
  */
 export function compararCargoNaLista(cargo: string, lista: readonly string[], fonteUrl: string): ComparacaoCampo {
   const tc = tokensDistintivos(cargo);
@@ -520,12 +523,15 @@ export function compararCargoNaLista(cargo: string, lista: readonly string[], fo
     if (n > 0 && (!melhor || n > melhor.n)) melhor = { denominacao: d, n };
   }
   if (!melhor) return { campo: "cargo", valorPlanilha: cargo, situacao: "fonte_nao_informa", fonteUrl };
+  const doOficial = new Set(tokensDistintivos(melhor.denominacao));
+  const doContato = new Set(tc);
+  const mesmoConjunto = doOficial.size === doContato.size && [...doContato].every((t) => doOficial.has(t));
   return {
     campo: "cargo",
     valorPlanilha: cargo,
     valorEsperado: melhor.denominacao,
     origemValor: "pagina",
-    situacao: situacaoCampo(cargo, melhor.denominacao),
+    situacao: mesmoConjunto && situacaoCampo(cargo, melhor.denominacao) === "confere" ? "confere" : "divergente",
     fonteUrl,
   };
 }

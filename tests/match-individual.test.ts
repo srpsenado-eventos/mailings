@@ -75,6 +75,23 @@ describe("compararCargoNaLista (cargo pela lista geral, spec §5.3)", () => {
     expect(c.valorEsperado).toBeUndefined();
   });
 
+  test("pasta diferente com um token em comum é divergente, nunca confere", () => {
+    const lista = ["Ministro de Estado do Desenvolvimento Agrário e Agricultura Familiar", "Ministro de Estado da Fazenda"];
+    const c = compararCargoNaLista("Ministro de Estado do Desenvolvimento Social", lista, LISTA.url);
+    expect(c).toMatchObject({ situacao: "divergente", valorEsperado: "Ministro de Estado do Desenvolvimento Agrário e Agricultura Familiar" });
+  });
+
+  test("qualificador a mais no Contatos é divergente com o texto oficial", () => {
+    const oficial = "Ministra de Estado da Casa Civil da Presidência da República";
+    const c = compararCargoNaLista("Ministra de Estado Chefe da Casa Civil da Presidência da República", [oficial], LISTA.url);
+    expect(c).toMatchObject({ situacao: "divergente", valorEsperado: oficial });
+  });
+
+  test("só tokens genéricos diferentes continua conferindo", () => {
+    const c = compararCargoNaLista("Ministro da Fazenda", ["Ministro de Estado da Fazenda"], LISTA.url);
+    expect(c).toMatchObject({ situacao: "confere" });
+  });
+
   test("listaDeCargos tira os cargos únicos das pessoas da página", () => {
     const pagina: ConteudoFonte = { url: "u", textoLimpo: "", destaques: [], pessoas: [{ nome: "A", cargo: "X" }, { nome: "B", cargo: "X" }, { nome: "C" }] };
     expect(listaDeCargos(pagina)).toEqual(["X"]);

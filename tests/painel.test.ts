@@ -724,12 +724,36 @@ describe("fontes individuais no painel (spec 2026-10-15 §6.1)", () => {
 
   test("procedência por contato: nome pela individual, cargo pela geral; grupo comum mantém a linha única", () => {
     expect(procedenciaDoContato(contato, grupoIndividuais)).toEqual([
-      { rotulo: "Nome", texto: "https://www.gov.br/exemplo/ministra", url: "https://www.gov.br/exemplo/ministra" },
-      { rotulo: "Cargo", texto: "https://www.gov.br/planalto/lista", url: "https://www.gov.br/planalto/lista" },
+      { rotulo: "Nome", texto: "https://www.gov.br/exemplo/ministra", url: "https://www.gov.br/exemplo/ministra", lida: true },
+      { rotulo: "Cargo", texto: "https://www.gov.br/planalto/lista", url: "https://www.gov.br/planalto/lista", lida: false },
     ]);
     expect(procedenciaDoContato({ ...contato, comparacoes: [], fonteUrl: undefined }, grupoComFonte)).toEqual([
-      { rotulo: "Nome e cargo", texto: "https://orgao.gov.br", url: "https://orgao.gov.br" },
+      { rotulo: "Nome e cargo", texto: "https://orgao.gov.br", url: "https://orgao.gov.br", lida: true },
     ]);
+  });
+
+  test("procedência: campo não verificado sai 'lida: false', campo conferido sai 'lida: true'", () => {
+    const invertido: ResultadoContato = {
+      ...contato,
+      comparacoes: [
+        { campo: "nome", valorPlanilha: "Ana", situacao: "nao_verificado", fonteUrl: "https://www.gov.br/exemplo/ministra" },
+        { campo: "cargo", valorPlanilha: "Ministra de Estado do Exemplo", valorEsperado: "Ministra de Estado do Exemplo", situacao: "confere", origemValor: "pagina", fonteUrl: "https://www.gov.br/planalto/lista" },
+      ],
+    };
+    expect(procedenciaDoContato(invertido, grupoIndividuais).map((l) => [l.rotulo, l.lida])).toEqual([["Nome", false], ["Cargo", true]]);
+  });
+
+  test("governador sem fonte individual sai 'Sem fonte' com a observação como motivo, não 'Nada a revisar'", () => {
+    const grupoGov: ResultadoGrupo = { grupo: "Governadores", semFonte: false, contatos: [], novos: [], individuais: { lidas: 22, caidas: 0 } };
+    const semFonte: ResultadoContato = {
+      contato: { nome: "Beto", grupo: "Governadores", cargo: "Governador do Estado de Mato Grosso" },
+      semaforo: "vermelho", score: 0, origem: "oficial",
+      comparacoes: [],
+      camposDivergentes: [{ campo: "fonte", valorPlanilha: "sem URL cadastrada" }],
+      observacao: "Sem fonte individual para a UF MT",
+    };
+    expect(situacaoDoContato(semFonte, grupoGov)).toMatchObject({ texto: "Sem fonte", tom: "neutro" });
+    expect(motivoDoContato(semFonte, grupoGov)).toBe("Sem fonte individual para a UF MT");
   });
 
   test("motivo do contato indeterminado num grupo com individuais é a observação dele", () => {

@@ -186,8 +186,9 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     // do GT (Referencia 2/Conferencia contatos 06_10.xlsx, aba "Sites Governo Estados").
     // Ficam fora, por decisão do Clovis: MT e MG (Diário Oficial), SC (PDF do Diário
     // Oficial), PE (notícia do TSE) e DF (página da vice). Esses cinco saem "cadastrar fonte".
-    // MS: a URL tem fragmento "#/QuemEQuem" (página montada por JavaScript); se o fetch
-    // não trouxer o nome, trocar para `navegador: true` e registrar aqui.
+    // MS: a URL tem fragmento "#/QuemEQuem" e a página é montada por JavaScript: o fetch
+    // traz só a casca do SPA, e o Chrome headless monta a página com "GOVERNADOR:"
+    // (medido em 2026-10-15). Por isso é lida pelo navegador (`navegador: true`).
     fontesIndividuais: [
       { url: "https://estado.ac.gov.br/orgao-entidades/", ativo: true, chave: { uf: "AC" }, campos: ["nome", "cargo"] },
       { url: "https://amapa.gov.br/gestores", ativo: true, chave: { uf: "AP" }, campos: ["nome", "cargo"] },
@@ -205,13 +206,19 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       { url: "https://www.rn.gov.br/postagem/governadora/", ativo: true, chave: { uf: "RN" }, campos: ["nome", "cargo"] },
       { url: "https://www.se.gov.br/agencia/governo", ativo: true, chave: { uf: "SE" }, campos: ["nome", "cargo"] },
       { url: "https://goias.gov.br/administracao-direta/", ativo: true, chave: { uf: "GO" }, campos: ["nome", "cargo"] },
-      { url: "https://www.transparencia.ms.gov.br/#/QuemEQuem", ativo: true, chave: { uf: "MS" }, campos: ["nome", "cargo"] },
+      { url: "https://www.transparencia.ms.gov.br/#/QuemEQuem", ativo: true, chave: { uf: "MS" }, campos: ["nome", "cargo"], navegador: true },
       { url: "https://www.es.gov.br/governo/governador", ativo: true, chave: { uf: "ES" }, campos: ["nome", "cargo"] },
       { url: "https://www.rj.gov.br/pagina/sobre-o-governo9806", ativo: true, chave: { uf: "RJ" }, campos: ["nome", "cargo"] },
       { url: "https://www.sp.gov.br/sp/institucional/estrutura/!ut/p/z1/04_Sj9CPykssy0xPLMnMz0vMAfIjo8ziDSzMTIyM3Q2MPYyDnQ3MXB3DzJ2NQg0M_Y31wyEKcABHA_0oovTjVhCF3_hw_ShUKwKCg4Am-BpaOvtauhk7-pvhV-DpbAxTgNuSgtzQCINMT0UAo-8oDA!!/", ativo: true, chave: { uf: "SP" }, campos: ["nome", "cargo"] },
       { url: "https://www.parana.pr.gov.br/Pagina/Quemequem", ativo: true, chave: { uf: "PR" }, campos: ["nome", "cargo"] },
       { url: "https://www.estado.rs.gov.br/governadoria", ativo: true, chave: { uf: "RS" }, campos: ["nome", "cargo"] },
     ],
+  },
+  {
+    // Spec 2026-10-15: existe para o casamento exato vencer a contenção e os eleitos de
+    // mandato novo não serem ligados às páginas dos governadores atuais.
+    nome: "Governadores Eleitos",
+    fontes: [],
   },
   {
     nome: "Ministros de Estado",
@@ -233,8 +240,8 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     // Spec 2026-10-15 §3.2: página de cada ministério, transcrita da planilha de conferência
     // do GT (Referencia 2/Conferencia contatos 06_10.xlsx, aba "Sites Governo Estados",
     // colunas F a H). A chave é o nome COMO ESTÁ NO CONTATOS (decisão do Clovis em
-    // 2026-10-15: 15 nomes da planilha eram mais curtos que o do Contatos e não casariam
-    // pela régua de igualdade normalizada). O comentário de cada linha é o cargo da planilha,
+    // 2026-10-15: 15 nomes da planilha não casavam com o do Contatos pela régua de igualdade
+    // normalizada (em geral a planilha trazia o nome mais longo)). O comentário de cada linha é o cargo da planilha,
     // só para localizar a linha. AGU e CGU cobrem nome E cargo; as demais, só nome.
     fontesIndividuais: [
       // Ministra de Estado da Casa Civil da Presidência da República
@@ -295,7 +302,8 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       { url: "https://www.gov.br/mulheres/pt-br/composicao/ministra/marcia-lopes", ativo: true, chave: { nome: "Márcia Helena Carvalho Lopes" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Pesca e Aquicultura
       { url: "https://www.gov.br/mpa/pt-br/acesso-a-informacao/institucional/quem-e-quem-3/gabinete-do-ministro/ministro", ativo: true, chave: { nome: "Rivetla Edipo Araujo Cruz" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado do Planejamento e Orçamento
+      // Ministro de Estado do Planejamento e Orçamento (o endereço ainda traz o nome da titular
+      // anterior, mas a página já mostra o titular atual, conferido em 2026-10-15)
       { url: "https://www.gov.br/planejamento/pt-br/composicao/gabinete-do-ministro/simone-nassar-tebet", ativo: true, chave: { nome: "Bruno Moretti" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado de Portos e Aeroportos
       { url: "https://www.gov.br/portos-e-aeroportos/pt-br/composicao/autoridades-1/tome-monteiro-da-franca?activeAccordion=accordion-panel-1", ativo: true, chave: { nome: "Tomé Monteiro da Franca" }, campos: ["nome"], navegador: "janela" },

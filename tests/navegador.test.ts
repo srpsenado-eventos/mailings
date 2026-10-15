@@ -187,6 +187,14 @@ describe("abrirSessao (Chrome com janela, spec 2026-10-15 §4.2)", () => {
     await sessao.fechar();
   });
 
+  test("página com status de erro (HTTP 404) vira ScrapeError com o motivo 'HTTP 404'", async () => {
+    const fechar = vi.fn(async () => undefined);
+    const lancar: Lancador = async () => ({ conteudo: async () => { throw new Error("HTTP 404"); }, fechar });
+    const sessao = abrirSessao({ env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+    await expect(sessao.raspar("https://www.gov.br/sumiu")).rejects.toMatchObject({ name: "ScrapeError", motivo: "HTTP 404" });
+    await sessao.fechar();
+  });
+
   test("página que estoura o teto sai 'navegador: tempo esgotado' e a sessão continua", async () => {
     const eterna = () => new Promise<string>(() => undefined);
     const { lancar } = lancadorDeSessao({ "https://www.gov.br/lenta": eterna, "https://www.gov.br/ok": HTML });

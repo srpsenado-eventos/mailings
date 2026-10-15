@@ -3,8 +3,8 @@ import { CATALOGO } from "@/data/catalogo";
 import { normalizarNome } from "@/lib/normalize";
 
 describe("catálogo real (data/catalogo.ts)", () => {
-  test("tem os 33 grupos migrados do banco", () => {
-    expect(CATALOGO).toHaveLength(33);
+  test("tem os 34 grupos (33 migrados do banco + Governadores Eleitos)", () => {
+    expect(CATALOGO).toHaveLength(34);
   });
 
   test("tem as 24 fontes cadastradas (21 migradas do banco + 3 de fora de exercício)", () => {
@@ -12,9 +12,12 @@ describe("catálogo real (data/catalogo.ts)", () => {
     expect(total).toBe(24);
   });
 
-  test("navegador headless só no TCU; 'janela' só em páginas do gov.br federal", () => {
-    const headless = CATALOGO.flatMap((g) => g.fontes.filter((f) => f.navegador === true).map((f) => f.url));
-    expect(headless).toEqual(["https://portal.tcu.gov.br/autoridades"]);
+  test("navegador headless só no MS (governador) e no TCU; 'janela' só em páginas do gov.br federal", () => {
+    const headless = CATALOGO.flatMap((g) => [
+      ...g.fontes.filter((f) => f.navegador === true).map((f) => f.url),
+      ...(g.fontesIndividuais ?? []).filter((f) => f.navegador === true).map((f) => f.url),
+    ]);
+    expect(headless).toEqual(["https://www.transparencia.ms.gov.br/#/QuemEQuem", "https://portal.tcu.gov.br/autoridades"]);
     const janela = CATALOGO.flatMap((g) => [
       ...g.fontes.filter((f) => f.navegador === "janela").map((f) => f.url),
       ...(g.fontesIndividuais ?? []).filter((f) => f.navegador === "janela").map((f) => f.url),

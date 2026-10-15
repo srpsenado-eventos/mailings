@@ -466,6 +466,7 @@ export function compararGrupo(
 export const MIN_TEXTO_PAGINA_INDIVIDUAL = 300;
 export const MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO = "página individual sem conteúdo legível (CAPTCHA ou só menu)";
 export const OBSERVACAO_NAO_CONSTA_INDIVIDUAL = "Não consta na página individual (possível saída)";
+export const OBSERVACAO_NOME_VAZIO_INDIVIDUAL = "Nome vazio no cadastro: não há o que procurar na página";
 export const OBSERVACAO_SEM_INDIVIDUAL = "Sem fonte individual cadastrada";
 
 export function paginaComConteudo(c: ConteudoFonte): boolean {
@@ -580,9 +581,9 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
   const protocolo = comparacoesTratamento(contato, grupoCanonico);
   const cargoDe = (comp: ComparacaoCampo | undefined): ComparacaoCampo[] => (comp ? [comp] : []);
 
-  const semConteudo = lida.erro !== undefined || lida.conteudo === undefined || !paginaComConteudo(lida.conteudo);
-  if (semConteudo) {
-    const motivo = lida.erro ?? MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO;
+  // Nome não verificado: página caída, ou nome vazio no cadastro. Cargo pela sua fonte (a
+  // individual, que não foi usada, ou a lista geral, que é independente da individual).
+  const indeterminado = (observacao: string, lidaComConteudo: boolean): VereditoIndividual => {
     const cargo = contato.cargo
       ? cobreCargo
         ? { campo: "cargo", valorPlanilha: contato.cargo, situacao: "nao_verificado" as const, fonteUrl: url }
@@ -603,13 +604,20 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
         camposDivergentes: divergenciasDe(comparacoes),
         origem: "oficial",
         fonteUrl: url,
-        observacao: `Página individual inacessível: ${motivo}`,
+        observacao,
       },
       nomeConfirmado: false,
-      lidaComConteudo: false,
+      lidaComConteudo,
       novos: [],
     };
+  };
+
+  const semConteudo = lida.erro !== undefined || lida.conteudo === undefined || !paginaComConteudo(lida.conteudo);
+  if (semConteudo) {
+    return indeterminado(`Página individual inacessível: ${lida.erro ?? MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO}`, false);
   }
+  // Contato sem nome ligado por UF: não há o que procurar, e ausência aqui não é saída.
+  if (!normalizarNome(contato.nome)) return indeterminado(OBSERVACAO_NOME_VAZIO_INDIVIDUAL, true);
 
   const conteudo = lida.conteudo as ConteudoFonte;
   const achado = nomeNaPagina(contato.nome, conteudo);

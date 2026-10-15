@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { buscarFontePrimaria, fonteIndividualDe, resolverGrupoEFonte, listarGruposComFonte } from "@/lib/catalogo";
 import type { FonteIndividual, GrupoCatalogo } from "@/lib/types";
+import { CATALOGO } from "@/data/catalogo";
 
 /** Açúcar para declarar um grupo com uma única fonte ativa. */
 function grupoComFonte(nome: string, url: string): GrupoCatalogo {
@@ -321,5 +322,12 @@ describe("resolverGrupoEFonte com fontes individuais", () => {
     const lista = listarGruposComFonte([governadores, ministros]);
     expect(lista.find((g) => g.nome === "Governadores")).toMatchObject({ temFonte: true, fonteUrl: undefined, fontesIndividuais: 1 });
     expect(lista.find((g) => g.nome === "Ministros")).toMatchObject({ temFonte: true, fontesIndividuais: 1, camposFontePrimaria: ["cargo"] });
+  });
+
+  test("rótulo 'Governadores Eleitos' casa o grupo exato e não herda as individuais de Governadores", () => {
+    const r = resolverGrupoEFonte("Governadores Eleitos", CATALOGO);
+    expect(r.grupoCanonico).toBe("Governadores Eleitos");
+    expect(r.fontesIndividuais).toEqual([]);
+    expect(r.fontes).toEqual([]);
   });
 });

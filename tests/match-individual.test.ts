@@ -12,6 +12,7 @@ import {
   nomeNaPagina,
   novosForaDaPlanilha,
   OBSERVACAO_NAO_CONSTA_INDIVIDUAL,
+  OBSERVACAO_NOME_VAZIO_INDIVIDUAL,
   OBSERVACAO_SEM_INDIVIDUAL,
   paginaComConteudo,
 } from "@/lib/match";
@@ -160,6 +161,26 @@ describe("compararContatoIndividual (tabela §5.2)", () => {
     expect(v.resultado.possivelSaida).toBeUndefined();
     expect(v.resultado.observacao).toContain(MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO);
     expect(v.lidaComConteudo).toBe(false);
+  });
+
+  test("contato com nome vazio ligado por UF: indeterminado, nunca possível saída, mesmo com a página lida", () => {
+    const semNome = { ...governador, nome: "  " };
+    const v = compararContatoIndividual({ contato: semNome, fonte: indNomeCargo, lida: { conteudo: estado } });
+    expect(v.resultado.semaforo).toBe("indeterminado");
+    expect(v.resultado.possivelSaida).toBeUndefined();
+    expect(v.resultado.observacao).toBe(OBSERVACAO_NOME_VAZIO_INDIVIDUAL);
+    expect(v.resultado.observacao).toBe("Nome vazio no cadastro: não há o que procurar na página");
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")).toMatchObject({ situacao: "nao_verificado", fonteUrl: estado.url });
+    expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "nao_verificado", fonteUrl: estado.url });
+    expect(v.nomeConfirmado).toBe(false);
+    expect(v.lidaComConteudo).toBe(true);
+    expect(v.novos).toEqual([]);
+  });
+
+  test("contato com nome vazio e cargo pela lista: cargo continua conferido pela lista", () => {
+    const v = compararContatoIndividual({ contato: { ...ministra, nome: "" }, fonte: indNome, lida: { conteudo: ministerio }, listaCargos: LISTA });
+    expect(v.resultado.semaforo).toBe("indeterminado");
+    expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "confere", fonteUrl: LISTA.url });
   });
 
   test("individual caiu e cobre cargo: cargo também 'nao_verificado' com a URL da individual", () => {

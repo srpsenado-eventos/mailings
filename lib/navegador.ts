@@ -90,12 +90,15 @@ export const lancarChrome: Lancador = async (caminhoChrome, modo = {}) => {
       // Headless (TCU): `networkidle0`, a lista chega por XHR e com `networkidle2` vinha pela metade.
       // Janela (gov.br, páginas servidas prontas): `networkidle2`, porque os scripts de analytics do
       // gov.br nunca deixam a rede zerar, e uma pausa curta para o DOM assentar.
-      if (modo.janela) {
-        await page.goto(url, { waitUntil: "networkidle2", timeout: timeoutMs });
-        await new Promise((r) => setTimeout(r, PAUSA_APOS_CARREGAR_MS));
-      } else {
-        await page.goto(url, { waitUntil: "networkidle0", timeout: timeoutMs });
-      }
+      const resposta = await page.goto(url, {
+        waitUntil: modo.janela ? "networkidle2" : "networkidle0",
+        timeout: timeoutMs,
+      });
+      // Página de erro (404, 500) montada pelo Chrome não é "lida com conteúdo": vira
+      // `ScrapeError` com "HTTP <status>" pelo mapeamento de `lerUma`/`rasparComNavegador`.
+      // Sem resposta (navegação no mesmo documento), segue normalmente.
+      if (resposta && !resposta.ok()) throw new Error(`HTTP ${resposta.status()}`);
+      if (modo.janela) await new Promise((r) => setTimeout(r, PAUSA_APOS_CARREGAR_MS));
       return page.content();
     },
     async fechar() {

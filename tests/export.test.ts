@@ -524,3 +524,32 @@ describe("colunas do endereço auditado", () => {
     expect(linha["Endereço (situação)"]).toBe("a confirmar");
   });
 });
+
+describe("fontes individuais no export (spec 2026-10-15 §6.2)", () => {
+  const comIndividual: ResultadoAnalise = {
+    ...analise,
+    grupos: [{
+      grupo: "Ministros de Estado", fonteUrl: "https://www.gov.br/planalto/lista", semFonte: false, novos: [],
+      contatos: [{
+        contato: { nome: "Ana", grupo: "Ministros de Estado", cargo: "Ministra X" },
+        semaforo: "verde", score: 1, origem: "oficial", fonteUrl: "https://www.gov.br/x/ministra",
+        comparacoes: [
+          { campo: "nome", valorPlanilha: "Ana", valorEsperado: "Ana", situacao: "confere", origemValor: "pagina", fonteUrl: "https://www.gov.br/x/ministra" },
+          { campo: "cargo", valorPlanilha: "Ministra X", situacao: "nao_verificado", fonteUrl: "https://www.gov.br/planalto/lista" },
+        ],
+        camposDivergentes: [],
+      }],
+    }],
+  };
+
+  test("Fonte é a individual; 'Fonte do cargo' é a geral; cargo não verificado sai com o texto", () => {
+    const linha = resultadoParaLinhas(comIndividual)[0];
+    expect(linha).toMatchObject({ Fonte: "https://www.gov.br/x/ministra", "Fonte do cargo": "https://www.gov.br/planalto/lista", "Cargo (site)": "não verificado" });
+  });
+
+  test("'Fonte do cargo' fica vazia quando é a mesma página da Fonte, e existe em toda linha", () => {
+    const linhas = resultadoParaLinhas(analise);
+    expect(linhas[0]["Fonte do cargo"]).toBe("");
+    expect(Object.keys(linhas[0])).toContain("Fonte do cargo");
+  });
+});

@@ -74,6 +74,7 @@ function valorEsperadoDe(c: ResultadoContato, campo: string): string {
   if (!comp) return "";
   if (comp.situacao === "fonte_nao_informa") return "fonte não informa";
   if (comp.situacao === "sem_regra") return "sem regra de protocolo";
+  if (comp.situacao === "nao_verificado") return "não verificado";
   const v = comp.valorEsperado ?? "";
   return v && comp.origemValor === "conhecimento" ? `${v} (via IA — confira)` : v;
 }
@@ -81,6 +82,12 @@ function valorEsperadoDe(c: ResultadoContato, campo: string): string {
 function valorPlanilhaDe(c: ResultadoContato, campo: string): string {
   if (campo === "nome") return c.contato.nome;
   return comparacaoDe(c, campo)?.valorPlanilha ?? "";
+}
+
+/** URL da fonte do cargo quando é outra página que não a `Fonte` do contato (fontes individuais). */
+function fonteDoCargo(c: ResultadoContato): string {
+  const url = comparacaoDe(c, "cargo")?.fonteUrl;
+  return url && url !== c.fonteUrl ? url : "";
 }
 
 /**
@@ -115,6 +122,7 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
         Origem: c.origem,
         Fonte: c.fonteUrl ?? "",
         Observacao: observacaoCom(c.observacao, ressalva),
+        "Fonte do cargo": fonteDoCargo(c),
       };
       for (const f of CAMPOS) {
         linha[`${f.rotulo} (planilha)`] = valorPlanilhaDe(c, f.campo);
@@ -149,6 +157,7 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
           `Pessoa na fonte sem correspondência na planilha${situacao}`,
           ressalva,
         ),
+        "Fonte do cargo": "",
       };
       for (const f of CAMPOS) {
         linha[`${f.rotulo} (planilha)`] = "";

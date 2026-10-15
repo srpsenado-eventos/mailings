@@ -10,7 +10,7 @@ Repositório remoto: `github.com/srpsenado-eventos/mailings`, branch base `main`
 
 ## Estado do projeto (2026-10-15)
 
-- Suíte: 46 arquivos, 912 testes, verde (2026-10-15). `npm run typecheck` limpo.
+- Suíte: 46 arquivos, 920 testes, verde (2026-10-15). `npm run typecheck` limpo.
 - Catálogo: 34 grupos, 24 fontes de grupo, 60 fontes individuais (22 Governadores, 38 Ministros de Estado), 22 grupos com fonte, **12 sem fonte** (entre eles Governadores Eleitos, que existe para não herdar as páginas dos governadores atuais) (todo contato deles sai vermelho, ver semântica abaixo).
 - Auditoria de Tratamento e Endereçamento (spec de 2026-08-13) e Camada C (regras de nome, spec de 2026-09-18) estão em `main` desde setembro de 2026 (`lib/tratamento.ts`, `data/regras-nome.ts`).
 - **Dívidas conhecidas** (não corrigir de passagem; abrir tarefa própria):

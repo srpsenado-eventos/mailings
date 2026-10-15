@@ -3,16 +3,31 @@ import type {
   ConteudoFonte,
   EnderecoEstruturado,
   FonteCatalogo,
+  FonteIndividual,
+  FonteLegivel,
   PessoaSite,
   ResultadoAnalise,
   ResultadoGrupo,
   ResumoAnalise,
 } from "@/lib/types";
 import { agruparPorGrupo } from "@/lib/planilha";
-import { compararGrupo, marcarFonteInacessivel, mesclarComposicao, unirFontes } from "@/lib/match";
+import {
+  compararContatoIndividual,
+  compararContatoSemIndividual,
+  compararGrupo,
+  listaDeCargos,
+  marcarFonteInacessivel,
+  mesclarComposicao,
+  MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO,
+  novosForaDaPlanilha,
+  paginaComConteudo,
+  unirFontes,
+  type ListaCargos,
+} from "@/lib/match";
 import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { ScrapeError } from "@/lib/scrape";
-import type { FonteResolvida } from "@/lib/catalogo";
+import { fonteIndividualDe, type FonteResolvida } from "@/lib/catalogo";
+import { ufDoContato } from "@/lib/uf";
 import { auditarEndereco, indexarEnderecos, type IndiceEnderecos } from "@/lib/endereco";
 
 function motivoDaFalha(err: unknown): string {
@@ -59,8 +74,8 @@ function leituraSuspeita(r: ResultadoGrupo): boolean {
 export interface Dependencias {
   /** Resolve o rótulo da planilha para grupo canônico + fontes oficiais. Lê o catálogo versionado. */
   resolverFonte: (grupo: string) => FonteResolvida;
-  /** Raspa UMA fonte cadastrada, com a extração que ela declara. */
-  raspar: (fonte: FonteCatalogo) => Promise<ConteudoFonte>;
+  /** Raspa UMA fonte do catálogo, de grupo ou individual, com a extração que ela declara. */
+  raspar: (fonte: FonteLegivel) => Promise<ConteudoFonte>;
   /** Camada B: composição via IA (texto raspado + conhecimento). `[]` = indisponível. */
   extrairComposicao: (grupoCanonico: string, textoLimpo: string) => Promise<PessoaSite[]>;
 }
@@ -132,6 +147,11 @@ async function analisarGrupo(
     );
   }
 
+  // Grupo com fontes individuais (spec 2026-10-15): caminho por contato. Os demais seguem abaixo.
+  if (resolvida.fontesIndividuais.length > 0) {
+    return comResponsavel(await analisarGrupoIndividual(grupo, contatos, resolvida, deps), resolvida.responsavel);
+  }
+
   // 1. Camada 1 (base): todas as fontes ativas, em paralelo. Uma falhar não derruba a outra.
   const lidas: FonteLida[] = await Promise.all(
     resolvida.fontes.map(async (fonte) => {
@@ -162,7 +182,9 @@ async function analisarGrupo(
   const textoLimpo = lidas[0]?.conteudo?.textoLimpo ?? "";
 
   // 2. Camada 2 (refinamento/cobertura): composição via IA. Sem chave → [].
-  const pessoasIA = await deps.extrairComposicao(resolvida.grupoCanonico, textoLimpo);
+  // Fonte que é só lista de cargos não tem composição de pessoas a refinar: a IA não roda.
+  const primariaCasaPessoa = (resolvida.fontes[0]?.casamento ?? "pessoa") === "pessoa";
+  const pessoasIA = primariaCasaPessoa ? await deps.extrairComposicao(resolvida.grupoCanonico, textoLimpo) : [];
   const composicao = mesclarComposicao(pessoasPagina, pessoasIA, contatos);
 
   // 3. Sem composição (nenhuma fonte legível E IA vazia): NUNCA "saída" — "não verificado".
@@ -241,6 +263,110 @@ async function analisarGrupo(
   );
 }
 
+/** Leitura de uma fonte individual, pela URL. */
+interface IndividualLida {
+  fonte: FonteIndividual;
+  conteudo?: ConteudoFonte;
+  erro?: string;
+}
+
+async function lerFonte<F extends FonteLegivel>(fonte: F, deps: Dependencias): Promise<{ fonte: F; conteudo?: ConteudoFonte; erro?: string }> {
+  try {
+    return { fonte, conteudo: await deps.raspar(fonte) };
+  } catch (err) {
+    return { fonte, erro: motivoDaFalha(err) };
+  }
+}
+
+function individualComConteudo(l: { conteudo?: ConteudoFonte; erro?: string }): boolean {
+  return l.erro === undefined && l.conteudo !== undefined && paginaComConteudo(l.conteudo);
+}
+
+/** Pluraliza "N página(s) individual(is) inacessível(is)" para o motivo do grupo. */
+function textoIndividuaisCaidas(n: number): string {
+  return n === 1 ? "1 página individual inacessível" : `${n} páginas individuais inacessíveis`;
+}
+
+/**
+ * Caminho por contato (spec 2026-10-15 §4 e §5): cada contato é verificado na SUA página
+ * individual; a fonte de grupo, quando existe, é a lista de denominações de cargo
+ * (`casamento: "cargo"`) ou, se compõe pessoas, só alimenta `novos`. Nenhuma leitura parcial
+ * entre individuais: cada contato responde pela sua. A IA não participa.
+ */
+async function analisarGrupoIndividual(
+  grupo: string,
+  contatos: ContatoPlanilha[],
+  resolvida: FonteResolvida,
+  deps: Dependencias,
+): Promise<ResultadoGrupo> {
+  const grupoCanonico = resolvida.grupoCanonico;
+  const ligacoes = contatos.map((c) => ({ contato: c, fonte: fonteIndividualDe(c, resolvida.fontesIndividuais) }));
+  // Cada URL é lida UMA vez, mesmo com dois contatos ligados a ela; individual sem contato não é lida.
+  const aLer = [...new Map(ligacoes.flatMap((l) => (l.fonte ? [[l.fonte.url, l.fonte] as const] : []))).values()];
+  const geral = resolvida.fontes[0];
+  const [lidasInd, lidaGeral] = await Promise.all([
+    Promise.all(aLer.map((f) => lerFonte(f, deps))),
+    geral ? lerFonte(geral, deps) : Promise.resolve(undefined),
+  ]);
+  const porUrl = new Map<string, IndividualLida>(lidasInd.map((l) => [l.fonte.url, l]));
+
+  // Fonte do cargo do grupo: a lista de denominações, ou o motivo de ela não ter vindo.
+  const geralContribuiu = lidaGeral !== undefined && contribuiu(lidaGeral);
+  const listaCargos: ListaCargos | undefined =
+    geral && geral.casamento === "cargo"
+      ? geralContribuiu
+        ? { url: geral.url, cargos: listaDeCargos(lidaGeral!.conteudo!) }
+        : { url: geral.url, erro: lidaGeral?.erro ?? MOTIVO_PAGINA_SEM_CONTEUDO }
+      : undefined;
+
+  const vereditos = ligacoes.map((l) =>
+    l.fonte
+      ? compararContatoIndividual({ contato: l.contato, fonte: l.fonte, lida: porUrl.get(l.fonte.url)!, listaCargos, grupoCanonico })
+      : { resultado: compararContatoSemIndividual(l.contato, { grupoCanonico, listaCargos, uf: ufDoContato(l.contato) }), nomeConfirmado: false, lidaComConteudo: false, novos: [] as PessoaSite[] },
+  );
+
+  const lidas = lidasInd.filter(individualComConteudo).length;
+  const caidas = lidasInd.length - lidas;
+  const individuais = { lidas, caidas };
+  const geralFalhou = geral !== undefined && !geralContribuiu;
+
+  // Nenhuma fonte, de grupo ou individual, lida com conteúdo: grupo inacessível, como sempre.
+  if (aLer.length + (geral ? 1 : 0) > 0 && lidas === 0 && (geral === undefined || geralFalhou)) {
+    const motivo = [
+      geral ? `${identificarFonte(geral)}: ${lidaGeral?.erro ?? MOTIVO_PAGINA_SEM_CONTEUDO}` : undefined,
+      caidas > 0 ? textoIndividuaisCaidas(caidas) : undefined,
+    ].filter(Boolean).join(" · ");
+    return { ...marcarFonteInacessivel(grupo, contatos, geral?.url, motivo, grupoCanonico), individuais };
+  }
+
+  // GUARDA DE GRUPO (§4.3): duas ou mais individuais lidas com conteúdo e nenhuma confirmou
+  // o nome do seu contato é layout que mudou ou bloqueio devolvendo outra página, nunca
+  // todo mundo saindo de uma vez. Indeterminado, com o motivo, sem novos.
+  const confirmadas = vereditos.filter((v) => v.nomeConfirmado).length;
+  if (lidas >= MIN_CONTATOS_LEITURA_SUSPEITA && confirmadas === 0) {
+    return { ...marcarFonteInacessivel(grupo, contatos, geral?.url, MOTIVO_LEITURA_SUSPEITA, grupoCanonico), individuais };
+  }
+
+  const erros = [
+    ...(geralFalhou ? [`${identificarFonte(geral!)}: ${lidaGeral?.erro ?? MOTIVO_PAGINA_SEM_CONTEUDO}`] : []),
+    ...lidasInd.filter((l) => !individualComConteudo(l)).map((l) => `${l.fonte.url}: ${l.erro ?? MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO}`),
+  ];
+  // Fonte de grupo que compõe pessoas (não é o caso do catálogo de hoje): só propõe inclusão.
+  const novosDaGeral =
+    geral && geral.casamento !== "cargo" && geralContribuiu
+      ? novosForaDaPlanilha(marcarProveniencia(lidaGeral!.conteudo!.pessoas, geral), contatos)
+      : [];
+  return {
+    grupo,
+    ...(geral ? { fonteUrl: geral.url } : {}),
+    semFonte: false,
+    contatos: vereditos.map((v) => v.resultado),
+    novos: [...vereditos.flatMap((v) => v.novos), ...novosDaGeral],
+    ...(erros.length > 0 ? { erroFonte: erros.join(" · ") } : {}),
+    individuais,
+  };
+}
+
 /**
  * Anexa a auditoria de endereço a cada contato do grupo. Passada POSTERIOR de
  * propósito: o endereço não depende da fonte oficial, então não entra em
@@ -279,7 +405,8 @@ function resumir(grupos: ResultadoGrupo[]): ResumoAnalise {
       resumo[c.semaforo] += 1;
       if (c.endereco?.situacao === "pendente") resumo.enderecosAConfirmar += 1;
       if (c.possivelSaida) resumo.possivelSaida += 1;
-      if (g.semFonte) resumo.contatosSemFonte += 1;
+      // Grupo sem fonte, ou contato de grupo com individuais que não tem a sua ("cadastrar fonte").
+      if (g.semFonte || c.camposDivergentes.some((d) => d.campo === "fonte")) resumo.contatosSemFonte += 1;
     }
   }
   return resumo;

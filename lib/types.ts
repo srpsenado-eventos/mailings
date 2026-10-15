@@ -153,6 +153,8 @@ export interface ResultadoGrupo {
    * não oficial — sinalizado ao usuário.
    */
   viaPesquisaAmpla?: boolean;
+  /** Páginas individuais ligadas a contatos do grupo: lidas com conteúdo e caídas (spec 2026-10-15 §6.1). */
+  individuais?: { lidas: number; caidas: number };
   /**
    * Quando o rótulo da planilha não casa nenhum grupo cadastrado (semFonte),
    * nomes cadastrados mais próximos para orientar o usuário a alinhar a planilha.

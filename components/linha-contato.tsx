@@ -9,7 +9,7 @@ import {
   etiquetaDeEndereco,
   etiquetasDoContato,
   motivoDoContato,
-  procedenciaNomeCargo,
+  procedenciaDoContato,
   situacaoDoContato,
   textoDataHora,
   textoEnderecoParaCopiar,
@@ -152,7 +152,7 @@ function BlocoGoverno({ e }: { e: EleicaoGovernoContato }) {
 
 function Detalhe({ c, g, retrato, eleicaoLigada }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato; eleicaoLigada: boolean }) {
   const cartoes = detalhesDoContato(c, g);
-  const p = procedenciaNomeCargo(g);
+  const procedencia = procedenciaDoContato(c, g);
   return (
     <div className="space-y-4 border-t border-separador bg-fundo/60 px-4 py-4">
       {cartoes.length > 0 && (
@@ -168,6 +168,7 @@ function Detalhe({ c, g, retrato, eleicaoLigada }: { c: ResultadoContato; g: Res
               <div className="mt-2 text-xs text-cinza-claro">{d.origem}</div>
               <div className="text-sm font-medium">{d.valorReferencia || "—"}</div>
               {d.copiavel && <BotaoCopiar texto={d.copiavel} />}
+              {d.url && <a href={d.url} target="_blank" rel="noreferrer" className="mt-1 block text-[11px] text-acao underline break-all">abrir a página desta referência</a>}
               {d.coerencias.map((t) => <div key={t} className="mt-1.5 text-xs text-atencao">{t}</div>)}
             </div>
           ))}
@@ -179,9 +180,9 @@ function Detalhe({ c, g, retrato, eleicaoLigada }: { c: ResultadoContato; g: Res
       <div>
       <h3 className="text-xs font-semibold uppercase tracking-wide text-cinza-claro">De onde veio cada resposta</h3>
       <ul className="mt-1 text-xs leading-relaxed text-cinza">
-        {p && (
-          <li>Nome e cargo: {p.url ? <a href={p.url} target="_blank" rel="noreferrer" className="text-acao underline">{p.texto}</a> : p.texto}, lido em {textoDataHora(retrato.geradoEm)}</li>
-        )}
+        {procedencia.map((p) => (
+          <li key={p.rotulo}>{p.rotulo}: {p.url ? <a href={p.url} target="_blank" rel="noreferrer" className="text-acao underline">{p.texto}</a> : p.texto}, lido em {textoDataHora(retrato.geradoEm)}</li>
+        ))}
         <li>Tratamento e endereçamento: tabela de protocolo (Posse2027_TabelaTratamentos.xlsx)</li>
         {retrato.planilhaEnderecos && <li>Endereço: {retrato.planilhaEnderecos.nome}</li>}
       </ul>

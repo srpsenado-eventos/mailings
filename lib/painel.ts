@@ -90,6 +90,9 @@ function etiquetaDoCampo(c: ResultadoContato, campo: CampoComparado): Etiqueta |
   if (coerenciasDo(c, campo).length > 0 || comp?.situacao === "divergente") {
     return { campo, texto: `${rotulo} diverge`, tom: "atencao", explicacao: doSite ? EXPLICACAO.divergeSite : EXPLICACAO.divergeProtocolo };
   }
+  if (comp?.situacao === "nao_verificado") {
+    return { campo, texto: `${rotulo} não verificado`, tom: "neutro", explicacao: EXPLICACAO.naoVerificado };
+  }
   if (!comp) return { campo, texto: `${rotulo} não verificado`, tom: "neutro", explicacao: EXPLICACAO.naoVerificado };
   if (comp.situacao === "confere") {
     return { campo, texto: `${rotulo} confere`, tom: "ok", explicacao: doSite ? EXPLICACAO.confereSite : EXPLICACAO.confereProtocolo };
@@ -197,7 +200,7 @@ export function motivoDoContato(c: ResultadoContato, g: ResultadoGrupo): string 
   if (c.possivelSaida) return "Não consta na fonte: confirmar se saiu";
   if (g.semFonte) return "Sem fonte cadastrada";
   if (g.fonteInacessivel) return "Fonte fora do ar: confira à mão";
-  if (c.semaforo === "indeterminado") return "Não verificado: uma fonte não respondeu";
+  if (c.semaforo === "indeterminado") return g.individuais && c.observacao ? c.observacao : "Não verificado: uma fonte não respondeu";
   return undefined;
 }
 
@@ -210,9 +213,12 @@ export interface DetalheCampo {
   valorReferencia: string;
   copiavel?: string;
   coerencias: string[];
+  /** Página de onde veio a referência deste campo, quando o retrato a registra (fontes individuais). */
+  url?: string;
 }
 
 const TEXTO_FONTE_NAO_INFORMA = "o site não informa";
+const TEXTO_NAO_VERIFICADO = "não verificado nesta varredura";
 const TEXTO_SEM_REGRA = "sem regra de protocolo para este cargo";
 const SUFIXO_VIA_IA = " (via IA — confira)";
 
@@ -224,6 +230,7 @@ function valorReferenciaDe(comp: ComparacaoCampo | undefined): string {
   if (!comp) return "";
   if (comp.situacao === "fonte_nao_informa") return TEXTO_FONTE_NAO_INFORMA;
   if (comp.situacao === "sem_regra") return TEXTO_SEM_REGRA;
+  if (comp.situacao === "nao_verificado") return TEXTO_NAO_VERIFICADO;
   const valor = comp.valorEsperado ?? "";
   return valor && comp.origemValor === "conhecimento" ? `${valor}${SUFIXO_VIA_IA}` : valor;
 }
@@ -244,6 +251,7 @@ export function detalhesDoContato(c: ResultadoContato, _g: ResultadoGrupo): Deta
       origem: origemDe(campo),
       valorReferencia: valorReferenciaDe(comp),
       ...(copiavel ? { copiavel } : {}),
+      ...(comp?.fonteUrl ? { url: comp.fonteUrl } : {}),
       coerencias: coerencias.map(textoCoerencia),
     });
   }
@@ -419,6 +427,31 @@ export function procedenciaNomeCargo(g: ResultadoGrupo): { texto: string; url?: 
   if (g.semFonte) return undefined;
   if (g.fonteUrl && g.fonteUrl.startsWith("http")) return { texto: g.fonteUrl, url: g.fonteUrl };
   return { texto: "conhecimento da IA, confira" };
+}
+
+/**
+ * Rodapé "De onde veio cada resposta", por contato. Grupo com fontes individuais: o nome vem da
+ * página do contato e o cargo da fonte do cargo (a geral, ou a mesma página). Grupo comum: a
+ * linha única de `procedenciaNomeCargo`.
+ */
+export function procedenciaDoContato(c: ResultadoContato, g: ResultadoGrupo): { rotulo: string; texto: string; url?: string }[] {
+  if (!g.individuais) {
+    const p = procedenciaNomeCargo(g);
+    return p ? [{ rotulo: "Nome e cargo", ...p }] : [];
+  }
+  const linhas: { rotulo: string; texto: string; url?: string }[] = [];
+  const nome = comparacaoDeValor(c, "nome")?.fonteUrl ?? c.fonteUrl;
+  if (nome) linhas.push({ rotulo: "Nome", texto: nome, url: nome });
+  const cargo = comparacaoDeValor(c, "cargo")?.fonteUrl;
+  if (cargo) linhas.push({ rotulo: "Cargo", texto: cargo, url: cargo });
+  return linhas;
+}
+
+/** "22 páginas individuais lidas · 2 inacessíveis", no cabeçalho do grupo. */
+export function textoIndividuais(i: { lidas: number; caidas: number }): string {
+  const lidas = i.lidas === 1 ? "1 página individual lida" : `${i.lidas} páginas individuais lidas`;
+  if (i.caidas === 0) return lidas;
+  return `${lidas} · ${i.caidas} ${i.caidas === 1 ? "inacessível" : "inacessíveis"}`;
 }
 
 /** "01/10, 14h12", no fuso de Brasília, como o cabeçalho do mockup. */

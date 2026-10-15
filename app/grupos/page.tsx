@@ -5,18 +5,19 @@ import type { GrupoCadastro } from "@/lib/types";
 export const runtime = "nodejs";
 
 function FonteStatus({ grupo }: { grupo: GrupoCadastro }) {
-  if (!grupo.temFonte) {
-    return <span className="text-amber-600">— sem fonte</span>;
-  }
+  if (!grupo.temFonte) return <span className="text-amber-600">— sem fonte</span>;
   return (
-    <a
-      href={grupo.fonteUrl}
-      target="_blank"
-      rel="noreferrer"
-      className="text-blue-700 underline break-all"
-    >
-      {grupo.fonteUrl}
-    </a>
+    <div className="space-y-1">
+      {grupo.fonteUrl && (
+        <div>
+          <a href={grupo.fonteUrl} target="_blank" rel="noreferrer" className="text-blue-700 underline break-all">{grupo.fonteUrl}</a>
+          {grupo.camposFontePrimaria && <span className="ml-2 text-xs text-gray-500">(referência de: {grupo.camposFontePrimaria.join(", ")})</span>}
+        </div>
+      )}
+      {grupo.fontesIndividuais > 0 && (
+        <div className="text-xs text-gray-600">{grupo.fontesIndividuais} {grupo.fontesIndividuais === 1 ? "fonte individual" : "fontes individuais"} (uma página por contato)</div>
+      )}
+    </div>
   );
 }
 

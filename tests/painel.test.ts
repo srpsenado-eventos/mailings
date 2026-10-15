@@ -10,12 +10,14 @@ import {
   linhasDoEndereco,
   montarRetrato,
   motivoDoContato,
+  procedenciaDoContato,
   procedenciaNomeCargo,
   resumoDoGrupo,
   situacaoDoContato,
   textoCabecalhoWeb,
   textoDataHora,
   textoEnderecoParaCopiar,
+  textoIndividuais,
   textoNumeroNaBase,
 } from "@/lib/painel";
 import { ColunaFaltanteError } from "@/lib/planilha";
@@ -692,5 +694,76 @@ describe("textoNumeroNaBase", () => {
     expect(textoNumeroNaBase({ ...base, acimaDoLimite: 1, foraDaPosse: 0, naoPrioritarios: 1 })).toBe(
       "Número acima de 6 na base inteira: 1 endereço (1 fora do painel: 0 fora da Posse, 1 não prioritário)",
     );
+  });
+});
+
+describe("fontes individuais no painel (spec 2026-10-15 §6.1)", () => {
+  const grupoIndividuais: ResultadoGrupo = { grupo: "Ministros de Estado", fonteUrl: "https://www.gov.br/planalto/lista", semFonte: false, contatos: [], novos: [], individuais: { lidas: 36, caidas: 2 } };
+  const contato: ResultadoContato = {
+    contato: { nome: "Ana", grupo: "Ministros de Estado", cargo: "Ministra de Estado do Exemplo" },
+    semaforo: "verde", score: 1, origem: "oficial", fonteUrl: "https://www.gov.br/exemplo/ministra",
+    comparacoes: [
+      { campo: "nome", valorPlanilha: "Ana", valorEsperado: "Ana", situacao: "confere", origemValor: "pagina", fonteUrl: "https://www.gov.br/exemplo/ministra" },
+      { campo: "cargo", valorPlanilha: "Ministra de Estado do Exemplo", situacao: "nao_verificado", fonteUrl: "https://www.gov.br/planalto/lista" },
+    ],
+    camposDivergentes: [],
+  };
+
+  test("nao_verificado vira etiqueta neutra 'Cargo não verificado' e não pede revisão", () => {
+    const etiquetas = etiquetasDoContato(contato, grupoIndividuais);
+    expect(etiquetas.find((e) => e.campo === "cargo")).toMatchObject({ texto: "Cargo não verificado", tom: "neutro" });
+    expect(situacaoDoContato(contato, grupoIndividuais).texto).toBe("Nada a revisar");
+  });
+
+  test("detalhe traz a URL da fonte de cada campo e o texto de não verificado", () => {
+    const d = detalhesDoContato(contato, grupoIndividuais);
+    expect(d.find((x) => x.campo === "nome")?.url).toBe("https://www.gov.br/exemplo/ministra");
+    expect(d.find((x) => x.campo === "cargo")).toMatchObject({ url: "https://www.gov.br/planalto/lista", valorReferencia: "não verificado nesta varredura" });
+    expect(d.find((x) => x.campo === "tratamento")?.url).toBeUndefined();
+  });
+
+  test("procedência por contato: nome pela individual, cargo pela geral; grupo comum mantém a linha única", () => {
+    expect(procedenciaDoContato(contato, grupoIndividuais)).toEqual([
+      { rotulo: "Nome", texto: "https://www.gov.br/exemplo/ministra", url: "https://www.gov.br/exemplo/ministra", lida: true },
+      { rotulo: "Cargo", texto: "https://www.gov.br/planalto/lista", url: "https://www.gov.br/planalto/lista", lida: false },
+    ]);
+    expect(procedenciaDoContato({ ...contato, comparacoes: [], fonteUrl: undefined }, grupoComFonte)).toEqual([
+      { rotulo: "Nome e cargo", texto: "https://orgao.gov.br", url: "https://orgao.gov.br", lida: true },
+    ]);
+  });
+
+  test("procedência: campo não verificado sai 'lida: false', campo conferido sai 'lida: true'", () => {
+    const invertido: ResultadoContato = {
+      ...contato,
+      comparacoes: [
+        { campo: "nome", valorPlanilha: "Ana", situacao: "nao_verificado", fonteUrl: "https://www.gov.br/exemplo/ministra" },
+        { campo: "cargo", valorPlanilha: "Ministra de Estado do Exemplo", valorEsperado: "Ministra de Estado do Exemplo", situacao: "confere", origemValor: "pagina", fonteUrl: "https://www.gov.br/planalto/lista" },
+      ],
+    };
+    expect(procedenciaDoContato(invertido, grupoIndividuais).map((l) => [l.rotulo, l.lida])).toEqual([["Nome", false], ["Cargo", true]]);
+  });
+
+  test("governador sem fonte individual sai 'Sem fonte' com a observação como motivo, não 'Nada a revisar'", () => {
+    const grupoGov: ResultadoGrupo = { grupo: "Governadores", semFonte: false, contatos: [], novos: [], individuais: { lidas: 22, caidas: 0 } };
+    const semFonte: ResultadoContato = {
+      contato: { nome: "Beto", grupo: "Governadores", cargo: "Governador do Estado de Mato Grosso" },
+      semaforo: "vermelho", score: 0, origem: "oficial",
+      comparacoes: [],
+      camposDivergentes: [{ campo: "fonte", valorPlanilha: "sem URL cadastrada" }],
+      observacao: "Sem fonte individual para a UF MT",
+    };
+    expect(situacaoDoContato(semFonte, grupoGov)).toMatchObject({ texto: "Sem fonte", tom: "neutro" });
+    expect(motivoDoContato(semFonte, grupoGov)).toBe("Sem fonte individual para a UF MT");
+  });
+
+  test("motivo do contato indeterminado num grupo com individuais é a observação dele", () => {
+    const caido: ResultadoContato = { ...contato, semaforo: "indeterminado", observacao: "Página individual inacessível: HTTP 403" };
+    expect(motivoDoContato(caido, grupoIndividuais)).toBe("Página individual inacessível: HTTP 403");
+  });
+
+  test("textoIndividuais", () => {
+    expect(textoIndividuais({ lidas: 22, caidas: 0 })).toBe("22 páginas individuais lidas");
+    expect(textoIndividuais({ lidas: 36, caidas: 2 })).toBe("36 páginas individuais lidas · 2 inacessíveis");
+    expect(textoIndividuais({ lidas: 1, caidas: 1 })).toBe("1 página individual lida · 1 inacessível");
   });
 });

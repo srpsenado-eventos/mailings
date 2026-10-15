@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { buscarFontePrimaria, resolverGrupoEFonte, listarGruposComFonte } from "@/lib/catalogo";
-import type { GrupoCatalogo } from "@/lib/types";
+import { buscarFontePrimaria, fonteIndividualDe, resolverGrupoEFonte, listarGruposComFonte } from "@/lib/catalogo";
+import type { FonteIndividual, GrupoCatalogo } from "@/lib/types";
+import { CATALOGO } from "@/data/catalogo";
 
 /** Açúcar para declarar um grupo com uma única fonte ativa. */
 function grupoComFonte(nome: string, url: string): GrupoCatalogo {
@@ -262,5 +263,71 @@ describe("listarGruposComFonte", () => {
     const grupos = listarGruposComFonte(entrada);
     expect(grupos.map((g) => g.nome)).toEqual(["Assessorias", "Zeladoria"]);
     expect(entrada.map((g) => g.nome)).toEqual(["Zeladoria", "Assessorias"]);
+  });
+});
+
+describe("fonteIndividualDe", () => {
+  const porUf: FonteIndividual[] = [
+    { url: "https://go.gov.br/governador", ativo: true, chave: { uf: "GO" }, campos: ["nome", "cargo"] },
+    { url: "https://mg.gov.br/governador", ativo: false, chave: { uf: "MG" }, campos: ["nome", "cargo"] },
+  ];
+  const porNome: FonteIndividual[] = [
+    { url: "https://www.gov.br/x/ministra", ativo: true, chave: { nome: "Ana Maria Política Completa" }, campos: ["nome"], navegador: "janela" },
+  ];
+
+  test("governador casa pela UF lida do Cargo quando o Departamento está vazio", () => {
+    const f = fonteIndividualDe({ nome: "Fulano", grupo: "Governadores", departamento: "", cargo: "Governador do Estado de Goiás" }, porUf);
+    expect(f?.url).toBe("https://go.gov.br/governador");
+  });
+
+  test("fonte inativa não casa, e UF não reconhecida não casa", () => {
+    expect(fonteIndividualDe({ nome: "F", grupo: "G", cargo: "Governador do Estado de Minas Gerais" }, porUf)).toBeUndefined();
+    expect(fonteIndividualDe({ nome: "F", grupo: "G", cargo: "Governador" }, porUf)).toBeUndefined();
+  });
+
+  test("ministro casa pelo nome com igualdade normalizada: acento, caixa e tratamento não importam", () => {
+    expect(fonteIndividualDe({ nome: "Ministra ANA MARIA POLITICA COMPLETA", grupo: "M" }, porNome)?.url).toBe("https://www.gov.br/x/ministra");
+  });
+
+  test("nome parcial ou diferente não casa (régua da comparação do campo Nome)", () => {
+    expect(fonteIndividualDe({ nome: "Ana Maria Completa", grupo: "M" }, porNome)).toBeUndefined();
+    expect(fonteIndividualDe({ nome: "Ana Maria Política Completa Souza", grupo: "M" }, porNome)).toBeUndefined();
+  });
+});
+
+describe("resolverGrupoEFonte com fontes individuais", () => {
+  const governadores: GrupoCatalogo = {
+    nome: "Governadores",
+    fontes: [],
+    fontesIndividuais: [{ url: "https://go.gov.br/governador", ativo: true, chave: { uf: "GO" }, campos: ["nome", "cargo"] }],
+  };
+
+  test("grupo só com individuais ativas é o dono, e devolve as individuais ativas", () => {
+    const r = resolverGrupoEFonte("Governadores", [governadores]);
+    expect(r.grupoCanonico).toBe("Governadores");
+    expect(r.fontes).toEqual([]);
+    expect(r.fontesIndividuais.map((f) => f.url)).toEqual(["https://go.gov.br/governador"]);
+  });
+
+  test("grupo sem individuais devolve lista vazia (nunca undefined)", () => {
+    expect(resolverGrupoEFonte("STF", [grupoComFonte("STF", "https://a.gov.br")]).fontesIndividuais).toEqual([]);
+  });
+
+  test("listarGruposComFonte conta grupo só com individuais como 'com fonte' e expõe os campos da primária", () => {
+    const ministros: GrupoCatalogo = {
+      nome: "Ministros",
+      fontes: [{ url: "https://www.gov.br/planalto/lista", ativo: true, campos: ["cargo"], casamento: "cargo", navegador: "janela" }],
+      fontesIndividuais: [{ url: "https://www.gov.br/x/ministra", ativo: true, chave: { nome: "A" }, campos: ["nome"] }],
+    };
+    const lista = listarGruposComFonte([governadores, ministros]);
+    expect(lista.find((g) => g.nome === "Governadores")).toMatchObject({ temFonte: true, fonteUrl: undefined, fontesIndividuais: 1 });
+    expect(lista.find((g) => g.nome === "Ministros")).toMatchObject({ temFonte: true, fontesIndividuais: 1, camposFontePrimaria: ["cargo"] });
+  });
+
+  test("rótulo 'Governadores Eleitos' casa o grupo exato e não herda as individuais de Governadores", () => {
+    const r = resolverGrupoEFonte("Governadores Eleitos", CATALOGO);
+    expect(r.grupoCanonico).toBe("Governadores Eleitos");
+    expect(r.fontesIndividuais).toEqual([]);
+    expect(r.fontes).toEqual([]);
   });
 });

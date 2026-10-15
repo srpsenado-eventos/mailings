@@ -33,9 +33,10 @@ const deps: Dependencias = {
       ? {
           grupoCanonico: "ORG",
           fontes: [{ url: "https://orgao.gov.br", ativo: true }],
+          fontesIndividuais: [],
           sugestoes: [],
         }
-      : { fontes: [], sugestoes: [] },
+      : { fontes: [], fontesIndividuais: [], sugestoes: [] },
   raspar: async (_fonte) => fonte,
   extrairComposicao: async () => [], // sem IA → usa o determinístico do scrape
 };
@@ -161,7 +162,7 @@ describe("analisar", () => {
   test("grupo casado sem URL oficial + IA → via pesquisa ampla", async () => {
     const depsSemUrl: Dependencias = {
       ...deps,
-      resolverFonte: () => ({ grupoCanonico: "ORG", fontes: [], sugestoes: [] }),
+      resolverFonte: () => ({ grupoCanonico: "ORG", fontes: [], fontesIndividuais: [], sugestoes: [] }),
       extrairComposicao: async () => [
         { nome: "Ana Maria Política Completa", cargo: "Presidente", origem: "conhecimento" },
       ],
@@ -173,7 +174,7 @@ describe("analisar", () => {
   test("grupo desconhecido com sugestões → semFonte + sugestoesCadastro", async () => {
     const depsSug: Dependencias = {
       ...deps,
-      resolverFonte: () => ({ fontes: [], sugestoes: ["Conselho Nacional de Justiça (CNJ)"] }),
+      resolverFonte: () => ({ fontes: [], fontesIndividuais: [], sugestoes: ["Conselho Nacional de Justiça (CNJ)"] }),
     };
     const r = await analisar("c.xlsx", [contatos[1]], depsSug);
     const g = r.grupos[0];
@@ -289,6 +290,7 @@ describe("analisar com duas fontes no mesmo grupo", () => {
         { url: SECUNDARIA, ativo: true, rotulo: "fora de exercício", propoeInclusao: true },
       ],
       ufs: ["MA", "PI"],
+      fontesIndividuais: [],
       sugestoes: [],
     }),
     raspar: async (fonte) =>
@@ -483,6 +485,7 @@ describe("Senadores de ponta a ponta (fixtures das duas páginas reais)", () => 
       grupoCanonico: grupoMA.nome,
       fontes: grupoMA.fontes.filter((f) => f.ativo),
       ufs: grupoMA.ufs,
+      fontesIndividuais: [],
       sugestoes: [],
     }),
     raspar: async (fonte) =>
@@ -542,6 +545,7 @@ describe("Senadores de ponta a ponta (fixtures das duas páginas reais)", () => 
         grupoCanonico: grupoMA.nome,
         fontes: [grupoMA.fontes[0]],
         ufs: grupoMA.ufs,
+        fontesIndividuais: [],
         sugestoes: [],
       }),
     };
@@ -634,6 +638,7 @@ describe("TCU de ponta a ponta (fixture real da página montada pelo navegador)"
     resolverFonte: () => ({
       grupoCanonico: GRUPO,
       fontes: [{ url: URL_TCU, ativo: true, navegador: true }],
+      fontesIndividuais: [],
       sugestoes: [],
     }),
     raspar: async () => extrairConteudo(html, URL_TCU),
@@ -694,7 +699,7 @@ describe("TCU de ponta a ponta (fixture real da página montada pelo navegador)"
     // Arrange: grupo sem URL; a IA devolve gente que não é nenhum dos contatos. A leitura é
     // suspeita, mas sem URL não há página a conferir: o caminho é o de "cadastrar fonte".
     const depsIa: Dependencias = {
-      resolverFonte: () => ({ grupoCanonico: GRUPO, fontes: [], sugestoes: [] }),
+      resolverFonte: () => ({ grupoCanonico: GRUPO, fontes: [], fontesIndividuais: [], sugestoes: [] }),
       raspar: async () => {
         throw new Error("não deveria raspar");
       },

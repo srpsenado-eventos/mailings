@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { CATALOGO } from "@/data/catalogo";
+import { normalizarNome } from "@/lib/normalize";
 
 describe("catálogo real (data/catalogo.ts)", () => {
-  test("tem os 33 grupos migrados do banco", () => {
-    expect(CATALOGO).toHaveLength(33);
+  test("tem os 34 grupos (33 migrados do banco + Governadores Eleitos)", () => {
+    expect(CATALOGO).toHaveLength(34);
   });
 
   test("tem as 24 fontes cadastradas (21 migradas do banco + 3 de fora de exercício)", () => {
@@ -11,10 +12,70 @@ describe("catálogo real (data/catalogo.ts)", () => {
     expect(total).toBe(24);
   });
 
-  test("só a fonte do TCU é lida por navegador, e ela é do domínio oficial", () => {
-    const porNavegador = CATALOGO.flatMap((g) => g.fontes.filter((f) => f.navegador).map((f) => ({ grupo: g.nome, url: f.url })));
-    expect(porNavegador).toEqual([{ grupo: "Ministros do TCU", url: "https://portal.tcu.gov.br/autoridades" }]);
-    expect(porNavegador[0].url).toMatch(/^https:\/\/[a-z.]+\.gov\.br\//);
+  test("navegador headless só no MS (governador) e no TCU; 'janela' só em páginas do gov.br federal", () => {
+    const headless = CATALOGO.flatMap((g) => [
+      ...g.fontes.filter((f) => f.navegador === true).map((f) => f.url),
+      ...(g.fontesIndividuais ?? []).filter((f) => f.navegador === true).map((f) => f.url),
+    ]);
+    expect(headless).toEqual(["https://www.transparencia.ms.gov.br/#/QuemEQuem", "https://portal.tcu.gov.br/autoridades"]);
+    const janela = CATALOGO.flatMap((g) => [
+      ...g.fontes.filter((f) => f.navegador === "janela").map((f) => f.url),
+      ...(g.fontesIndividuais ?? []).filter((f) => f.navegador === "janela").map((f) => f.url),
+    ]);
+    expect(janela.length).toBe(39);
+    expect(janela.every((u) => u.startsWith("https://www.gov.br/"))).toBe(true);
+  });
+
+  describe("fontes individuais (spec 2026-10-15)", () => {
+    const DOMINIO_OFICIAL = /^https:\/\/[a-z0-9.-]+\.(gov|jus|leg|mp|def)\.br(\/|$)/i;
+    const comIndividuais = CATALOGO.filter((g) => (g.fontesIndividuais ?? []).length > 0);
+
+    test("só Governadores e Ministros de Estado têm fontes individuais", () => {
+      expect(comIndividuais.map((g) => g.nome).sort()).toEqual(["Governadores", "Ministros de Estado"]);
+    });
+
+    test("Governadores: 22 individuais ativas, por UF, nome e cargo, sem fonte de grupo", () => {
+      const g = CATALOGO.find((x) => x.nome === "Governadores")!;
+      expect(g.fontes).toEqual([]);
+      const ind = g.fontesIndividuais ?? [];
+      expect(ind).toHaveLength(22);
+      expect(ind.every((f) => f.ativo && "uf" in f.chave && f.campos.length === 2)).toBe(true);
+      const ufs = ind.map((f) => ("uf" in f.chave ? f.chave.uf : "")).sort();
+      expect(ufs).toEqual(["AC","AL","AM","AP","BA","CE","ES","GO","MA","MS","PA","PB","PI","PR","RJ","RN","RO","RR","RS","SE","SP","TO"]);
+    });
+
+    test("Ministros de Estado: geral é lista de cargos com janela; 38 individuais por nome; AGU e CGU cobrem cargo", () => {
+      const g = CATALOGO.find((x) => x.nome === "Ministros de Estado")!;
+      expect(g.fontes).toHaveLength(1);
+      expect(g.fontes[0]).toMatchObject({ ativo: true, casamento: "cargo", campos: ["cargo"], navegador: "janela" });
+      const ind = g.fontesIndividuais ?? [];
+      expect(ind).toHaveLength(38);
+      expect(ind.every((f) => f.ativo && "nome" in f.chave && f.navegador === "janela")).toBe(true);
+      const cobremCargo = ind.filter((f) => f.campos.includes("cargo")).map((f) => f.url).sort();
+      expect(cobremCargo).toEqual([
+        "https://www.gov.br/agu/pt-br/acesso-a-informacao/institucional/quem",
+        "https://www.gov.br/cgu/pt-br/composicao/ministro",
+      ]);
+    });
+
+    test("toda individual é de domínio oficial, tem campos com 'nome' e chave única no grupo", () => {
+      for (const g of comIndividuais) {
+        const ind = g.fontesIndividuais ?? [];
+        expect(ind.filter((f) => !DOMINIO_OFICIAL.test(f.url)).map((f) => f.url)).toEqual([]);
+        expect(ind.filter((f) => f.campos.length === 0 || !f.campos.includes("nome")).map((f) => f.url)).toEqual([]);
+        const chaves = ind.map((f) => ("uf" in f.chave ? `uf:${f.chave.uf}` : `nome:${normalizarNome(f.chave.nome)}`));
+        expect(new Set(chaves).size).toBe(chaves.length);
+      }
+    });
+
+    test("fonte 'casamento: cargo' só existe em grupo com individual ativa, e cobre só cargo", () => {
+      for (const g of CATALOGO) {
+        for (const f of g.fontes.filter((x) => x.casamento === "cargo")) {
+          expect(f.campos).toEqual(["cargo"]);
+          expect((g.fontesIndividuais ?? []).some((i) => i.ativo)).toBe(true);
+        }
+      }
+    });
   });
 
   test("todo grupo tem nome não-vazio", () => {

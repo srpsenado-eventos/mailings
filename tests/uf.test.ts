@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { siglaDaUf, UF_POR_EXTENSO, ufNoTexto } from "@/lib/uf";
+import { siglaDaUf, UF_POR_EXTENSO, ufDoContato, ufNoTexto } from "@/lib/uf";
 
 describe("siglaDaUf", () => {
   test("reconhece o nome por extenso do Departamento, com ou sem acento e caixa", () => {
@@ -41,5 +41,14 @@ describe("ufNoTexto", () => {
     expect(ufNoTexto("Governadora")).toBeUndefined();
     expect(ufNoTexto("")).toBeUndefined();
     expect(ufNoTexto(undefined)).toBeUndefined();
+  });
+});
+
+describe("ufDoContato", () => {
+  test("Departamento por extenso vence; depois o Cargo; depois o Órgão", () => {
+    expect(ufDoContato({ departamento: "GOIÁS", cargo: "Governador do Estado de Minas Gerais" })).toBe("GO");
+    expect(ufDoContato({ departamento: "", cargo: "Governador do Estado de Minas Gerais" })).toBe("MG");
+    expect(ufDoContato({ departamento: "", cargo: "Governador em Exercício", orgao: "Governo do Estado do Rio de Janeiro" })).toBe("RJ");
+    expect(ufDoContato({ departamento: "", cargo: "Ministro de Estado da Fazenda" })).toBeUndefined();
   });
 });

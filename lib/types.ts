@@ -86,9 +86,11 @@ export interface CampoDivergente {
  * `fonte_nao_informa` = o site não publica esse campo.
  * `sem_regra` = não há regra de protocolo aplicável (cargo não mapeado, ou contato sem cargo).
  * São coisas diferentes: a primeira é limite da fonte, a segunda é limite do cadastro de regras.
- * Nenhuma das duas é divergência.
+ * `nao_verificado` = a fonte daquele campo caiu, ou não existe para o contato; como
+ * `fonte_nao_informa`, não é divergência.
+ * Nenhuma das três é divergência.
  */
-export type SituacaoCampo = "confere" | "divergente" | "fonte_nao_informa" | "sem_regra";
+export type SituacaoCampo = "confere" | "divergente" | "fonte_nao_informa" | "sem_regra" | "nao_verificado";
 
 export interface ComparacaoCampo {
   campo: string;
@@ -105,6 +107,8 @@ export interface ComparacaoCampo {
    * há: a regra do grupo dá a correção objetiva, e `valorEsperado` a carrega.
    */
   achado?: AchadoCoerencia;
+  /** Página de onde saiu o valor esperado, ou que se tentou ler quando `nao_verificado` (spec 2026-10-15 §5.1). */
+  fonteUrl?: string;
 }
 
 export interface ResultadoContato {
@@ -149,6 +153,8 @@ export interface ResultadoGrupo {
    * não oficial — sinalizado ao usuário.
    */
   viaPesquisaAmpla?: boolean;
+  /** Páginas individuais ligadas a contatos do grupo: lidas com conteúdo e caídas (spec 2026-10-15 §6.1). */
+  individuais?: { lidas: number; caidas: number };
   /**
    * Quando o rótulo da planilha não casa nenhum grupo cadastrado (semFonte),
    * nomes cadastrados mais próximos para orientar o usuário a alinhar a planilha.
@@ -220,6 +226,10 @@ export interface GrupoCadastro {
   /** URL oficial primária ativa, se houver. */
   fonteUrl?: string;
   temFonte: boolean;
+  /** Quantidade de fontes individuais ativas (spec 2026-10-15). */
+  fontesIndividuais: number;
+  /** Campos que a fonte primária cobre, quando ela declara (`["cargo"]` na lista do Planalto). */
+  camposFontePrimaria?: readonly CampoFonte[];
 }
 
 /**
@@ -240,6 +250,9 @@ export interface ExtracaoTabela {
   secoes?: readonly string[];
 }
 
+/** Campos de que uma fonte é referência (spec 2026-10-15 §3.1). */
+export type CampoFonte = "nome" | "cargo";
+
 /** Fonte oficial de um grupo no catálogo versionado (`data/catalogo.ts`). */
 export interface FonteCatalogo {
   url: string;
@@ -257,11 +270,40 @@ export interface FonteCatalogo {
    */
   propoeInclusao?: boolean;
   /**
-   * A página monta a lista por JavaScript: é lida pelo Chrome local (`lib/navegador.ts`),
-   * não pelo `fetch`. Só em modo local; sem Chrome a fonte sai inacessível.
+   * `true`: a página monta a lista por JavaScript e é lida pelo Chrome local sem janela
+   * (`lib/navegador.ts`, caso TCU). `"janela"`: lida pelo Chrome com janela visível, numa
+   * sessão só por varredura — o gov.br responde CAPTCHA ao `fetch` e ao headless (spec
+   * 2026-10-15 §2.9). Só em modo local; sem Chrome a fonte sai inacessível.
    */
-  navegador?: true;
+  navegador?: true | "janela";
+  /** De quais campos esta fonte é referência. Ausente: nome e cargo (composição do grupo, regra atual). */
+  campos?: readonly CampoFonte[];
+  /**
+   * Ausente ou "pessoa": compõe o grupo com pessoas (regra atual). "cargo": a página é só
+   * uma lista de denominações de cargo — não casa ninguém pelo nome, não gera possível
+   * saída nem proposta de inclusão (spec 2026-10-15 §5.3).
+   */
+  casamento?: "pessoa" | "cargo";
 }
+
+/** Chave que liga uma fonte individual ao contato: a UF do cargo, ou o nome como está no Contatos. */
+export type ChaveFonteIndividual = { uf: string } | { nome: string };
+
+/**
+ * Página oficial de UM contato (spec 2026-10-15 §3). A ligação é pela chave, comparada com
+ * `ufDoContato` ou com `normalizarNome`; a página é a referência dos `campos` declarados.
+ */
+export interface FonteIndividual {
+  url: string;
+  ativo: boolean;
+  chave: ChaveFonteIndividual;
+  /** Obrigatório e sempre com "nome": `["nome", "cargo"]` ou `["nome"]`. */
+  campos: readonly CampoFonte[];
+  navegador?: true | "janela";
+}
+
+/** Uma fonte que o raspador sabe ler: o que `FonteCatalogo` e `FonteIndividual` têm em comum. */
+export type FonteLegivel = Pick<FonteCatalogo, "url" | "tabela" | "navegador">;
 
 /**
  * Grupo no catálogo versionado (`data/catalogo.ts`), com responsáveis internos
@@ -277,6 +319,8 @@ export interface GrupoCatalogo {
   emailResp2?: string;
   emailBackup?: string;
   fontes: FonteCatalogo[];
+  /** Páginas individuais, uma por contato, ligadas por UF ou por nome (spec 2026-10-15). */
+  fontesIndividuais?: readonly FonteIndividual[];
   /**
    * UFs que pertencem ao grupo, quando ele é uma faixa geográfica ("Senadores (Acre a
    * Goiás)"). Filtra **apenas** a proposta de inclusão: para casar contato existente a

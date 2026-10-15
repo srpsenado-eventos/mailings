@@ -7,7 +7,8 @@ import { resolverGrupoEFonte } from "@/lib/catalogo";
 import { modoDoApp } from "@/lib/modo";
 import { origemPermitida } from "@/lib/origem";
 import { montarRetrato } from "@/lib/painel";
-import { rasparFonte } from "@/lib/raspagem";
+import { abrirSessao } from "@/lib/navegador";
+import { RASPADORES_PADRAO, rasparFonte } from "@/lib/raspagem";
 import { extrairComposicao, diagnosticarIa } from "@/lib/gemini";
 
 const AVISO_NAO_GUARDADO = "A varredura terminou, mas o retrato não pôde ser guardado: na próxima abertura o app não a terá.";
@@ -32,13 +33,20 @@ export async function POST(req: NextRequest) {
 
     const { arquivoNome, contatos, arquivoEnderecosNome, enderecos, eleitos, deputadosAtuais, governadores, arquivosEleicao, baseEnderecos } = parsePayloadAnalise(corpo);
 
-    const deps: Dependencias = {
-      resolverFonte: (grupo) => resolverGrupoEFonte(grupo),
-      raspar: (fonte) => rasparFonte(fonte),
-      extrairComposicao: (grupoCanonico, textoLimpo) => extrairComposicao(grupoCanonico, textoLimpo),
-    };
-
-    const analisado = await analisar(arquivoNome, contatos, deps, enderecos);
+    // Sessão do Chrome com janela para as fontes `navegador: "janela"` (spec 2026-10-15 §4.2):
+    // aberta uma vez por varredura, lançada só se alguma fonte precisar, fechada sempre.
+    const sessao = abrirSessao();
+    let analisado;
+    try {
+      const deps: Dependencias = {
+        resolverFonte: (grupo) => resolverGrupoEFonte(grupo),
+        raspar: (fonte) => rasparFonte(fonte, { ...RASPADORES_PADRAO, porJanela: (url, opcoes) => sessao.raspar(url, opcoes) }),
+        extrairComposicao: (grupoCanonico, textoLimpo) => extrairComposicao(grupoCanonico, textoLimpo),
+      };
+      analisado = await analisar(arquivoNome, contatos, deps, enderecos);
+    } finally {
+      await sessao.fechar();
+    }
     // Eleição 2026: passada posterior, eixo próprio (spec 2026-10-05 §4.3).
     const resultado = eleitos || deputadosAtuais || governadores
       ? aplicarEleicao(analisado, eleitos ?? [], arquivosEleicao ?? [], deputadosAtuais, governadores)

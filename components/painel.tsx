@@ -10,6 +10,7 @@ import { avisoDaEleicao, ehFiltroEleicao, FILTROS_ELEICAO, secoesDeEleicao, seco
 import { PublicarButton } from "@/components/publicar-button";
 import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-contato";
 import { cartoesDoResumo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoCabecalhoWeb, textoDataHora, textoNumeroNaBase, type Filtro } from "@/lib/painel";
+import { autoridadesRepetidas, etiquetaDeRepeticao, textoRepetidas } from "@/lib/repetidos";
 import type { ResultadoGrupo, Retrato } from "@/lib/types";
 
 function EstadoDaFonte({ g }: { g: ResultadoGrupo }) {
@@ -51,6 +52,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
   const secoesGov = useMemo(() => (eleicaoLigada ? secoesDeGoverno(retrato.eleicao, filtro, busca) : []), [eleicaoLigada, retrato, filtro, busca]);
   const avisoEleicao = eleicaoLigada ? avisoDaEleicao(retrato.eleicao) : undefined;
   const grupos = useMemo(() => filtrarGrupos(retrato.grupos, filtro, busca, grupo), [retrato, filtro, busca, grupo]);
+  const repetidas = useMemo(() => autoridadesRepetidas(retrato.grupos), [retrato]);
   const deputados = useMemo(() => grupoDeputados(retrato.eleicao, { busca, filtro, grupo }), [retrato, busca, filtro, grupo]);
   const total = retrato.resumo.total;
   const visiveis = contarContatos(grupos);
@@ -87,6 +89,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
         </div>
         <div className="flex items-center gap-2">
           <Link href="/grupos" className="text-sm text-acao underline">Grupos cadastrados</Link>
+          {repetidas.length > 0 && <Link href="/repetidos" className="text-sm text-acao underline">{textoRepetidas(repetidas.length)}</Link>}
           {modo !== "web" && (onNovaVarredura ? (
             <button type="button" onClick={onNovaVarredura} className="rounded-md border border-borda-forte bg-cartao px-3 py-1.5 text-sm">Nova varredura</button>
           ) : (
@@ -180,7 +183,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
                   <div className={`${CLASSES_COLUNAS} text-xs text-cinza-claro`}>
                     <div>Contato</div><div>Cargo no cadastro</div><div>Campos conferidos</div><div>Situação</div>
                   </div>
-                  {g.contatos.map((c, i) => <LinhaContato key={`${c.contato.nome}-${i}`} c={c} g={g} retrato={retrato} eleicaoLigada={eleicaoLigada} />)}
+                  {g.contatos.map((c, i) => <LinhaContato key={`${c.contato.nome}-${i}`} c={c} g={g} retrato={retrato} eleicaoLigada={eleicaoLigada} repeticao={etiquetaDeRepeticao(repetidas, c, g.grupo)} />)}
                   {g.novos.map((n, i) => (
                     <LinhaNovo
                       key={`novo-${i}`}

@@ -27,7 +27,7 @@ import type {
  */
 
 export type Tom = "ok" | "atencao" | "ruim" | "neutro";
-export type CampoEtiqueta = "nome" | "cargo" | "tratamento" | "enderecamento" | "endereco" | "fonte" | "eleicao";
+export type CampoEtiqueta = "nome" | "cargo" | "tratamento" | "enderecamento" | "endereco" | "fonte" | "eleicao" | "grupo";
 
 export interface Etiqueta {
   campo: CampoEtiqueta;

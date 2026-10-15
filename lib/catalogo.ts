@@ -10,7 +10,7 @@ import type { FonteCatalogo, GrupoCadastro, GrupoCatalogo } from "@/lib/types";
  * Sessão Especial; ...; Ministros do STF"). Cada segmento é um grupo candidato
  * que pode ter fonte oficial cadastrada.
  */
-function segmentarGrupo(grupoNome: string): string[] {
+export function segmentarGrupo(grupoNome: string): string[] {
   return grupoNome
     .split(";")
     .map((s) => normalizarTexto(s))
@@ -20,7 +20,7 @@ function segmentarGrupo(grupoNome: string): string[] {
 const TAMANHO_MIN_SEGMENTO = 3;
 
 /** Casa um nome de grupo normalizado contra um segmento da planilha. */
-function casaSegmento(nomeNorm: string, seg: string): boolean {
+export function casaSegmento(nomeNorm: string, seg: string): boolean {
   if (seg.length < TAMANHO_MIN_SEGMENTO) return false; // guarda contra "pr" casar "presidente..."
   if (nomeNorm === seg) return true;
   // Contenção: a sigla curta da planilha ("cnj") cabe no nome formal cadastrado

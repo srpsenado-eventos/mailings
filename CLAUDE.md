@@ -1,6 +1,6 @@
 # CLAUDE.md — Fiscal de Mailings
 
-Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui. Última revisão: 2026-10-12.
+Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui. Última revisão: 2026-10-14.
 
 ## Contexto rápido
 
@@ -8,9 +8,9 @@ Web app interno do Senado Federal (Secretaria de Relações Públicas, GT Gestã
 
 Repositório remoto: `github.com/srpsenado-eventos/mailings`, branch base `main`; o trabalho sai em branches `feat/*` mescladas por PR.
 
-## Estado do projeto (2026-10-12)
+## Estado do projeto (2026-10-14)
 
-- Suíte: 41 arquivos, 788 testes, verde (2026-10-12). `npm run typecheck` limpo.
+- Suíte: 44 arquivos, 840 testes, verde (2026-10-14). `npm run typecheck` limpo.
 - Catálogo: 33 grupos, 24 fontes, 21 grupos com fonte, **12 sem fonte** (todo contato deles sai vermelho, ver semântica abaixo).
 - Auditoria de Tratamento e Endereçamento (spec de 2026-08-13) e Camada C (regras de nome, spec de 2026-09-18) estão em `main` desde setembro de 2026 (`lib/tratamento.ts`, `data/regras-nome.ts`).
 - **Dívidas conhecidas** (não corrigir de passagem; abrir tarefa própria):
@@ -50,6 +50,7 @@ Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**
 | 2026-10-05 | `eleitos-2026-e-ajustes-prodasen-design.md` | Eleitos 2026: reeleito e quem troca de Casa ficam no grupo atual (Ata 14), mandato novo vai para "Senadores/Deputados Federais Eleitos"; chave "Eleição 2026" no painel; tela local `/prodasen` com cadastro em lote no layout do Contatos e ajuste de endereço no formato de 23/09 | Vigente; D1 (eleitos no painel) implementado; D2 parcial: bloco do endereço de /prodasen implementado (spec 2026-10-06); cadastro em lote a implementar |
 | 2026-10-06 | `prodasen-ajuste-do-numero.md` | Ajuste do Número acima de 6 na base inteira; tela local `/prodasen` com a carga e os ajustes em .xlsx; total da base no painel | Vigente; substitui o formato de arquivo do §6.2 de 2026-10-05 |
 | 2026-10-12 | `deputados-no-painel-e-governadores-eleitos-design.md` | Grupo Deputados Federais montado da planilha da Câmara no painel e na web (sem e-mail, telefone, prédio e sala); governadores eleitos no eixo Eleição 2026; 2º turno só como UF pendente | Vigente; implementado |
+| 2026-10-14 | `autoridades-em-mais-de-um-grupo-design.md` | Pessoa em mais de um grupo: grupo do convite pela Nominata do GT (cargo atual vence "ex-"; entre atuais, o nível mais alto); página `/repetidos` e etiqueta vermelha "a ser convidada pelo grupo X"; cálculo na tela, sem coleta nova | Vigente; implementado |
 
 ## Princípios de implementação
 
@@ -66,6 +67,7 @@ Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**
 - **Fontes cadastradas à mão.** Nenhuma URL entra no catálogo por descoberta automática, busca ou IA. O Clovis fornece e confere cada uma.
 - **Camada D (endereço) é um eixo independente e não pinta o semáforo.** A planilha de endereços é opcional, lida no navegador (`lib/planilha-enderecos.ts`) e viaja no mesmo JSON (`enderecos`, `arquivoEnderecosNome`). A junção com o contato é pelo `Id` (nome só como fallback, e nome ambíguo não recebe endereço); entre várias linhas vale a marcada `Prioritário`, e várias prioritárias ou nenhuma é achado sem endereço. O orquestrador anexa `ResultadoContato.endereco` numa passada posterior, nos três caminhos (com fonte, sem fonte, fonte inacessível); ela não entra em `comparacoes` nem em `camposDivergentes` e nunca cria `possivelSaida`. `AuditoriaEndereco.formatado` **só existe quando `situacao === "completo"`**; tela e export não devem montar endereço "pronto para copiar" fora disso. CEP de 7 dígitos vira proposta de zero à esquerda **só em SP**, e continua proposta até os Correios confirmarem (Fase 2, bloqueada na chave). O campo `Número` comporta até 6 caracteres, contando espaço e qualquer sinal (regra do GT, 2026-10-04, `LIMITE_NUMERO` em `lib/endereco.ts`): acima disso é o achado `numero_longo`, pendência; o painel mede o valor do relatório (não o achado), então acusa e filtra também em retrato gravado antes da regra. O contador próprio é `resumo.enderecosAConfirmar` (só `pendente`).
 - **Eleição 2026 é um eixo independente e não pinta o semáforo.** As planilhas de `GT Posse/Eleitos 2026` são opcionais na Nova varredura (passo 3), lidas no navegador (`lib/planilha-eleitos.ts`, reconhecidas pela aba). `aplicarEleicao` (`lib/eleitos.ts`) roda depois de `analisar`: o destino vem do `Status do mandato` (reeleito e quem troca de Casa ficam no grupo atual, pela Ata 14 do GT Cerimonial; mandato novo vai para "Senadores/Deputados Federais Eleitos"); o Contatos só acha a linha e pega contradição, que vira `conferir`, nunca decisão. Casamento por nome com a UF do `Departamento` como guarda e `pontuarPessoa >= 1`. Governadores eleitos entram no mesmo eixo: `lib/eleitos-governo.ts` classifica a aba "Eleitos 1º turno" de `Governadores Eleitos 2026.xlsx` (`eleicaoGoverno` no contato; reeleito fica em Governadores, quem vai para outro cargo fica no atual pela Ata 14, mandato novo vai para "Governadores Eleitos"), e a aba "2º turno" vira só a lista de UFs pendentes, sem classificar ninguém. A UF do governador sai do Departamento; se vazio, do Cargo ou do Órgão (`ufNoTexto`, que só reconhece a UF no fim do texto). Enquanto o grupo Deputados Federais não existe no Contatos, `lib/painel-deputados.ts` monta um grupo virtual na tela a partir da planilha da Câmara. Os deputados atuais vão para a web sem e-mail, telefone, prédio e sala.
+- **Autoridade em mais de um grupo é calculada na tela e não pinta o semáforo.** `lib/repetidos.ts` lê `retrato.grupos`, junta a mesma pessoa pelo nome (`normalizarNome`; o `Id` muda por grupo; nome parcial vira "Conferir") e escolhe o grupo do convite pela tabela `data/precedencia.ts` (Nominata do GT): cargo atual vence cargo de "ex-"; entre atuais, o nível mais alto; cargo fora da Nominata perde para quem está nela; empate, nenhum nível ou possível saída no vencedor ficam para "Conferir". Grupos de eleitos e o PILOTO ficam fora. Página `/repetidos` (local e web) e etiqueta vermelha "Autoridade a ser convidada pelo grupo X" na linha do grupo que não convida, fora de `etiquetasDoContato`.
 - **O retrato é a única persistência.** `lib/armazem.ts` grava o último `Retrato` em `.fiscal/retrato.json`, fora do git, com escrita atômica; um só, sem histórico. A cópia publicada no Blob (modo web) é um espelho enxuto dele, nunca outra fonte. O painel (`/`) lê o retrato; sem retrato, manda para `/nova-varredura`. A lógica de apresentação (etiquetas, situação, filtros, cartões, detalhe) é função pura em `lib/painel.ts`, testada; componentes só renderizam.
 - **Dois modos, um ponto de decisão.** `modoDoApp()` (`lib/modo.ts`, `FISCAL_MODO`) escolhe o armazém e a tela. Na Vercel o modo é sempre `web` (variável `VERCEL`), mesmo sem `FISCAL_MODO`. Local (padrão): `.fiscal/`, Nova varredura, botão "Publicar na web" quando há `BLOB_READ_WRITE_TOKEN`. Web (Vercel): lê o Blob privado (`lib/armazem-blob.ts`), tudo atrás da senha única (`middleware.ts`, `/entrar`, cookie HMAC de `lib/sessao.ts`), sem `/nova-varredura` e com `/api/analise` em 404. `POST /api/publicar` (só local) manda o retrato **sem telefone, e-mail, rede social e `baseEnderecos`, e sem e-mail, telefone, prédio e sala dos deputados atuais** (`lib/publicar.ts`), com `publicadoEm`.
 
@@ -108,11 +110,12 @@ Nota: o spec de 2026-08-13 registra que o Clovis considerou esse PDF "de outra f
 ## Layout do código
 
 ```
-app/                 ← rotas Next.js; /api/analise (POST JSON), /nova-varredura, /prodasen, /grupos, /entrar, /api/publicar e /api/entrar; `/` lê o retrato
+app/                 ← rotas Next.js; /api/analise (POST JSON), /nova-varredura, /prodasen, /grupos, /entrar, /api/publicar e /api/entrar; `/` lê o retrato; `/repetidos`
 components/          ← UI (Tailwind puro): painel, linha-contato, etiqueta, nova-varredura-form, export-buttons
-lib/                 ← lógica pura: planilha, catalogo, scrape, navegador, raspagem, match, analise, gemini (=Haiku), normalize, cargos, export, armazem, painel, modo, publicar, sessao, entrada, armazem-blob, uf, planilha-eleitos, eleitos, eleitos-casamento, eleitos-governo, painel-eleicao, painel-deputados, export-eleitos, ajuste-numero
+lib/                 ← lógica pura: planilha, catalogo, scrape, navegador, raspagem, match, analise, gemini (=Haiku), normalize, cargos, export, armazem, painel, modo, publicar, sessao, entrada, armazem-blob, uf, planilha-eleitos, eleitos, eleitos-casamento, eleitos-governo, painel-eleicao, painel-deputados, export-eleitos, ajuste-numero, repetidos, export-repetidos
 middleware.ts        ← senha do modo web; em modo local deixa tudo passar
 data/catalogo.ts     ← FONTE DA VERDADE de grupos, responsáveis e URLs oficiais
+data/precedencia.ts  ← níveis da Nominata do GT por grupo (grupo do convite de quem está em mais de um grupo)
 data/*.sql           ← histórico da fase Supabase; fora do caminho de execução
 supabase/migrations/ ← idem, histórico
 scripts/             ← geradores (gerar-catalogo.mjs, gerar-seed.mjs) e apply-migrations.mjs (legado)
@@ -192,9 +195,9 @@ Havendo mais de uma base de contatos ou de endereços, vale a de data mais recen
    - contagens da eleição;
    - a hora publicada.
 
-**Código novo é outro fluxo.** Publicar o retrato não leva código para a web. O projeto `mailings` (equipe `srp-coeven`) **não** faz deploy automático do GitHub. Quando o `main` muda:
+**Código novo é outro fluxo.** Publicar o retrato não leva código para a web. Desde o merge do PR #11 (2026-10-12), o projeto `mailings` (equipe `srp-coeven`) **faz deploy automático** do GitHub quando o `main` muda: depois do merge, basta conferir que o deploy de produção trouxe o commit (`vercel api /v13/deployments/<url> --scope srp-coeven`, alias `mailings-theta.vercel.app`) e entrar no painel. Se o automático falhar, o caminho manual é:
 - extrair `git archive origin/main` numa pasta limpa, com o `.vercel/project.json` copiado;
-- rodar `vercel deploy --prod --yes --scope srp-coeven` (sem `--scope` dá "Not authorized"; a CLI desta máquina está autenticada);
+- rodar `vercel deploy --prod --yes --scope srp-coeven` (sem `--scope` dá "Not authorized");
 - nunca fazer o deploy da pasta do projeto: o `pnpm-lock.yaml` solto quebra o build.
 
 Conferir com `vercel inspect <url> --scope srp-coeven --wait` (status Ready, alias `mailings-theta.vercel.app`) e entrando no painel.

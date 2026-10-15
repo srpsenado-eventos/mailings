@@ -34,3 +34,12 @@ export function ufNoTexto(texto: string | undefined): string | undefined {
   const achado = NOMES_POR_TAMANHO.find(([nome]) => t === nome || t.endsWith(` ${nome}`));
   return achado?.[1];
 }
+
+/**
+ * UF de um contato: o Departamento por extenso (como o Contatos grava nos senadores), senão
+ * a UF no fim do Cargo ("Governador do Estado de Goiás"), senão no Órgão. É a mesma ordem
+ * que o eixo da eleição usa para governadores (`lib/eleitos-governo.ts`).
+ */
+export function ufDoContato(contato: { departamento?: string; cargo?: string; orgao?: string }): string | undefined {
+  return siglaDaUf(contato.departamento) ?? ufNoTexto(contato.cargo) ?? ufNoTexto(contato.orgao);
+}

@@ -220,6 +220,10 @@ export interface GrupoCadastro {
   /** URL oficial primária ativa, se houver. */
   fonteUrl?: string;
   temFonte: boolean;
+  /** Quantidade de fontes individuais ativas (spec 2026-10-15). */
+  fontesIndividuais: number;
+  /** Campos que a fonte primária cobre, quando ela declara (`["cargo"]` na lista do Planalto). */
+  camposFontePrimaria?: readonly CampoFonte[];
 }
 
 /**

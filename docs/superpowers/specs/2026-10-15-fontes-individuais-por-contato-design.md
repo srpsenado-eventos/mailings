@@ -272,3 +272,8 @@ O nome do contato não é usado nesta fonte. Ela não gera `possivelSaida` nem `
 - Fontes individuais para outros grupos (Embaixadores, tribunais). O mecanismo fica genérico, mas só Governadores e Ministros de Estado recebem cadastro neste spec.
 - Ler a planilha de referência na varredura: a transcrição para o catálogo é manual, conferida pelo Clovis.
 - Cache de leituras anteriores de fonte: o retrato continua a única persistência.
+
+## 9. Desvios registrados na implementação (2026-10-15)
+
+- §5.3: "confere" na lista de cargos exige também o mesmo conjunto de tokens distintivos entre o cargo do Contatos e a denominação (decisão do controlador R3, para evitar verde falso entre pastas que compartilham um token).
+- §6.2: a coluna "Fonte do cargo" entra depois de "Observacao", no fim das colunas existentes (R4).

@@ -18,6 +18,8 @@ export const MOTIVO_NAVEGADOR_AUSENTE = "navegador não encontrado";
 export const MOTIVO_NAVEGADOR_TEMPO = "navegador: tempo esgotado";
 /** Teto por página. A do TCU carrega em poucos segundos; 30 s cobre rede lenta sem travar a varredura. */
 export const TETO_NAVEGADOR_MS = 30_000;
+/** Pausa depois do carregamento na sessão com janela, para o DOM assentar antes de ler o HTML. */
+const PAUSA_APOS_CARREGAR_MS = 1_500;
 
 /** Caminhos padrão do Chrome no Windows, na ordem de procura. */
 const CAMINHOS_PADRAO = [
@@ -31,7 +33,12 @@ export interface PaginaNavegador {
   fechar(): Promise<void>;
 }
 
-export type Lancador = (caminhoChrome: string) => Promise<PaginaNavegador>;
+/** Como lançar: com janela visível (gov.br responde CAPTCHA ao headless) ou sem (padrão, caso TCU). */
+export interface ModoLancamento {
+  janela?: boolean;
+}
+
+export type Lancador = (caminhoChrome: string, modo?: ModoLancamento) => Promise<PaginaNavegador>;
 
 export interface OpcoesNavegador {
   timeoutMs?: number;
@@ -66,17 +73,29 @@ function comTeto<T>(promessa: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promessa, teto]).finally(() => clearTimeout(timer));
 }
 
-/** Lançador real: Chrome sem janela via puppeteer-core. Não coberto por teste (abre navegador). */
-export const lancarChrome: Lancador = async (caminhoChrome) => {
-  const browser = await puppeteer.launch({ executablePath: caminhoChrome, headless: true });
+/** Lançador real via puppeteer-core. Não coberto por teste (abre navegador). */
+export const lancarChrome: Lancador = async (caminhoChrome, modo = {}) => {
+  const browser = await puppeteer.launch({
+    executablePath: caminhoChrome,
+    headless: !modo.janela,
+    ...(modo.janela ? { args: ["--window-size=1200,900"] } : {}),
+  });
+  // Uma aba só, reaproveitada: a sessão com janela lê dezenas de páginas em sequência, e
+  // uma aba por página deixaria o Chrome com dezenas de abas abertas até o fim da varredura.
+  let page: Awaited<ReturnType<typeof browser.newPage>> | undefined;
   return {
     async conteudo(url, timeoutMs) {
-      const page = await browser.newPage();
-      // Mesmo valor do teto de `comTeto`, cujo timer é armado antes do lançamento e dispara primeiro: o motivo fica exato.
-      // `networkidle0`: espera NENHUMA requisição pendente, para a lista dos ministros já ter
-      // chegado. Com `networkidle2` a página podia ser lida pela metade (só o menu). Página cuja
-      // rede nunca sossega termina em "tempo esgotado", o lado seguro (indeterminado, nunca saída).
-      await page.goto(url, { waitUntil: "networkidle0", timeout: timeoutMs });
+      page ??= await browser.newPage();
+      // Mesmo valor do teto de `comTeto`, cujo timer é armado antes e dispara primeiro: o motivo fica exato.
+      // Headless (TCU): `networkidle0`, a lista chega por XHR e com `networkidle2` vinha pela metade.
+      // Janela (gov.br, páginas servidas prontas): `networkidle2`, porque os scripts de analytics do
+      // gov.br nunca deixam a rede zerar, e uma pausa curta para o DOM assentar.
+      if (modo.janela) {
+        await page.goto(url, { waitUntil: "networkidle2", timeout: timeoutMs });
+        await new Promise((r) => setTimeout(r, PAUSA_APOS_CARREGAR_MS));
+      } else {
+        await page.goto(url, { waitUntil: "networkidle0", timeout: timeoutMs });
+      }
       return page.content();
     },
     async fechar() {
@@ -113,4 +132,73 @@ export async function rasparComNavegador(url: string, opcoes: OpcoesNavegador = 
     // terminou, fecha quando terminar, sem segurar a varredura; falha ao fechar não muda o resultado.
     void lancamento?.then((p) => p.fechar()).catch(() => undefined);
   }
+}
+
+export interface SessaoNavegador {
+  /** Lê UMA URL do catálogo na janela. As chamadas são enfileiradas: uma página por vez. */
+  raspar(url: string, opcoes?: { tabela?: ExtracaoTabela }): Promise<ConteudoFonte>;
+  /** Fecha o Chrome, se chegou a abrir. Nunca lança. */
+  fechar(): Promise<void>;
+}
+
+export interface OpcoesSessao {
+  timeoutMs?: number;
+  env?: NodeJS.ProcessEnv;
+  existe?: (caminho: string) => boolean;
+  lancar?: Lancador;
+}
+
+/**
+ * Sessão do Chrome COM JANELA para as fontes `navegador: "janela"` (spec 2026-10-15 §4.2):
+ * um Chrome por varredura, lançado no primeiro `raspar`, uma página por vez na mesma aba,
+ * com o teto por página. Chrome ausente ou que não sobe faz cada `raspar` falhar com
+ * `ScrapeError`, sem travar as fontes lidas por `fetch`. A rota chama `fechar()` no `finally`.
+ */
+export function abrirSessao(opcoes: OpcoesSessao = {}): SessaoNavegador {
+  const timeoutMs = opcoes.timeoutMs ?? TETO_NAVEGADOR_MS;
+  const lancar = opcoes.lancar ?? lancarChrome;
+  let lancamento: Promise<PaginaNavegador> | undefined;
+  // Fila: cada leitura começa quando a anterior termina, com sucesso ou erro.
+  let fila: Promise<unknown> = Promise.resolve();
+
+  const pagina = (url: string): Promise<PaginaNavegador> => {
+    if (!lancamento) {
+      const caminho = localizarChrome(opcoes.env ?? process.env, opcoes.existe ?? existsSync);
+      if (!caminho) return Promise.reject(new ScrapeError(url, MOTIVO_NAVEGADOR_AUSENTE));
+      lancamento = lancar(caminho, { janela: true });
+      // Evita "unhandled rejection" quando o Chrome não sobe: o erro é entregue a cada raspar.
+      lancamento.catch(() => undefined);
+    }
+    return lancamento;
+  };
+
+  const lerUma = async (url: string, tabela?: ExtracaoTabela): Promise<ConteudoFonte> => {
+    try {
+      const p = await pagina(url);
+      const html = await comTeto(p.conteudo(url, timeoutMs), timeoutMs);
+      if (!html.trim()) throw new ScrapeError(url, "HTML vazio");
+      return tabela ? extrairTabela(html, url, tabela) : extrairConteudo(html, url);
+    } catch (err) {
+      if (err instanceof ScrapeError) throw err;
+      if (err instanceof TempoEsgotadoError) throw new ScrapeError(url, MOTIVO_NAVEGADOR_TEMPO);
+      throw new ScrapeError(url, err instanceof Error ? err.message : "erro desconhecido");
+    }
+  };
+
+  return {
+    raspar(url, o = {}) {
+      const leitura = fila.then(() => lerUma(url, o.tabela));
+      fila = leitura.catch(() => undefined);
+      return leitura;
+    },
+    async fechar() {
+      if (!lancamento) return;
+      try {
+        await fila;
+        await (await lancamento).fechar();
+      } catch {
+        /* Chrome que não subiu ou já fechou: nada a fechar */
+      }
+    },
+  };
 }

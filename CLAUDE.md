@@ -1,6 +1,6 @@
 # CLAUDE.md — Fiscal de Mailings
 
-Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui. Última revisão: 2026-10-14.
+Instruções específicas deste projeto para o Claude Code. Convenções globais do usuário (testing, coding-style, security, agents) já vêm de `~/.claude/rules/ecc/common/` e **não** são repetidas aqui. Última revisão: 2026-10-15.
 
 ## Contexto rápido
 
@@ -8,10 +8,10 @@ Web app interno do Senado Federal (Secretaria de Relações Públicas, GT Gestã
 
 Repositório remoto: `github.com/srpsenado-eventos/mailings`, branch base `main`; o trabalho sai em branches `feat/*` mescladas por PR.
 
-## Estado do projeto (2026-10-14)
+## Estado do projeto (2026-10-15)
 
-- Suíte: 46 arquivos, 906 testes, verde (2026-10-15). `npm run typecheck` limpo.
-- Catálogo: 33 grupos, 24 fontes de grupo, 60 fontes individuais (22 Governadores, 38 Ministros de Estado), 22 grupos com fonte, **11 sem fonte** (todo contato deles sai vermelho, ver semântica abaixo).
+- Suíte: 46 arquivos, 912 testes, verde (2026-10-15). `npm run typecheck` limpo.
+- Catálogo: 34 grupos, 24 fontes de grupo, 60 fontes individuais (22 Governadores, 38 Ministros de Estado), 22 grupos com fonte, **12 sem fonte** (entre eles Governadores Eleitos, que existe para não herdar as páginas dos governadores atuais) (todo contato deles sai vermelho, ver semântica abaixo).
 - Auditoria de Tratamento e Endereçamento (spec de 2026-08-13) e Camada C (regras de nome, spec de 2026-09-18) estão em `main` desde setembro de 2026 (`lib/tratamento.ts`, `data/regras-nome.ts`).
 - **Dívidas conhecidas** (não corrigir de passagem; abrir tarefa própria):
   - `lib/gemini.ts` e `GeminiCliente` são nomes históricos: o cliente é Anthropic Haiku desde 2026-06-14. Comentários em `lib/types.ts` ainda falam em "Gemini + Google Search".
@@ -21,7 +21,7 @@ Repositório remoto: `github.com/srpsenado-eventos/mailings`, branch base `main`
 
 ## Stack (em uso)
 
-Next.js 15 (App Router) + TypeScript + Tailwind · SheetJS (`xlsx`) · `fetch` (undici) + cheerio · puppeteer-core (só fontes do catálogo com `navegador: true`, caso TCU; abre o Chrome local, nunca na Vercel; exige Node 22.12 ou superior; a máquina tem Node 24) · string-similarity · Anthropic Claude Haiku via `fetch` na Messages API (Camada 2, opcional) · Vitest · roda local com `npm run dev`; a Vercel exibe o retrato publicado em modo `web` (`FISCAL_MODO=web`, `@vercel/blob`), nunca varre. **Sem banco de dados.** shadcn/ui está previsto no spec, mas não há `components/ui/`; os componentes são Tailwind puro.
+Next.js 15 (App Router) + TypeScript + Tailwind · SheetJS (`xlsx`) · `fetch` (undici) + cheerio · puppeteer-core (só fontes do catálogo com `navegador: true`, caso TCU, ou `"janela"` (gov.br, Chrome com janela); abre o Chrome local, nunca na Vercel; exige Node 22.12 ou superior; a máquina tem Node 24) · string-similarity · Anthropic Claude Haiku via `fetch` na Messages API (Camada 2, opcional) · Vitest · roda local com `npm run dev`; a Vercel exibe o retrato publicado em modo `web` (`FISCAL_MODO=web`, `@vercel/blob`), nunca varre. **Sem banco de dados.** shadcn/ui está previsto no spec, mas não há `components/ui/`; os componentes são Tailwind puro.
 
 Não trocar dependências sem registrar a decisão num novo doc em `docs/superpowers/specs/`.
 
@@ -82,7 +82,7 @@ Os specs se sobrepõem no tempo. Quando dois discordam, **o mais recente vence**
 | **verde** | Contato casou com pessoa da composição e nenhum campo diverge | Nada |
 | **amarelo** | Casou, mas nome, cargo ou endereço diverge do site | Revisar; o valor do site vem em `valorEsperado` |
 | **vermelho + `possivelSaida`** | Há composição real e o contato não está nela | Confirmar se a autoridade saiu |
-| **vermelho + campo `fonte`** | Grupo **sem URL cadastrada** | Cadastrar fonte (não é problema do contato) |
+| **vermelho + campo `fonte`** | Grupo **sem URL cadastrada**, ou contato de grupo com fontes individuais sem a sua (governador de UF sem página) | Cadastrar fonte (não é problema do contato) |
 | **indeterminado** | URL existe, mas a página não pôde ser lida (403, TLS, timeout, JS) e a IA não cobriu | Conferir à mão; `erroFonte` diz o motivo |
 | **novo** | Pessoa da composição **com cargo** e sem par na planilha | Avaliar inclusão |
 
@@ -233,7 +233,7 @@ Conferir com `vercel inspect <url> --scope srp-coeven --wait` (status Ready, ali
 - Não reintroduzir banco de dados (Supabase, Postgres, ORM) sem novo spec.
 - Não persistir nada além do último retrato (`.fiscal/` e sua cópia enxuta no Blob privado, spec 2026-10-02 §6); sem histórico nem banco sem novo spec.
 - Não voltar a depender da Vercel para ler fontes: ela é bloqueada por IP (medido em 2026-09-17). Em modo web ela só exibe.
-- Não usar Firecrawl, Puppeteer ou Playwright dentro do app **fora de `lib/navegador.ts`**: só fonte do catálogo marcada `navegador: true`, só em modo local, com `puppeteer-core` e o Chrome desta máquina (spec 2026-10-02 §8). Scraping padrão continua `fetch` + cheerio. (Usar Firecrawl ou o navegador como ferramenta de desenvolvimento, para inspecionar uma página candidata antes de cadastrar, é permitido.)
+- Não usar Firecrawl, Puppeteer ou Playwright dentro do app **fora de `lib/navegador.ts`**: só fonte do catálogo marcada `navegador: true` ou `navegador: "janela"`, só em modo local, com `puppeteer-core` e o Chrome desta máquina (spec 2026-10-02 §8). Scraping padrão continua `fetch` + cheerio. (Usar Firecrawl ou o navegador como ferramenta de desenvolvimento, para inspecionar uma página candidata antes de cadastrar, é permitido.)
 - Não cadastrar URLs descobertas por busca ou IA. O Clovis fornece.
 - Não transformar "não conseguimos ler a página" em "possível saída". Ver regra de ouro.
 - Não enviar contatos da planilha para a IA.

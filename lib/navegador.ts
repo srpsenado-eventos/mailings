@@ -29,7 +29,7 @@ const PAUSA_APOS_CARREGAR_MS = 1_500;
  * antes da única nova tentativa.
  */
 export const PAUSA_ENTRE_PAGINAS_MS = 3_000;
-export const ESPERA_ANTES_DE_REPETIR_MS = 20_000;
+export const ESPERA_ANTES_DE_REPETIR_MS = 60_000;
 const MOTIVO_MUITOS_PEDIDOS = "HTTP 429";
 
 const esperarPadrao = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));

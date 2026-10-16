@@ -62,6 +62,13 @@ function deps(mapa: Record<string, ConteudoFonte | string>, extra: Partial<Depen
 }
 
 describe("analisar com fontes individuais (spec 2026-10-15 §4 e §5.5)", () => {
+  test("a página geral é pedida antes das individuais (fila do Chrome com janela)", async () => {
+    const pedidas: string[] = [];
+    const raspar = rasparDe({ [URL_MIN]: paginaMin, [URL_GERAL]: paginaGeral });
+    await analisar("c.xlsx", [ministra], deps({}, { raspar: (f) => { pedidas.push(f.url); return raspar(f); } }));
+    expect(pedidas).toEqual([URL_GERAL, URL_MIN]);
+  });
+
   test("ministro: individual lida e geral lida → verde; grupo lido, fonteUrl é a geral, individuais contadas", async () => {
     const r = await analisar("c.xlsx", [ministra], deps({ [URL_MIN]: paginaMin, [URL_GERAL]: paginaGeral }));
     const g = r.grupos[0];

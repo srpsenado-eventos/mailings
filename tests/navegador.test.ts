@@ -6,6 +6,8 @@ import {
   rasparComNavegador,
   MOTIVO_NAVEGADOR_AUSENTE,
   MOTIVO_NAVEGADOR_TEMPO,
+  PAUSA_ENTRE_PAGINAS_MS,
+  ESPERA_ANTES_DE_REPETIR_MS,
   type Lancador,
   type ModoLancamento,
   type PaginaNavegador,
@@ -136,6 +138,11 @@ describe("rasparComNavegador", () => {
   });
 });
 
+/** Página com texto bastante para não ser tomada por CAPTCHA (`MIN_TEXTO_PAGINA_INDIVIDUAL`). */
+const HTML_SESSAO = HTML.replace("</main>", `<p>${"Composição oficial do órgão publicada nesta página. ".repeat(8)}</p></main>`);
+const semEspera = async () => undefined;
+const CAPTCHA = "<html><body><main><p>Qual é o código exibido na imagem?</p></main></body></html>";
+
 /** Lançador falso de sessão: anota o modo, as URLs na ordem e se fechou; devolve o HTML por URL. */
 function lancadorDeSessao(htmlPorUrl: Record<string, string | (() => Promise<string>)>) {
   const estado = { lancamentos: 0, modo: undefined as ModoLancamento | undefined, urls: [] as string[], fechado: false, emAndamento: 0, maxEmAndamento: 0 };
@@ -163,9 +170,9 @@ function lancadorDeSessao(htmlPorUrl: Record<string, string | (() => Promise<str
 
 describe("abrirSessao (Chrome com janela, spec 2026-10-15 §4.2)", () => {
   test("lança o Chrome uma vez, com janela, só no primeiro raspar, e lê as páginas uma por vez na ordem", async () => {
-    const lento = () => new Promise<string>((r) => setTimeout(() => r(HTML), 20));
-    const { lancar, estado } = lancadorDeSessao({ "https://www.gov.br/a": lento, "https://www.gov.br/b": HTML });
-    const sessao = abrirSessao({ env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+    const lento = () => new Promise<string>((r) => setTimeout(() => r(HTML_SESSAO), 20));
+    const { lancar, estado } = lancadorDeSessao({ "https://www.gov.br/a": lento, "https://www.gov.br/b": HTML_SESSAO });
+    const sessao = abrirSessao({ esperar: semEspera, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
     expect(estado.lancamentos).toBe(0);
     const [a, b] = await Promise.all([sessao.raspar("https://www.gov.br/a"), sessao.raspar("https://www.gov.br/b")]);
     expect(estado.lancamentos).toBe(1);
@@ -179,8 +186,8 @@ describe("abrirSessao (Chrome com janela, spec 2026-10-15 §4.2)", () => {
   });
 
   test("falha de uma página vira ScrapeError com o motivo e não derruba a seguinte", async () => {
-    const { lancar } = lancadorDeSessao({ "https://www.gov.br/ok": HTML });
-    const sessao = abrirSessao({ env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+    const { lancar } = lancadorDeSessao({ "https://www.gov.br/ok": HTML_SESSAO });
+    const sessao = abrirSessao({ esperar: semEspera, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
     await expect(sessao.raspar("https://www.gov.br/falha")).rejects.toMatchObject({ motivo: "net::ERR_FAILED" });
     const ok = await sessao.raspar("https://www.gov.br/ok");
     expect(ok.pessoas.length).toBeGreaterThan(0);
@@ -190,15 +197,15 @@ describe("abrirSessao (Chrome com janela, spec 2026-10-15 §4.2)", () => {
   test("página com status de erro (HTTP 404) vira ScrapeError com o motivo 'HTTP 404'", async () => {
     const fechar = vi.fn(async () => undefined);
     const lancar: Lancador = async () => ({ conteudo: async () => { throw new Error("HTTP 404"); }, fechar });
-    const sessao = abrirSessao({ env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+    const sessao = abrirSessao({ esperar: semEspera, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
     await expect(sessao.raspar("https://www.gov.br/sumiu")).rejects.toMatchObject({ name: "ScrapeError", motivo: "HTTP 404" });
     await sessao.fechar();
   });
 
   test("página que estoura o teto sai 'navegador: tempo esgotado' e a sessão continua", async () => {
     const eterna = () => new Promise<string>(() => undefined);
-    const { lancar } = lancadorDeSessao({ "https://www.gov.br/lenta": eterna, "https://www.gov.br/ok": HTML });
-    const sessao = abrirSessao({ env: envCom("D:/chrome.exe"), existe: existeSempre, lancar, timeoutMs: 30 });
+    const { lancar } = lancadorDeSessao({ "https://www.gov.br/lenta": eterna, "https://www.gov.br/ok": HTML_SESSAO });
+    const sessao = abrirSessao({ esperar: semEspera, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar, timeoutMs: 30 });
     await expect(sessao.raspar("https://www.gov.br/lenta")).rejects.toMatchObject({ motivo: MOTIVO_NAVEGADOR_TEMPO });
     expect((await sessao.raspar("https://www.gov.br/ok")).pessoas.length).toBeGreaterThan(0);
     await sessao.fechar();
@@ -206,14 +213,14 @@ describe("abrirSessao (Chrome com janela, spec 2026-10-15 §4.2)", () => {
 
   test("HTML vazio é ScrapeError('HTML vazio')", async () => {
     const { lancar } = lancadorDeSessao({ "https://www.gov.br/vazia": "   " });
-    const sessao = abrirSessao({ env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+    const sessao = abrirSessao({ esperar: semEspera, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
     await expect(sessao.raspar("https://www.gov.br/vazia")).rejects.toMatchObject({ motivo: "HTML vazio" });
     await sessao.fechar();
   });
 
   test("sem Chrome, cada raspar falha com navegador ausente, nada é lançado e fechar não lança", async () => {
-    const { lancar, estado } = lancadorDeSessao({ "https://www.gov.br/a": HTML });
-    const sessao = abrirSessao({ env: ENV_VAZIO, existe: () => false, lancar });
+    const { lancar, estado } = lancadorDeSessao({ "https://www.gov.br/a": HTML_SESSAO });
+    const sessao = abrirSessao({ esperar: semEspera, env: ENV_VAZIO, existe: () => false, lancar });
     await expect(sessao.raspar("https://www.gov.br/a")).rejects.toMatchObject({ motivo: MOTIVO_NAVEGADOR_AUSENTE });
     await expect(sessao.raspar("https://www.gov.br/a")).rejects.toMatchObject({ motivo: MOTIVO_NAVEGADOR_AUSENTE });
     expect(estado.lancamentos).toBe(0);
@@ -222,15 +229,79 @@ describe("abrirSessao (Chrome com janela, spec 2026-10-15 §4.2)", () => {
 
   test("Chrome que não sobe: cada raspar falha com a mensagem do lançamento, fechar não lança", async () => {
     const lancar: Lancador = async () => { throw new Error("spawn EACCES"); };
-    const sessao = abrirSessao({ env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+    const sessao = abrirSessao({ esperar: semEspera, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
     await expect(sessao.raspar("https://www.gov.br/a")).rejects.toMatchObject({ motivo: "spawn EACCES" });
     await expect(sessao.fechar()).resolves.toBeUndefined();
   });
 
   test("fechar sem nenhum raspar não lança e não lança o Chrome", async () => {
     const { lancar, estado } = lancadorDeSessao({});
-    const sessao = abrirSessao({ env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+    const sessao = abrirSessao({ esperar: semEspera, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
     await sessao.fechar();
     expect(estado.lancamentos).toBe(0);
+  });
+
+  describe("ritmo (gov.br limita pedidos seguidos)", () => {
+    test("pausa antes de cada página a partir da segunda, nunca antes da primeira", async () => {
+      const { lancar } = lancadorDeSessao({ "https://www.gov.br/a": HTML_SESSAO, "https://www.gov.br/b": HTML_SESSAO });
+      const esperas: number[] = [];
+      const sessao = abrirSessao({ esperar: async (ms) => { esperas.push(ms); }, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+      await sessao.raspar("https://www.gov.br/a");
+      expect(esperas).toEqual([]);
+      await sessao.raspar("https://www.gov.br/b");
+      expect(esperas).toEqual([PAUSA_ENTRE_PAGINAS_MS]);
+      await sessao.fechar();
+    });
+
+    test("HTTP 429 espera e lê mais uma vez; a segunda leitura vale", async () => {
+      let chamadas = 0;
+      const esperas: number[] = [];
+      const lancar: Lancador = async () => ({
+        conteudo: async () => { chamadas += 1; if (chamadas === 1) throw new Error("HTTP 429"); return HTML_SESSAO; },
+        fechar: async () => undefined,
+      });
+      const sessao = abrirSessao({ esperar: async (ms) => { esperas.push(ms); }, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+      const c = await sessao.raspar("https://www.gov.br/limite");
+      expect(chamadas).toBe(2);
+      expect(esperas).toEqual([ESPERA_ANTES_DE_REPETIR_MS]);
+      expect(c.pessoas.length).toBeGreaterThan(0);
+      await sessao.fechar();
+    });
+
+    test("HTTP 429 duas vezes vira ScrapeError 'HTTP 429'", async () => {
+      const lancar: Lancador = async () => ({ conteudo: async () => { throw new Error("HTTP 429"); }, fechar: async () => undefined });
+      const sessao = abrirSessao({ esperar: semEspera, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+      await expect(sessao.raspar("https://www.gov.br/limite")).rejects.toMatchObject({ name: "ScrapeError", motivo: "HTTP 429" });
+      await sessao.fechar();
+    });
+
+    test("página sem conteúdo legível (CAPTCHA) é lida mais uma vez", async () => {
+      const respostas = [CAPTCHA, HTML_SESSAO];
+      const lancar: Lancador = async () => ({ conteudo: async () => respostas.shift()!, fechar: async () => undefined });
+      const sessao = abrirSessao({ esperar: semEspera, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+      const c = await sessao.raspar("https://www.gov.br/captcha");
+      expect(respostas).toEqual([]);
+      expect(c.pessoas.length).toBeGreaterThan(0);
+      await sessao.fechar();
+    });
+
+    test("CAPTCHA nas duas leituras devolve a página curta, para o orquestrador marcar inacessível", async () => {
+      let chamadas = 0;
+      const lancar: Lancador = async () => ({ conteudo: async () => { chamadas += 1; return CAPTCHA; }, fechar: async () => undefined });
+      const sessao = abrirSessao({ esperar: semEspera, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+      const c = await sessao.raspar("https://www.gov.br/captcha");
+      expect(chamadas).toBe(2);
+      expect(c.textoLimpo.trim().length).toBeLessThan(300);
+      await sessao.fechar();
+    });
+
+    test("erro que não é 429 (404, rede) não é repetido", async () => {
+      let chamadas = 0;
+      const lancar: Lancador = async () => ({ conteudo: async () => { chamadas += 1; throw new Error("HTTP 404"); }, fechar: async () => undefined });
+      const sessao = abrirSessao({ esperar: semEspera, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+      await expect(sessao.raspar("https://www.gov.br/sumiu")).rejects.toMatchObject({ motivo: "HTTP 404" });
+      expect(chamadas).toBe(1);
+      await sessao.fechar();
+    });
   });
 });

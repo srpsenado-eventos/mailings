@@ -116,7 +116,8 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp2: "thiago.pinto@senado.leg.br",
     emailBackup: "sarah.costa@senado.leg.br",
     fontes: [
-      { url: "https://www.gov.br/mre/pt-br/assuntos/cerimonial/lista-do-corpo-diplomatico-e-datas-nacionais", ativo: true },
+      // gov.br: o fetch recebe CAPTCHA; o Chrome com janela traz a lista inteira (medido em 2026-10-16).
+      { url: "https://www.gov.br/mre/pt-br/assuntos/cerimonial/lista-do-corpo-diplomatico-e-datas-nacionais", ativo: true, navegador: "janela" },
     ],
   },
   {
@@ -128,7 +129,8 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp2: "beatriz.zama@senado.leg.br",
     emailBackup: "jaciara.santos@senado.leg.br",
     fontes: [
-      { url: "https://www.gov.br/mre/pt-br/assuntos/cerimonial/lista-do-corpo-diplomatico-e-datas-nacionais", ativo: true },
+      // gov.br: o fetch recebe CAPTCHA; o Chrome com janela traz a lista inteira (medido em 2026-10-16).
+      { url: "https://www.gov.br/mre/pt-br/assuntos/cerimonial/lista-do-corpo-diplomatico-e-datas-nacionais", ativo: true, navegador: "janela" },
     ],
   },
   {
@@ -140,7 +142,8 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp2: "cynaraps@senado.leg.br",
     emailBackup: "fernanda.goncalves@senado.leg.br",
     fontes: [
-      { url: "https://www.gov.br/mre/pt-br/assuntos/cerimonial/lista-do-corpo-diplomatico-e-datas-nacionais", ativo: true },
+      // gov.br: o fetch recebe CAPTCHA; o Chrome com janela traz a lista inteira (medido em 2026-10-16).
+      { url: "https://www.gov.br/mre/pt-br/assuntos/cerimonial/lista-do-corpo-diplomatico-e-datas-nacionais", ativo: true, navegador: "janela" },
     ],
   },
   {
@@ -189,13 +192,15 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     // MS: a URL tem fragmento "#/QuemEQuem" e a página é montada por JavaScript: o fetch
     // traz só a casca do SPA, e o Chrome headless monta a página com "GOVERNADOR:"
     // (medido em 2026-10-15). Por isso é lida pelo navegador (`navegador: true`).
+    // AM, RR e RJ: o fetch falhava ("fetch failed" no AM; RR e RJ só com a casca da página)
+    // e o Chrome com janela traz a página inteira (medido em 2026-10-16): `navegador: "janela"`.
     fontesIndividuais: [
       { url: "https://estado.ac.gov.br/orgao-entidades/", ativo: true, chave: { uf: "AC" }, campos: ["nome", "cargo"] },
       { url: "https://amapa.gov.br/gestores", ativo: true, chave: { uf: "AP" }, campos: ["nome", "cargo"] },
-      { url: "https://www.transparencia.am.gov.br/estrutura-organizacional/", ativo: true, chave: { uf: "AM" }, campos: ["nome", "cargo"] },
+      { url: "https://www.transparencia.am.gov.br/estrutura-organizacional/", ativo: true, chave: { uf: "AM" }, campos: ["nome", "cargo"], navegador: "janela" },
       { url: "https://www.pa.gov.br/orgao?id_orgao=2", ativo: true, chave: { uf: "PA" }, campos: ["nome", "cargo"] },
       { url: "https://rondonia.ro.gov.br/?page_id=1207", ativo: true, chave: { uf: "RO" }, campos: ["nome", "cargo"] },
-      { url: "https://transparencia.rr.gov.br/principaiscargos", ativo: true, chave: { uf: "RR" }, campos: ["nome", "cargo"] },
+      { url: "https://transparencia.rr.gov.br/principaiscargos", ativo: true, chave: { uf: "RR" }, campos: ["nome", "cargo"], navegador: "janela" },
       { url: "https://www.to.gov.br/governo", ativo: true, chave: { uf: "TO" }, campos: ["nome", "cargo"] },
       { url: "https://alagoas.al.gov.br/governo/governador-de-alagoas", ativo: true, chave: { uf: "AL" }, campos: ["nome", "cargo"] },
       { url: "https://www.ba.gov.br/comunicacao/equipe-de-governo", ativo: true, chave: { uf: "BA" }, campos: ["nome", "cargo"] },
@@ -208,7 +213,7 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       { url: "https://goias.gov.br/administracao-direta/", ativo: true, chave: { uf: "GO" }, campos: ["nome", "cargo"] },
       { url: "https://www.transparencia.ms.gov.br/#/QuemEQuem", ativo: true, chave: { uf: "MS" }, campos: ["nome", "cargo"], navegador: true },
       { url: "https://www.es.gov.br/governo/governador", ativo: true, chave: { uf: "ES" }, campos: ["nome", "cargo"] },
-      { url: "https://www.rj.gov.br/pagina/sobre-o-governo9806", ativo: true, chave: { uf: "RJ" }, campos: ["nome", "cargo"] },
+      { url: "https://www.rj.gov.br/pagina/sobre-o-governo9806", ativo: true, chave: { uf: "RJ" }, campos: ["nome", "cargo"], navegador: "janela" },
       { url: "https://www.sp.gov.br/sp/institucional/estrutura/!ut/p/z1/04_Sj9CPykssy0xPLMnMz0vMAfIjo8ziDSzMTIyM3Q2MPYyDnQ3MXB3DzJ2NQg0M_Y31wyEKcABHA_0oovTjVhCF3_hw_ShUKwKCg4Am-BpaOvtauhk7-pvhV-DpbAxTgNuSgtzQCINMT0UAo-8oDA!!/", ativo: true, chave: { uf: "SP" }, campos: ["nome", "cargo"] },
       { url: "https://www.parana.pr.gov.br/Pagina/Quemequem", ativo: true, chave: { uf: "PR" }, campos: ["nome", "cargo"] },
       { url: "https://www.estado.rs.gov.br/governadoria", ativo: true, chave: { uf: "RS" }, campos: ["nome", "cargo"] },

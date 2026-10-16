@@ -304,10 +304,10 @@ async function analisarGrupoIndividual(
   // Cada URL é lida UMA vez, mesmo com dois contatos ligados a ela; individual sem contato não é lida.
   const aLer = [...new Map(ligacoes.flatMap((l) => (l.fonte ? [[l.fonte.url, l.fonte] as const] : []))).values()];
   const geral = resolvida.fontes[0];
-  const [lidasInd, lidaGeral] = await Promise.all([
-    Promise.all(aLer.map((f) => lerFonte(f, deps))),
-    geral ? lerFonte(geral, deps) : Promise.resolve(undefined),
-  ]);
+  // A geral entra na fila do Chrome ANTES das individuais: lida por último, chegava quando o
+  // gov.br já limitava os pedidos (HTTP 429 em 2026-10-15) e o cargo de todos ficava sem fonte.
+  const leituraGeral = geral ? lerFonte(geral, deps) : Promise.resolve(undefined);
+  const [lidaGeral, lidasInd] = await Promise.all([leituraGeral, Promise.all(aLer.map((f) => lerFonte(f, deps)))]);
   const porUrl = new Map<string, IndividualLida>(lidasInd.map((l) => [l.fonte.url, l]));
 
   // Fonte do cargo do grupo: a lista de denominações, ou o motivo de ela não ter vindo.

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import puppeteer from "puppeteer-core";
 import { extrairConteudo, extrairTabela, ScrapeError } from "@/lib/scrape";
+import { paginaComConteudo } from "@/lib/match";
 import type { ConteudoFonte, ExtracaoTabela } from "@/lib/types";
 
 /**
@@ -20,6 +21,18 @@ export const MOTIVO_NAVEGADOR_TEMPO = "navegador: tempo esgotado";
 export const TETO_NAVEGADOR_MS = 30_000;
 /** Pausa depois do carregamento na sessão com janela, para o DOM assentar antes de ler o HTML. */
 const PAUSA_APOS_CARREGAR_MS = 1_500;
+
+/**
+ * Ritmo da sessão com janela. Em 2026-10-15 a varredura leu umas 40 páginas do gov.br em
+ * sequência e o site passou a responder HTTP 429 ("muitos pedidos") e CAPTCHA, derrubando até
+ * a página geral do Planalto. A pausa espaça as páginas; a espera dá tempo de o limite aliviar
+ * antes da única nova tentativa.
+ */
+export const PAUSA_ENTRE_PAGINAS_MS = 3_000;
+export const ESPERA_ANTES_DE_REPETIR_MS = 60_000;
+const MOTIVO_MUITOS_PEDIDOS = "HTTP 429";
+
+const esperarPadrao = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /** Caminhos padrão do Chrome no Windows, na ordem de procura. */
 const CAMINHOS_PADRAO = [
@@ -146,6 +159,8 @@ export interface SessaoNavegador {
 
 export interface OpcoesSessao {
   timeoutMs?: number;
+  /** Espera do ritmo (pausa entre páginas e antes da nova tentativa). Injetável para teste. */
+  esperar?: (ms: number) => Promise<void>;
   env?: NodeJS.ProcessEnv;
   existe?: (caminho: string) => boolean;
   lancar?: Lancador;
@@ -156,11 +171,17 @@ export interface OpcoesSessao {
  * um Chrome por varredura, lançado no primeiro `raspar`, uma página por vez na mesma aba,
  * com o teto por página. Chrome ausente ou que não sobe faz cada `raspar` falhar com
  * `ScrapeError`, sem travar as fontes lidas por `fetch`. A rota chama `fechar()` no `finally`.
+ *
+ * Ritmo: pausa de `PAUSA_ENTRE_PAGINAS_MS` antes de cada página a partir da segunda; página
+ * que volta HTTP 429 ou sem conteúdo legível (CAPTCHA, `paginaComConteudo`) é lida mais UMA
+ * vez depois de `ESPERA_ANTES_DE_REPETIR_MS`, e o resultado dessa segunda leitura vale.
  */
 export function abrirSessao(opcoes: OpcoesSessao = {}): SessaoNavegador {
   const timeoutMs = opcoes.timeoutMs ?? TETO_NAVEGADOR_MS;
   const lancar = opcoes.lancar ?? lancarChrome;
+  const esperar = opcoes.esperar ?? esperarPadrao;
   let lancamento: Promise<PaginaNavegador> | undefined;
+  let paginasPedidas = 0;
   // Fila: cada leitura começa quando a anterior termina, com sucesso ou erro.
   let fila: Promise<unknown> = Promise.resolve();
 
@@ -188,9 +209,21 @@ export function abrirSessao(opcoes: OpcoesSessao = {}): SessaoNavegador {
     }
   };
 
+  const lerComRitmo = async (url: string, tabela?: ExtracaoTabela): Promise<ConteudoFonte> => {
+    if (paginasPedidas++ > 0) await esperar(PAUSA_ENTRE_PAGINAS_MS);
+    try {
+      const conteudo = await lerUma(url, tabela);
+      if (paginaComConteudo(conteudo)) return conteudo;
+    } catch (err) {
+      if (!(err instanceof ScrapeError && err.motivo === MOTIVO_MUITOS_PEDIDOS)) throw err;
+    }
+    await esperar(ESPERA_ANTES_DE_REPETIR_MS);
+    return lerUma(url, tabela);
+  };
+
   return {
     raspar(url, o = {}) {
-      const leitura = fila.then(() => lerUma(url, o.tabela));
+      const leitura = fila.then(() => lerComRitmo(url, o.tabela));
       fila = leitura.catch(() => undefined);
       return leitura;
     },

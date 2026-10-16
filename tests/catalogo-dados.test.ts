@@ -12,7 +12,7 @@ describe("catálogo real (data/catalogo.ts)", () => {
     expect(total).toBe(24);
   });
 
-  test("navegador headless só no MS (governador) e no TCU; 'janela' só em páginas do gov.br federal", () => {
+  test("navegador headless só no MS (governador) e no TCU; 'janela' no gov.br federal e em AM, RR e RJ", () => {
     const headless = CATALOGO.flatMap((g) => [
       ...g.fontes.filter((f) => f.navegador === true).map((f) => f.url),
       ...(g.fontesIndividuais ?? []).filter((f) => f.navegador === true).map((f) => f.url),
@@ -22,8 +22,14 @@ describe("catálogo real (data/catalogo.ts)", () => {
       ...g.fontes.filter((f) => f.navegador === "janela").map((f) => f.url),
       ...(g.fontesIndividuais ?? []).filter((f) => f.navegador === "janela").map((f) => f.url),
     ]);
-    expect(janela.length).toBe(39);
-    expect(janela.every((u) => u.startsWith("https://www.gov.br/"))).toBe(true);
+    const estaduais = janela.filter((u) => !u.startsWith("https://www.gov.br/"));
+    expect(estaduais).toEqual([
+      "https://www.transparencia.am.gov.br/estrutura-organizacional/",
+      "https://transparencia.rr.gov.br/principaiscargos",
+      "https://www.rj.gov.br/pagina/sobre-o-governo9806",
+    ]);
+    // 38 ministros + a geral do Planalto + as 3 entradas de Embaixadores (mesma lista do MRE).
+    expect(janela.length - estaduais.length).toBe(42);
   });
 
   describe("fontes individuais (spec 2026-10-15)", () => {

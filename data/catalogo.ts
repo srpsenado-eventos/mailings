@@ -399,7 +399,9 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp2: "andriele@senado.leg.br",
     emailBackup: "cleria.rosa@senado.leg.br",
     fontes: [
-      { url: "https://www.tst.jus.br/en/ministros", ativo: true },
+      // 2026-10-20: a antiga `/en/ministros` passou a responder HTTP 404 (medido em 19/10); a
+      // página em português responde 200 com a lista (título "Ministros - TST").
+      { url: "https://www.tst.jus.br/ministros", ativo: true },
     ],
   },
   {

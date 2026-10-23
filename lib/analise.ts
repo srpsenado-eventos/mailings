@@ -387,7 +387,8 @@ function textoIndividuaisCaidas(n: number): string {
  * Caminho por contato (spec 2026-10-15 §4 e §5): cada contato é verificado na SUA página
  * individual; a fonte de grupo, quando existe, é a lista de denominações de cargo
  * (`casamento: "cargo"`) ou, se compõe pessoas, só alimenta `novos`. Nenhuma leitura parcial
- * entre individuais: cada contato responde pela sua. A IA não participa.
+ * entre individuais: cada contato responde pela sua. A IA não participa. Página individual sem
+ * conteúdo legível e geral sem ninguém saem pela leitura guardada válida (spec 2026-10-20 §5.2).
  */
 async function analisarGrupoIndividual(
   grupo: string,
@@ -403,8 +404,11 @@ async function analisarGrupoIndividual(
   const geral = resolvida.fontes[0];
   // A geral entra na fila do Chrome ANTES das individuais: lida por último, chegava quando o
   // gov.br já limitava os pedidos (HTTP 429 em 2026-10-15) e o cargo de todos ficava sem fonte.
-  const leituraGeral = geral ? lerHoje(geral, deps) : Promise.resolve(undefined);
-  const [lidaGeral, lidasInd] = await Promise.all([leituraGeral, Promise.all(aLer.map((f) => lerHoje(f, deps)))]);
+  const leituraGeral = geral ? lerFonte(geral, deps, agora, contribuiu, MOTIVO_PAGINA_SEM_CONTEUDO) : Promise.resolve(undefined);
+  const [lidaGeral, lidasInd] = await Promise.all([
+    leituraGeral,
+    Promise.all(aLer.map((f) => lerFonte(f, deps, agora, individualComConteudo, MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO))),
+  ]);
   const porUrl = new Map<string, IndividualLida>(lidasInd.map((l) => [l.fonte.url, l]));
 
   // Fonte do cargo do grupo: a lista de denominações, ou o motivo de ela não ter vindo.
@@ -416,19 +420,36 @@ async function analisarGrupoIndividual(
         : { url: geral.url, erro: lidaGeral?.erro ?? MOTIVO_PAGINA_SEM_CONTEUDO }
       : undefined;
 
-  const vereditos = ligacoes.map((l) =>
-    l.fonte
-      ? compararContatoIndividual({ contato: l.contato, fonte: l.fonte, lida: porUrl.get(l.fonte.url)!, listaCargos, grupoCanonico })
-      : { resultado: compararContatoSemIndividual(l.contato, { grupoCanonico, listaCargos, uf: ufDoContato(l.contato) }), nomeConfirmado: false, lidaComConteudo: false, novos: [] as PessoaSite[] },
-  );
+  const vereditos = ligacoes.map((l) => {
+    if (!l.fonte) {
+      return {
+        resultado: compararContatoSemIndividual(l.contato, { grupoCanonico, listaCargos, uf: ufDoContato(l.contato) }),
+        nomeConfirmado: false,
+        lidaHoje: false,
+        novos: [] as PessoaSite[],
+      };
+    }
+    const lida = porUrl.get(l.fonte.url)!;
+    const v = compararContatoIndividual({ contato: l.contato, fonte: l.fonte, lida, listaCargos, grupoCanonico });
+    // Página reaproveitada: o contato é comparado como se ela fosse de hoje; só a data fica registrada (§5.2).
+    return {
+      ...v,
+      resultado: lida.reaproveitada ? { ...v.resultado, leituraDe: lida.reaproveitada.lidaEm } : v.resultado,
+      lidaHoje: lida.reaproveitada === undefined,
+    };
+  });
 
-  const lidas = lidasInd.filter(individualComConteudo).length;
-  const caidas = lidasInd.length - lidas;
-  const individuais = { lidas, caidas };
+  // Página reaproveitada não é lida nem caída (§4.1).
+  const lidas = lidasInd.filter((l) => individualComConteudo(l) && !l.reaproveitada).length;
+  const reaproveitadasInd = lidasInd.filter((l) => l.reaproveitada !== undefined).length;
+  const caidas = lidasInd.length - lidas - reaproveitadasInd;
+  const geralReaproveitada = lidaGeral?.reaproveitada;
+  const reaproveitadas = reaproveitadasInd + (geralReaproveitada ? 1 : 0);
+  const individuais = { lidas, caidas, ...(reaproveitadas > 0 ? { reaproveitadas } : {}) };
   const geralFalhou = geral !== undefined && !geralContribuiu;
 
-  // Nenhuma fonte, de grupo ou individual, lida com conteúdo: grupo inacessível, como sempre.
-  if (aLer.length + (geral ? 1 : 0) > 0 && lidas === 0 && (geral === undefined || geralFalhou)) {
+  // Nenhuma fonte, de grupo ou individual, com conteúdo (hoje ou pela memória): grupo inacessível, como sempre.
+  if (aLer.length + (geral ? 1 : 0) > 0 && lidas + reaproveitadasInd === 0 && (geral === undefined || geralFalhou)) {
     const motivo = [
       geral ? `${identificarFonte(geral)}: ${lidaGeral?.erro ?? MOTIVO_PAGINA_SEM_CONTEUDO}` : undefined,
       caidas > 0 ? textoIndividuaisCaidas(caidas) : undefined,
@@ -436,11 +457,12 @@ async function analisarGrupoIndividual(
     return { grupo: { ...marcarFonteInacessivel(grupo, contatos, geral?.url, motivo, grupoCanonico), individuais }, leituras: SEM_LEITURAS };
   }
 
-  // GUARDA DE GRUPO (§4.3): duas ou mais individuais lidas com conteúdo e nenhuma confirmou
-  // o nome do seu contato é layout que mudou ou bloqueio devolvendo outra página, nunca
-  // todo mundo saindo de uma vez. Indeterminado, com o motivo, sem novos.
-  const confirmadas = vereditos.filter((v) => v.nomeConfirmado).length;
-  if (lidas >= MIN_CONTATOS_LEITURA_SUSPEITA && confirmadas === 0) {
+  // GUARDA DE GRUPO (§4.3 de 2026-10-15): duas ou mais individuais lidas HOJE com conteúdo e
+  // nenhuma confirmou o nome do seu contato é layout que mudou ou bloqueio devolvendo outra
+  // página, nunca todo mundo saindo de uma vez. Indeterminado, com o motivo, sem novos. As
+  // páginas reaproveitadas não contam: já foram leituras boas (spec 2026-10-20 §5.2).
+  const confirmadasHoje = vereditos.filter((v) => v.lidaHoje && v.nomeConfirmado).length;
+  if (lidas >= MIN_CONTATOS_LEITURA_SUSPEITA && confirmadasHoje === 0) {
     return { grupo: { ...marcarFonteInacessivel(grupo, contatos, geral?.url, MOTIVO_LEITURA_SUSPEITA, grupoCanonico), individuais }, leituras: SEM_LEITURAS };
   }
 
@@ -461,9 +483,15 @@ async function analisarGrupoIndividual(
       contatos: vereditos.map((v) => v.resultado),
       novos: [...vereditos.flatMap((v) => v.novos), ...novosDaGeral],
       ...(erros.length > 0 ? { erroFonte: erros.join(" · ") } : {}),
+      // A geral é a `fonteUrl` do grupo: reaproveitada, o cabeçalho diz a data e o motivo.
+      ...(geral && geralReaproveitada ? { reaproveitada: { url: geral.url, ...geralReaproveitada } } : {}),
       individuais,
     },
-    leituras: SEM_LEITURAS,
+    // §4.3: individuais com conteúdo e geral com denominação entram na memória; reaproveitadas voltam com a data original.
+    leituras: [
+      ...lidasInd.filter(individualComConteudo).map((l) => guardar(l, agora)),
+      ...(lidaGeral && contribuiu(lidaGeral) ? [guardar(lidaGeral, agora)] : []),
+    ],
   };
 }
 

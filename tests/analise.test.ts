@@ -6,7 +6,7 @@ import { extrairConteudo, extrairTabela, ScrapeError } from "@/lib/scrape";
 import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { MOTIVO_NAVEGADOR_AUSENTE } from "@/lib/navegador";
 import { CATALOGO } from "@/data/catalogo";
-import type { ContatoPlanilha, ConteudoFonte } from "@/lib/types";
+import type { ContatoPlanilha, ConteudoFonte, LeituraGuardada, LeiturasGuardadas } from "@/lib/types";
 
 /**
  * `Tratamento` e `Endereçamento` coerentes e conformes: a auditoria dos dois campos roda
@@ -745,5 +745,147 @@ describe("TCU de ponta a ponta (fixture real da página montada pelo navegador)"
     expect(de("Jorge Oliveira")?.possivelSaida).toBeFalsy();
     expect(de("Aroldo Cedraz")?.possivelSaida).toBe(true);
     expect(de("Aroldo Cedraz")?.semaforo).toBe("vermelho");
+  });
+});
+
+describe("memória de leitura por página (spec 2026-10-20 §5.1)", () => {
+  const AGORA = new Date("2026-10-20T12:00:00.000Z");
+  const LIDA_EM_16 = "2026-10-16T15:50:29.000Z";
+  const URL = "https://orgao.gov.br";
+  const guardada = (conteudo: ConteudoFonte = fonte, lidaEm = LIDA_EM_16): LeituraGuardada => ({ url: conteudo.url, lidaEm, conteudo });
+  const paginaCom = (nomes: string[]): ConteudoFonte => ({ url: URL, textoLimpo: nomes.join(". "), destaques: [], pessoas: nomes.map((nome) => ({ nome, cargo: "Ministro" })) });
+  // Nomes sem token em comum: `pontuarPessoa` casaria "Pessoa Número Um" com "Pessoa Número Dois".
+  const dez = ["Alberto Caminho Verde", "Beatriz Lagoa Azul", "Carlos Monte Claro", "Dalva Serra Branca", "Eduardo Vale Fundo", "Fátima Rio Manso", "Gustavo Campo Largo", "Helena Praia Grande", "Ivo Morro Alto", "Joana Bosque Novo"];
+  const dezContatos: ContatoPlanilha[] = dez.map((nome) => ({ nome, grupo: "ORG", ...CADASTRO_OK }));
+
+  function comMemoria(raspar: Dependencias["raspar"], leituras: LeiturasGuardadas, extra: Partial<Dependencias> = {}): Dependencias {
+    return { ...deps, raspar, leiturasAnteriores: leituras, agora: () => AGORA, ...extra };
+  }
+  const erro403: Dependencias["raspar"] = async () => { throw new Error("HTTP 403"); };
+  const semNinguem: Dependencias["raspar"] = async () => ({ url: URL, textoLimpo: "", destaques: [], pessoas: [] });
+
+  test("primária com erro e memória válida → grupo lido, reaproveitada com o motivo, IA não chamada, contato verde", async () => {
+    let iaChamada = false;
+    const r = await analisar("c.xlsx", [contatos[0]], comMemoria(erro403, { [URL]: guardada() }, { extrairComposicao: async () => { iaChamada = true; return []; } }));
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBeUndefined();
+    expect(g.viaPesquisaAmpla).toBeUndefined();
+    expect(g.reaproveitada).toEqual({ url: URL, lidaEm: LIDA_EM_16, motivo: "HTTP 403" });
+    expect(g.contatos[0].semaforo).toBe("verde");
+    expect(g.contatos[0].origem).toBe("oficial");
+    expect(iaChamada).toBe(false);
+    expect(r.resumo.gruposReaproveitados).toBe(1);
+    expect(r.resumo.gruposFonteInacessivel).toBe(0);
+  });
+
+  test("primária com erro e memória vencida (8 dias) → comportamento de hoje: IA sozinha e via IA; sem IA, inacessível", async () => {
+    const vencida = { [URL]: guardada(fonte, "2026-10-12T11:00:00.000Z") };
+    const comIa = await analisar("c.xlsx", [contatos[0]], comMemoria(erro403, vencida, { extrairComposicao: async () => [{ nome: "Ana Maria Política Completa", cargo: "Presidente", origem: "conhecimento" }] }));
+    expect(comIa.grupos[0].viaPesquisaAmpla).toBe(true);
+    expect(comIa.grupos[0].reaproveitada).toBeUndefined();
+    const semIa = await analisar("c.xlsx", [contatos[0]], comMemoria(erro403, vencida));
+    expect(semIa.grupos[0].fonteInacessivel).toBe(true);
+    expect(semIa.resumo.gruposReaproveitados).toBe(0);
+  });
+
+  test("primária que respondeu sem ninguém e memória válida → reaproveitada com 'não trouxe ninguém'", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], comMemoria(semNinguem, { [URL]: guardada() }));
+    expect(r.grupos[0].reaproveitada).toMatchObject({ motivo: "não trouxe ninguém" });
+    expect(r.grupos[0].contatos[0].semaforo).toBe("verde");
+  });
+
+  test("leitura parcial (2 de 10) com memória que casa os 10 → reaproveitada com o motivo, todos verdes", async () => {
+    const hoje = async () => paginaCom(dez.slice(0, 2));
+    const r = await analisar("c.xlsx", dezContatos, comMemoria(hoje, { [URL]: guardada(paginaCom(dez)) }));
+    const g = r.grupos[0];
+    expect(g.reaproveitada).toEqual({ url: URL, lidaEm: LIDA_EM_16, motivo: "página casou 2 de 10 contatos" });
+    expect(g.contatos.every((c) => c.semaforo === "verde")).toBe(true);
+  });
+
+  test("leitura parcial sem memória → como hoje: 2 verdes e 8 possíveis saídas", async () => {
+    const r = await analisar("c.xlsx", dezContatos, comMemoria(async () => paginaCom(dez.slice(0, 2)), {}));
+    const g = r.grupos[0];
+    expect(g.reaproveitada).toBeUndefined();
+    expect(g.contatos.filter((c) => c.possivelSaida).length).toBe(8);
+  });
+
+  test("leitura parcial com memória que não casa melhor → fica a de hoje", async () => {
+    const r = await analisar("c.xlsx", dezContatos, comMemoria(async () => paginaCom(dez.slice(0, 2)), { [URL]: guardada(paginaCom(dez.slice(0, 2))) }));
+    expect(r.grupos[0].reaproveitada).toBeUndefined();
+  });
+
+  test("9 de 10 com memória → a leitura de hoje vale; quem falta é possível saída", async () => {
+    const r = await analisar("c.xlsx", dezContatos, comMemoria(async () => paginaCom(dez.slice(0, 9)), { [URL]: guardada(paginaCom(dez)) }));
+    const g = r.grupos[0];
+    expect(g.reaproveitada).toBeUndefined();
+    expect(g.contatos.filter((c) => c.possivelSaida).length).toBe(1);
+  });
+
+  test("grupo de um contato nunca é parcial: página de hoje sem ele e memória com ele → possível saída", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], comMemoria(async () => paginaCom(["Outra Pessoa Qualquer"]), { [URL]: guardada() }));
+    expect(r.grupos[0].reaproveitada).toBeUndefined();
+    expect(r.grupos[0].contatos[0].possivelSaida).toBe(true);
+  });
+
+  test("guardada que não casa ninguém de um grupo com 2+ contatos cai na leitura suspeita, nunca saída em massa", async () => {
+    const r = await analisar("c.xlsx", dezContatos, comMemoria(erro403, { [URL]: guardada(paginaCom(["Fulano Estranho", "Beltrano Estranho"])) }));
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBe(true);
+    expect(g.erroFonte).toBe(MOTIVO_LEITURA_SUSPEITA);
+    expect(g.contatos.every((c) => c.semaforo === "indeterminado")).toBe(true);
+  });
+
+  test("leituras de saída: a boa de hoje com a data de hoje; a parcial não entra; a reaproveitada mantém a data original; vencida é podada", async () => {
+    const boa = await analisar("c.xlsx", [contatos[0]], comMemoria(async () => fonte, { "https://nao-visitada": guardada({ ...fonte, url: "https://nao-visitada" }), "https://vencida": guardada({ ...fonte, url: "https://vencida" }, "2026-10-01T00:00:00.000Z") }));
+    expect(boa.leituras?.[URL]).toEqual({ url: URL, lidaEm: AGORA.toISOString(), conteudo: fonte });
+    expect(boa.leituras?.["https://nao-visitada"]).toBeDefined();
+    expect(boa.leituras?.["https://vencida"]).toBeUndefined();
+
+    const parcial = await analisar("c.xlsx", dezContatos, comMemoria(async () => paginaCom(dez.slice(0, 2)), {}));
+    expect(parcial.leituras?.[URL]).toBeUndefined();
+
+    const reaproveitada = await analisar("c.xlsx", [contatos[0]], comMemoria(erro403, { [URL]: guardada() }));
+    expect(reaproveitada.leituras?.[URL].lidaEm).toBe(LIDA_EM_16);
+  });
+
+  test("sem memória injetada, leituras sai só com as boas de hoje e nada é reaproveitado", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], { ...deps, agora: () => AGORA });
+    expect(Object.keys(r.leituras ?? {})).toEqual([URL]);
+    const caido = await analisar("c.xlsx", [contatos[0]], { ...deps, raspar: erro403 });
+    expect(caido.grupos[0].fonteInacessivel).toBe(true);
+  });
+});
+
+describe("memória de leitura com duas fontes no grupo (§5.1 passo 6)", () => {
+  const PRIMARIA = "https://senado.leg.br/em-exercicio";
+  const SECUNDARIA = "https://senado.leg.br/fora-de-exercicio";
+  const AGORA = new Date("2026-10-20T12:00:00.000Z");
+  const paginaPrimaria: ConteudoFonte = { url: PRIMARIA, textoLimpo: "Weverton — MA", destaques: [], pessoas: [{ nome: "Weverton", uf: "MA" }] };
+  const paginaSecundaria: ConteudoFonte = { url: SECUNDARIA, textoLimpo: "Wellington Dias — PI", destaques: [], pessoas: [{ nome: "Wellington Dias", uf: "PI" }] };
+  const senadores: ContatoPlanilha[] = [
+    { nome: "Weverton", grupo: "Senadores (Maranhão ao Piauí)", ...CADASTRO_OK },
+    { nome: "Wellington Dias", grupo: "Senadores (Maranhão ao Piauí)", ...CADASTRO_OK },
+    { nome: "Fulano Que Saiu", grupo: "Senadores (Maranhão ao Piauí)", ...CADASTRO_OK },
+  ];
+  const depsSenadores: Dependencias = {
+    resolverFonte: () => ({
+      grupoCanonico: "Senadores (Maranhão ao Piauí)",
+      fontes: [{ url: PRIMARIA, ativo: true }, { url: SECUNDARIA, ativo: true, rotulo: "fora de exercício", propoeInclusao: true }],
+      ufs: ["MA", "PI"], fontesIndividuais: [], sugestoes: [],
+    }),
+    raspar: async (f) => { if (f.url === SECUNDARIA) throw new Error("HTTP 403"); return paginaPrimaria; },
+    extrairComposicao: async () => [],
+    leiturasAnteriores: { [SECUNDARIA]: { url: SECUNDARIA, lidaEm: "2026-10-16T15:50:29.000Z", conteudo: paginaSecundaria } },
+    agora: () => AGORA,
+  };
+
+  test("secundária com erro e memória → anotação em erroFonte, grupo não reaproveitado, quem só constava nela casa, e a saída continua de pé", async () => {
+    const r = await analisar("c.xlsx", senadores, depsSenadores);
+    const g = r.grupos[0];
+    expect(g.reaproveitada).toBeUndefined();
+    expect(g.erroFonte).toBe("fora de exercício: leitura de 16/10 reaproveitada (HTTP 403)");
+    expect(g.contatos.map((c) => c.semaforo)).toEqual(["verde", "verde", "vermelho"]);
+    expect(g.contatos[2].possivelSaida).toBe(true);
+    expect(r.resumo.gruposReaproveitados).toBe(0);
   });
 });

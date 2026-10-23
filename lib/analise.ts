@@ -5,7 +5,10 @@ import type {
   FonteCatalogo,
   FonteIndividual,
   FonteLegivel,
+  LeituraGuardada,
+  LeiturasGuardadas,
   PessoaSite,
+  Reaproveitamento,
   ResultadoAnalise,
   ResultadoGrupo,
   ResumoAnalise,
@@ -15,6 +18,7 @@ import {
   compararContatoIndividual,
   compararContatoSemIndividual,
   compararGrupo,
+  contarContatosCasados,
   listaDeCargos,
   marcarFonteInacessivel,
   mesclarComposicao,
@@ -24,6 +28,14 @@ import {
   unirFontes,
   type ListaCargos,
 } from "@/lib/match";
+import {
+  anotacaoReaproveitada,
+  ehLeituraParcial,
+  leituraValida,
+  mesclarLeituras,
+  motivoLeituraParcial,
+  MOTIVO_SEM_NINGUEM,
+} from "@/lib/memoria-leitura";
 import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { ScrapeError } from "@/lib/scrape";
 import { fonteIndividualDe, type FonteResolvida } from "@/lib/catalogo";
@@ -45,7 +57,6 @@ const MOTIVO_PAGINA_SEM_CONTEUDO = "página não retornou conteúdo legível (pr
  * que ela é ilegível seria mentira — a lista de "fora de exercício" fica legitimamente vazia
  * quando nenhum senador está afastado.
  */
-const MOTIVO_FONTE_VAZIA = "não trouxe ninguém";
 
 /** Motivo do grupo cuja composição lida não casou nenhum contato (ver `leituraSuspeita`). */
 export const MOTIVO_LEITURA_SUSPEITA =
@@ -78,13 +89,105 @@ export interface Dependencias {
   raspar: (fonte: FonteLegivel) => Promise<ConteudoFonte>;
   /** Camada B: composição via IA (texto raspado + conhecimento). `[]` = indisponível. */
   extrairComposicao: (grupoCanonico: string, textoLimpo: string) => Promise<PessoaSite[]>;
+  /**
+   * Memória de leitura por página (spec 2026-10-20), por URL. Ausente: nada é reaproveitado e o
+   * comportamento é o de antes; `leituras` sai só com as boas de hoje.
+   */
+  leiturasAnteriores?: LeiturasGuardadas;
+  /** Relógio injetável (validade de 7 dias e data das leituras de hoje). Ausente: `new Date()`. */
+  agora?: () => Date;
 }
 
-/** Resultado da leitura de uma fonte: conteúdo OU motivo técnico da falha, nunca os dois. */
-interface FonteLida {
-  fonte: FonteCatalogo;
+/**
+ * Leitura de uma fonte, de grupo ou individual: conteúdo OU motivo técnico da falha, nunca os
+ * dois. Quando o conteúdo veio da memória (spec 2026-10-20), `reaproveitada` diz de quando ele
+ * é e por que a leitura de hoje não serviu.
+ */
+interface Leitura<F extends FonteLegivel> {
+  fonte: F;
   conteudo?: ConteudoFonte;
   erro?: string;
+  reaproveitada?: Reaproveitamento;
+}
+type FonteLida = Leitura<FonteCatalogo>;
+type IndividualLida = Leitura<FonteIndividual>;
+
+async function lerHoje<F extends FonteLegivel>(fonte: F, deps: Dependencias): Promise<Leitura<F>> {
+  try {
+    return { fonte, conteudo: await deps.raspar(fonte) };
+  } catch (err) {
+    return { fonte, erro: motivoDaFalha(err) };
+  }
+}
+
+/** A leitura guardada da URL, se existe e está no prazo (§5.3). */
+function guardadaValida(url: string, deps: Dependencias, agora: Date): LeituraGuardada | undefined {
+  const guardada = deps.leiturasAnteriores?.[url];
+  return guardada && leituraValida(guardada, agora) ? guardada : undefined;
+}
+
+/**
+ * Lê a fonte hoje e, se a leitura não serviu (`serviu` falsa: erro, sem ninguém ou sem conteúdo
+ * legível, conforme quem chama), sai pela leitura guardada válida da mesma URL, com a data
+ * original e o motivo de hoje (§5.1 passo 2, §5.2). Sem memória válida, devolve a de hoje.
+ */
+async function lerFonte<F extends FonteLegivel>(
+  fonte: F,
+  deps: Dependencias,
+  agora: Date,
+  serviu: (l: Leitura<F>) => boolean,
+  motivoPadrao: string,
+): Promise<Leitura<F>> {
+  const hoje = await lerHoje(fonte, deps);
+  if (serviu(hoje)) return hoje;
+  const guardada = guardadaValida(fonte.url, deps, agora);
+  if (!guardada) return hoje;
+  return { fonte, conteudo: guardada.conteudo, reaproveitada: { lidaEm: guardada.lidaEm, motivo: hoje.erro ?? motivoPadrao } };
+}
+
+/** O que entra na memória por esta leitura: reaproveitada volta com a data original (§4.3). */
+function guardar<F extends FonteLegivel>(l: Leitura<F>, agora: Date): LeituraGuardada {
+  return { url: l.fonte.url, lidaEm: l.reaproveitada?.lidaEm ?? agora.toISOString(), conteudo: l.conteudo as ConteudoFonte };
+}
+
+/** O que a análise de um grupo devolve: o resultado e as leituras boas desta varredura (§4.3). */
+interface AnaliseDoGrupo {
+  grupo: ResultadoGrupo;
+  leituras: LeituraGuardada[];
+}
+
+const SEM_LEITURAS: LeituraGuardada[] = [];
+
+/**
+ * §5.1 passo 4: a primária lida hoje casou menos da metade dos contatos. Se a guardada casa
+ * mais, ela entra no lugar, com o motivo "página casou X de N contatos"; senão fica a de hoje,
+ * que não será guardada (`primariaParcial`). Primária reaproveitada, sem ninguém ou que é só
+ * lista de cargos não passa por aqui.
+ */
+function reaproveitarParcial(
+  lidas: FonteLida[],
+  contatos: ContatoPlanilha[],
+  deps: Dependencias,
+  agora: Date,
+): { lidas: FonteLida[]; primariaParcial: boolean } {
+  const primaria = lidas[0];
+  const naoSeAplica = { lidas, primariaParcial: false };
+  if (!primaria || primaria.reaproveitada || !contribuiu(primaria) || primaria.fonte.casamento === "cargo") return naoSeAplica;
+  const casadosHoje = contarContatosCasados(contatos, primaria.conteudo!.pessoas);
+  if (!ehLeituraParcial(casadosHoje, contatos.length)) return naoSeAplica;
+  const guardada = guardadaValida(primaria.fonte.url, deps, agora);
+  if (!guardada || contarContatosCasados(contatos, guardada.conteudo.pessoas) <= casadosHoje) return { lidas, primariaParcial: true };
+  const trocada: FonteLida = {
+    fonte: primaria.fonte,
+    conteudo: guardada.conteudo,
+    reaproveitada: { lidaEm: guardada.lidaEm, motivo: motivoLeituraParcial(casadosHoje, contatos.length) },
+  };
+  return { lidas: [trocada, ...lidas.slice(1)], primariaParcial: false };
+}
+
+/** §4.3: fontes que contribuíram entram na memória; a primária parcial de hoje não. */
+function leiturasBoas(lidas: readonly FonteLida[], primariaParcial: boolean, agora: Date): LeituraGuardada[] {
+  return lidas.flatMap((l, i) => (!contribuiu(l) || (i === 0 && primariaParcial) ? [] : [guardar(l, agora)]));
 }
 
 /** Carimba em cada pessoa de onde ela veio, para o veredito saber o que dizer depois. */
@@ -136,33 +239,37 @@ async function analisarGrupo(
   grupo: string,
   contatos: ContatoPlanilha[],
   deps: Dependencias,
-): Promise<ResultadoGrupo> {
+  agora: Date,
+): Promise<AnaliseDoGrupo> {
   const resolvida = await deps.resolverFonte(grupo);
   // Grupo desconhecido (nenhum cadastro casa) → sem fonte; orienta com sugestões.
   if (!resolvida.grupoCanonico) {
     const base = compararGrupo(grupo, contatos, undefined);
-    return comResponsavel(
-      resolvida.sugestoes.length > 0 ? { ...base, sugestoesCadastro: resolvida.sugestoes } : base,
-      resolvida.responsavel,
-    );
+    return {
+      grupo: comResponsavel(
+        resolvida.sugestoes.length > 0 ? { ...base, sugestoesCadastro: resolvida.sugestoes } : base,
+        resolvida.responsavel,
+      ),
+      leituras: SEM_LEITURAS,
+    };
   }
 
   // Grupo com fontes individuais (spec 2026-10-15): caminho por contato. Os demais seguem abaixo.
   if (resolvida.fontesIndividuais.length > 0) {
-    return comResponsavel(await analisarGrupoIndividual(grupo, contatos, resolvida, deps), resolvida.responsavel);
+    const a = await analisarGrupoIndividual(grupo, contatos, resolvida, deps, agora);
+    return { ...a, grupo: comResponsavel(a.grupo, resolvida.responsavel) };
   }
 
   // 1. Camada 1 (base): todas as fontes ativas, em paralelo. Uma falhar não derruba a outra.
-  const lidas: FonteLida[] = await Promise.all(
-    resolvida.fontes.map(async (fonte) => {
-      try {
-        return { fonte, conteudo: await deps.raspar(fonte) };
-      } catch (err) {
-        return { fonte, erro: motivoDaFalha(err) };
-      }
-    }),
+  //    Fonte que FALHOU hoje (ver `falhou`) sai pela leitura guardada válida, se houver, com o
+  //    motivo de hoje anotado (spec 2026-10-20 §5.1, passo 2).
+  const lidasHoje: FonteLida[] = await Promise.all(
+    resolvida.fontes.map((fonte, i) => lerFonte(fonte, deps, agora, (l) => !falhou(l, i === 0), MOTIVO_SEM_NINGUEM)),
   );
+  // Leitura parcial da primária (§5.1, passo 4): só a guardada que casa mais contatos a substitui.
+  const { lidas, primariaParcial } = reaproveitarParcial(lidasHoje, contatos, deps, agora);
   const urlPrimaria = resolvida.fontes[0]?.url;
+  const primariaReaproveitada = lidas[0]?.reaproveitada;
   // Toda fonte que contribuiu entra na composição, na ordem do catálogo: dado oficial da
   // Camada 1 nunca é descartado, nem quando a primária caiu. O que a falha de UMA fonte
   // entre várias suspende é a CONCLUSÃO, não a comparação — ver `leituraParcial` abaixo.
@@ -171,20 +278,24 @@ async function analisarGrupo(
   );
   const naoContribuiram = lidas.filter((l) => !contribuiu(l));
   const algumaContribuiu = lidas.some(contribuiu);
-  // LEITURA PARCIAL: alguma fonte ativa compôs o grupo e outra FALHOU (ver `falhou`). É a
-  // única situação em que o veredito de saída fica suspenso — ver o passo 4. Fonte que
-  // respondeu e não tinha ninguém a listar não entra aqui: vira só ressalva em `erroFonte`.
-  // Quando NENHUMA fonte contribuiu nada muda em relação ao que já existia: a composição
-  // da IA, se houver, é composição real e continua podendo apontar saída (marcada
-  // `viaPesquisaAmpla`, o caminho documentado do TCU); sem IA, cai em fonte inacessível.
+  // LEITURA PARCIAL (no sentido de 2026-09-24): alguma fonte ativa compôs o grupo e outra
+  // FALHOU (ver `falhou`). É a única situação em que o veredito de saída fica suspenso — ver o
+  // passo 4. Fonte reaproveitada pela memória contribuiu e não falhou. Fonte que respondeu e
+  // não tinha ninguém a listar não entra aqui: vira só ressalva em `erroFonte`. Quando NENHUMA
+  // fonte contribuiu nada muda em relação ao que já existia: a composição da IA, se houver, é
+  // composição real e continua podendo apontar saída (marcada `viaPesquisaAmpla`); sem IA,
+  // cai em fonte inacessível.
   const leituraParcial = algumaContribuiu && lidas.some((l, i) => falhou(l, i === 0));
   // A Camada 2 recebe o texto da fonte primária — uma chamada por grupo, como sempre.
   const textoLimpo = lidas[0]?.conteudo?.textoLimpo ?? "";
 
   // 2. Camada 2 (refinamento/cobertura): composição via IA. Sem chave → [].
   // Fonte que é só lista de cargos não tem composição de pessoas a refinar: a IA não roda.
+  // Com a primária reaproveitada a IA também não roda (spec 2026-10-20 §5.1, passo 5): a
+  // composição guardada é a de um dia bom e não precisa de resgate. Primária que falhou SEM
+  // memória válida segue como sempre: a IA compõe sozinha (decisão 3).
   const primariaCasaPessoa = (resolvida.fontes[0]?.casamento ?? "pessoa") === "pessoa";
-  const pessoasIA = primariaCasaPessoa ? await deps.extrairComposicao(resolvida.grupoCanonico, textoLimpo) : [];
+  const pessoasIA = primariaCasaPessoa && !primariaReaproveitada ? await deps.extrairComposicao(resolvida.grupoCanonico, textoLimpo) : [];
   const composicao = mesclarComposicao(pessoasPagina, pessoasIA, contatos);
 
   // 3. Sem composição (nenhuma fonte legível E IA vazia): NUNCA "saída" — "não verificado".
@@ -192,16 +303,19 @@ async function analisarGrupo(
     if (urlPrimaria) {
       // Diferencia scrape que lançou erro de página que veio sem conteúdo legível (JS).
       const motivo = lidas[0]?.erro ?? MOTIVO_PAGINA_SEM_CONTEUDO;
-      return comResponsavel(
-        marcarFonteInacessivel(grupo, contatos, urlPrimaria, motivo, resolvida.grupoCanonico),
-        resolvida.responsavel,
-      );
+      return {
+        grupo: comResponsavel(
+          marcarFonteInacessivel(grupo, contatos, urlPrimaria, motivo, resolvida.grupoCanonico),
+          resolvida.responsavel,
+        ),
+        leituras: SEM_LEITURAS,
+      };
     }
     // sem URL → sem fonte
-    return comResponsavel(
-      compararGrupo(grupo, contatos, undefined, resolvida.grupoCanonico),
-      resolvida.responsavel,
-    );
+    return {
+      grupo: comResponsavel(compararGrupo(grupo, contatos, undefined, resolvida.grupoCanonico), resolvida.responsavel),
+      leituras: SEM_LEITURAS,
+    };
   }
 
   // 4. Compara contra a composição (fontes que sobreviveram + resgates da IA).
@@ -213,69 +327,51 @@ async function analisarGrupo(
   };
   // Leitura parcial: parte da composição oficial ficou de fora, então ninguém deste grupo
   // pode ser dado como saída — e o usuário precisa saber disso, na tela e no export.
-  const r = compararGrupo(
-    grupo,
-    contatos,
-    fonte,
-    resolvida.grupoCanonico,
-    resolvida.ufs,
-    leituraParcial,
-  );
-  // LEITURA SUSPEITA: composição real (página e/ou IA) que não casa nenhum contato de um
-  // grupo com 2+ contatos é, na prática, página que não montou, layout que mudou ou página
+  const r = compararGrupo(grupo, contatos, fonte, resolvida.grupoCanonico, resolvida.ufs, leituraParcial);
+  // LEITURA SUSPEITA: composição real (página, memória e/ou IA) que não casa nenhum contato de
+  // um grupo com 2+ contatos é, na prática, página que não montou, layout que mudou ou página
   // errada, nunca um grupo inteiro que saiu. Não se confia nela: o grupo fica indeterminado,
   // com o motivo, e o fiscal confere à mão; sem `novos`, que viriam da mesma leitura ruim. A
   // leitura parcial já suspende a saída (ninguém vira possível saída) e nunca dispara aqui.
   // Grupo SEM URL no catálogo (composição só da IA) cai no caminho "sem fonte": a tela diz
   // "cadastrar fonte", e não aparece um link "abrir" apontando para o sentinela da IA.
+  // Leitura ruim de hoje não entra na memória.
   if (leituraSuspeita(r)) {
-    return comResponsavel(
-      urlPrimaria
-        ? marcarFonteInacessivel(
-            grupo,
-            contatos,
-            urlPrimaria,
-            MOTIVO_LEITURA_SUSPEITA,
-            resolvida.grupoCanonico,
-          )
-        : compararGrupo(grupo, contatos, undefined, resolvida.grupoCanonico),
-      resolvida.responsavel,
-    );
+    return {
+      grupo: comResponsavel(
+        urlPrimaria
+          ? marcarFonteInacessivel(grupo, contatos, urlPrimaria, MOTIVO_LEITURA_SUSPEITA, resolvida.grupoCanonico)
+          : compararGrupo(grupo, contatos, undefined, resolvida.grupoCanonico),
+        resolvida.responsavel,
+      ),
+      leituras: SEM_LEITURAS,
+    };
   }
-  // Ressalva atribuída A CADA fonte que não compôs — sem identificar qual, "HTTP 403"
-  // parece falha da primária. Vale para as duas formas de não compor, inclusive a que NÃO
-  // suspende o veredito: o usuário tem que saber que aquela fonte não trouxe nada. Só
-  // rótulo/URL e o motivo técnico: nunca um contato.
-  const erro = algumaContribuiu && naoContribuiram.length > 0
-    ? naoContribuiram
-        .map((l) => `${identificarFonte(l.fonte)}: ${l.erro ?? MOTIVO_FONTE_VAZIA}`)
-        .join(" · ")
-    : undefined;
+  // Ressalva atribuída A CADA fonte que não compôs — sem identificar qual, "HTTP 403" parece
+  // falha da primária. Vale para as duas formas de não compor, inclusive a que NÃO suspende o
+  // veredito: o usuário tem que saber que aquela fonte não trouxe nada. Fonte secundária
+  // reaproveitada pela memória também é anotada aqui (spec 2026-10-20 §5.1, passo 6), sem
+  // mudar o veredito. Só rótulo/URL e o motivo técnico: nunca um contato.
+  const anotacoes = [
+    ...naoContribuiram.map((l) => `${identificarFonte(l.fonte)}: ${l.erro ?? MOTIVO_SEM_NINGUEM}`),
+    ...lidas.slice(1).flatMap((l) => (l.reaproveitada ? [`${identificarFonte(l.fonte)}: ${anotacaoReaproveitada(l.reaproveitada)}`] : [])),
+  ];
+  const erro = algumaContribuiu && anotacoes.length > 0 ? anotacoes.join(" · ") : undefined;
   // Marca o grupo quando a composição dependeu do conhecimento da IA (não 100% oficial).
   const usouConhecimento = composicao.some((p) => p.origem === "conhecimento");
-  return comResponsavel(
-    {
-      ...r,
-      ...(erro ? { erroFonte: erro } : {}),
-      ...(usouConhecimento || !urlPrimaria ? { viaPesquisaAmpla: true } : {}),
-    },
-    resolvida.responsavel,
-  );
-}
-
-/** Leitura de uma fonte individual, pela URL. */
-interface IndividualLida {
-  fonte: FonteIndividual;
-  conteudo?: ConteudoFonte;
-  erro?: string;
-}
-
-async function lerFonte<F extends FonteLegivel>(fonte: F, deps: Dependencias): Promise<{ fonte: F; conteudo?: ConteudoFonte; erro?: string }> {
-  try {
-    return { fonte, conteudo: await deps.raspar(fonte) };
-  } catch (err) {
-    return { fonte, erro: motivoDaFalha(err) };
-  }
+  return {
+    grupo: comResponsavel(
+      {
+        ...r,
+        ...(erro ? { erroFonte: erro } : {}),
+        // Primária substituída pela guardada: o grupo sai LIDO, com a data e o motivo (§5.1, passo 6).
+        ...(primariaReaproveitada && urlPrimaria ? { reaproveitada: { url: urlPrimaria, ...primariaReaproveitada } } : {}),
+        ...(usouConhecimento || !urlPrimaria ? { viaPesquisaAmpla: true } : {}),
+      },
+      resolvida.responsavel,
+    ),
+    leituras: leiturasBoas(lidas, primariaParcial, agora),
+  };
 }
 
 function individualComConteudo(l: { conteudo?: ConteudoFonte; erro?: string }): boolean {
@@ -298,7 +394,8 @@ async function analisarGrupoIndividual(
   contatos: ContatoPlanilha[],
   resolvida: FonteResolvida,
   deps: Dependencias,
-): Promise<ResultadoGrupo> {
+  agora: Date,
+): Promise<AnaliseDoGrupo> {
   const grupoCanonico = resolvida.grupoCanonico;
   const ligacoes = contatos.map((c) => ({ contato: c, fonte: fonteIndividualDe(c, resolvida.fontesIndividuais) }));
   // Cada URL é lida UMA vez, mesmo com dois contatos ligados a ela; individual sem contato não é lida.
@@ -306,8 +403,8 @@ async function analisarGrupoIndividual(
   const geral = resolvida.fontes[0];
   // A geral entra na fila do Chrome ANTES das individuais: lida por último, chegava quando o
   // gov.br já limitava os pedidos (HTTP 429 em 2026-10-15) e o cargo de todos ficava sem fonte.
-  const leituraGeral = geral ? lerFonte(geral, deps) : Promise.resolve(undefined);
-  const [lidaGeral, lidasInd] = await Promise.all([leituraGeral, Promise.all(aLer.map((f) => lerFonte(f, deps)))]);
+  const leituraGeral = geral ? lerHoje(geral, deps) : Promise.resolve(undefined);
+  const [lidaGeral, lidasInd] = await Promise.all([leituraGeral, Promise.all(aLer.map((f) => lerHoje(f, deps)))]);
   const porUrl = new Map<string, IndividualLida>(lidasInd.map((l) => [l.fonte.url, l]));
 
   // Fonte do cargo do grupo: a lista de denominações, ou o motivo de ela não ter vindo.
@@ -336,7 +433,7 @@ async function analisarGrupoIndividual(
       geral ? `${identificarFonte(geral)}: ${lidaGeral?.erro ?? MOTIVO_PAGINA_SEM_CONTEUDO}` : undefined,
       caidas > 0 ? textoIndividuaisCaidas(caidas) : undefined,
     ].filter(Boolean).join(" · ");
-    return { ...marcarFonteInacessivel(grupo, contatos, geral?.url, motivo, grupoCanonico), individuais };
+    return { grupo: { ...marcarFonteInacessivel(grupo, contatos, geral?.url, motivo, grupoCanonico), individuais }, leituras: SEM_LEITURAS };
   }
 
   // GUARDA DE GRUPO (§4.3): duas ou mais individuais lidas com conteúdo e nenhuma confirmou
@@ -344,7 +441,7 @@ async function analisarGrupoIndividual(
   // todo mundo saindo de uma vez. Indeterminado, com o motivo, sem novos.
   const confirmadas = vereditos.filter((v) => v.nomeConfirmado).length;
   if (lidas >= MIN_CONTATOS_LEITURA_SUSPEITA && confirmadas === 0) {
-    return { ...marcarFonteInacessivel(grupo, contatos, geral?.url, MOTIVO_LEITURA_SUSPEITA, grupoCanonico), individuais };
+    return { grupo: { ...marcarFonteInacessivel(grupo, contatos, geral?.url, MOTIVO_LEITURA_SUSPEITA, grupoCanonico), individuais }, leituras: SEM_LEITURAS };
   }
 
   const erros = [
@@ -357,13 +454,16 @@ async function analisarGrupoIndividual(
       ? novosForaDaPlanilha(marcarProveniencia(lidaGeral!.conteudo!.pessoas, geral), contatos)
       : [];
   return {
-    grupo,
-    ...(geral ? { fonteUrl: geral.url } : {}),
-    semFonte: false,
-    contatos: vereditos.map((v) => v.resultado),
-    novos: [...vereditos.flatMap((v) => v.novos), ...novosDaGeral],
-    ...(erros.length > 0 ? { erroFonte: erros.join(" · ") } : {}),
-    individuais,
+    grupo: {
+      grupo,
+      ...(geral ? { fonteUrl: geral.url } : {}),
+      semFonte: false,
+      contatos: vereditos.map((v) => v.resultado),
+      novos: [...vereditos.flatMap((v) => v.novos), ...novosDaGeral],
+      ...(erros.length > 0 ? { erroFonte: erros.join(" · ") } : {}),
+      individuais,
+    },
+    leituras: SEM_LEITURAS,
   };
 }
 
@@ -420,12 +520,15 @@ export async function analisar(
   deps: Dependencias,
   enderecos?: EnderecoEstruturado[],
 ): Promise<ResultadoAnalise> {
+  const agora = deps.agora?.() ?? new Date();
   const indice = enderecos && enderecos.length > 0 ? indexarEnderecos(enderecos) : undefined;
   const porGrupo = agruparPorGrupo(contatos);
-  const grupos = await Promise.all(
-    [...porGrupo.entries()].map(async ([grupo, lista]) =>
-      anexarEnderecos(await analisarGrupo(grupo, lista, deps), indice),
-    ),
+  const analisados = await Promise.all(
+    [...porGrupo.entries()].map(([grupo, lista]) => analisarGrupo(grupo, lista, deps, agora)),
   );
-  return { arquivoNome, grupos, resumo: resumir(grupos) };
+  const grupos = analisados.map((a) => anexarEnderecos(a.grupo, indice));
+  // A memória que sai desta varredura (spec 2026-10-20 §6, passo 3): a anterior podada,
+  // sobreposta pelas leituras boas de hoje e pelas reaproveitadas, com a data original.
+  const leituras = mesclarLeituras(deps.leiturasAnteriores ?? {}, analisados.flatMap((a) => a.leituras), agora);
+  return { arquivoNome, grupos, resumo: resumir(grupos), leituras };
 }

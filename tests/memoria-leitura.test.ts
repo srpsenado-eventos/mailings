@@ -88,6 +88,12 @@ describe("mesclarLeituras", () => {
     const saida = mesclarLeituras(anteriores, [leitura(URL_A, "2026-10-16T12:00:00.000Z", ["Velha"])], AGORA);
     expect(saida[URL_A].lidaEm).toBe("2026-10-16T12:00:00.000Z");
   });
+  test("duas colhidas da mesma URL: a mais recente vence, qualquer que seja a ordem", () => {
+    const antiga = leitura(URL_A, "2026-10-16T12:00:00.000Z", ["Antiga"]);
+    const nova = leitura(URL_A, AGORA.toISOString(), ["Nova"]);
+    expect(mesclarLeituras({}, [nova, antiga], AGORA)[URL_A].conteudo.pessoas).toEqual([{ nome: "Nova" }]);
+    expect(mesclarLeituras({}, [antiga, nova], AGORA)[URL_A].conteudo.pessoas).toEqual([{ nome: "Nova" }]);
+  });
 });
 
 describe("reconstruirLeituras (§5.4)", () => {

@@ -51,13 +51,6 @@ function motivoDaFalha(err: unknown): string {
 /** Motivo padrão quando o scrape teve sucesso (HTTP 200) mas não achou ninguém — caso do TCU/JS. */
 const MOTIVO_PAGINA_SEM_CONTEUDO = "página não retornou conteúdo legível (provável JavaScript)";
 
-/**
- * Motivo de uma fonte que respondeu e simplesmente não trouxe ninguém, enquanto outra fonte
- * do grupo trouxe. Diferente do diagnóstico acima de propósito: a página respondeu, e dizer
- * que ela é ilegível seria mentira — a lista de "fora de exercício" fica legitimamente vazia
- * quando nenhum senador está afastado.
- */
-
 /** Motivo do grupo cuja composição lida não casou nenhum contato (ver `leituraSuspeita`). */
 export const MOTIVO_LEITURA_SUSPEITA =
   "leitura suspeita: nenhum contato do grupo foi encontrado na composição lida";
@@ -120,6 +113,9 @@ async function lerHoje<F extends FonteLegivel>(fonte: F, deps: Dependencias): Pr
   }
 }
 
+/** Guardada sem ninguém não serve à fonte de grupo (nem à lista geral): só a individual pode ser legitimamente vazia. */
+const GUARDADA_COM_PESSOAS = (g: LeituraGuardada): boolean => g.conteudo.pessoas.length > 0;
+
 /** A leitura guardada da URL, se existe e está no prazo (§5.3). */
 function guardadaValida(url: string, deps: Dependencias, agora: Date): LeituraGuardada | undefined {
   const guardada = deps.leiturasAnteriores?.[url];
@@ -129,7 +125,8 @@ function guardadaValida(url: string, deps: Dependencias, agora: Date): LeituraGu
 /**
  * Lê a fonte hoje e, se a leitura não serviu (`serviu` falsa: erro, sem ninguém ou sem conteúdo
  * legível, conforme quem chama), sai pela leitura guardada válida da mesma URL, com a data
- * original e o motivo de hoje (§5.1 passo 2, §5.2). Sem memória válida, devolve a de hoje.
+ * original e o motivo de hoje (§5.1 passo 2, §5.2). Sem memória válida (ou que `serveGuardada`
+ * recusa), devolve a de hoje.
  */
 async function lerFonte<F extends FonteLegivel>(
   fonte: F,
@@ -137,11 +134,12 @@ async function lerFonte<F extends FonteLegivel>(
   agora: Date,
   serviu: (l: Leitura<F>) => boolean,
   motivoPadrao: string,
+  serveGuardada: (g: LeituraGuardada) => boolean = () => true,
 ): Promise<Leitura<F>> {
   const hoje = await lerHoje(fonte, deps);
   if (serviu(hoje)) return hoje;
   const guardada = guardadaValida(fonte.url, deps, agora);
-  if (!guardada) return hoje;
+  if (!guardada || !serveGuardada(guardada)) return hoje;
   return { fonte, conteudo: guardada.conteudo, reaproveitada: { lidaEm: guardada.lidaEm, motivo: hoje.erro ?? motivoPadrao } };
 }
 
@@ -264,7 +262,7 @@ async function analisarGrupo(
   //    Fonte que FALHOU hoje (ver `falhou`) sai pela leitura guardada válida, se houver, com o
   //    motivo de hoje anotado (spec 2026-10-20 §5.1, passo 2).
   const lidasHoje: FonteLida[] = await Promise.all(
-    resolvida.fontes.map((fonte, i) => lerFonte(fonte, deps, agora, (l) => !falhou(l, i === 0), MOTIVO_SEM_NINGUEM)),
+    resolvida.fontes.map((fonte, i) => lerFonte(fonte, deps, agora, (l) => !falhou(l, i === 0), MOTIVO_SEM_NINGUEM, GUARDADA_COM_PESSOAS)),
   );
   // Leitura parcial da primária (§5.1, passo 4): só a guardada que casa mais contatos a substitui.
   const { lidas, primariaParcial } = reaproveitarParcial(lidasHoje, contatos, deps, agora);
@@ -404,7 +402,7 @@ async function analisarGrupoIndividual(
   const geral = resolvida.fontes[0];
   // A geral entra na fila do Chrome ANTES das individuais: lida por último, chegava quando o
   // gov.br já limitava os pedidos (HTTP 429 em 2026-10-15) e o cargo de todos ficava sem fonte.
-  const leituraGeral = geral ? lerFonte(geral, deps, agora, contribuiu, MOTIVO_PAGINA_SEM_CONTEUDO) : Promise.resolve(undefined);
+  const leituraGeral = geral ? lerFonte(geral, deps, agora, contribuiu, MOTIVO_PAGINA_SEM_CONTEUDO, GUARDADA_COM_PESSOAS) : Promise.resolve(undefined);
   const [lidaGeral, lidasInd] = await Promise.all([
     leituraGeral,
     Promise.all(aLer.map((f) => lerFonte(f, deps, agora, individualComConteudo, MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO))),

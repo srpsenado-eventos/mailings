@@ -854,6 +854,14 @@ describe("memória de leitura por página (spec 2026-10-20 §5.1)", () => {
     const caido = await analisar("c.xlsx", [contatos[0]], { ...deps, raspar: erro403 });
     expect(caido.grupos[0].fonteInacessivel).toBe(true);
   });
+  test("guardada sem ninguém não serve à primária: com IA, o grupo segue via IA como antes; sem IA, inacessível", async () => {
+    const vazia: ConteudoFonte = { url: URL, textoLimpo: "", destaques: [], pessoas: [] };
+    const comIa = await analisar("c.xlsx", [contatos[0]], comMemoria(erro403, { [URL]: guardada(vazia) }, { extrairComposicao: async () => [{ nome: "Ana Maria Política Completa", cargo: "Presidente", origem: "conhecimento" }] }));
+    expect(comIa.grupos[0].viaPesquisaAmpla).toBe(true);
+    expect(comIa.grupos[0].reaproveitada).toBeUndefined();
+    const semIa = await analisar("c.xlsx", [contatos[0]], comMemoria(erro403, { [URL]: guardada(vazia) }));
+    expect(semIa.grupos[0].fonteInacessivel).toBe(true);
+  });
 });
 
 describe("memória de leitura com duas fontes no grupo (§5.1 passo 6)", () => {

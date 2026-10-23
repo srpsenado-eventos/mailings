@@ -12,7 +12,11 @@ export const VALIDADE_LEITURA_DIAS = 7;
 export const FRACAO_MINIMA_CASADA = 0.5;
 /** Grupo de um contato só nunca é leitura parcial: uma pessoa pode mesmo ter saído. */
 export const MIN_CONTATOS_LEITURA_PARCIAL = 2;
-/** Motivo de hoje quando a página respondeu e não trouxe ninguém. */
+/**
+ * Motivo de hoje quando a página respondeu e não trouxe ninguém. Diferente do diagnóstico de
+ * "provável JavaScript" de propósito: a página respondeu, e dizer que ela é ilegível seria
+ * mentira (a lista de "fora de exercício" fica legitimamente vazia quando ninguém está afastado).
+ */
 export const MOTIVO_SEM_NINGUEM = "não trouxe ninguém";
 
 const MS_POR_DIA = 24 * 60 * 60 * 1000;
@@ -76,11 +80,16 @@ export function podarLeituras(leituras: unknown, agora: Date): LeiturasGuardadas
 
 /**
  * §6 passo 3: a memória anterior podada, sobreposta pelas leituras desta varredura (as boas de
- * hoje, com a data de hoje, e as reaproveitadas, com a data original). Não muta a entrada.
+ * hoje, com a data de hoje, e as reaproveitadas, com a data original). Na mesma URL, a leitura de
+ * data mais recente vence, qualquer que seja a ordem (grupos que compartilham a página podem ler
+ * hoje um e reaproveitar a guardada no outro). Não muta a entrada.
  */
 export function mesclarLeituras(anteriores: LeiturasGuardadas, colhidas: readonly LeituraGuardada[], agora: Date): LeiturasGuardadas {
   const saida = podarLeituras(anteriores, agora);
-  for (const l of colhidas) saida[l.url] = l;
+  for (const l of colhidas) {
+    const existente = saida[l.url];
+    if (!existente || Date.parse(l.lidaEm) >= Date.parse(existente.lidaEm)) saida[l.url] = l;
+  }
   return saida;
 }
 

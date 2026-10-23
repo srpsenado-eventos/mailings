@@ -570,4 +570,11 @@ describe("memória de leitura no export (spec 2026-10-20 §7)", () => {
     };
     expect(resultadoParaLinhas(comMemoria)[0].Observacao).toBe("Leitura de 16/10 reaproveitada (página casou 2 de 10 contatos)");
   });
+  test("contato com página individual reaproveitada leva a data na observação", () => {
+    const comIndividual: ResultadoAnalise = {
+      ...analise,
+      grupos: [{ ...analise.grupos[0], contatos: [{ ...analise.grupos[0].contatos[0], leituraDe: "2026-10-19T10:00:00.000Z" }] }],
+    };
+    expect(resultadoParaLinhas(comIndividual)[0].Observacao).toBe("Leitura de 19/10 reaproveitada");
+  });
 });

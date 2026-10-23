@@ -1,7 +1,7 @@
 import * as XLSX from "xlsx";
 import { coerenciasVisiveis, textoCoerencia, ROTULOS_CAMPO_TRATAMENTO } from "@/lib/tratamento";
 import { rotuloAchadoEndereco } from "@/lib/endereco";
-import { anotacaoReaproveitada } from "@/lib/memoria-leitura";
+import { anotacaoReaproveitada, diaMes } from "@/lib/memoria-leitura";
 import type {
   AuditoriaEndereco,
   ComparacaoCampo,
@@ -128,7 +128,7 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
         Divergencias: [...new Set(c.camposDivergentes.map((d) => d.campo))].join(", "),
         Origem: c.origem,
         Fonte: c.fonteUrl ?? "",
-        Observacao: observacaoCom(c.observacao, ressalvas),
+        Observacao: observacaoCom(c.observacao, [...(c.leituraDe ? [`Leitura de ${diaMes(c.leituraDe)} reaproveitada`] : []), ...ressalvas]),
         "Fonte do cargo": fonteDoCargo(c),
       };
       for (const f of CAMPOS) {

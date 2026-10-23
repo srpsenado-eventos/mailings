@@ -29,7 +29,7 @@ const analise: ResultadoAnalise = {
   ],
   resumo: {
     total: 1, verde: 0, amarelo: 1, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-    gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+    gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
   },
 };
 
@@ -70,7 +70,7 @@ describe("resultadoParaLinhas", () => {
       ],
       resumo: {
         total: 0, verde: 0, amarelo: 0, vermelho: 0, novo: 1, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
       },
     };
     const linha = resultadoParaLinhas(analise)[0];
@@ -108,7 +108,7 @@ describe("resultadoParaLinhas", () => {
       ],
       resumo: {
         total: 1, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 1, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
       },
     };
 
@@ -152,7 +152,7 @@ describe("resultadoParaLinhas", () => {
       ],
       resumo: {
         total: 1, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 1, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-        gruposSemFonte: 0, gruposFonteInacessivel: 1, gruposViaPesquisaAmpla: 0,
+        gruposSemFonte: 0, gruposFonteInacessivel: 1, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
       },
     };
 
@@ -205,7 +205,7 @@ function analiseCom(comparacoes: ComparacaoCampo[], contato: ContatoPlanilha): R
     ],
     resumo: {
       total: 1, verde: 0, amarelo: 1, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-      gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+      gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
     },
   };
 }
@@ -450,7 +450,7 @@ function analiseComContato(over: Partial<ResultadoContato>): ResultadoAnalise {
     ],
     resumo: {
       total: 1, verde: 1, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-      gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+      gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
     },
   };
 }

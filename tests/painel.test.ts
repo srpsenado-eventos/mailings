@@ -309,7 +309,7 @@ describe("cartoesDoResumo", () => {
     const cartoes = cartoesDoResumo({
       total: 10, verde: 4, amarelo: 2, vermelho: 3, novo: 1, indeterminado: 1,
       enderecosAConfirmar: 5, possivelSaida: 2, contatosSemFonte: 1,
-      gruposSemFonte: 1, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+      gruposSemFonte: 1, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
     });
     expect(cartoes).toEqual([
       { rotulo: "Conferem", valor: 4 },
@@ -354,7 +354,7 @@ describe("textoDataHora", () => {
 describe("montarRetrato", () => {
   const resultado: ResultadoAnalise = {
     arquivoNome: "c.xlsx", grupos: [],
-    resumo: { total: 0, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0, gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0 },
+    resumo: { total: 0, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0, gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0 },
   };
 
   test("com as duas planilhas", () => {

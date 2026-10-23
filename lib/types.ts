@@ -73,6 +73,24 @@ export interface ConteudoFonte {
   pessoas: PessoaSite[];
 }
 
+/** Uma página oficial lida com sucesso, guardada para reaproveitamento (spec 2026-10-20 §4.1). */
+export interface LeituraGuardada {
+  url: string;
+  /** Hora da leitura que produziu o conteúdo, ISO 8601. Reaproveitar não muda a data. */
+  lidaEm: string;
+  conteudo: ConteudoFonte;
+}
+
+/** Chave: a URL da página. */
+export type LeiturasGuardadas = Record<string, LeituraGuardada>;
+
+/** A leitura de hoje foi substituída pela guardada: de quando ela é e por que a de hoje não serviu. */
+export interface Reaproveitamento {
+  lidaEm: string;
+  /** Motivo técnico de hoje ("HTTP 403", "não trouxe ninguém", "página casou 2 de 10 contatos"). Sem PII. */
+  motivo: string;
+}
+
 export type Semaforo = "verde" | "amarelo" | "vermelho" | "novo" | "indeterminado";
 export type OrigemVeredito = "oficial" | "pesquisa_ampla";
 
@@ -124,6 +142,8 @@ export interface ResultadoContato {
   origem: OrigemVeredito;
   fonteUrl?: string;
   observacao?: string;
+  /** ISO 8601 da leitura reaproveitada da página individual do contato (spec 2026-10-20 §5.2). Ausente quando lida nesta varredura. */
+  leituraDe?: string;
   /**
    * Auditoria de endereço (Camada D). **Não** entra em `camposDivergentes` nem muda
    * `semaforo`: ver docs/superpowers/specs/2026-10-01-auditoria-de-endereco-camada-d.md
@@ -153,8 +173,17 @@ export interface ResultadoGrupo {
    * não oficial — sinalizado ao usuário.
    */
   viaPesquisaAmpla?: boolean;
-  /** Páginas individuais ligadas a contatos do grupo: lidas com conteúdo e caídas (spec 2026-10-15 §6.1). */
-  individuais?: { lidas: number; caidas: number };
+  /**
+   * A fonte primária do grupo foi substituída pela leitura guardada (spec 2026-10-20 §4.1).
+   * Nunca junto com `fonteInacessivel` nem com `viaPesquisaAmpla`.
+   */
+  reaproveitada?: Reaproveitamento & { url: string };
+  /**
+   * Páginas individuais ligadas a contatos do grupo: lidas com conteúdo hoje, caídas, e as que
+   * entraram pela memória (spec 2026-10-15 §6.1; 2026-10-20 §4.1). `reaproveitadas` só aparece
+   * quando maior que zero; retrato antigo não o traz.
+   */
+  individuais?: { lidas: number; caidas: number; reaproveitadas?: number };
   /**
    * Quando o rótulo da planilha não casa nenhum grupo cadastrado (semFonte),
    * nomes cadastrados mais próximos para orientar o usuário a alinhar a planilha.
@@ -184,6 +213,8 @@ export interface ResumoAnalise {
   gruposFonteInacessivel: number;
   /** Grupos verificados pela 2ª etapa (pesquisa ampla via Gemini). */
   gruposViaPesquisaAmpla: number;
+  /** Grupos com `reaproveitada` ou com `individuais.reaproveitadas > 0` (spec 2026-10-20). */
+  gruposReaproveitados: number;
 }
 
 export interface ResultadoAnalise {
@@ -192,6 +223,8 @@ export interface ResultadoAnalise {
   resumo: ResumoAnalise;
   /** Presente só quando a varredura recebeu as planilhas de eleitos. */
   eleicao?: ResultadoEleicao;
+  /** Memória de leitura que sai desta varredura (spec 2026-10-20 §6). Só no retrato local; ausente em retrato antigo. */
+  leituras?: LeiturasGuardadas;
 }
 
 /**

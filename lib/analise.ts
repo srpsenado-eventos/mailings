@@ -394,11 +394,13 @@ function resumir(grupos: ResultadoGrupo[]): ResumoAnalise {
     gruposSemFonte: 0,
     gruposFonteInacessivel: 0,
     gruposViaPesquisaAmpla: 0,
+    gruposReaproveitados: 0,
   };
   for (const g of grupos) {
     if (g.semFonte) resumo.gruposSemFonte += 1;
     if (g.fonteInacessivel) resumo.gruposFonteInacessivel += 1;
     if (g.viaPesquisaAmpla) resumo.gruposViaPesquisaAmpla += 1;
+    if (g.reaproveitada || (g.individuais?.reaproveitadas ?? 0) > 0) resumo.gruposReaproveitados += 1;
     resumo.novo += g.novos.length;
     for (const c of g.contatos) {
       resumo.total += 1;

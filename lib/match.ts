@@ -97,6 +97,15 @@ export function mesclarComposicao(
 }
 
 /**
+ * Quantos contatos casam alguém da composição, pela mesma régua de `mesclarComposicao`.
+ * Serve à leitura parcial da spec 2026-10-20 (§5.1, passo 4): a página de hoje casou
+ * menos da metade do grupo?
+ */
+export function contarContatosCasados(contatos: readonly ContatoPlanilha[], pessoas: readonly PessoaSite[]): number {
+  return contatos.filter((c) => pessoas.some((p) => pontuarPessoa(c.nome, p.nome) >= LIMIAR_PESSOA)).length;
+}
+
+/**
  * Une as composições das várias fontes ativas de um grupo, na ordem do catálogo. A
  * primeira fonte que publica alguém vence: a mesma autoridade pode constar em duas
  * páginas do mesmo órgão, e contá-la duas vezes duplicaria a proposta de inclusão e

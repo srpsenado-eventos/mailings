@@ -59,10 +59,10 @@ export type LeiturasGuardadas = Record<string, LeituraGuardada>;
 
 - `ResultadoAnalise.leituras?: LeiturasGuardadas`: a memória que sai desta varredura (ver §6). O `Retrato` herda o campo. Ausente em retrato gravado antes do mecanismo.
 - `ResultadoGrupo.reaproveitada?: { url: string; lidaEm: string; motivo: string }`: a **fonte primária** do grupo foi substituída pela leitura guardada. `motivo` é o motivo técnico de hoje ("HTTP 403", "não trouxe ninguém", "página casou 2 de 10 contatos"). Nunca junto com `fonteInacessivel` nem com `viaPesquisaAmpla`.
-- `ResultadoGrupo.individuais?: { lidas: number; caidas: number; reaproveitadas: number }`: `reaproveitadas` conta as páginas individuais (e a geral, quando reaproveitada) que entraram pela memória. `lidas` continua contando as páginas com conteúdo hoje; uma página reaproveitada não é lida nem caída.
+- `ResultadoGrupo.individuais?: { lidas: number; caidas: number; reaproveitadas?: number }`: `reaproveitadas` conta as páginas individuais (e a geral, quando reaproveitada) que entraram pela memória. `lidas` continua contando as páginas com conteúdo hoje; uma página reaproveitada não é lida nem caída. Opcional no tipo porque retrato gravado antes do mecanismo não o traz; a tela trata ausente como zero. Em grupo com individuais, a lista geral reaproveitada também marca `reaproveitada` no grupo (ela é a `fonteUrl` do grupo), para o cabeçalho dizer a data e o motivo.
 - `ResultadoContato.leituraDe?: string`: ISO 8601 da leitura reaproveitada da página individual do contato. Ausente quando a página foi lida hoje.
 - `ResumoAnalise.gruposReaproveitados: number`: grupos com `reaproveitada` ou com `individuais.reaproveitadas > 0`.
-- `Dependencias.leituraAnterior?: (url: string) => LeituraGuardada | undefined` e `Dependencias.agora?: () => Date` (`lib/analise.ts`). Sem `leituraAnterior`, nada é reaproveitado e o comportamento é o de hoje; sem `agora`, `new Date()`.
+- `Dependencias.leiturasAnteriores?: LeiturasGuardadas` e `Dependencias.agora?: () => Date` (`lib/analise.ts`). Sem `leiturasAnteriores`, nada é reaproveitado e o comportamento é o de hoje; sem `agora`, `new Date()`. (Ajuste de 20/10, ao planejar: o mapa inteiro, e não uma função por URL, para `analisar` devolver a memória mesclada e podada do §6 sem a rota conhecer a regra.)
 
 ### 4.2 Constantes (`lib/memoria-leitura.ts`)
 
@@ -114,7 +114,7 @@ A leitura parcial substitui a regra de leitura suspeita só quando existe leitur
 
 Para um retrato gravado antes do mecanismo (`leituras` ausente), `reconstruirLeituras(retrato)` monta a memória só das **fontes de grupo lidas da página**: grupo sem `semFonte`, sem `fonteInacessivel`, sem `viaPesquisaAmpla`, sem `individuais`, com `fonteUrl` http. A composição reconstruída:
 
-- uma pessoa por contato cuja comparação de `nome` tem `valorEsperado` com `origemValor: "pagina"`: `nome` é esse valor, `cargo` é o `valorEsperado` da comparação de `cargo` quando `origemValor: "pagina"`;
+- uma pessoa por contato cuja comparação de `nome` tem `valorEsperado` vindo da página: `origemValor` igual a `"pagina"` **ou ausente** (a raspagem real não carimba `origem` nas pessoas da página, então os retratos gravados trazem `origemValor` ausente para valor de página; `"conhecimento"` é a IA, `"coerencia"` e `"protocolo"` são as outras camadas e ficam fora). `nome` é esse valor; `cargo` é o `valorEsperado` da comparação de `cargo` pela mesma regra;
 - mais cada registro de `novos` que não veio da IA (`origem !== "conhecimento"`).
 
 `conteudo` fica `{ url: fonteUrl, textoLimpo: nomes separados por linha, destaques: [], pessoas }`; `lidaEm` é o `geradoEm` do retrato. Grupo com mais de uma fonte entra pela primária (`fonteUrl`), que é a única que o retrato identifica. Páginas individuais não são reconstruídas: começam a ser guardadas na primeira leitura boa com o código novo.
@@ -140,7 +140,7 @@ O retrato local no momento do merge tem o STF via IA (20/10) e o TST via IA; só
 - **Cabeçalho do grupo** (`components/painel.tsx`, texto por função pura em `lib/painel.ts`): com `reaproveitada`, linha em cor de atenção "Leitura de 16/10 reaproveitada: hoje a página não respondeu (HTTP 403)" ou "…: hoje a página casou 2 de 10 contatos". A procedência "Nome e cargo" aponta para a URL, como hoje.
 - **Individuais**: `textoIndividuais` passa a "38 páginas individuais lidas · 4 reaproveitadas · 2 inacessíveis" (omite as partes com zero).
 - **Contato** com `leituraDe`: a linha de procedência do campo diz "leitura de 16/10" ao lado da URL. Sem etiqueta nova.
-- **Resumo**: `gruposReaproveitados` no resumo do retrato; aparece na linha de situação dos grupos do painel local e da web, e no relatório da coleta. Não vira cartão.
+- **Resumo**: `gruposReaproveitados` no resumo do retrato. O painel (local e web, mesmo componente) ganha, abaixo dos cartões, uma linha de situação dos grupos, hoje inexistente: "3 grupos sem fonte · 1 inacessível · 2 via IA · 2 com leitura reaproveitada", omitindo as partes com zero e ausente quando tudo é zero (função pura `textoSituacaoDosGrupos` em `lib/painel.ts`). Entra também no relatório da coleta. Não vira cartão.
 - **Export** (`lib/export.ts`): a coluna que hoje leva `erroFonte` recebe também "Leitura de 16/10 reaproveitada (<motivo>)".
 
 ## 8. Rotina e trava de qualidade (CLAUDE.md)

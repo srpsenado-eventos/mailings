@@ -1,17 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analisar, type Dependencias } from "@/lib/analise";
 import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload";
-import { armazemPadrao } from "@/lib/armazem";
+import { armazemPadrao, type Armazem } from "@/lib/armazem";
 import { aplicarEleicao } from "@/lib/eleitos";
 import { resolverGrupoEFonte } from "@/lib/catalogo";
+import { memoriaDoRetrato } from "@/lib/memoria-leitura";
 import { modoDoApp } from "@/lib/modo";
 import { origemPermitida } from "@/lib/origem";
 import { montarRetrato } from "@/lib/painel";
 import { abrirSessao } from "@/lib/navegador";
 import { RASPADORES_PADRAO, rasparFonte } from "@/lib/raspagem";
 import { extrairComposicao, diagnosticarIa } from "@/lib/gemini";
+import type { Retrato } from "@/lib/types";
 
 const AVISO_NAO_GUARDADO = "A varredura terminou, mas o retrato não pôde ser guardado: na próxima abertura o app não a terá.";
+
+/** Retrato anterior, só para a memória de leitura: ausente ou ilegível vale como "sem memória" (spec 2026-10-20 §10). */
+async function lerRetratoAnterior(armazem: Armazem): Promise<Retrato | undefined> {
+  try {
+    return await armazem.lerRetrato();
+  } catch (err) {
+    // Só o motivo técnico: o retrato tem PII e nunca vai para o log.
+    console.error("[/api/analise] retrato anterior ilegível, varredura sem memória:", err instanceof Error ? err.message : "erro desconhecido");
+    return undefined;
+  }
+}
 
 /**
  * Recebe os contatos (e, opcionalmente, os endereços) já extraídos no navegador, varre as
@@ -33,6 +46,12 @@ export async function POST(req: NextRequest) {
 
     const { arquivoNome, contatos, arquivoEnderecosNome, enderecos, eleitos, deputadosAtuais, governadores, arquivosEleicao, baseEnderecos } = parsePayloadAnalise(corpo);
 
+    // Memória de leitura por página (spec 2026-10-20 §6): a do retrato anterior, reconstruída
+    // quando ele é de antes do mecanismo. O mesmo relógio vale para a validade e para a data das leituras.
+    const agora = new Date();
+    const armazem = armazemPadrao();
+    const leiturasAnteriores = memoriaDoRetrato(await lerRetratoAnterior(armazem), agora);
+
     // Sessão do Chrome com janela para as fontes `navegador: "janela"` (spec 2026-10-15 §4.2):
     // aberta uma vez por varredura, lançada só se alguma fonte precisar, fechada sempre.
     const sessao = abrirSessao();
@@ -42,6 +61,8 @@ export async function POST(req: NextRequest) {
         resolverFonte: (grupo) => resolverGrupoEFonte(grupo),
         raspar: (fonte) => rasparFonte(fonte, { ...RASPADORES_PADRAO, porJanela: (url, opcoes) => sessao.raspar(url, opcoes) }),
         extrairComposicao: (grupoCanonico, textoLimpo) => extrairComposicao(grupoCanonico, textoLimpo),
+        leiturasAnteriores,
+        agora: () => agora,
       };
       analisado = await analisar(arquivoNome, contatos, deps, enderecos);
     } finally {
@@ -65,7 +86,7 @@ export async function POST(req: NextRequest) {
 
     let aviso: string | undefined;
     try {
-      await armazemPadrao().gravarRetrato(retrato);
+      await armazem.gravarRetrato(retrato);
     } catch (err) {
       // Só o motivo técnico: o retrato tem PII e nunca vai para o log.
       console.error("[/api/analise] retrato não guardado:", err instanceof Error ? err.message : "erro desconhecido");
@@ -74,8 +95,8 @@ export async function POST(req: NextRequest) {
 
     // Diagnóstico temporário (não-PII): só roda com ?diag=1 (custo zero no fluxo normal).
     const diag = req.nextUrl.searchParams.get("diag") === "1" ? await diagnosticarIa() : undefined;
-    // A base inteira tem PII e já está no arquivo local: o navegador não precisa dela de volta.
-    const { baseEnderecos: _baseGuardada, ...retratoDaResposta } = retrato;
+    // A base inteira tem PII e a memória só interessa à máquina: ambas já estão no arquivo local.
+    const { baseEnderecos: _baseGuardada, leituras: _memoria, ...retratoDaResposta } = retrato;
     return NextResponse.json({ ok: true, retrato: retratoDaResposta, ...(aviso ? { aviso } : {}), ...(diag ? { diag } : {}) });
   } catch (err) {
     if (err instanceof PayloadInvalidoError) {

@@ -553,3 +553,21 @@ describe("fontes individuais no export (spec 2026-10-15 §6.2)", () => {
     expect(Object.keys(linhas[0])).toContain("Fonte do cargo");
   });
 });
+
+describe("memória de leitura no export (spec 2026-10-20 §7)", () => {
+  test("grupo reaproveitado leva a anotação na observação de cada contato, junto com a ressalva de fonte", () => {
+    const comMemoria: ResultadoAnalise = {
+      ...analise,
+      grupos: [{ ...analise.grupos[0], reaproveitada: { url: "https://orgao.gov.br", lidaEm: "2026-10-16T15:50:29.000Z", motivo: "HTTP 403" }, erroFonte: "fora de exercício: HTTP 403" }],
+    };
+    const linha = resultadoParaLinhas(comMemoria)[0];
+    expect(linha.Observacao).toBe("Leitura de 16/10 reaproveitada (HTTP 403) · fonte não respondeu — fora de exercício: HTTP 403");
+  });
+  test("sem erroFonte, só a anotação", () => {
+    const comMemoria: ResultadoAnalise = {
+      ...analise,
+      grupos: [{ ...analise.grupos[0], reaproveitada: { url: "https://orgao.gov.br", lidaEm: "2026-10-16T15:50:29.000Z", motivo: "página casou 2 de 10 contatos" } }],
+    };
+    expect(resultadoParaLinhas(comMemoria)[0].Observacao).toBe("Leitura de 16/10 reaproveitada (página casou 2 de 10 contatos)");
+  });
+});

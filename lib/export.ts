@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { coerenciasVisiveis, textoCoerencia, ROTULOS_CAMPO_TRATAMENTO } from "@/lib/tratamento";
 import { rotuloAchadoEndereco } from "@/lib/endereco";
+import { anotacaoReaproveitada } from "@/lib/memoria-leitura";
 import type {
   AuditoriaEndereco,
   ComparacaoCampo,
@@ -91,29 +92,35 @@ function fonteDoCargo(c: ResultadoContato): string {
 }
 
 /**
- * Observação do contato mais a ressalva do grupo, quando alguma fonte não respondeu.
- * Quem trabalha a partir do download precisa da mesma ressalva que a tela dá: sem ela, a
- * linha parece um veredito completo.
+ * Observação do contato mais as ressalvas do grupo (leitura reaproveitada, fonte que não
+ * respondeu). Quem trabalha a partir do download precisa das mesmas ressalvas que a tela dá:
+ * sem elas, a linha parece um veredito completo.
  */
-function observacaoCom(observacao: string | undefined, ressalva: string | undefined): string {
-  return [observacao, ressalva ? `fonte não respondeu — ${ressalva}` : undefined]
-    .filter(Boolean)
-    .join(" · ");
+function observacaoCom(observacao: string | undefined, ressalvas: readonly string[]): string {
+  return [observacao, ...ressalvas].filter(Boolean).join(" · ");
+}
+
+function primeiraMaiuscula(t: string): string {
+  return t.charAt(0).toUpperCase() + t.slice(1);
 }
 
 /**
- * Ressalva do grupo a repetir na linha de cada contato. No grupo inteiro inacessível a
- * observação do contato já diz que a fonte não pôde ser lida: repetir o motivo aqui daria
- * a mesma frase duas vezes na mesma célula. A tela suprime pelo mesmo motivo.
+ * Ressalvas do grupo a repetir na linha de cada contato. No grupo inteiro inacessível a
+ * observação do contato já diz que a fonte não pôde ser lida: repetir o motivo aqui daria a
+ * mesma frase duas vezes na mesma célula. A tela suprime pelo mesmo motivo.
  */
-function ressalvaDoGrupo(g: ResultadoGrupo): string | undefined {
-  return g.fonteInacessivel ? undefined : g.erroFonte;
+function ressalvasDoGrupo(g: ResultadoGrupo): string[] {
+  if (g.fonteInacessivel) return [];
+  return [
+    ...(g.reaproveitada ? [primeiraMaiuscula(anotacaoReaproveitada(g.reaproveitada))] : []),
+    ...(g.erroFonte ? [`fonte não respondeu — ${g.erroFonte}`] : []),
+  ];
 }
 
 export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, string>[] {
   const linhas: Record<string, string>[] = [];
   for (const g of analise.grupos) {
-    const ressalva = ressalvaDoGrupo(g);
+    const ressalvas = ressalvasDoGrupo(g);
     for (const c of g.contatos) {
       const linha: Record<string, string> = {
         Grupo: g.grupo,
@@ -121,7 +128,7 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
         Divergencias: [...new Set(c.camposDivergentes.map((d) => d.campo))].join(", "),
         Origem: c.origem,
         Fonte: c.fonteUrl ?? "",
-        Observacao: observacaoCom(c.observacao, ressalva),
+        Observacao: observacaoCom(c.observacao, ressalvas),
         "Fonte do cargo": fonteDoCargo(c),
       };
       for (const f of CAMPOS) {
@@ -155,7 +162,7 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
         Fonte: novo.fonteUrl ?? g.fonteUrl ?? "",
         Observacao: observacaoCom(
           `Pessoa na fonte sem correspondência na planilha${situacao}`,
-          ressalva,
+          ressalvas,
         ),
         "Fonte do cargo": "",
       };

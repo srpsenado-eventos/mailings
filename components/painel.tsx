@@ -9,7 +9,7 @@ import { grupoDeputados, NOME_GRUPO_DEPUTADOS, temGrupoDeputados } from "@/lib/p
 import { avisoDaEleicao, ehFiltroEleicao, FILTROS_ELEICAO, secoesDeEleicao, secoesDeGoverno } from "@/lib/painel-eleicao";
 import { PublicarButton } from "@/components/publicar-button";
 import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-contato";
-import { cartoesDoResumo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoNumeroNaBase, type Filtro } from "@/lib/painel";
+import { cartoesDoResumo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, type Filtro } from "@/lib/painel";
 import { autoridadesRepetidas, etiquetaDeRepeticao, textoRepetidas } from "@/lib/repetidos";
 import type { ResultadoGrupo, Retrato } from "@/lib/types";
 
@@ -34,6 +34,7 @@ function EstadoDaFonte({ g }: { g: ResultadoGrupo }) {
   }
   return (
     <span className="text-xs text-cinza">
+      {g.reaproveitada && <span className="text-atencao">{textoReaproveitada(g.reaproveitada)} · </span>}
       {g.viaPesquisaAmpla && <span className="text-atencao">≈ via IA — confira · </span>}
       {g.individuais && <span>{textoIndividuais(g.individuais)} · </span>}
       {g.erroFonte && <span className="text-atencao">uma fonte não respondeu: {g.erroFonte} · </span>}
@@ -114,6 +115,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
           </div>
         ))}
       </div>
+      {textoSituacaoDosGrupos(retrato.resumo) && <p className="mt-2 text-xs text-cinza">{textoSituacaoDosGrupos(retrato.resumo)}</p>}
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <span className="text-xs text-cinza-claro">Mostrar</span>

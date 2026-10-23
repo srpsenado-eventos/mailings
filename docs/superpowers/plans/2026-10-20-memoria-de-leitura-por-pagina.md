@@ -500,7 +500,8 @@ describe("memória de leitura por página (spec 2026-10-20 §5.1)", () => {
   const URL = "https://orgao.gov.br";
   const guardada = (conteudo: ConteudoFonte = fonte, lidaEm = LIDA_EM_16): LeituraGuardada => ({ url: conteudo.url, lidaEm, conteudo });
   const paginaCom = (nomes: string[]): ConteudoFonte => ({ url: URL, textoLimpo: nomes.join(". "), destaques: [], pessoas: nomes.map((nome) => ({ nome, cargo: "Ministro" })) });
-  const dez = Array.from({ length: 10 }, (_, i) => `Pessoa Número ${["Um", "Dois", "Três", "Quatro", "Cinco", "Seis", "Sete", "Oito", "Nove", "Dez"][i]}`);
+  // Nomes sem token em comum: `pontuarPessoa` casaria "Pessoa Número Um" com "Pessoa Número Dois".
+  const dez = ["Alberto Caminho Verde", "Beatriz Lagoa Azul", "Carlos Monte Claro", "Dalva Serra Branca", "Eduardo Vale Fundo", "Fátima Rio Manso", "Gustavo Campo Largo", "Helena Praia Grande", "Ivo Morro Alto", "Joana Bosque Novo"];
   const dezContatos: ContatoPlanilha[] = dez.map((nome) => ({ nome, grupo: "ORG", ...CADASTRO_OK }));
 
   function comMemoria(raspar: Dependencias["raspar"], leituras: LeiturasGuardadas, extra: Partial<Dependencias> = {}): Dependencias {

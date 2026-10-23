@@ -1,3 +1,4 @@
+import { normalizarNome } from "@/lib/normalize";
 import type { LeituraGuardada, LeiturasGuardadas, PessoaSite, Reaproveitamento, ResultadoContato, ResultadoGrupo, Retrato } from "@/lib/types";
 
 /**
@@ -97,11 +98,27 @@ function pessoa(nome: string, cargo: string | undefined): PessoaSite {
   return { nome, ...(cargo ? { cargo } : {}) };
 }
 
+/** Acumuladas mais as novas que não repetem nome (após `normalizarNome`). Devolve array novo. */
+function unirPessoas(acumuladas: readonly PessoaSite[], novas: readonly PessoaSite[]): PessoaSite[] {
+  const vistos = new Set(acumuladas.map((p) => normalizarNome(p.nome)));
+  const saida = [...acumuladas];
+  for (const p of novas) {
+    const chave = normalizarNome(p.nome);
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    saida.push(p);
+  }
+  return saida;
+}
+
 /**
  * §5.4: memória reconstruída de um retrato gravado antes do mecanismo, só das fontes de grupo
  * lidas da página. Uma pessoa por contato com nome vindo da página (e o cargo, quando também
  * veio), mais os `novos` que não são da IA. `lidaEm` é o `geradoEm` do retrato. Grupo sem
- * nada aproveitável fica fora (§10).
+ * nada aproveitável fica fora (§10). Grupos que compartilham a mesma `fonteUrl` (Senadores e
+ * "Presidente do Senado Federal; Senadores", os três de Embaixadores) somam as pessoas numa só
+ * leitura, sem repetir nome (igualdade após `normalizarNome`; fica a primeira ocorrência), em vez
+ * de o último sobrescrever o anterior. Grupo sem pessoa não cria nem apaga entrada.
  */
 export function reconstruirLeituras(retrato: Pick<Retrato, "grupos" | "geradoEm">): LeiturasGuardadas {
   const leituras: LeiturasGuardadas = {};
@@ -116,7 +133,8 @@ export function reconstruirLeituras(retrato: Pick<Retrato, "grupos" | "geradoEm"
       ...g.novos.filter((n) => n.origem !== "conhecimento").map((n) => pessoa(n.nome, n.cargo)),
     ];
     if (pessoas.length === 0) continue;
-    leituras[url] = { url, lidaEm: retrato.geradoEm, conteudo: { url, textoLimpo: pessoas.map((p) => p.nome).join("\n"), destaques: [], pessoas } };
+    const unidas = unirPessoas(leituras[url]?.conteudo.pessoas ?? [], pessoas);
+    leituras[url] = { url, lidaEm: retrato.geradoEm, conteudo: { url, textoLimpo: unidas.map((p) => p.nome).join("\n"), destaques: [], pessoas: unidas } };
   }
   return leituras;
 }

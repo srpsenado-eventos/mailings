@@ -131,6 +131,26 @@ describe("reconstruirLeituras (§5.4)", () => {
     ]);
     expect(m[URL_A].conteudo.textoLimpo).toBe("Ana Maria Exemplo\nBeto Caso\nFábio Novo");
   });
+
+  test("dois grupos com a mesma fonteUrl somam as pessoas em uma só leitura, sem repetir nome", () => {
+    const URL_SEN = "https://www25.senado.leg.br/web/senadores/em-exercicio";
+    const grupoGrande: ResultadoGrupo = {
+      ...base, grupo: "Senadores", fonteUrl: URL_SEN,
+      contatos: [
+        contato("Weverton", [{ campo: "nome", valorPlanilha: "Weverton", valorEsperado: "Weverton", situacao: "confere" }]),
+        contato("Davi", [{ campo: "nome", valorPlanilha: "Davi", valorEsperado: "Davi Alcolumbre", situacao: "divergente" }]),
+      ],
+    };
+    const grupoDeUm: ResultadoGrupo = {
+      ...base, grupo: "Presidente do Senado Federal; Senadores", fonteUrl: URL_SEN,
+      contatos: [contato("Davi Alcolumbre", [{ campo: "nome", valorPlanilha: "Davi Alcolumbre", valorEsperado: "Davi Alcolumbre", situacao: "confere" }, { campo: "cargo", valorPlanilha: "Presidente", valorEsperado: "Presidente do Senado", situacao: "divergente" }])],
+    };
+    const m = reconstruirLeituras({ geradoEm: "2026-10-20T13:49:13.000Z", grupos: [grupoGrande, grupoDeUm] });
+    expect(m[URL_SEN].conteudo.pessoas.map((p) => p.nome)).toEqual(["Weverton", "Davi Alcolumbre"]);
+    expect(m[URL_SEN].conteudo.textoLimpo).toBe("Weverton\nDavi Alcolumbre");
+    const invertido = reconstruirLeituras({ geradoEm: "2026-10-20T13:49:13.000Z", grupos: [grupoDeUm, grupoGrande] });
+    expect(invertido[URL_SEN].conteudo.pessoas).toHaveLength(2);
+  });
 });
 
 describe("memoriaDoRetrato (§6 passo 1 e §10)", () => {

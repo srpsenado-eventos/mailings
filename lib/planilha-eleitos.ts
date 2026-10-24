@@ -1,12 +1,17 @@
 import * as XLSX from "xlsx";
 import { normalizarTexto } from "@/lib/normalize";
 import { ColunaFaltanteError } from "@/lib/planilha";
+import { listarEntreAspas } from "@/lib/texto";
 import type { CasaLegislativa, DeputadoAtual, EleitoPlanilha, GovernadorPlanilha, PlanilhaGovernadores } from "@/lib/types";
 
 /**
  * Leitura, no navegador, das planilhas de `GT Posse/Eleitos 2026` (spec 2026-10-05 §2).
  * Mesmo padrão de `lib/planilha-enderecos.ts`: cabeçalho casado normalizado e coluna
- * ausente como erro claro. O tipo é reconhecido pela aba e pelas colunas, não pelo nome do arquivo.
+ * ausente como erro claro. O tipo é reconhecido pela aba e pelas colunas, não pelo nome do arquivo:
+ * - aba "Em exercício" → deputados atuais;
+ * - aba "Eleitos 1º turno" (layout antigo do gerador) ou aba "Eleitos" com a coluna "Turno"
+ *   (layout desde 24/10/2026) → governadores, com a aba "2º turno" opcional;
+ * - aba "Eleitos" sem "Turno" → senadores (com "1º suplente") ou deputados federais eleitos.
  */
 export type ArquivoEleicao =
   | { tipo: "senado"; eleitos: EleitoPlanilha[] }
@@ -21,10 +26,17 @@ export interface ArquivoEleicaoLido {
 
 export class PlanilhaEleicaoDesconhecidaError extends Error {
   constructor() {
-    super("Planilha não reconhecida: esperada a aba \"Eleitos\" (senadores ou deputados eleitos), \"Em exercício\" (deputados atuais) ou \"Eleitos 1º turno\" (governadores).");
+    super("Planilha não reconhecida: esperada a aba \"Eleitos\" (senadores ou deputados eleitos; governadores, quando tem a coluna \"Turno\"), \"Em exercício\" (deputados atuais) ou \"Eleitos 1º turno\" (governadores, layout antigo).");
     this.name = "PlanilhaEleicaoDesconhecidaError";
   }
 }
+
+const ROTULO_TIPO: Record<ArquivoEleicao["tipo"], string> = {
+  senado: "senadores eleitos",
+  camara: "deputados federais eleitos",
+  atuais: "deputados federais em exercício",
+  governo: "governadores eleitos",
+};
 
 const COLUNAS_ELEITOS = {
   uf: "uf", nomeUrna: "nome de urna", nomeCompleto: "nome completo", partido: "partido",
@@ -45,10 +57,22 @@ const COLUNAS_GOVERNO = {
   situacaoTse: "situacao (tse)", statusMandato: "status do mandato", baseStatus: "base do status",
   genero: "genero (tse)", vice: "vice na chapa",
 } as const;
+type ColunasGoverno = Record<keyof typeof COLUNAS_GOVERNO, string>;
 const OBRIGATORIAS_GOVERNO = ["uf", "nomeUrna", "nomeCompleto", "situacaoTse", "statusMandato"] as const;
 
 /** Coluna que só a planilha de senadores tem. */
 const MARCA_SENADO = normalizarTexto("1º suplente");
+/** Coluna que só a planilha de governadores tem na aba "Eleitos" (layout do gerador do GT desde 24/10/2026). */
+const MARCA_GOVERNO = normalizarTexto("Turno");
+/**
+ * Na aba "2º turno" do layout novo a situação vem sufixada: vale a do 2º turno quando a coluna existe
+ * (a planilha real de 24/10 grava "Situação (TSE) 2º turno", sem parênteses; a forma com parênteses, coerente
+ * com "Votos (2º turno)", também é aceita), senão a do 1º turno; o layout antigo mantém "Situação (TSE)".
+ * A primeira coluna presente é a usada. Nessa aba a situação não é obrigatória: ninguém a usa adiante
+ * (`agruparSegundoTurno` guarda só nome, partido e status), e exigi-la derrubaria o arquivo inteiro.
+ */
+const COLUNAS_SITUACAO_SEGUNDO_TURNO = ["Situação (TSE) (2º turno)", "Situação (TSE) 2º turno", "Situação (TSE) (1º turno)", "Situação (TSE)"].map(normalizarTexto);
+const OBRIGATORIAS_SEGUNDO_TURNO = OBRIGATORIAS_GOVERNO.filter((c) => c !== "situacaoTse");
 
 function cabecalhos(ws: XLSX.WorkSheet): Map<string, number> {
   const linhas = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" });
@@ -83,8 +107,12 @@ function aba(wb: XLSX.WorkBook, alvo: string): XLSX.WorkSheet | undefined {
   return nome ? wb.Sheets[nome] : undefined;
 }
 
-function lerGovernadores(ws: XLSX.WorkSheet): GovernadorPlanilha[] {
-  return lerTabela(ws, COLUNAS_GOVERNO, OBRIGATORIAS_GOVERNO)
+function lerGovernadores(
+  ws: XLSX.WorkSheet,
+  colunas: ColunasGoverno = COLUNAS_GOVERNO,
+  obrigatorias: readonly string[] = OBRIGATORIAS_GOVERNO,
+): GovernadorPlanilha[] {
+  return lerTabela(ws, colunas, obrigatorias)
     .filter((l) => l.nomeUrna || l.nomeCompleto)
     .map((l): GovernadorPlanilha => ({
       uf: l.uf.toUpperCase(), nomeUrna: l.nomeUrna, nomeCompleto: l.nomeCompleto, situacaoTse: l.situacaoTse,
@@ -97,6 +125,27 @@ function lerGovernadores(ws: XLSX.WorkSheet): GovernadorPlanilha[] {
 }
 
 const abaVazia = (ws: XLSX.WorkSheet): boolean => XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 }).length <= 1;
+
+/**
+ * A aba "2º turno" lista os dois candidatos de cada UF que foi ao 2º turno, e no layout novo continua
+ * listando-os depois que o eleito entra na aba "Eleitos". UF pendente é só a que ainda não tem eleito
+ * (decisão do Clovis, 24/10/2026); o restante do app segue recebendo `segundoTurno` como lista de pendentes.
+ */
+function lerSegundoTurno(ws: XLSX.WorkSheet, ufsEleitas: ReadonlySet<string>): GovernadorPlanilha[] {
+  if (abaVazia(ws)) return [];
+  const idx = cabecalhos(ws);
+  const situacaoTse = COLUNAS_SITUACAO_SEGUNDO_TURNO.find((c) => idx.has(c)) ?? COLUNAS_GOVERNO.situacaoTse;
+  return lerGovernadores(ws, { ...COLUNAS_GOVERNO, situacaoTse }, OBRIGATORIAS_SEGUNDO_TURNO).filter((g) => !ufsEleitas.has(g.uf));
+}
+
+function lerArquivoGoverno(eleitosAba: XLSX.WorkSheet, segunda: XLSX.WorkSheet | undefined): ArquivoEleicao {
+  const eleitos = lerGovernadores(eleitosAba);
+  const ufsEleitas = new Set(eleitos.map((g) => g.uf));
+  return {
+    tipo: "governo",
+    governadores: { eleitos, segundoTurno: segunda ? lerSegundoTurno(segunda, ufsEleitas) : [] },
+  };
+}
 
 export function lerPlanilhaEleicao(buffer: ArrayBuffer): ArquivoEleicao {
   const wb = XLSX.read(buffer, { type: "array" });
@@ -114,21 +163,16 @@ export function lerPlanilhaEleicao(buffer: ArrayBuffer): ArquivoEleicao {
     return { tipo: "atuais", deputados };
   }
 
+  const segundoTurno = aba(wb, normalizarTexto("2º turno"));
   const primeiroTurno = aba(wb, normalizarTexto("Eleitos 1º turno"));
-  if (primeiroTurno) {
-    const segunda = aba(wb, normalizarTexto("2º turno"));
-    return {
-      tipo: "governo",
-      governadores: {
-        eleitos: lerGovernadores(primeiroTurno),
-        segundoTurno: segunda && !abaVazia(segunda) ? lerGovernadores(segunda) : [],
-      },
-    };
-  }
+  if (primeiroTurno) return lerArquivoGoverno(primeiroTurno, segundoTurno);
 
   const eleitosAba = aba(wb, "eleitos");
   if (!eleitosAba) throw new PlanilhaEleicaoDesconhecidaError();
-  const casa: CasaLegislativa = cabecalhos(eleitosAba).has(MARCA_SENADO) ? "senado" : "camara";
+  const colunas = cabecalhos(eleitosAba);
+  if (colunas.has(MARCA_GOVERNO)) return lerArquivoGoverno(eleitosAba, segundoTurno);
+
+  const casa: CasaLegislativa = colunas.has(MARCA_SENADO) ? "senado" : "camara";
   const eleitos = lerTabela(eleitosAba, COLUNAS_ELEITOS, OBRIGATORIAS_ELEITOS)
     .filter((l) => l.nomeUrna || l.nomeCompleto)
     .map((l): EleitoPlanilha => ({
@@ -137,6 +181,29 @@ export function lerPlanilhaEleicao(buffer: ArrayBuffer): ArquivoEleicao {
       baseStatus: opcional(l.baseStatus), genero: opcional(l.genero), nascimento: opcional(l.nascimento),
     }));
   return casa === "senado" ? { tipo: "senado", eleitos } : { tipo: "camara", eleitos };
+}
+
+/**
+ * Numa mesma seleção, dois arquivos reconhecidos como o mesmo tipo são contradição, não troca (em 24/10/2026
+ * a planilha de governadores regerada foi lida como Câmara e escondeu o cartão dos deputados eleitos):
+ * nenhum deles entra, e a mensagem diz quais foram e como foram lidos. Entre seleções distintas, o arquivo
+ * novo substitui o antigo do mesmo tipo (`juntarArquivosEleicao`).
+ */
+export function separarColisoesDeTipo(lidos: readonly ArquivoEleicaoLido[]): { aceitos: ArquivoEleicaoLido[]; colisoes: string[] } {
+  const porTipo = new Map<ArquivoEleicao["tipo"], ArquivoEleicaoLido[]>();
+  for (const l of lidos) porTipo.set(l.arquivo.tipo, [...(porTipo.get(l.arquivo.tipo) ?? []), l]);
+  const repetidos = [...porTipo].filter(([, doTipo]) => doTipo.length > 1);
+  const tiposRepetidos = new Set(repetidos.map(([tipo]) => tipo));
+  return {
+    aceitos: lidos.filter((l) => !tiposRepetidos.has(l.arquivo.tipo)),
+    colisoes: repetidos.map(([tipo, doTipo]) => `${listarEntreAspas(doTipo.map((l) => l.nome))} foram reconhecidos como ${ROTULO_TIPO[tipo]}; escolha um deles.`),
+  };
+}
+
+/** Estado do passo 3 depois de uma seleção: os novos trocam só os do mesmo tipo e vão para o fim. */
+export function substituirPorTipo(atual: readonly ArquivoEleicaoLido[], novos: readonly ArquivoEleicaoLido[]): ArquivoEleicaoLido[] {
+  const tipos = new Set(novos.map((l) => l.arquivo.tipo));
+  return [...atual.filter((a) => !tipos.has(a.arquivo.tipo)), ...novos];
 }
 
 /** Junta os arquivos lidos; vale o último de cada tipo (trocar o arquivo não soma em dobro). */
@@ -161,11 +228,10 @@ export function juntarArquivosEleicao(lidos: readonly ArquivoEleicaoLido[]): {
 }
 
 export function resumoArquivoEleicao(a: ArquivoEleicao): string {
-  if (a.tipo === "senado") return `${a.eleitos.length} senadores eleitos`;
-  if (a.tipo === "camara") return `${a.eleitos.length} deputados federais eleitos`;
-  if (a.tipo === "atuais") return `${a.deputados.length} deputados federais em exercício`;
+  if (a.tipo === "senado" || a.tipo === "camara") return `${a.eleitos.length} ${ROTULO_TIPO[a.tipo]}`;
+  if (a.tipo === "atuais") return `${a.deputados.length} ${ROTULO_TIPO.atuais}`;
   const { eleitos, segundoTurno } = a.governadores;
-  const base = `${eleitos.length} governadores eleitos`;
+  const base = `${eleitos.length} ${ROTULO_TIPO.governo}`;
   if (segundoTurno.length === 0) return base;
   return `${base} · ${new Set(segundoTurno.map((g) => g.uf)).size} UFs no 2º turno`;
 }

@@ -6,6 +6,8 @@ import {
   lerPlanilhaEleicao,
   PlanilhaEleicaoDesconhecidaError,
   resumoArquivoEleicao,
+  separarColisoesDeTipo,
+  substituirPorTipo,
   type ArquivoEleicaoLido,
 } from "@/lib/planilha-eleitos";
 
@@ -68,7 +70,7 @@ describe("lerPlanilhaEleicao", () => {
 
   test("planilha sem as abas esperadas é recusada", () => {
     expect(() => lerPlanilhaEleicao(montar({ Folha1: [{ a: "1" }] }))).toThrow(PlanilhaEleicaoDesconhecidaError);
-    expect(() => lerPlanilhaEleicao(montar({ Folha1: [{ a: "1" }] }))).toThrow('Planilha não reconhecida: esperada a aba "Eleitos" (senadores ou deputados eleitos), "Em exercício" (deputados atuais) ou "Eleitos 1º turno" (governadores).');
+    expect(() => lerPlanilhaEleicao(montar({ Folha1: [{ a: "1" }] }))).toThrow('Planilha não reconhecida: esperada a aba "Eleitos" (senadores ou deputados eleitos; governadores, quando tem a coluna "Turno"), "Em exercício" (deputados atuais) ou "Eleitos 1º turno" (governadores, layout antigo).');
   });
 });
 
@@ -125,8 +127,181 @@ describe("lerPlanilhaEleicao: governadores", () => {
     expect(() => lerPlanilhaEleicao(montarGoverno({ "Eleitos 1º turno": [cab] }))).toThrow(ColunaFaltanteError);
   });
 
-  test("o erro de planilha desconhecida cita 'Eleitos 1º turno'", () => {
+  test("o erro de planilha desconhecida cita 'Eleitos 1º turno' e a coluna 'Turno'", () => {
     expect(() => lerPlanilhaEleicao(montar({ Folha1: [{ a: "1" }] }))).toThrow(/Eleitos 1º turno/);
+    expect(() => lerPlanilhaEleicao(montar({ Folha1: [{ a: "1" }] }))).toThrow(/coluna "Turno"/);
+  });
+});
+
+// Layout do gerador do GT a partir de 24/10/2026: aba "Eleitos" com a coluna "Turno" e aba "2º turno"
+// com as colunas do 1º turno sufixadas e as do 2º turno no fim.
+const CABECALHO_ELEITOS_NOVO = [
+  "UF", "Nome de urna", "Nome completo", "Partido", "Coligação / Federação", "Votos", "% votos válidos",
+  "Situação (TSE)", "Turno", "Status do mandato", "Base do status", "Gênero (TSE)", "Nascimento", "Ocupação declarada", "Vice na chapa",
+];
+const linhaEleitoNovo = (uf: string, urna: string, turno: string): string[] => [
+  uf, urna, `${urna} Completo`, "PXX", "Fed", "1000", "55", "Eleito", turno, "Mandato novo", "Primeiro turno", "Feminino", "01/01/1970", "Professora", `Vice de ${urna}`,
+];
+const CABECALHO_SEGUNDO_TURNO_NOVO = [
+  "UF", "Nome de urna", "Nome completo", "Partido", "Coligação / Federação", "Votos (1º turno)", "% votos válidos (1º turno)",
+  "Situação (TSE) (1º turno)", "Status do mandato", "Base do status", "Gênero (TSE)", "Nascimento", "Ocupação declarada", "Vice na chapa",
+  "Votos (2º turno)", "% votos válidos (2º turno)", "Situação (TSE) 2º turno",
+];
+const linhaSegundoTurnoNovo = (uf: string, urna: string, situacao1: string, situacao2: string): string[] => [
+  uf, urna, `${urna} Completo`, "PXX", "Fed", "900", "45", situacao1, "Mandato novo", "Segundo turno", "Masculino", "01/01/1970", "Advogado", `Vice de ${urna}`,
+  "", "", situacao2,
+];
+
+describe("lerPlanilhaEleicao: governadores no layout novo (aba 'Eleitos' com 'Turno')", () => {
+  test("aba 'Eleitos' com a coluna 'Turno' é governadores, não Câmara", () => {
+    const r = lerPlanilhaEleicao(montarGoverno({
+      Eleitos: [CABECALHO_ELEITOS_NOVO.slice(), linhaEleitoNovo("ac", "Gov Um", "1º turno")],
+      "Leia-me": [["x"]],
+    }));
+    expect(r.tipo).toBe("governo");
+    if (r.tipo !== "governo") throw new Error("tipo");
+    expect(r.governadores.eleitos).toEqual([{
+      uf: "AC", nomeUrna: "Gov Um", nomeCompleto: "Gov Um Completo", partido: "PXX", situacaoTse: "Eleito",
+      statusMandato: "Mandato novo", baseStatus: "Primeiro turno", genero: "Feminino", vice: "Vice de Gov Um",
+    }]);
+    expect(r.governadores.segundoTurno).toEqual([]);
+  });
+
+  test("UF que já tem eleito na aba 'Eleitos' sai do 2º turno; a situação vem de 'Situação (TSE) 2º turno'", () => {
+    const r = lerPlanilhaEleicao(montarGoverno({
+      Eleitos: [CABECALHO_ELEITOS_NOVO.slice(), linhaEleitoNovo("AC", "Gov Um", "1º turno"), linhaEleitoNovo("SP", "Gov Tres", "2º turno")],
+      "2º turno": [
+        CABECALHO_SEGUNDO_TURNO_NOVO.slice(),
+        linhaSegundoTurnoNovo("SP", "Gov Tres", "2º turno", "Eleito"),
+        linhaSegundoTurnoNovo("SP", "Gov Quatro", "2º turno", "Não eleito"),
+        linhaSegundoTurnoNovo("rj", "Gov Cinco", "2º turno", "Aguarda apuração"),
+        linhaSegundoTurnoNovo("RJ", "Gov Seis", "2º turno", "Aguarda apuração"),
+      ],
+    }));
+    if (r.tipo !== "governo") throw new Error("tipo");
+    expect(r.governadores.eleitos.map((g) => g.uf)).toEqual(["AC", "SP"]);
+    expect(r.governadores.segundoTurno.map((g) => [g.uf, g.nomeUrna, g.situacaoTse])).toEqual([
+      ["RJ", "Gov Cinco", "Aguarda apuração"],
+      ["RJ", "Gov Seis", "Aguarda apuração"],
+    ]);
+    expect(r.governadores.segundoTurno[0]).toMatchObject({ statusMandato: "Mandato novo", baseStatus: "Segundo turno", vice: "Vice de Gov Cinco" });
+  });
+
+  test("sem 'Situação (TSE) 2º turno', a situação do 2º turno vem de 'Situação (TSE) (1º turno)'", () => {
+    const cab = CABECALHO_SEGUNDO_TURNO_NOVO.slice(0, 14);
+    const r = lerPlanilhaEleicao(montarGoverno({
+      Eleitos: [CABECALHO_ELEITOS_NOVO.slice(), linhaEleitoNovo("AC", "Gov Um", "1º turno")],
+      "2º turno": [cab, linhaSegundoTurnoNovo("RJ", "Gov Cinco", "2º turno", "ignorada").slice(0, 14)],
+    }));
+    if (r.tipo !== "governo") throw new Error("tipo");
+    expect(r.governadores.segundoTurno).toHaveLength(1);
+    expect(r.governadores.segundoTurno[0].situacaoTse).toBe("2º turno");
+  });
+
+  test("'Situação (TSE) (2º turno)', com parênteses, também vale como situação do 2º turno", () => {
+    const cab = CABECALHO_SEGUNDO_TURNO_NOVO.map((c) => (c === "Situação (TSE) 2º turno" ? "Situação (TSE) (2º turno)" : c));
+    const r = lerPlanilhaEleicao(montarGoverno({
+      Eleitos: [CABECALHO_ELEITOS_NOVO.slice(), linhaEleitoNovo("AC", "Gov Um", "1º turno")],
+      "2º turno": [cab, linhaSegundoTurnoNovo("RJ", "Gov Cinco", "2º turno", "Aguarda apuração")],
+    }));
+    if (r.tipo !== "governo") throw new Error("tipo");
+    expect(r.governadores.segundoTurno[0].situacaoTse).toBe("Aguarda apuração");
+  });
+
+  test("aba '2º turno' sem nenhuma coluna de situação não derruba o arquivo: situação fica vazia", () => {
+    const cab = CABECALHO_SEGUNDO_TURNO_NOVO.filter((c) => !c.startsWith("Situação"));
+    const r = lerPlanilhaEleicao(montarGoverno({
+      Eleitos: [CABECALHO_ELEITOS_NOVO.slice(), linhaEleitoNovo("AC", "Gov Um", "1º turno")],
+      "2º turno": [cab, linhaSegundoTurnoNovo("RJ", "Gov Cinco", "x", "y").filter((_, i) => i !== 7 && i !== 16)],
+    }));
+    if (r.tipo !== "governo") throw new Error("tipo");
+    expect(r.governadores.eleitos).toHaveLength(1);
+    expect(r.governadores.segundoTurno).toEqual([expect.objectContaining({ uf: "RJ", nomeUrna: "Gov Cinco", situacaoTse: "" })]);
+  });
+
+  test("aba '2º turno' sem 'Status do mandato' continua sendo erro claro", () => {
+    const cab = CABECALHO_SEGUNDO_TURNO_NOVO.filter((c) => c !== "Status do mandato");
+    expect(() => lerPlanilhaEleicao(montarGoverno({
+      Eleitos: [CABECALHO_ELEITOS_NOVO.slice(), linhaEleitoNovo("AC", "Gov Um", "1º turno")],
+      "2º turno": [cab, linhaSegundoTurnoNovo("RJ", "Gov Cinco", "x", "y").filter((_, i) => i !== 8)],
+    }))).toThrow(ColunaFaltanteError);
+  });
+
+  test("aba '2º turno' vazia no layout novo dá lista vazia", () => {
+    const r = lerPlanilhaEleicao(montarGoverno({
+      Eleitos: [CABECALHO_ELEITOS_NOVO.slice(), linhaEleitoNovo("AC", "Gov Um", "1º turno")],
+      "2º turno": [CABECALHO_SEGUNDO_TURNO_NOVO.slice()],
+    }));
+    if (r.tipo !== "governo") throw new Error("tipo");
+    expect(r.governadores.segundoTurno).toEqual([]);
+  });
+
+  test("aba 'Eleitos' sem a coluna 'Turno' continua sendo deputados federais eleitos", () => {
+    const cab = CABECALHO_ELEITOS_NOVO.filter((c) => c !== "Turno");
+    const r = lerPlanilhaEleicao(montarGoverno({ Eleitos: [cab, linhaEleitoNovo("AC", "Dep Um", "").filter((_, i) => i !== 8)] }));
+    expect(r.tipo).toBe("camara");
+  });
+
+  test("layout antigo: UF que aparece nas duas abas também sai do 2º turno", () => {
+    const r = lerPlanilhaEleicao(montarGoverno({
+      "Eleitos 1º turno": [CABECALHO_GOVERNO.slice(), linhaGoverno("SP", "Gov Um", "V")],
+      "2º turno": [CABECALHO_GOVERNO.slice(), linhaGoverno("SP", "Gov Dois", "V"), linhaGoverno("RJ", "Gov Tres", "V")],
+    }));
+    if (r.tipo !== "governo") throw new Error("tipo");
+    expect(r.governadores.segundoTurno.map((g) => g.uf)).toEqual(["RJ"]);
+  });
+});
+
+describe("separarColisoesDeTipo", () => {
+  const camara = (nome: string): ArquivoEleicaoLido => ({ nome, arquivo: { tipo: "camara", eleitos: [] } });
+  const governo = (nome: string): ArquivoEleicaoLido => ({ nome, arquivo: { tipo: "governo", governadores: { eleitos: [], segundoTurno: [] } } });
+
+  test("tipos distintos: todos aceitos, sem colisão", () => {
+    const r = separarColisoesDeTipo([camara("c.xlsx"), governo("g.xlsx")]);
+    expect(r.aceitos.map((l) => l.nome)).toEqual(["c.xlsx", "g.xlsx"]);
+    expect(r.colisoes).toEqual([]);
+  });
+
+  test("dois arquivos do mesmo tipo: nenhum dos dois entra e a mensagem cita os dois e o tipo", () => {
+    const r = separarColisoesDeTipo([camara("Deputados Federais Eleitos 2026.xlsx"), governo("g.xlsx"), camara("Governadores Eleitos 2026.xlsx")]);
+    expect(r.aceitos.map((l) => l.nome)).toEqual(["g.xlsx"]);
+    expect(r.colisoes).toEqual([
+      '"Deputados Federais Eleitos 2026.xlsx" e "Governadores Eleitos 2026.xlsx" foram reconhecidos como deputados federais eleitos; escolha um deles.',
+    ]);
+  });
+
+  test("três do mesmo tipo: a mensagem lista os três", () => {
+    const r = separarColisoesDeTipo([camara("a.xlsx"), camara("b.xlsx"), camara("c.xlsx")]);
+    expect(r.aceitos).toEqual([]);
+    expect(r.colisoes).toEqual(['"a.xlsx", "b.xlsx" e "c.xlsx" foram reconhecidos como deputados federais eleitos; escolha um deles.']);
+  });
+
+  test("lista vazia: nada a separar", () => {
+    expect(separarColisoesDeTipo([])).toEqual({ aceitos: [], colisoes: [] });
+  });
+
+  test("Senado (com '1º suplente') e governadores (com 'Turno') na mesma seleção são tipos distintos", () => {
+    const senado = lerPlanilhaEleicao(montar({ Eleitos: [{ ...eleitoBase, "1º suplente": "Suplente Um" }] }));
+    const governo = lerPlanilhaEleicao(montarGoverno({ Eleitos: [CABECALHO_ELEITOS_NOVO.slice(), linhaEleitoNovo("AC", "Gov Um", "1º turno")] }));
+    const r = separarColisoesDeTipo([{ nome: "s.xlsx", arquivo: senado }, { nome: "g.xlsx", arquivo: governo }]);
+    expect(r.aceitos.map((l) => l.arquivo.tipo)).toEqual(["senado", "governo"]);
+    expect(r.colisoes).toEqual([]);
+  });
+});
+
+describe("substituirPorTipo", () => {
+  const lido = (nome: string, tipo: "senado" | "camara"): ArquivoEleicaoLido => ({ nome, arquivo: { tipo, eleitos: [] } });
+
+  test("arquivo novo troca só o do mesmo tipo; os outros ficam, e os novos vão para o fim", () => {
+    const r = substituirPorTipo([lido("s1.xlsx", "senado"), lido("c1.xlsx", "camara")], [lido("s2.xlsx", "senado")]);
+    expect(r.map((l) => l.nome)).toEqual(["c1.xlsx", "s2.xlsx"]);
+  });
+
+  test("sem novos, devolve a lista igual; não muda as listas recebidas", () => {
+    const atual = [lido("s1.xlsx", "senado")];
+    expect(substituirPorTipo(atual, [])).toEqual(atual);
+    substituirPorTipo(atual, [lido("s2.xlsx", "senado")]);
+    expect(atual.map((l) => l.nome)).toEqual(["s1.xlsx"]);
   });
 });
 

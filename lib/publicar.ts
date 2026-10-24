@@ -25,8 +25,8 @@ function semCamposPessoais(contato: ContatoPlanilha): ContatoPlanilha {
  * objeto do painel e viajam atrás da senha. Os deputados atuais da eleição vão sem e-mail, telefone, prédio e sala, e o retrato sem `baseEnderecos`. Spec 2026-10-02, §6.3 e §6.5. Não muta a entrada.
  */
 export function enxugarParaPublicar(retrato: Retrato, publicadoEm: string): Retrato {
-  // A base de endereços inteira (PII) fica nesta máquina; só `numeroNaBase` segue (spec 2026-10-06, §3).
-  const { baseEnderecos: _baseEnderecos, ...semBase } = retrato;
+  // A base de endereços inteira (PII) e a memória de leitura (só interessa à máquina) ficam aqui; só `numeroNaBase` segue (spec 2026-10-06 §3; 2026-10-20 §6).
+  const { baseEnderecos: _baseEnderecos, leituras: _leituras, ...semBase } = retrato;
   return {
     ...semBase,
     publicadoEm,

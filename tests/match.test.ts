@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   compararContato,
   compararGrupo,
+  contarContatosCasados,
   marcarFonteInacessivel,
   mesclarComposicao,
   pontuarPessoa,
@@ -476,5 +477,20 @@ describe("compararGrupo com fonte incompleta (alguma fonte do grupo não respond
     const c = r.contatos[0];
     expect(c.semaforo).toBe("vermelho");
     expect(c.possivelSaida).toBe(true);
+  });
+});
+
+describe("contarContatosCasados (spec 2026-10-20 §5.1)", () => {
+  const contatos = [
+    { nome: "Ana Maria Política Completa", grupo: "G" },
+    { nome: "Beto Carlos Exemplo", grupo: "G" },
+    { nome: "Carla Ninguém Sabe", grupo: "G" },
+  ];
+  test("conta quantos contatos casam alguém da composição pela régua de mesclarComposicao", () => {
+    const pessoas = [{ nome: "Ana Maria Política Completa" }, { nome: "Beto Exemplo" }, { nome: "Zé Outro" }];
+    expect(contarContatosCasados(contatos, pessoas)).toBe(2);
+  });
+  test("composição vazia casa zero", () => {
+    expect(contarContatosCasados(contatos, [])).toBe(0);
   });
 });

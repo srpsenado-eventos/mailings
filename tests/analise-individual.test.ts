@@ -6,6 +6,7 @@ import { OBSERVACAO_SEM_INDIVIDUAL } from "@/lib/match";
 import { extrairConteudo } from "@/lib/scrape";
 import type { ContatoPlanilha, ConteudoFonte, FonteIndividual, FonteCatalogo } from "@/lib/types";
 import type { FonteResolvida } from "@/lib/catalogo";
+import type { LeiturasGuardadas } from "@/lib/types";
 
 const fixture = (nome: string) => readFileSync(resolve(__dirname, `fixtures/${nome}`), "utf-8");
 const PROTOCOLO_F = { tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" };
@@ -183,5 +184,97 @@ describe("analisar com fontes individuais (spec 2026-10-15 §4 e §5.5)", () => 
     const textos = r.grupos.flatMap((g) => [g.erroFonte ?? "", ...g.contatos.map((c) => c.observacao ?? "")]).join(" ");
     expect(textos).not.toContain("Ana Maria");
     expect(textos).not.toContain("João Carlos");
+  });
+});
+
+
+describe("memória de leitura nas páginas individuais e na lista geral (spec 2026-10-20 §5.2)", () => {
+  const AGORA = new Date("2026-10-20T12:00:00.000Z");
+  const LIDA_EM_16 = "2026-10-16T15:50:29.000Z";
+  const memoria = (...conteudos: ConteudoFonte[]): LeiturasGuardadas =>
+    Object.fromEntries(conteudos.map((c) => [c.url, { url: c.url, lidaEm: LIDA_EM_16, conteudo: c }]));
+  const comMemoria = (mapa: Record<string, ConteudoFonte | string>, leituras: LeiturasGuardadas) => deps(mapa, { leiturasAnteriores: leituras, agora: () => AGORA });
+
+  test("individual com erro e memória válida → contato comparado, verde, leituraDe, individuais.reaproveitadas, grupo lido", async () => {
+    const r = await analisar("c.xlsx", [ministra], comMemoria({ [URL_MIN]: "HTTP 429", [URL_GERAL]: paginaGeral }, memoria(paginaMin)));
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBeUndefined();
+    expect(g.contatos[0].semaforo).toBe("verde");
+    expect(g.contatos[0].leituraDe).toBe(LIDA_EM_16);
+    expect(g.individuais).toEqual({ lidas: 0, caidas: 0, reaproveitadas: 1 });
+    expect(g.erroFonte).toBeUndefined();
+    expect(g.reaproveitada).toBeUndefined();
+    expect(r.resumo.gruposReaproveitados).toBe(1);
+  });
+
+  test("individual com erro e memória vencida → como hoje: indeterminado, caída, sem leituraDe", async () => {
+    const vencida: LeiturasGuardadas = { [URL_MIN]: { url: URL_MIN, lidaEm: "2026-10-12T11:00:00.000Z", conteudo: paginaMin } };
+    const r = await analisar("c.xlsx", [ministra], comMemoria({ [URL_MIN]: "HTTP 429", [URL_GERAL]: paginaGeral }, vencida));
+    const g = r.grupos[0];
+    expect(g.contatos[0].semaforo).toBe("indeterminado");
+    expect(g.contatos[0].leituraDe).toBeUndefined();
+    expect(g.individuais).toEqual({ lidas: 0, caidas: 1 });
+    expect(r.resumo.gruposReaproveitados).toBe(0);
+  });
+
+  test("lista geral com erro e memória → cargo conferido, grupo com reaproveitada da geral, conta em reaproveitadas", async () => {
+    const r = await analisar("c.xlsx", [ministra], comMemoria({ [URL_MIN]: paginaMin, [URL_GERAL]: "HTTP 403" }, memoria(paginaGeral)));
+    const g = r.grupos[0];
+    expect(g.contatos[0].semaforo).toBe("verde");
+    expect(g.contatos[0].comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("confere");
+    expect(g.contatos[0].leituraDe).toBeUndefined();
+    expect(g.reaproveitada).toEqual({ url: URL_GERAL, lidaEm: LIDA_EM_16, motivo: "HTTP 403" });
+    expect(g.individuais).toEqual({ lidas: 1, caidas: 0, reaproveitadas: 1 });
+    expect(g.erroFonte).toBeUndefined();
+  });
+
+  test("página sem conteúdo legível (CAPTCHA) com memória válida → reaproveitada com o motivo da página vazia", async () => {
+    const captcha: ConteudoFonte = { url: URL_MIN, textoLimpo: "What code is in the image?", destaques: [], pessoas: [] };
+    const r = await analisar("c.xlsx", [ministra], comMemoria({ [URL_MIN]: captcha, [URL_GERAL]: paginaGeral }, memoria(paginaMin)));
+    expect(r.grupos[0].contatos[0].semaforo).toBe("verde");
+    expect(r.grupos[0].contatos[0].leituraDe).toBe(LIDA_EM_16);
+  });
+
+  test("guarda de grupo conta só as páginas lidas hoje: uma lida hoje sem o nome e uma reaproveitada com o nome → saída e verde, não suspeita", async () => {
+    const trocada: ConteudoFonte = { ...paginaGo, pessoas: [{ nome: "Novo Titular do Estado", cargo: "Governador" }], textoLimpo: paginaGo.textoLimpo.replace("João Carlos Destaque Silva", "Novo Titular do Estado") };
+    const r = await analisar("c.xlsx", [govGo, govRs], comMemoria({ [URL_GO]: trocada, [URL_RS]: "HTTP 503" }, memoria(paginaRs)));
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBeUndefined();
+    expect(g.contatos[0]).toMatchObject({ semaforo: "vermelho", possivelSaida: true });
+    expect(g.contatos[1]).toMatchObject({ semaforo: "verde", leituraDe: LIDA_EM_16 });
+    expect(g.individuais).toEqual({ lidas: 1, caidas: 0, reaproveitadas: 1 });
+  });
+
+  test("duas lidas hoje sem confirmar ninguém continuam leitura suspeita, mesmo com reaproveitadas confirmando", async () => {
+    const semNomes = (url: string): ConteudoFonte => ({ ...paginaGo, url, pessoas: [], textoLimpo: paginaGo.textoLimpo.replace("João Carlos Destaque Silva", "Outro Governador Qualquer") });
+    const govMg: ContatoPlanilha = { nome: "Terceiro Governador Exemplo", cargo: "Governador do Estado de Minas Gerais", grupo: "Governadores", ...PROTOCOLO_M };
+    const URL_MG = "https://mg.gov.br/governador";
+    const paginaMg: ConteudoFonte = { url: URL_MG, textoLimpo: `${paginaGo.textoLimpo} Terceiro Governador Exemplo`, destaques: [], pessoas: [{ nome: "Terceiro Governador Exemplo", cargo: "Governador" }] };
+    const resolvida: FonteResolvida = { ...RESOLVIDA_GOV, fontesIndividuais: [...individuaisGov, { url: URL_MG, ativo: true, chave: { uf: "MG" }, campos: ["nome", "cargo"] }] };
+    const d = deps({ [URL_GO]: semNomes(URL_GO), [URL_RS]: semNomes(URL_RS), [URL_MG]: "HTTP 503" }, { resolverFonte: resolver(RESOLVIDA_MIN, resolvida), leiturasAnteriores: memoria(paginaMg), agora: () => AGORA });
+    const r = await analisar("c.xlsx", [govGo, govRs, govMg], d);
+    expect(r.grupos[0].fonteInacessivel).toBe(true);
+    expect(r.grupos[0].erroFonte).toBe(MOTIVO_LEITURA_SUSPEITA);
+  });
+
+  test("nenhuma página lida hoje, todas pela memória → grupo lido, não inacessível", async () => {
+    const r = await analisar("c.xlsx", [govGo, govRs], comMemoria({ [URL_GO]: "HTTP 503", [URL_RS]: "HTTP 503" }, memoria(paginaGo, paginaRs)));
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBeUndefined();
+    expect(g.contatos.map((c) => c.semaforo)).toEqual(["verde", "verde"]);
+    expect(g.individuais).toEqual({ lidas: 0, caidas: 0, reaproveitadas: 2 });
+  });
+
+  test("leituras de saída traz a individual lida hoje e a geral, e mantém a reaproveitada com a data original", async () => {
+    const r = await analisar("c.xlsx", [ministra, govGo], comMemoria({ [URL_MIN]: paginaMin, [URL_GERAL]: paginaGeral, [URL_GO]: "HTTP 503" }, memoria(paginaGo)));
+    expect(r.leituras?.[URL_MIN].lidaEm).toBe(AGORA.toISOString());
+    expect(r.leituras?.[URL_GERAL].lidaEm).toBe(AGORA.toISOString());
+    expect(r.leituras?.[URL_GO].lidaEm).toBe(LIDA_EM_16);
+  });
+
+  test("página individual caída hoje sem memória não entra em leituras; página lida hoje sem conteúdo também não", async () => {
+    const captcha: ConteudoFonte = { url: URL_GO, textoLimpo: "What code is in the image?", destaques: [], pessoas: [] };
+    const r = await analisar("c.xlsx", [govGo, govRs], comMemoria({ [URL_GO]: captcha, [URL_RS]: "HTTP 503" }, {}));
+    expect(r.leituras).toEqual({});
   });
 });

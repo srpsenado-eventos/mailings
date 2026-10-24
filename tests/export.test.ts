@@ -29,7 +29,7 @@ const analise: ResultadoAnalise = {
   ],
   resumo: {
     total: 1, verde: 0, amarelo: 1, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-    gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+    gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
   },
 };
 
@@ -70,7 +70,7 @@ describe("resultadoParaLinhas", () => {
       ],
       resumo: {
         total: 0, verde: 0, amarelo: 0, vermelho: 0, novo: 1, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
       },
     };
     const linha = resultadoParaLinhas(analise)[0];
@@ -108,7 +108,7 @@ describe("resultadoParaLinhas", () => {
       ],
       resumo: {
         total: 1, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 1, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
       },
     };
 
@@ -152,7 +152,7 @@ describe("resultadoParaLinhas", () => {
       ],
       resumo: {
         total: 1, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 1, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-        gruposSemFonte: 0, gruposFonteInacessivel: 1, gruposViaPesquisaAmpla: 0,
+        gruposSemFonte: 0, gruposFonteInacessivel: 1, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
       },
     };
 
@@ -205,7 +205,7 @@ function analiseCom(comparacoes: ComparacaoCampo[], contato: ContatoPlanilha): R
     ],
     resumo: {
       total: 1, verde: 0, amarelo: 1, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-      gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+      gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
     },
   };
 }
@@ -450,7 +450,7 @@ function analiseComContato(over: Partial<ResultadoContato>): ResultadoAnalise {
     ],
     resumo: {
       total: 1, verde: 1, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-      gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+      gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
     },
   };
 }
@@ -551,5 +551,30 @@ describe("fontes individuais no export (spec 2026-10-15 §6.2)", () => {
     const linhas = resultadoParaLinhas(analise);
     expect(linhas[0]["Fonte do cargo"]).toBe("");
     expect(Object.keys(linhas[0])).toContain("Fonte do cargo");
+  });
+});
+
+describe("memória de leitura no export (spec 2026-10-20 §7)", () => {
+  test("grupo reaproveitado leva a anotação na observação de cada contato, junto com a ressalva de fonte", () => {
+    const comMemoria: ResultadoAnalise = {
+      ...analise,
+      grupos: [{ ...analise.grupos[0], reaproveitada: { url: "https://orgao.gov.br", lidaEm: "2026-10-16T15:50:29.000Z", motivo: "HTTP 403" }, erroFonte: "fora de exercício: HTTP 403" }],
+    };
+    const linha = resultadoParaLinhas(comMemoria)[0];
+    expect(linha.Observacao).toBe("Leitura de 16/10 reaproveitada (HTTP 403) · fonte não respondeu — fora de exercício: HTTP 403");
+  });
+  test("sem erroFonte, só a anotação", () => {
+    const comMemoria: ResultadoAnalise = {
+      ...analise,
+      grupos: [{ ...analise.grupos[0], reaproveitada: { url: "https://orgao.gov.br", lidaEm: "2026-10-16T15:50:29.000Z", motivo: "página casou 2 de 10 contatos" } }],
+    };
+    expect(resultadoParaLinhas(comMemoria)[0].Observacao).toBe("Leitura de 16/10 reaproveitada (página casou 2 de 10 contatos)");
+  });
+  test("contato com página individual reaproveitada leva a data na observação", () => {
+    const comIndividual: ResultadoAnalise = {
+      ...analise,
+      grupos: [{ ...analise.grupos[0], contatos: [{ ...analise.grupos[0].contatos[0], leituraDe: "2026-10-19T10:00:00.000Z" }] }],
+    };
+    expect(resultadoParaLinhas(comIndividual)[0].Observacao).toBe("Leitura de 19/10 reaproveitada");
   });
 });

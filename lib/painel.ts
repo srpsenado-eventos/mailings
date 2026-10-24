@@ -1,6 +1,7 @@
 import { coerenciasVisiveis, textoCoerencia } from "@/lib/tratamento";
 import { excessoDoNumero, LIMITE_NUMERO, rotuloAchadoEndereco } from "@/lib/endereco";
 import { colunasDaBase, textoCelula } from "@/lib/ajuste-numero";
+import { descreverMotivoDeHoje, diaMes } from "@/lib/memoria-leitura";
 import { normalizarTexto } from "@/lib/normalize";
 import { ColunaFaltanteError } from "@/lib/planilha";
 import { ehFiltroEleicao, passaFiltroEleicao, type FiltroEleicao } from "@/lib/painel-eleicao";
@@ -11,6 +12,7 @@ import type {
   ComparacaoCampo,
   EnderecoEstruturado,
   PessoaSite,
+  Reaproveitamento,
   ResultadoAnalise,
   ResultadoContato,
   ResultadoGrupo,
@@ -438,8 +440,13 @@ export function procedenciaNomeCargo(g: ResultadoGrupo): { texto: string; url?: 
   return { texto: "conhecimento da IA, confira" };
 }
 
-/** Uma linha do rodapé de procedência. `lida` é falsa quando a página daquele campo não foi lida nesta varredura. */
-export interface LinhaProcedencia { rotulo: string; texto: string; url?: string; lida: boolean }
+/** Cabeçalho do grupo reaproveitado (spec 2026-10-20 §7): "Leitura de 16/10 reaproveitada: hoje a página não respondeu (HTTP 403)". */
+export function textoReaproveitada(r: Reaproveitamento & { url?: string }): string {
+  return `Leitura de ${diaMes(r.lidaEm)} reaproveitada: ${descreverMotivoDeHoje(r.motivo)}`;
+}
+
+/** Uma linha do rodapé de procedência. `lida` é falsa quando a página daquele campo não foi lida nesta varredura; `leituraDe` é a data da leitura reaproveitada (spec 2026-10-20 §7). */
+export interface LinhaProcedencia { rotulo: string; texto: string; url?: string; lida: boolean; leituraDe?: string }
 
 /**
  * Rodapé "De onde veio cada resposta", por contato. Grupo com fontes individuais: o nome vem da
@@ -448,25 +455,48 @@ export interface LinhaProcedencia { rotulo: string; texto: string; url?: string;
  * única de `procedenciaNomeCargo`.
  */
 export function procedenciaDoContato(c: ResultadoContato, g: ResultadoGrupo): LinhaProcedencia[] {
+  const deGrupo = g.reaproveitada ? { leituraDe: g.reaproveitada.lidaEm } : {};
   if (!g.individuais) {
     const p = procedenciaNomeCargo(g);
-    return p ? [{ rotulo: "Nome e cargo", ...p, lida: true }] : [];
+    return p ? [{ rotulo: "Nome e cargo", ...p, lida: true, ...deGrupo }] : [];
   }
+  // Página individual reaproveitada: data no contato; geral reaproveitada: data no grupo, pela URL.
+  const leituraDe = (url: string, daIndividual: boolean): { leituraDe?: string } => {
+    if (daIndividual && c.leituraDe) return { leituraDe: c.leituraDe };
+    if (g.reaproveitada && g.reaproveitada.url === url) return { leituraDe: g.reaproveitada.lidaEm };
+    return {};
+  };
   const linhas: LinhaProcedencia[] = [];
   const compNome = comparacaoDeValor(c, "nome");
   const nome = compNome?.fonteUrl ?? c.fonteUrl;
-  if (nome) linhas.push({ rotulo: "Nome", texto: nome, url: nome, lida: compNome?.situacao !== "nao_verificado" });
+  if (nome) linhas.push({ rotulo: "Nome", texto: nome, url: nome, lida: compNome?.situacao !== "nao_verificado", ...leituraDe(nome, true) });
   const compCargo = comparacaoDeValor(c, "cargo");
   const cargo = compCargo?.fonteUrl;
-  if (cargo) linhas.push({ rotulo: "Cargo", texto: cargo, url: cargo, lida: compCargo?.situacao !== "nao_verificado" });
+  if (cargo) linhas.push({ rotulo: "Cargo", texto: cargo, url: cargo, lida: compCargo?.situacao !== "nao_verificado", ...leituraDe(cargo, cargo === c.fonteUrl) });
   return linhas;
 }
 
-/** "22 páginas individuais lidas · 2 inacessíveis", no cabeçalho do grupo. */
-export function textoIndividuais(i: { lidas: number; caidas: number }): string {
-  const lidas = i.lidas === 1 ? "1 página individual lida" : `${i.lidas} páginas individuais lidas`;
-  if (i.caidas === 0) return lidas;
-  return `${lidas} · ${i.caidas} ${i.caidas === 1 ? "inacessível" : "inacessíveis"}`;
+/** "38 páginas individuais lidas · 4 reaproveitadas · 2 inacessíveis", no cabeçalho do grupo. Partes zeradas somem; retrato antigo não traz `reaproveitadas`. */
+export function textoIndividuais(i: { lidas: number; caidas: number; reaproveitadas?: number }): string {
+  const partes = [i.lidas === 1 ? "1 página individual lida" : `${i.lidas} páginas individuais lidas`];
+  const r = i.reaproveitadas ?? 0;
+  if (r > 0) partes.push(`${r} ${r === 1 ? "reaproveitada" : "reaproveitadas"}`);
+  if (i.caidas > 0) partes.push(`${i.caidas} ${i.caidas === 1 ? "inacessível" : "inacessíveis"}`);
+  return partes.join(" · ");
+}
+
+/** Linha de situação dos grupos, abaixo dos cartões (spec 2026-10-20 §7). Vazia quando tudo é zero. */
+export function textoSituacaoDosGrupos(r: Partial<ResumoAnalise>): string {
+  const n = (v: number | undefined) => v ?? 0;
+  const itens = [
+    { n: n(r.gruposSemFonte), um: "sem fonte", varios: "sem fonte" },
+    { n: n(r.gruposFonteInacessivel), um: "inacessível", varios: "inacessíveis" },
+    { n: n(r.gruposViaPesquisaAmpla), um: "via IA", varios: "via IA" },
+    { n: n(r.gruposReaproveitados), um: "com leitura reaproveitada", varios: "com leitura reaproveitada" },
+  ].filter((i) => i.n > 0);
+  return itens
+    .map((i, idx) => `${i.n} ${idx === 0 ? (i.n === 1 ? "grupo " : "grupos ") : ""}${i.n === 1 ? i.um : i.varios}`)
+    .join(" · ");
 }
 
 /** "01/10, 14h12", no fuso de Brasília, como o cabeçalho do mockup. */

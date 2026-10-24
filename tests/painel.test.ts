@@ -19,6 +19,8 @@ import {
   textoEnderecoParaCopiar,
   textoIndividuais,
   textoNumeroNaBase,
+  textoReaproveitada,
+  textoSituacaoDosGrupos,
 } from "@/lib/painel";
 import { ColunaFaltanteError } from "@/lib/planilha";
 import type {
@@ -309,7 +311,7 @@ describe("cartoesDoResumo", () => {
     const cartoes = cartoesDoResumo({
       total: 10, verde: 4, amarelo: 2, vermelho: 3, novo: 1, indeterminado: 1,
       enderecosAConfirmar: 5, possivelSaida: 2, contatosSemFonte: 1,
-      gruposSemFonte: 1, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+      gruposSemFonte: 1, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
     });
     expect(cartoes).toEqual([
       { rotulo: "Conferem", valor: 4 },
@@ -354,7 +356,7 @@ describe("textoDataHora", () => {
 describe("montarRetrato", () => {
   const resultado: ResultadoAnalise = {
     arquivoNome: "c.xlsx", grupos: [],
-    resumo: { total: 0, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0, gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0 },
+    resumo: { total: 0, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0, gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0 },
   };
 
   test("com as duas planilhas", () => {
@@ -765,5 +767,50 @@ describe("fontes individuais no painel (spec 2026-10-15 §6.1)", () => {
     expect(textoIndividuais({ lidas: 22, caidas: 0 })).toBe("22 páginas individuais lidas");
     expect(textoIndividuais({ lidas: 36, caidas: 2 })).toBe("36 páginas individuais lidas · 2 inacessíveis");
     expect(textoIndividuais({ lidas: 1, caidas: 1 })).toBe("1 página individual lida · 1 inacessível");
+  });
+});
+
+describe("memória de leitura no painel (spec 2026-10-20 §7)", () => {
+  const LIDA_EM_16 = "2026-10-16T15:50:29.000Z";
+
+  test("textoReaproveitada descreve a data e o motivo de hoje", () => {
+    expect(textoReaproveitada({ url: "https://x", lidaEm: LIDA_EM_16, motivo: "HTTP 403" })).toBe("Leitura de 16/10 reaproveitada: hoje a página não respondeu (HTTP 403)");
+    expect(textoReaproveitada({ url: "https://x", lidaEm: LIDA_EM_16, motivo: "página casou 2 de 10 contatos" })).toBe("Leitura de 16/10 reaproveitada: hoje a página casou 2 de 10 contatos");
+    expect(textoReaproveitada({ url: "https://x", lidaEm: LIDA_EM_16, motivo: "não trouxe ninguém" })).toBe("Leitura de 16/10 reaproveitada: hoje a página não trouxe ninguém");
+  });
+
+  test("textoIndividuais com reaproveitadas; zero some; retrato antigo sem o campo continua igual", () => {
+    expect(textoIndividuais({ lidas: 38, caidas: 2, reaproveitadas: 4 })).toBe("38 páginas individuais lidas · 4 reaproveitadas · 2 inacessíveis");
+    expect(textoIndividuais({ lidas: 0, caidas: 0, reaproveitadas: 1 })).toBe("0 páginas individuais lidas · 1 reaproveitada");
+    expect(textoIndividuais({ lidas: 36, caidas: 2 })).toBe("36 páginas individuais lidas · 2 inacessíveis");
+  });
+
+  test("procedência do grupo comum reaproveitado leva leituraDe", () => {
+    const g: ResultadoGrupo = { ...grupoComFonte, reaproveitada: { url: "https://orgao.gov.br", lidaEm: LIDA_EM_16, motivo: "HTTP 403" } };
+    expect(procedenciaDoContato(contato({}), g)).toEqual([{ rotulo: "Nome e cargo", texto: "https://orgao.gov.br", url: "https://orgao.gov.br", lida: true, leituraDe: LIDA_EM_16 }]);
+    expect(procedenciaDoContato(contato({}), grupoComFonte)[0].leituraDe).toBeUndefined();
+  });
+
+  test("procedência por contato: leituraDe na linha do nome (página individual) e na do cargo (geral reaproveitada)", () => {
+    const g: ResultadoGrupo = { grupo: "Ministros de Estado", fonteUrl: "https://www.gov.br/planalto/lista", semFonte: false, contatos: [], novos: [], individuais: { lidas: 36, caidas: 0, reaproveitadas: 2 }, reaproveitada: { url: "https://www.gov.br/planalto/lista", lidaEm: LIDA_EM_16, motivo: "HTTP 429" } };
+    const c: ResultadoContato = {
+      ...contato({}), fonteUrl: "https://www.gov.br/exemplo/ministra", leituraDe: "2026-10-19T10:00:00.000Z",
+      comparacoes: [
+        { campo: "nome", valorPlanilha: "Ana", valorEsperado: "Ana", situacao: "confere", origemValor: "pagina", fonteUrl: "https://www.gov.br/exemplo/ministra" },
+        { campo: "cargo", valorPlanilha: "Ministra", valorEsperado: "Ministra", situacao: "confere", origemValor: "pagina", fonteUrl: "https://www.gov.br/planalto/lista" },
+      ],
+    };
+    expect(procedenciaDoContato(c, g).map((l) => [l.rotulo, l.leituraDe])).toEqual([["Nome", "2026-10-19T10:00:00.000Z"], ["Cargo", LIDA_EM_16]]);
+  });
+
+  test("textoSituacaoDosGrupos omite zeros, põe 'grupo(s)' na primeira parte e sai vazio com tudo zero", () => {
+    expect(textoSituacaoDosGrupos({ gruposSemFonte: 3, gruposFonteInacessivel: 1, gruposViaPesquisaAmpla: 2, gruposReaproveitados: 2 })).toBe("3 grupos sem fonte · 1 inacessível · 2 via IA · 2 com leitura reaproveitada");
+    expect(textoSituacaoDosGrupos({ gruposFonteInacessivel: 1 })).toBe("1 grupo inacessível");
+    expect(textoSituacaoDosGrupos({ gruposViaPesquisaAmpla: 4, gruposReaproveitados: 1 })).toBe("4 grupos via IA · 1 com leitura reaproveitada");
+    expect(textoSituacaoDosGrupos({})).toBe("");
+  });
+
+  test("cartoesDoResumo não ganha cartão novo", () => {
+    expect(cartoesDoResumo({ gruposReaproveitados: 5 }).map((c) => c.rotulo)).toEqual(["Conferem", "Com divergência", "Possível saída", "Não verificados", "Propostas de inclusão", "Endereços a confirmar"]);
   });
 });

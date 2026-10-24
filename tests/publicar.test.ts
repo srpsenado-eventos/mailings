@@ -87,6 +87,16 @@ describe("enxugarParaPublicar", () => {
     for (const dado of ["camara.leg.br", "3215-0000", "Anexo Ficticio", "sala-ficticia-9"]) expect(json).not.toContain(dado);
     expect(comEleicao.eleicao?.deputadosAtuais?.[0].email).toBe("c@camara.leg.br");
   });
+  test("o retrato publicado não leva a memória de leitura (spec 2026-10-20 §6)", () => {
+    const comLeituras = {
+      ...retrato,
+      leituras: { "https://orgao.gov.br": { url: "https://orgao.gov.br", lidaEm: "2026-10-16T15:50:29.000Z", conteudo: { url: "https://orgao.gov.br", textoLimpo: "Texto da página guardada", destaques: [], pessoas: [{ nome: "Pessoa Guardada" }] } } },
+    } as unknown as Retrato;
+    const pub = enxugarParaPublicar(comLeituras, "2026-10-20T18:00:00.000Z");
+    expect("leituras" in pub).toBe(false);
+    expect(JSON.stringify(pub)).not.toContain("Pessoa Guardada");
+    expect(comLeituras.leituras).toBeDefined();
+  });
 });
 
 describe("enxugarParaPublicar com a base de endereços", () => {

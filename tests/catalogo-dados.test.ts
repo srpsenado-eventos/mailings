@@ -3,6 +3,11 @@ import { CATALOGO } from "@/data/catalogo";
 import { normalizarNome } from "@/lib/normalize";
 
 describe("catálogo real (data/catalogo.ts)", () => {
+  test("Ministros do TST lê /ministros (a antiga /en/ministros responde 404 desde 2026-10-19)", () => {
+    const tst = CATALOGO.find((g) => g.nome === "Ministros do TST");
+    expect(tst?.fontes.map((f) => f.url)).toEqual(["https://www.tst.jus.br/ministros"]);
+  });
+
   test("tem os 34 grupos (33 migrados do banco + Governadores Eleitos)", () => {
     expect(CATALOGO).toHaveLength(34);
   });

@@ -1,9 +1,10 @@
 "use client";
-import { useState } from "react";
+import { useState, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { lerPlanilha, ColunaFaltanteError } from "@/lib/planilha";
 import { lerBaseEnderecos, lerPlanilhaEnderecos } from "@/lib/planilha-enderecos";
-import { juntarArquivosEleicao, lerPlanilhaEleicao, PlanilhaEleicaoDesconhecidaError, resumoArquivoEleicao, type ArquivoEleicaoLido } from "@/lib/planilha-eleitos";
+import { juntarArquivosEleicao, lerPlanilhaEleicao, PlanilhaEleicaoDesconhecidaError, resumoArquivoEleicao, separarColisoesDeTipo, type ArquivoEleicaoLido } from "@/lib/planilha-eleitos";
+import { triarArquivosSoltos } from "@/lib/arquivos-soltos";
 import type { BaseEnderecos, ContatoPlanilha, EnderecoEstruturado, Retrato } from "@/lib/types";
 
 type Resposta = { ok: true; retrato: Retrato; aviso?: string } | { ok: false; message?: string };
@@ -25,6 +26,12 @@ function mensagemDeLeitura(err: unknown): string {
   return err instanceof Error ? `Falha ao ler a planilha: ${err.message}` : "Falha ao ler a planilha.";
 }
 
+/** Junta o aviso da triagem (arquivo ignorado ao soltar) com a mensagem de leitura, se houver. */
+function juntarMensagens(partes: readonly (string | null)[]): string | null {
+  const presentes = partes.filter((p): p is string => p !== null && p.length > 0);
+  return presentes.length > 0 ? presentes.join(" | ") : null;
+}
+
 function Passo({ numero, ativo }: { numero: number; ativo: boolean }) {
   return (
     <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${ativo ? "bg-ok-fundo text-ok" : "bg-neutro-fundo text-cinza"}`}>
@@ -37,17 +44,44 @@ interface SeletorProps {
   id: string;
   rotulo: string;
   desabilitado: boolean;
+  /** Passo que aceita várias planilhas de uma vez (Eleição 2026). */
   multiplo?: boolean;
-  onArquivo?: (f: File) => void;
-  onArquivos?: (fs: File[]) => void;
+  /** Recebe as planilhas escolhidas ou soltas e o aviso da triagem (arquivo ignorado, mais de uma num passo de uma só). */
+  onEntrega: (arquivos: File[], aviso: string | null) => void;
 }
 
-function SeletorDeArquivo({ id, rotulo, desabilitado, multiplo, onArquivo, onArquivos }: SeletorProps) {
+function SeletorDeArquivo({ id, rotulo, desabilitado, multiplo = false, onEntrega }: SeletorProps) {
+  const [arrastando, setArrastando] = useState(false);
+
+  function aoArrastarSobre(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = desabilitado ? "none" : "copy";
+    if (!desabilitado) setArrastando(true);
+  }
+
+  function aoSairDoArrasto(e: DragEvent<HTMLDivElement>) {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setArrastando(false);
+  }
+
+  function aoSoltar(e: DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setArrastando(false);
+    if (desabilitado) return;
+    const { aceitos, aviso } = triarArquivosSoltos(Array.from(e.dataTransfer.files), multiplo);
+    onEntrega(aceitos, aviso);
+  }
+
   return (
-    <div className="mt-4 rounded-lg border border-dashed border-borda-forte bg-fundo p-5 text-center">
+    <div
+      onDragOver={aoArrastarSobre}
+      onDragLeave={aoSairDoArrasto}
+      onDrop={aoSoltar}
+      className={`mt-4 rounded-lg border border-dashed p-5 text-center transition-colors ${arrastando ? "border-acao bg-acao-borda/40" : "border-borda-forte bg-fundo"}`}
+    >
       <label htmlFor={id} className="cursor-pointer rounded-md border border-acao-borda bg-cartao px-3.5 py-1.5 text-sm font-medium text-acao">
         {rotulo}
       </label>
+      <p className="mt-3 text-xs text-cinza">{multiplo ? "ou arraste as planilhas para aqui" : "ou arraste a planilha para aqui"}</p>
       <input
         id={id}
         type="file"
@@ -57,8 +91,7 @@ function SeletorDeArquivo({ id, rotulo, desabilitado, multiplo, onArquivo, onArq
         multiple={multiplo}
         onChange={(e) => {
           const lista = Array.from(e.target.files ?? []);
-          if (onArquivos && lista.length > 0) onArquivos(lista);
-          else if (lista[0]) onArquivo?.(lista[0]);
+          if (lista.length > 0) onEntrega(lista, null);
           e.target.value = "";
         }}
       />
@@ -92,35 +125,44 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
   const [erroVarredura, setErroVarredura] = useState<string | null>(null);
   const [varrendo, setVarrendo] = useState(false);
 
-  async function lerContatos(arquivo: File) {
-    setErroContatos(null);
+  async function lerContatos(arquivos: File[], aviso: string | null) {
     setErroVarredura(null);
+    const arquivo = arquivos[0];
+    if (!arquivo) {
+      setErroContatos(aviso);
+      return;
+    }
     try {
       const lista = lerPlanilha(await arquivo.arrayBuffer());
       setContatos({ nome: arquivo.name, contatos: lista, grupos: new Set(lista.map((c) => c.grupo)).size });
+      setErroContatos(aviso);
     } catch (err) {
       setContatos(null);
-      setErroContatos(mensagemDeLeitura(err));
+      setErroContatos(juntarMensagens([aviso, mensagemDeLeitura(err)]));
     }
   }
 
-  async function lerEnderecos(arquivo: File) {
-    setErroEnderecos(null);
+  async function lerEnderecos(arquivos: File[], aviso: string | null) {
     setErroVarredura(null);
+    const arquivo = arquivos[0];
+    if (!arquivo) {
+      setErroEnderecos(aviso);
+      return;
+    }
     try {
       const buffer = await arquivo.arrayBuffer();
       setEnderecos({ nome: arquivo.name, enderecos: lerPlanilhaEnderecos(buffer), base: lerBaseEnderecos(buffer) });
+      setErroEnderecos(aviso);
     } catch (err) {
       setEnderecos(null);
-      setErroEnderecos(mensagemDeLeitura(err));
+      setErroEnderecos(juntarMensagens([aviso, mensagemDeLeitura(err)]));
     }
   }
 
-  async function lerEleicao(arquivos: File[]) {
-    setErroEleicao(null);
+  async function lerEleicao(arquivos: File[], aviso: string | null) {
     setErroVarredura(null);
     const lidos: ArquivoEleicaoLido[] = [];
-    const erros: string[] = [];
+    const erros: string[] = aviso ? [aviso] : [];
     for (const f of arquivos) {
       try {
         lidos.push({ nome: f.name, arquivo: lerPlanilhaEleicao(await f.arrayBuffer()) });
@@ -128,13 +170,15 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
         erros.push(`${f.name}: ${mensagemDeLeitura(err)}`);
       }
     }
-    if (lidos.length > 0) {
+    // Dois arquivos do mesmo tipo na mesma seleção não entram (nenhum deles); o de outra seleção é trocado.
+    const { aceitos, colisoes } = separarColisoesDeTipo(lidos);
+    if (aceitos.length > 0) {
       setEleicao((atual) => {
-        const tipos = new Set(lidos.map((l) => l.arquivo.tipo));
-        return [...atual.filter((a) => !tipos.has(a.arquivo.tipo)), ...lidos];
+        const tipos = new Set(aceitos.map((l) => l.arquivo.tipo));
+        return [...atual.filter((a) => !tipos.has(a.arquivo.tipo)), ...aceitos];
       });
     }
-    if (erros.length > 0) setErroEleicao(erros.join(" | "));
+    setErroEleicao(juntarMensagens([...erros, ...colisoes]));
   }
 
   async function varrer() {
@@ -189,7 +233,7 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
           {contatos ? (
             <ArquivoLido nome={contatos.nome} resumo={`${contatos.contatos.length} contatos · ${contatos.grupos} grupos`} onTrocar={() => { setContatos(null); setErroVarredura(null); }} desabilitado={varrendo} />
           ) : (
-            <SeletorDeArquivo id="planilha-contatos" rotulo="Escolher arquivo" desabilitado={varrendo} onArquivo={lerContatos} />
+            <SeletorDeArquivo id="planilha-contatos" rotulo="Escolher arquivo" desabilitado={varrendo} onEntrega={lerContatos} />
           )}
           {erroContatos && <p className="mt-2 text-sm text-ruim">{erroContatos}</p>}
         </section>
@@ -206,7 +250,7 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
           {enderecos ? (
             <ArquivoLido nome={enderecos.nome} resumo={`${enderecos.enderecos.length} endereços`} onTrocar={() => { setEnderecos(null); setErroVarredura(null); }} desabilitado={varrendo} />
           ) : (
-            <SeletorDeArquivo id="planilha-enderecos" rotulo="Escolher arquivo" desabilitado={varrendo} onArquivo={lerEnderecos} />
+            <SeletorDeArquivo id="planilha-enderecos" rotulo="Escolher arquivo" desabilitado={varrendo} onEntrega={lerEnderecos} />
           )}
           {erroEnderecos && <p className="mt-2 text-sm text-ruim">{erroEnderecos}</p>}
         </section>
@@ -218,7 +262,7 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
             <span className="rounded-full bg-neutro-fundo px-2 py-0.5 text-[11px] text-cinza">opcional</span>
           </div>
           <p className="mt-3 text-sm leading-relaxed text-cinza">
-            As planilhas da pasta <strong className="font-medium">Eleitos 2026</strong>: senadores eleitos, deputados federais eleitos, deputados atuais e governadores eleitos. Pode escolher as quatro de uma vez.
+            As planilhas da pasta <strong className="font-medium">Eleitos 2026</strong>: senadores eleitos, deputados federais eleitos, deputados atuais e governadores eleitos. Pode escolher ou arrastar as quatro de uma vez.
           </p>
           {eleicao.map((l) => (
             <ArquivoLido
@@ -229,7 +273,7 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
               desabilitado={varrendo}
             />
           ))}
-          <SeletorDeArquivo id="planilhas-eleicao" rotulo={eleicao.length > 0 ? "Acrescentar ou trocar" : "Escolher arquivos"} desabilitado={varrendo} multiplo onArquivos={lerEleicao} />
+          <SeletorDeArquivo id="planilhas-eleicao" rotulo={eleicao.length > 0 ? "Acrescentar ou trocar" : "Escolher arquivos"} desabilitado={varrendo} multiplo onEntrega={lerEleicao} />
           {erroEleicao && <p className="mt-2 text-sm text-ruim">{erroEleicao}</p>}
         </section>
       </div>

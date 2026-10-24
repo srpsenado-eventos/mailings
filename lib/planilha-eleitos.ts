@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { normalizarTexto } from "@/lib/normalize";
 import { ColunaFaltanteError } from "@/lib/planilha";
+import { listarEntreAspas } from "@/lib/texto";
 import type { CasaLegislativa, DeputadoAtual, EleitoPlanilha, GovernadorPlanilha, PlanilhaGovernadores } from "@/lib/types";
 
 /**
@@ -174,12 +175,6 @@ export function lerPlanilhaEleicao(buffer: ArrayBuffer): ArquivoEleicao {
   return casa === "senado" ? { tipo: "senado", eleitos } : { tipo: "camara", eleitos };
 }
 
-function listarNomes(nomes: readonly string[]): string {
-  const entreAspas = nomes.map((n) => `"${n}"`);
-  if (entreAspas.length <= 1) return entreAspas.join("");
-  return `${entreAspas.slice(0, -1).join(", ")} e ${entreAspas[entreAspas.length - 1]}`;
-}
-
 /**
  * Numa mesma seleção, dois arquivos reconhecidos como o mesmo tipo são contradição, não troca (em 24/10/2026
  * a planilha de governadores regerada foi lida como Câmara e escondeu o cartão dos deputados eleitos):
@@ -193,7 +188,7 @@ export function separarColisoesDeTipo(lidos: readonly ArquivoEleicaoLido[]): { a
   const tiposRepetidos = new Set(repetidos.map(([tipo]) => tipo));
   return {
     aceitos: lidos.filter((l) => !tiposRepetidos.has(l.arquivo.tipo)),
-    colisoes: repetidos.map(([tipo, doTipo]) => `${listarNomes(doTipo.map((l) => l.nome))} foram reconhecidos como ${ROTULO_TIPO[tipo]}; escolha um deles.`),
+    colisoes: repetidos.map(([tipo, doTipo]) => `${listarEntreAspas(doTipo.map((l) => l.nome))} foram reconhecidos como ${ROTULO_TIPO[tipo]}; escolha um deles.`),
   };
 }
 

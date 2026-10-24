@@ -452,7 +452,7 @@ export interface EleitoPlanilha {
   nascimento?: string;
 }
 
-/** Uma linha de `Governadores Eleitos 2026.xlsx` (abas "Eleitos 1º turno" e "2º turno"). Dado público do TSE. */
+/** Uma linha de `Governadores Eleitos 2026.xlsx` (aba "Eleitos" com "Turno", ou "Eleitos 1º turno" no layout antigo, e aba "2º turno"). Dado público do TSE. */
 export interface GovernadorPlanilha {
   uf: string; nomeUrna: string; nomeCompleto: string; partido?: string;
   situacaoTse: string; statusMandato: string; baseStatus?: string; genero?: string; vice?: string;

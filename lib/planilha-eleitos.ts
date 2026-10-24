@@ -65,10 +65,14 @@ const MARCA_SENADO = normalizarTexto("1º suplente");
 /** Coluna que só a planilha de governadores tem na aba "Eleitos" (layout do gerador do GT desde 24/10/2026). */
 const MARCA_GOVERNO = normalizarTexto("Turno");
 /**
- * Na aba "2º turno" do layout novo a situação vem sufixada: vale a do 2º turno quando a coluna existe,
- * senão a do 1º turno; o layout antigo mantém "Situação (TSE)". A primeira coluna presente é a usada.
+ * Na aba "2º turno" do layout novo a situação vem sufixada: vale a do 2º turno quando a coluna existe
+ * (a planilha real de 24/10 grava "Situação (TSE) 2º turno", sem parênteses; a forma com parênteses, coerente
+ * com "Votos (2º turno)", também é aceita), senão a do 1º turno; o layout antigo mantém "Situação (TSE)".
+ * A primeira coluna presente é a usada. Nessa aba a situação não é obrigatória: ninguém a usa adiante
+ * (`agruparSegundoTurno` guarda só nome, partido e status), e exigi-la derrubaria o arquivo inteiro.
  */
-const COLUNAS_SITUACAO_SEGUNDO_TURNO = ["Situação (TSE) 2º turno", "Situação (TSE) (1º turno)", "Situação (TSE)"].map(normalizarTexto);
+const COLUNAS_SITUACAO_SEGUNDO_TURNO = ["Situação (TSE) (2º turno)", "Situação (TSE) 2º turno", "Situação (TSE) (1º turno)", "Situação (TSE)"].map(normalizarTexto);
+const OBRIGATORIAS_SEGUNDO_TURNO = OBRIGATORIAS_GOVERNO.filter((c) => c !== "situacaoTse");
 
 function cabecalhos(ws: XLSX.WorkSheet): Map<string, number> {
   const linhas = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "" });
@@ -103,8 +107,12 @@ function aba(wb: XLSX.WorkBook, alvo: string): XLSX.WorkSheet | undefined {
   return nome ? wb.Sheets[nome] : undefined;
 }
 
-function lerGovernadores(ws: XLSX.WorkSheet, colunas: ColunasGoverno = COLUNAS_GOVERNO): GovernadorPlanilha[] {
-  return lerTabela(ws, colunas, OBRIGATORIAS_GOVERNO)
+function lerGovernadores(
+  ws: XLSX.WorkSheet,
+  colunas: ColunasGoverno = COLUNAS_GOVERNO,
+  obrigatorias: readonly string[] = OBRIGATORIAS_GOVERNO,
+): GovernadorPlanilha[] {
+  return lerTabela(ws, colunas, obrigatorias)
     .filter((l) => l.nomeUrna || l.nomeCompleto)
     .map((l): GovernadorPlanilha => ({
       uf: l.uf.toUpperCase(), nomeUrna: l.nomeUrna, nomeCompleto: l.nomeCompleto, situacaoTse: l.situacaoTse,
@@ -127,7 +135,7 @@ function lerSegundoTurno(ws: XLSX.WorkSheet, ufsEleitas: ReadonlySet<string>): G
   if (abaVazia(ws)) return [];
   const idx = cabecalhos(ws);
   const situacaoTse = COLUNAS_SITUACAO_SEGUNDO_TURNO.find((c) => idx.has(c)) ?? COLUNAS_GOVERNO.situacaoTse;
-  return lerGovernadores(ws, { ...COLUNAS_GOVERNO, situacaoTse }).filter((g) => !ufsEleitas.has(g.uf));
+  return lerGovernadores(ws, { ...COLUNAS_GOVERNO, situacaoTse }, OBRIGATORIAS_SEGUNDO_TURNO).filter((g) => !ufsEleitas.has(g.uf));
 }
 
 function lerArquivoGoverno(eleitosAba: XLSX.WorkSheet, segunda: XLSX.WorkSheet | undefined): ArquivoEleicao {
@@ -190,6 +198,12 @@ export function separarColisoesDeTipo(lidos: readonly ArquivoEleicaoLido[]): { a
     aceitos: lidos.filter((l) => !tiposRepetidos.has(l.arquivo.tipo)),
     colisoes: repetidos.map(([tipo, doTipo]) => `${listarEntreAspas(doTipo.map((l) => l.nome))} foram reconhecidos como ${ROTULO_TIPO[tipo]}; escolha um deles.`),
   };
+}
+
+/** Estado do passo 3 depois de uma seleção: os novos trocam só os do mesmo tipo e vão para o fim. */
+export function substituirPorTipo(atual: readonly ArquivoEleicaoLido[], novos: readonly ArquivoEleicaoLido[]): ArquivoEleicaoLido[] {
+  const tipos = new Set(novos.map((l) => l.arquivo.tipo));
+  return [...atual.filter((a) => !tipos.has(a.arquivo.tipo)), ...novos];
 }
 
 /** Junta os arquivos lidos; vale o último de cada tipo (trocar o arquivo não soma em dobro). */

@@ -1,10 +1,11 @@
 "use client";
-import { useState, type DragEvent } from "react";
+import { useEffect, useState, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { lerPlanilha, ColunaFaltanteError } from "@/lib/planilha";
 import { lerBaseEnderecos, lerPlanilhaEnderecos } from "@/lib/planilha-enderecos";
-import { juntarArquivosEleicao, lerPlanilhaEleicao, PlanilhaEleicaoDesconhecidaError, resumoArquivoEleicao, separarColisoesDeTipo, type ArquivoEleicaoLido } from "@/lib/planilha-eleitos";
+import { juntarArquivosEleicao, lerPlanilhaEleicao, PlanilhaEleicaoDesconhecidaError, resumoArquivoEleicao, separarColisoesDeTipo, substituirPorTipo, type ArquivoEleicaoLido } from "@/lib/planilha-eleitos";
 import { triarArquivosSoltos } from "@/lib/arquivos-soltos";
+import { juntarMensagens } from "@/lib/texto";
 import type { BaseEnderecos, ContatoPlanilha, EnderecoEstruturado, Retrato } from "@/lib/types";
 
 type Resposta = { ok: true; retrato: Retrato; aviso?: string } | { ok: false; message?: string };
@@ -26,12 +27,6 @@ function mensagemDeLeitura(err: unknown): string {
   return err instanceof Error ? `Falha ao ler a planilha: ${err.message}` : "Falha ao ler a planilha.";
 }
 
-/** Junta o aviso da triagem (arquivo ignorado ao soltar) com a mensagem de leitura, se houver. */
-function juntarMensagens(partes: readonly (string | null)[]): string | null {
-  const presentes = partes.filter((p): p is string => p !== null && p.length > 0);
-  return presentes.length > 0 ? presentes.join(" | ") : null;
-}
-
 function Passo({ numero, ativo }: { numero: number; ativo: boolean }) {
   return (
     <span className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${ativo ? "bg-ok-fundo text-ok" : "bg-neutro-fundo text-cinza"}`}>
@@ -50,13 +45,34 @@ interface SeletorProps {
   onEntrega: (arquivos: File[], aviso: string | null) => void;
 }
 
+const arrastaArquivos = (dt: DataTransfer | null): boolean => dt !== null && Array.from(dt.types).includes("Files");
+
+/**
+ * Arquivo solto fora da área tracejada cairia no comportamento padrão do navegador (baixar o .xlsx ou
+ * abrir o .csv no lugar da tela, perdendo o que já foi lido). Enquanto a tela está montada, nada disso acontece.
+ */
+function useSemSoltarForaDaArea() {
+  useEffect(() => {
+    const impedir = (e: globalThis.DragEvent) => {
+      if (arrastaArquivos(e.dataTransfer)) e.preventDefault();
+    };
+    window.addEventListener("dragover", impedir);
+    window.addEventListener("drop", impedir);
+    return () => {
+      window.removeEventListener("dragover", impedir);
+      window.removeEventListener("drop", impedir);
+    };
+  }, []);
+}
+
 function SeletorDeArquivo({ id, rotulo, desabilitado, multiplo = false, onEntrega }: SeletorProps) {
   const [arrastando, setArrastando] = useState(false);
 
   function aoArrastarSobre(e: DragEvent<HTMLDivElement>) {
     e.preventDefault();
-    e.dataTransfer.dropEffect = desabilitado ? "none" : "copy";
-    if (!desabilitado) setArrastando(true);
+    const comArquivos = arrastaArquivos(e.dataTransfer);
+    e.dataTransfer.dropEffect = desabilitado || !comArquivos ? "none" : "copy";
+    if (!desabilitado && comArquivos) setArrastando(true);
   }
 
   function aoSairDoArrasto(e: DragEvent<HTMLDivElement>) {
@@ -116,6 +132,7 @@ function ArquivoLido({ nome, resumo, onTrocar, desabilitado }: { nome: string; r
 
 export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuardado: (retrato: Retrato, aviso: string) => void }) {
   const router = useRouter();
+  useSemSoltarForaDaArea();
   const [contatos, setContatos] = useState<ArquivoContatos | null>(null);
   const [enderecos, setEnderecos] = useState<ArquivoEnderecos | null>(null);
   const [erroContatos, setErroContatos] = useState<string | null>(null);
@@ -172,12 +189,7 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
     }
     // Dois arquivos do mesmo tipo na mesma seleção não entram (nenhum deles); o de outra seleção é trocado.
     const { aceitos, colisoes } = separarColisoesDeTipo(lidos);
-    if (aceitos.length > 0) {
-      setEleicao((atual) => {
-        const tipos = new Set(aceitos.map((l) => l.arquivo.tipo));
-        return [...atual.filter((a) => !tipos.has(a.arquivo.tipo)), ...aceitos];
-      });
-    }
+    if (aceitos.length > 0) setEleicao((atual) => substituirPorTipo(atual, aceitos));
     setErroEleicao(juntarMensagens([...erros, ...colisoes]));
   }
 
@@ -231,7 +243,7 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
             Exportação do Sistema Contatos. Os grupos a varrer saem da coluna <strong className="font-medium">Grupo</strong> desta planilha.
           </p>
           {contatos ? (
-            <ArquivoLido nome={contatos.nome} resumo={`${contatos.contatos.length} contatos · ${contatos.grupos} grupos`} onTrocar={() => { setContatos(null); setErroVarredura(null); }} desabilitado={varrendo} />
+            <ArquivoLido nome={contatos.nome} resumo={`${contatos.contatos.length} contatos · ${contatos.grupos} grupos`} onTrocar={() => { setContatos(null); setErroContatos(null); setErroVarredura(null); }} desabilitado={varrendo} />
           ) : (
             <SeletorDeArquivo id="planilha-contatos" rotulo="Escolher arquivo" desabilitado={varrendo} onEntrega={lerContatos} />
           )}
@@ -248,7 +260,7 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
             Sem ele, o endereço continua saindo como <em>fonte não informa</em>: os sites dos órgãos não publicam endereço.
           </p>
           {enderecos ? (
-            <ArquivoLido nome={enderecos.nome} resumo={`${enderecos.enderecos.length} endereços`} onTrocar={() => { setEnderecos(null); setErroVarredura(null); }} desabilitado={varrendo} />
+            <ArquivoLido nome={enderecos.nome} resumo={`${enderecos.enderecos.length} endereços`} onTrocar={() => { setEnderecos(null); setErroEnderecos(null); setErroVarredura(null); }} desabilitado={varrendo} />
           ) : (
             <SeletorDeArquivo id="planilha-enderecos" rotulo="Escolher arquivo" desabilitado={varrendo} onEntrega={lerEnderecos} />
           )}
@@ -269,7 +281,7 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
               key={l.arquivo.tipo}
               nome={l.nome}
               resumo={resumoArquivoEleicao(l.arquivo)}
-              onTrocar={() => { setEleicao((atual) => atual.filter((a) => a.arquivo.tipo !== l.arquivo.tipo)); setErroVarredura(null); }}
+              onTrocar={() => { setEleicao((atual) => atual.filter((a) => a.arquivo.tipo !== l.arquivo.tipo)); setErroEleicao(null); setErroVarredura(null); }}
               desabilitado={varrendo}
             />
           ))}

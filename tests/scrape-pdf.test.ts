@@ -1,12 +1,17 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { extrairConteudoPdf, lerTextoPdf, raspar } from "@/lib/scrape";
 
 const textoStj = readFileSync(resolve(__dirname, "fixtures/stj-composicao.txt"), "utf-8");
 const URL = "https://www.stj.jus.br/x/Composicao-do-STJ.pdf";
 
 describe("leitura de PDF (spec 2026-10-23 §5.1)", () => {
+  // Fora do teste: uma asserção que falha não deixa o fetch falso para os outros.
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   test("texto do PDF do STJ: os 2 convocados (nomes seguidos de **), com a data da composição no contexto", async () => {
     const c = await extrairConteudoPdf(new Uint8Array(), URL, { marcador: ["**"] }, async () => textoStj);
     expect(c.url).toBe(URL);
@@ -27,6 +32,5 @@ describe("leitura de PDF (spec 2026-10-23 §5.1)", () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, headers: { get: () => "application/pdf" }, arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) })));
     const c = await raspar(URL, { tipo: "pdf", marcador: ["**"] });
     expect(c.pessoas.map((p) => p.nome)).toEqual(["Fulano De Teste"]);
-    vi.unstubAllGlobals();
   });
 });

@@ -490,8 +490,36 @@ function sufixoDoMarcador(marcador: string): string {
   return marcador.replace(/[()*]/g, "").trim();
 }
 
-/** Início do nome que fecha `palavras`: maiúsculas e conectivos minúsculos, parando no cargo. */
-function inicioDoNome(palavras: readonly string[]): number {
+/**
+ * Qualificadores que, logo depois da palavra de cargo, continuam o cargo e não abrem o nome
+ * ("Desembargador Federal Olindo Menezes", "Desembargadora do Trabalho Fulana Silva"). Os
+ * convocados do STJ vêm em boa parte dos TRFs; sem isto o nome saía "Federal Olindo Menezes",
+ * não casava o contato e virava possível saída falsa e "novo" falso. Formas normalizadas.
+ */
+const QUALIFICADORES_DO_CARGO: readonly (readonly string[])[] = [
+  ["federal"], ["do", "trabalho"], ["substituto"], ["substituta"], ["convocado"], ["convocada"],
+];
+
+/** Posição logo depois dos qualificadores do cargo que começam em `inicio` (podem ser vários seguidos). */
+function depoisDosQualificadores(palavras: readonly string[], inicio: number): number {
+  let i = inicio;
+  for (;;) {
+    const qualificador = QUALIFICADORES_DO_CARGO.find((q) =>
+      q.every((parte, k) => i + k < palavras.length && normalizarTexto(palavras[i + k]) === parte),
+    );
+    if (!qualificador) return i;
+    i += qualificador.length;
+  }
+}
+
+/** Onde começa o nome que fecha `palavras` e a palavra de cargo que o antecede, se houver. */
+interface LimitesDoNome {
+  inicio: number;
+  palavraDeCargo?: string;
+}
+
+/** Nome: maiúsculas e conectivos minúsculos do fim para trás, parando no cargo. */
+function limitesDoNome(palavras: readonly string[]): LimitesDoNome {
   let inicio = palavras.length;
   while (inicio > 0) {
     const palavra = palavras[inicio - 1];
@@ -499,26 +527,26 @@ function inicioDoNome(palavras: readonly string[]): number {
     if (!conectivoMinusculo && (!PALAVRA_DE_NOME.test(palavra) || ehPalavraDeCargo(palavra))) break;
     inicio -= 1;
   }
+  const anterior = inicio > 0 ? palavras[inicio - 1] : undefined;
+  const palavraDeCargo = anterior !== undefined && ehPalavraDeCargo(anterior) ? anterior : undefined;
+  if (palavraDeCargo !== undefined) inicio = depoisDosQualificadores(palavras, inicio);
   // Conectivo não abre nome: "de Fulano Silva" vira "Fulano Silva".
   while (inicio < palavras.length && CONECTOR.test(palavras[inicio])) inicio += 1;
-  return inicio;
+  return { inicio, ...(palavraDeCargo !== undefined ? { palavraDeCargo } : {}) };
 }
 
 /**
  * A pessoa cujo nome fecha `trecho` (o texto entre o separador anterior e o marcador). O cargo
- * só existe quando a palavra logo antes do nome é de cargo: "Desembargador" + "(convocado)"
- * dá "Desembargador convocado".
+ * só existe quando há palavra de cargo antes do nome (com ou sem qualificador no meio):
+ * "Desembargador" + "(convocado)" dá "Desembargador convocado"; o qualificador não entra.
  */
 function pessoaAntesDoMarcador(trecho: string, marcador: string): PessoaSite | undefined {
   const palavras = trecho.trim().split(/\s+/).filter(Boolean);
-  const inicio = inicioDoNome(palavras);
+  const { inicio, palavraDeCargo } = limitesDoNome(palavras);
   const nome = palavras.slice(inicio);
   if (nome.filter((p) => !CONECTOR.test(p)).length < 2) return undefined;
-  const anterior = inicio > 0 ? palavras[inicio - 1] : undefined;
   const cargo =
-    anterior !== undefined && ehPalavraDeCargo(anterior)
-      ? `${anterior} ${sufixoDoMarcador(marcador)}`.trim()
-      : undefined;
+    palavraDeCargo !== undefined ? `${palavraDeCargo} ${sufixoDoMarcador(marcador)}`.trim() : undefined;
   return { nome: nome.join(" "), ...(cargo ? { cargo } : {}), origem: "pagina" };
 }
 

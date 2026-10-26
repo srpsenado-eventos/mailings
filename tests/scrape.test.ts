@@ -691,6 +691,29 @@ describe("extração por marcador (spec 2026-10-23 §5.2)", () => {
   test("marcador ** sem palavra de cargo antes: pessoa sem cargo", () => {
     expect(extrairPorMarcador("Ana Maria Política Completa **\nBeto Souza", ["**"])).toEqual([{ nome: "Ana Maria Política Completa", origem: "pagina" }]);
   });
+  test("qualificador logo depois do cargo ('Federal') fica fora do nome e do cargo", () => {
+    expect(extrairPorMarcador("Desembargador Federal Olindo Menezes **", ["**"])).toEqual([
+      { nome: "Olindo Menezes", cargo: "Desembargador", origem: "pagina" },
+    ]);
+    expect(extrairPorMarcador("Desembargador Federal Olindo Menezes (convocado)", ["(convocado)"])).toEqual([
+      { nome: "Olindo Menezes", cargo: "Desembargador convocado", origem: "pagina" },
+    ]);
+  });
+  test("qualificador de duas palavras ('do Trabalho') fica fora do nome", () => {
+    expect(extrairPorMarcador("Desembargadora do Trabalho Fulana Silva (convocada)", ["(convocada)"])).toEqual([
+      { nome: "Fulana Silva", cargo: "Desembargadora convocada", origem: "pagina" },
+    ]);
+  });
+  test("qualificadores seguidos ('Substituto', 'Convocado') também saem do nome", () => {
+    expect(extrairPorMarcador("Desembargador Federal Substituto Convocado Olindo Menezes **", ["**"])).toEqual([
+      { nome: "Olindo Menezes", cargo: "Desembargador", origem: "pagina" },
+    ]);
+  });
+  test("'Federal' sem palavra de cargo antes continua parte do nome", () => {
+    expect(extrairPorMarcador("Federal Olindo Menezes **", ["**"])).toEqual([
+      { nome: "Federal Olindo Menezes", origem: "pagina" },
+    ]);
+  });
   test("nome de uma palavra antes do marcador não vira pessoa", () => {
     expect(extrairPorMarcador("Fulano (convocado)", ["(convocado)"])).toEqual([]);
   });

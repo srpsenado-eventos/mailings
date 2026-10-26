@@ -4,18 +4,18 @@ import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload
 import { armazemPadrao, type Armazem } from "@/lib/armazem";
 import { aplicarEleicao } from "@/lib/eleitos";
 import { resolverGrupoEFonte } from "@/lib/catalogo";
-import { memoriaDoRetrato } from "@/lib/memoria-leitura";
+import { falhasDoRetrato, memoriaDoRetrato } from "@/lib/memoria-leitura";
 import { modoDoApp } from "@/lib/modo";
 import { origemPermitida } from "@/lib/origem";
 import { montarRetrato } from "@/lib/painel";
 import { abrirSessao } from "@/lib/navegador";
-import { RASPADORES_PADRAO, rasparFonte } from "@/lib/raspagem";
+import { comRepeticao, RASPADORES_PADRAO, rasparFonte } from "@/lib/raspagem";
 import { extrairComposicao, diagnosticarIa } from "@/lib/gemini";
 import type { Retrato } from "@/lib/types";
 
 const AVISO_NAO_GUARDADO = "A varredura terminou, mas o retrato não pôde ser guardado: na próxima abertura o app não a terá.";
 
-/** Retrato anterior, só para a memória de leitura: ausente ou ilegível vale como "sem memória" (spec 2026-10-20 §10). */
+/** Retrato anterior, só para a memória de leitura e as falhas por URL: ausente ou ilegível vale como "sem memória" (spec 2026-10-20 §10). */
 async function lerRetratoAnterior(armazem: Armazem): Promise<Retrato | undefined> {
   try {
     return await armazem.lerRetrato();
@@ -48,9 +48,13 @@ export async function POST(req: NextRequest) {
 
     // Memória de leitura por página (spec 2026-10-20 §6): a do retrato anterior, reconstruída
     // quando ele é de antes do mecanismo. O mesmo relógio vale para a validade e para a data das leituras.
+    // As falhas por URL do retrato anterior contam as coletas seguidas em que cada URL caiu
+    // (spec 2026-10-23 §3.4).
     const agora = new Date();
     const armazem = armazemPadrao();
-    const leiturasAnteriores = memoriaDoRetrato(await lerRetratoAnterior(armazem), agora);
+    const anterior = await lerRetratoAnterior(armazem);
+    const leiturasAnteriores = memoriaDoRetrato(anterior, agora);
+    const falhasAnteriores = falhasDoRetrato(anterior);
 
     // Sessão do Chrome com janela para as fontes `navegador: "janela"` (spec 2026-10-15 §4.2):
     // aberta uma vez por varredura, lançada só se alguma fonte precisar, fechada sempre.
@@ -59,9 +63,12 @@ export async function POST(req: NextRequest) {
     try {
       const deps: Dependencias = {
         resolverFonte: (grupo) => resolverGrupoEFonte(grupo),
-        raspar: (fonte) => rasparFonte(fonte, { ...RASPADORES_PADRAO, porJanela: (url, opcoes) => sessao.raspar(url, opcoes) }),
+        // Repetição com espera para falhas transitórias (30 s, 120 s); a fonte "janela" passa
+        // direto, porque a sessão já tem ritmo e repetição próprios (spec 2026-10-23 §3.2).
+        raspar: comRepeticao((fonte) => rasparFonte(fonte, { ...RASPADORES_PADRAO, porJanela: (url, opcoes) => sessao.raspar(url, opcoes) })),
         extrairComposicao: (grupoCanonico, textoLimpo) => extrairComposicao(grupoCanonico, textoLimpo),
         leiturasAnteriores,
+        falhasAnteriores,
         agora: () => agora,
       };
       analisado = await analisar(arquivoNome, contatos, deps, enderecos);

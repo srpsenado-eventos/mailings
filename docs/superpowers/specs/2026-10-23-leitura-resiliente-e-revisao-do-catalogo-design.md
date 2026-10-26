@@ -144,3 +144,22 @@ Nenhum teste lê disco fora de `tests/fixtures/` nem acessa a rede.
 1. Esta spec entra no PR da memória de leitura, só como documento, com a linha na tabela do CLAUDE.md. `Referencia 2/` entra no `.gitignore`.
 2. Implementação depois do merge da memória, em `feat/leitura-resiliente`, com plano próprio, por subagentes; `npm test`, `typecheck`, `build`; PR; merge pelo Clovis; deploy automático; coleta nova; trava (§7); publicação; relatório.
 3. Para o grupo novo aparecer, a próxima base de contatos precisa trazer o rótulo `Senadores fora de exercício`.
+
+## 11. Ajustes do plano (2026-10-26)
+
+O plano `docs/superpowers/plans/2026-10-26-leitura-resiliente-e-revisao-do-catalogo.md` acertou estes pontos, que valem sobre o texto acima onde houver diferença:
+
+1. Mudança de composição é medida pelos nomes **de hoje**: `trocados / total`, com `total` = nomes distintos da página de hoje e `trocados` = os que não estavam na leitura guardada (não `1 − (hoje ∩ guardada) / guardados` do §3.4); página truncada dá 0 e segue para a leitura parcial, virada real dá 1; o cabeçalho diz "Composição mudou: X de Y nomes não estavam na leitura de DD/MM; confira".
+2. A mudança é detectada **antes** do reaproveitamento por leitura parcial e o impede: com mais da metade dos nomes novos, a leitura de hoje vale, o grupo sai lido com `mudouFormato`, as saídas aparecem e o grupo segura a publicação até o fiscal olhar.
+3. O motivo da página individual reaproveitada vem de `falhas[url]`: toda URL que falhou hoje, inclusive a que saiu pela memória, entra em `falhas` com o motivo de hoje; nenhum campo novo no contato.
+4. `falhas` fica em `ResultadoAnalise.falhas?` (o `Retrato` herda) e vai para a web (só URLs do catálogo, datas e motivos técnicos); URL não visitada na varredura mantém a entrada; URL tentada mais de uma vez na mesma varredura tem a entrada apagada por um sucesso.
+5. `marcador` é `{ textos: readonly string[] }`, não `{ texto: string }` (§5): o TST tem dois marcadores, "(convocado)" e "(convocada)".
+6. Janela que responde ao 403 sem conteúdo legível conta como falha da janela: `rasparFonte` só aceita o conteúdo dela com página legível ou pessoas; senão lança o erro original do `fetch` ("HTTP 403").
+7. O grupo novo "Senadores fora de exercício" propõe inclusão (`propoeInclusao: true`): afastado ainda não movido pelo GT aparece nele como proposta de inclusão e em "Senadores" como possível saída.
+8. Fonte provisória marca o contato (`ResultadoContato.provisoria: true`) e o grupo conta (`individuais.provisorias`), para o cabeçalho e a procedência dizerem "Fonte provisória: notícia".
+9. `nomesDoContatos` vale para o grupo: a lista é a união das listas das fontes ativas, aplicada a todo contato que casou alguém da composição.
+10. Títulos (`h1` a `h3`) entram em `destaques` de `extrairConteudo`, filtrados por `ehNome` como os `strong`, para o nome mais curto "em título" chegar a `nomeNaPagina`.
+11. A leitura feita pela alternativa é guardada na memória sob a URL da alternativa (`l.alternativa?.url ?? l.fonte.url`); a procura da guardada tenta a principal e depois a alternativa.
+12. O grupo novo fica sem responsáveis: a planilha de 23/10 não os traz; o Clovis preenche quando o GT definir.
+
+Decisão da revisão de 26/10: página de hoje com "pessoas" que não casam nenhum contato, mesmo com leitura guardada válida, agora cai em **leitura suspeita** (grupo inacessível, que segura a publicação) em vez de ser reaproveitada como no passo 4 do §5.1 da spec de 2026-10-20.

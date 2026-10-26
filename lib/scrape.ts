@@ -440,6 +440,9 @@ const PALAVRAS_MOLDURA =
  */
 const MAX_FRACAO_MOLDURA = 0.8;
 
+/** Marcação do conteúdo principal da página: o bloco que a contém nunca é moldura. */
+const CONTEUDO_PRINCIPAL = "main, [role=main]";
+
 function tamanhoDoTexto(texto: string): number {
   return texto.replace(/\s+/g, " ").trim().length;
 }
@@ -458,6 +461,11 @@ function removerMoldura($: RaizCheerio): void {
       PALAVRAS_MOLDURA.test(marcas);
     if (!ehMoldura) return;
     if (tamanhoDoTexto(alvo.text()) / total >= MAX_FRACAO_MOLDURA) return;
+    // Bloco que contém o conteúdo principal não é moldura, por menor que seja a fração. A
+    // página do PGR (Plone) rendeu 112 caracteres e nenhuma pessoa em 23/10; a causa provável,
+    // reproduzida em tests/fixtures/mpf-pgr.html, é o miolo dentro do bloco do menu lateral
+    // ("menu-lateral"), que o menu principal e o rodapé deixam abaixo de 80% do texto.
+    if (alvo.find(CONTEUDO_PRINCIPAL).length > 0) return;
     alvo.remove();
   });
 }

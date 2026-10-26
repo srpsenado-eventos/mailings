@@ -704,3 +704,12 @@ describe("extração por marcador (spec 2026-10-23 §5.2)", () => {
     expect(c.pessoas.length).toBeGreaterThan(6);
   });
 });
+
+test("PGR (Plone, nome em strong e cargo no parágrafo seguinte): uma pessoa com nome e cargo (spec 2026-10-23 §5)", () => {
+  // O brief usava "Fulano Exemplo Procurador", mas "procurador" é palavra do léxico de cargos e
+  // `pareceNome` reprova o trecho por isso, com ou sem moldura. O nome real do PGR não tem
+  // palavra de cargo; o fictício também não pode ter.
+  const c = extrairConteudo(readFileSync(resolve(__dirname, "fixtures/mpf-pgr.html"), "utf-8"), "https://www.mpf.mp.br/o-mpf/o-mpf/membros/procurador-geral-da-republica");
+  expect(c.pessoas).toContainEqual(expect.objectContaining({ nome: "Fulano Exemplo Pereira", cargo: expect.stringMatching(/Procurador-Geral da República/) }));
+  expect(c.textoLimpo.length).toBeGreaterThan(300);
+});

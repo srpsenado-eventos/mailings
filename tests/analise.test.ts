@@ -1,11 +1,12 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { analisar, MOTIVO_LEITURA_SUSPEITA, type Dependencias } from "@/lib/analise";
 import { extrairConteudo, extrairTabela, ScrapeError } from "@/lib/scrape";
 import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { MOTIVO_NAVEGADOR_AUSENTE } from "@/lib/navegador";
 import { CATALOGO } from "@/data/catalogo";
+import { MOTIVO_SEM_NINGUEM } from "@/lib/memoria-leitura";
 import type { ContatoPlanilha, ConteudoFonte, LeituraGuardada, LeiturasGuardadas } from "@/lib/types";
 
 /**
@@ -895,5 +896,111 @@ describe("memória de leitura com duas fontes no grupo (§5.1 passo 6)", () => {
     expect(g.contatos.map((c) => c.semaforo)).toEqual(["verde", "verde", "vermelho"]);
     expect(g.contatos[2].possivelSaida).toBe(true);
     expect(r.resumo.gruposReaproveitados).toBe(0);
+  });
+});
+
+/** Raspador por URL: conteúdo, ou string = erro com esse motivo; URL fora do mapa também é erro. */
+function rasparDe(mapa: Record<string, ConteudoFonte | string>): Dependencias["raspar"] {
+  return async (f) => {
+    const v = mapa[f.url];
+    if (v === undefined) throw new Error(`sem página para ${f.url}`);
+    if (typeof v === "string") throw new Error(v);
+    return v;
+  };
+}
+
+describe("URL alternativa (spec 2026-10-23 §3.3)", () => {
+  const ALT = "https://orgao.gov.br/alternativa";
+  const depsAlt = (mapa: Record<string, ConteudoFonte | string>, extra: Partial<Dependencias> = {}): Dependencias => ({
+    ...deps,
+    resolverFonte: () => ({ grupoCanonico: "ORG", fontes: [{ url: "https://orgao.gov.br", ativo: true, urlAlternativa: ALT }], fontesIndividuais: [], sugestoes: [] }),
+    raspar: rasparDe(mapa),
+    ...extra,
+  });
+  test("principal com erro e alternativa boa: grupo lido pela alternativa, fonteUrl do grupo é a principal, do contato é a alternativa", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], depsAlt({ "https://orgao.gov.br": "HTTP 404", [ALT]: { ...fonte, url: ALT } }));
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBeUndefined();
+    expect(g.fonteUrl).toBe("https://orgao.gov.br");
+    expect(g.alternativa).toEqual({ url: ALT, motivoPrincipal: "HTTP 404" });
+    expect(g.contatos[0].semaforo).toBe("verde");
+    expect(g.contatos[0].fonteUrl).toBe(ALT);
+  });
+  test("principal sem ninguém também abre a alternativa, com o motivo 'não trouxe ninguém'", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], depsAlt({ "https://orgao.gov.br": { ...fonte, pessoas: [] }, [ALT]: { ...fonte, url: ALT } }));
+    expect(r.grupos[0].alternativa?.motivoPrincipal).toBe(MOTIVO_SEM_NINGUEM);
+  });
+  test("principal boa: a alternativa não é lida", async () => {
+    const raspar = vi.fn(rasparDe({ "https://orgao.gov.br": fonte, [ALT]: { ...fonte, url: ALT } }));
+    await analisar("c.xlsx", [contatos[0]], depsAlt({}, { raspar }));
+    expect(raspar.mock.calls.map((c) => c[0].url)).toEqual(["https://orgao.gov.br"]);
+  });
+  test("as duas falham: inacessível, com os dois motivos", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], depsAlt({ "https://orgao.gov.br": "HTTP 404", [ALT]: "HTTP 500 (3 tentativas)" }));
+    expect(r.grupos[0].fonteInacessivel).toBe(true);
+    expect(r.grupos[0].erroFonte).toBe("HTTP 404 · URL alternativa: HTTP 500 (3 tentativas)");
+  });
+  test("memória da alternativa serve quando as duas falham: reaproveitada com url = principal, leitura guardada sob a alternativa", async () => {
+    const guardada: LeituraGuardada = { url: ALT, lidaEm: "2026-10-19T12:00:00.000Z", conteudo: { ...fonte, url: ALT } };
+    const r = await analisar("c.xlsx", [contatos[0]], depsAlt({ "https://orgao.gov.br": "HTTP 404", [ALT]: "HTTP 500" }, { leiturasAnteriores: { [ALT]: guardada }, agora: () => new Date("2026-10-21T12:00:00.000Z") }));
+    const g = r.grupos[0];
+    expect(g.reaproveitada).toEqual({ url: "https://orgao.gov.br", lidaEm: guardada.lidaEm, motivo: "HTTP 404 · URL alternativa: HTTP 500" });
+    expect(r.leituras?.[ALT]?.lidaEm).toBe(guardada.lidaEm);
+  });
+  test("leitura boa pela alternativa entra na memória sob a URL da alternativa", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], depsAlt({ "https://orgao.gov.br": "HTTP 404", [ALT]: { ...fonte, url: ALT } }));
+    expect(Object.keys(r.leituras ?? {})).toEqual([ALT]);
+  });
+  test("secundária lida pela alternativa: compõe o grupo e vira anotação em erroFonte, sem alternativa no grupo", async () => {
+    const FORA = "https://orgao.gov.br/fora";
+    const FORA_ALT = "https://orgao.gov.br/fora-alternativa";
+    const r = await analisar("c.xlsx", [contatos[0]], {
+      ...deps,
+      resolverFonte: () => ({ grupoCanonico: "ORG", fontes: [{ url: "https://orgao.gov.br", ativo: true }, { url: FORA, ativo: true, rotulo: "fora", urlAlternativa: FORA_ALT }], fontesIndividuais: [], sugestoes: [] }),
+      raspar: rasparDe({ "https://orgao.gov.br": fonte, [FORA]: "HTTP 404", [FORA_ALT]: { ...fonte, url: FORA_ALT, pessoas: [{ nome: "Outra Pessoa Afastada", cargo: "Senadora", origem: "pagina" }] } }),
+    });
+    const g = r.grupos[0];
+    expect(g.erroFonte).toBe("fora: lida pela URL alternativa (HTTP 404)");
+    expect(g.alternativa).toBeUndefined();
+    expect(g.contatos[0].semaforo).toBe("verde");
+    expect(r.falhas).toEqual({ [FORA]: expect.objectContaining({ coletas: 1, motivo: "HTTP 404" }) });
+  });
+});
+
+describe("falhas por URL em coletas seguidas (spec 2026-10-23 §3.4)", () => {
+  const agora = () => new Date("2026-10-21T12:00:00.000Z");
+  test("URL que falhou entra em falhas com coletas 1; o resumo não conta antes de 2", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], { ...deps, raspar: async () => { throw new ScrapeError("https://orgao.gov.br", "HTTP 404"); }, agora });
+    expect(r.falhas).toEqual({ "https://orgao.gov.br": { desde: agora().toISOString(), coletas: 1, motivo: "HTTP 404" } });
+    expect(r.resumo.urlsCaidasRepetidas).toBe(0);
+  });
+  test("segunda coleta seguida: coletas 2, desde mantido, resumo conta 1; grupo reaproveitado pela memória também conta", async () => {
+    const desde = "2026-10-19T12:00:00.000Z";
+    const guardada: LeituraGuardada = { url: "https://orgao.gov.br", lidaEm: desde, conteudo: fonte };
+    const r = await analisar("c.xlsx", [contatos[0]], {
+      ...deps,
+      raspar: async () => { throw new ScrapeError("https://orgao.gov.br", "HTTP 404"); },
+      agora,
+      falhasAnteriores: { "https://orgao.gov.br": { desde, coletas: 1, motivo: "HTTP 404" } },
+      leiturasAnteriores: { "https://orgao.gov.br": guardada },
+    });
+    expect(r.grupos[0].reaproveitada).toBeDefined();
+    expect(r.falhas?.["https://orgao.gov.br"]).toEqual({ desde, coletas: 2, motivo: "HTTP 404" });
+    expect(r.resumo.urlsCaidasRepetidas).toBe(1);
+  });
+  test("URL lida hoje sai de falhas; sem falhasAnteriores o mapa começa vazio", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], { ...deps, agora, falhasAnteriores: { "https://orgao.gov.br": { desde: "2026-10-19T12:00:00.000Z", coletas: 3, motivo: "HTTP 404" } } });
+    expect(r.falhas).toEqual({});
+  });
+  test("primária sem ninguém (grupo de fonte) conta como falha da URL; secundária sem ninguém não", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], {
+      ...deps,
+      resolverFonte: () => ({ grupoCanonico: "ORG", fontes: [{ url: "https://orgao.gov.br", ativo: true }, { url: "https://orgao.gov.br/fora", ativo: true, rotulo: "fora" }], fontesIndividuais: [], sugestoes: [] }),
+      raspar: async (f) => (f.url === "https://orgao.gov.br" ? fonte : { ...fonte, url: f.url, pessoas: [] }),
+      agora,
+    });
+    expect(r.falhas).toEqual({});
+    const r2 = await analisar("c.xlsx", [contatos[0]], { ...deps, raspar: async () => ({ ...fonte, pessoas: [] }), agora });
+    expect(r2.falhas?.["https://orgao.gov.br"]?.motivo).toBe(MOTIVO_SEM_NINGUEM);
   });
 });

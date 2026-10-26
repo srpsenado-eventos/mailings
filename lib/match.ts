@@ -8,6 +8,7 @@ import type {
   CampoDivergente,
   ComparacaoCampo,
   FonteIndividual,
+  LeituraAlternativa,
   SituacaoCampo,
   OrigemVeredito,
   Semaforo,
@@ -625,8 +626,11 @@ export interface EntradaIndividual {
   contato: ContatoPlanilha;
   /** A fonte individual que casou o contato. */
   fonte: FonteIndividual;
-  /** Leitura da página individual: conteúdo OU motivo da falha. */
-  lida: { conteudo?: ConteudoFonte; erro?: string };
+  /**
+   * Leitura da página individual: conteúdo OU motivo da falha. `alternativa`: a principal não
+   * serviu e o conteúdo veio da URL alternativa cadastrada (spec 2026-10-23 §3.3).
+   */
+  lida: { conteudo?: ConteudoFonte; erro?: string; alternativa?: LeituraAlternativa };
   /** Fonte do cargo do grupo (`casamento: "cargo"`), quando o grupo tem; a individual cobre o cargo quando declara. */
   listaCargos?: ListaCargos;
   grupoCanonico?: string;
@@ -645,7 +649,9 @@ export interface VereditoIndividual {
 /** Veredito de um contato ligado a uma fonte individual: a tabela da spec 2026-10-15 §5.2. */
 export function compararContatoIndividual(e: EntradaIndividual): VereditoIndividual {
   const { contato, fonte, lida, listaCargos, grupoCanonico } = e;
-  const url = fonte.url;
+  // A URL de onde o conteúdo veio: a alternativa, quando foi ela que respondeu (spec 2026-10-23 §3.3).
+  const url = lida.alternativa?.url ?? fonte.url;
+  const pelaAlternativa = lida.alternativa ? { alternativa: lida.alternativa } : {};
   const cobreCargo = fonte.campos.includes("cargo");
   const protocolo = comparacoesTratamento(contato, grupoCanonico);
   const cargoDe = (comp: ComparacaoCampo | undefined): ComparacaoCampo[] => (comp ? [comp] : []);
@@ -702,6 +708,7 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
         origem: "oficial",
         fonteUrl: url,
         observacao: OBSERVACAO_NAO_CONSTA_INDIVIDUAL,
+        ...pelaAlternativa,
       },
       nomeConfirmado: false,
       lidaComConteudo: true,
@@ -741,6 +748,7 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
       camposDivergentes,
       origem: "oficial",
       fonteUrl: url,
+      ...pelaAlternativa,
     },
     nomeConfirmado: true,
     lidaComConteudo: true,

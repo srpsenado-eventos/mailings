@@ -266,6 +266,13 @@ describe("compararContatoIndividual (tabela §5.2)", () => {
       expect(v.resultado.comparacoes.some((c) => c.origemValor === "coerencia" || c.origemValor === "protocolo")).toBe(true);
     }
   });
+  test("lida pela alternativa: as comparações e o fonteUrl apontam para a URL lida", () => {
+    const alt = "https://www.exemplar.gov.br/governo-alternativa";
+    const v = compararContatoIndividual({ contato: governador, fonte: indNomeCargo, lida: { conteudo: { ...estado, url: alt }, alternativa: { url: alt, motivoPrincipal: "HTTP 404" } } });
+    expect(v.resultado.fonteUrl).toBe(alt);
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")?.fonteUrl).toBe(alt);
+    expect(v.resultado.alternativa).toEqual({ url: alt, motivoPrincipal: "HTTP 404" });
+  });
 });
 
 describe("compararContatoSemIndividual (§5.4)", () => {

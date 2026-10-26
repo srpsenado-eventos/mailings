@@ -2,9 +2,11 @@ import type {
   ContatoPlanilha,
   ConteudoFonte,
   EnderecoEstruturado,
+  FalhasPorUrl,
   FonteCatalogo,
   FonteIndividual,
   FonteLegivel,
+  LeituraAlternativa,
   LeituraGuardada,
   LeiturasGuardadas,
   PessoaSite,
@@ -12,6 +14,7 @@ import type {
   ResultadoAnalise,
   ResultadoGrupo,
   ResumoAnalise,
+  TentativaDeUrl,
 } from "@/lib/types";
 import { agruparPorGrupo } from "@/lib/planilha";
 import {
@@ -30,6 +33,8 @@ import {
 } from "@/lib/match";
 import {
   anotacaoReaproveitada,
+  atualizarFalhas,
+  contarUrlsCaidas,
   ehLeituraParcial,
   leituraValida,
   mesclarLeituras,
@@ -87,6 +92,11 @@ export interface Dependencias {
    * comportamento é o de antes; `leituras` sai só com as boas de hoje.
    */
   leiturasAnteriores?: LeiturasGuardadas;
+  /**
+   * URLs que falharam nas coletas anteriores (spec 2026-10-23 §3.4). Ausente: o mapa de hoje
+   * começa vazio.
+   */
+  falhasAnteriores?: FalhasPorUrl;
   /** Relógio injetável (validade de 7 dias e data das leituras de hoje). Ausente: `new Date()`. */
   agora?: () => Date;
 }
@@ -94,32 +104,80 @@ export interface Dependencias {
 /**
  * Leitura de uma fonte, de grupo ou individual: conteúdo OU motivo técnico da falha, nunca os
  * dois. Quando o conteúdo veio da memória (spec 2026-10-20), `reaproveitada` diz de quando ele
- * é e por que a leitura de hoje não serviu.
+ * é e por que a leitura de hoje não serviu, e `urlDaMemoria` sob qual URL ele estava guardado.
+ * `alternativa`: a principal não serviu e a URL alternativa cadastrada respondeu (spec
+ * 2026-10-23 §3.3). `tentadas`: as URLs pedidas hoje, com o motivo das que não serviram; a
+ * leitura reaproveitada mantém as de hoje, porque a URL falhou mesmo assim (§3.4).
  */
 interface Leitura<F extends FonteLegivel> {
   fonte: F;
   conteudo?: ConteudoFonte;
   erro?: string;
   reaproveitada?: Reaproveitamento;
+  urlDaMemoria?: string;
+  alternativa?: LeituraAlternativa;
+  tentadas: TentativaDeUrl[];
 }
 type FonteLida = Leitura<FonteCatalogo>;
 type IndividualLida = Leitura<FonteIndividual>;
+/** Uma leitura de uma URL só, antes de saber se ela serviu. */
+type Raspagem = Pick<Leitura<FonteLegivel>, "conteudo" | "erro">;
 
-async function lerHoje<F extends FonteLegivel>(fonte: F, deps: Dependencias): Promise<Leitura<F>> {
+async function rasparUma(fonte: FonteLegivel, deps: Dependencias): Promise<Raspagem> {
   try {
-    return { fonte, conteudo: await deps.raspar(fonte) };
+    return { conteudo: await deps.raspar(fonte) };
   } catch (err) {
-    return { fonte, erro: motivoDaFalha(err) };
+    return { erro: motivoDaFalha(err) };
   }
+}
+
+/** A URL tentada hoje e, se ela não serviu, o motivo (o técnico ou o padrão de quem chama). */
+function tentativa(url: string, r: Raspagem, serviu: boolean, motivoPadrao: string): TentativaDeUrl {
+  return serviu ? { url } : { url, erro: r.erro ?? motivoPadrao };
+}
+
+/** A URL de onde veio o conteúdo de hoje: a alternativa, quando foi ela que respondeu (§3.3). */
+function urlLida<F extends FonteLegivel>(l: Leitura<F>): string {
+  return l.alternativa?.url ?? l.fonte.url;
+}
+
+/**
+ * Lê a URL principal e, se ela não serviu (`serviu` falsa, conforme quem chama) e a fonte tem
+ * URL alternativa, lê a alternativa com o mesmo raspador (spec 2026-10-23 §3.3). A alternativa
+ * que serve entra com `alternativa: { url, motivoPrincipal }`; as duas falhando, o erro diz os
+ * dois motivos. Principal que serve: a alternativa nem é pedida.
+ */
+async function lerHoje<F extends FonteLegivel>(
+  fonte: F,
+  deps: Dependencias,
+  serviu: (l: Leitura<F>) => boolean,
+  motivoPadrao: string,
+): Promise<Leitura<F>> {
+  const principal = await rasparUma(fonte, deps);
+  const principalServiu = serviu({ fonte, ...principal, tentadas: [] });
+  const tentadaPrincipal = tentativa(fonte.url, principal, principalServiu, motivoPadrao);
+  if (principalServiu || !fonte.urlAlternativa) return { fonte, ...principal, tentadas: [tentadaPrincipal] };
+  const url = fonte.urlAlternativa;
+  const alternativa = await rasparUma({ ...fonte, url }, deps);
+  const alternativaServiu = serviu({ fonte, ...alternativa, tentadas: [] });
+  const tentadas = [tentadaPrincipal, tentativa(url, alternativa, alternativaServiu, motivoPadrao)];
+  const motivoPrincipal = principal.erro ?? motivoPadrao;
+  if (alternativaServiu) return { fonte, conteudo: alternativa.conteudo, alternativa: { url, motivoPrincipal }, tentadas };
+  return { fonte, erro: `${motivoPrincipal} · URL alternativa: ${alternativa.erro ?? motivoPadrao}`, tentadas };
 }
 
 /** Guardada sem ninguém não serve à fonte de grupo (nem à lista geral): só a individual pode ser legitimamente vazia. */
 const GUARDADA_COM_PESSOAS = (g: LeituraGuardada): boolean => g.conteudo.pessoas.length > 0;
 
-/** A leitura guardada da URL, se existe e está no prazo (§5.3). */
-function guardadaValida(url: string, deps: Dependencias, agora: Date): LeituraGuardada | undefined {
-  const guardada = deps.leiturasAnteriores?.[url];
-  return guardada && leituraValida(guardada, agora) ? guardada : undefined;
+/**
+ * A leitura guardada da fonte, se existe e está no prazo (§5.3): a da URL principal e, sem ela,
+ * a da URL alternativa (spec 2026-10-23 §3.3).
+ */
+function guardadaValida(fonte: FonteLegivel, deps: Dependencias, agora: Date): LeituraGuardada | undefined {
+  const urls = fonte.urlAlternativa ? [fonte.url, fonte.urlAlternativa] : [fonte.url];
+  return urls
+    .map((url) => deps.leiturasAnteriores?.[url])
+    .find((g): g is LeituraGuardada => g !== undefined && leituraValida(g, agora));
 }
 
 /**
@@ -136,25 +194,40 @@ async function lerFonte<F extends FonteLegivel>(
   motivoPadrao: string,
   serveGuardada: (g: LeituraGuardada) => boolean = () => true,
 ): Promise<Leitura<F>> {
-  const hoje = await lerHoje(fonte, deps);
+  const hoje = await lerHoje(fonte, deps, serviu, motivoPadrao);
   if (serviu(hoje)) return hoje;
-  const guardada = guardadaValida(fonte.url, deps, agora);
+  const guardada = guardadaValida(fonte, deps, agora);
   if (!guardada || !serveGuardada(guardada)) return hoje;
-  return { fonte, conteudo: guardada.conteudo, reaproveitada: { lidaEm: guardada.lidaEm, motivo: hoje.erro ?? motivoPadrao } };
+  return {
+    fonte,
+    conteudo: guardada.conteudo,
+    reaproveitada: { lidaEm: guardada.lidaEm, motivo: hoje.erro ?? motivoPadrao },
+    urlDaMemoria: guardada.url,
+    tentadas: hoje.tentadas,
+  };
 }
 
-/** O que entra na memória por esta leitura: reaproveitada volta com a data original (§4.3). */
+/**
+ * O que entra na memória por esta leitura, sob a URL de onde o conteúdo veio (a alternativa,
+ * quando foi ela que respondeu): reaproveitada volta com a data original e sob a URL em que
+ * estava guardada (§4.3).
+ */
 function guardar<F extends FonteLegivel>(l: Leitura<F>, agora: Date): LeituraGuardada {
-  return { url: l.fonte.url, lidaEm: l.reaproveitada?.lidaEm ?? agora.toISOString(), conteudo: l.conteudo as ConteudoFonte };
+  return { url: l.urlDaMemoria ?? urlLida(l), lidaEm: l.reaproveitada?.lidaEm ?? agora.toISOString(), conteudo: l.conteudo as ConteudoFonte };
 }
 
-/** O que a análise de um grupo devolve: o resultado e as leituras boas desta varredura (§4.3). */
+/**
+ * O que a análise de um grupo devolve: o resultado, as leituras boas desta varredura (§4.3) e
+ * as URLs tentadas hoje, com o motivo das que falharam (spec 2026-10-23 §3.4).
+ */
 interface AnaliseDoGrupo {
   grupo: ResultadoGrupo;
   leituras: LeituraGuardada[];
+  tentadas: TentativaDeUrl[];
 }
 
 const SEM_LEITURAS: LeituraGuardada[] = [];
+const SEM_TENTADAS: TentativaDeUrl[] = [];
 
 /**
  * §5.1 passo 4: a primária lida hoje casou menos da metade dos contatos. Se a guardada casa
@@ -173,12 +246,14 @@ function reaproveitarParcial(
   if (!primaria || primaria.reaproveitada || !contribuiu(primaria) || primaria.fonte.casamento === "cargo") return naoSeAplica;
   const casadosHoje = contarContatosCasados(contatos, primaria.conteudo!.pessoas);
   if (!ehLeituraParcial(casadosHoje, contatos.length)) return naoSeAplica;
-  const guardada = guardadaValida(primaria.fonte.url, deps, agora);
+  const guardada = guardadaValida(primaria.fonte, deps, agora);
   if (!guardada || contarContatosCasados(contatos, guardada.conteudo.pessoas) <= casadosHoje) return { lidas, primariaParcial: true };
   const trocada: FonteLida = {
     fonte: primaria.fonte,
     conteudo: guardada.conteudo,
     reaproveitada: { lidaEm: guardada.lidaEm, motivo: motivoLeituraParcial(casadosHoje, contatos.length) },
+    urlDaMemoria: guardada.url,
+    tentadas: primaria.tentadas,
   };
   return { lidas: [trocada, ...lidas.slice(1)], primariaParcial: false };
 }
@@ -188,11 +263,14 @@ function leiturasBoas(lidas: readonly FonteLida[], primariaParcial: boolean, ago
   return lidas.flatMap((l, i) => (!contribuiu(l) || (i === 0 && primariaParcial) ? [] : [guardar(l, agora)]));
 }
 
-/** Carimba em cada pessoa de onde ela veio, para o veredito saber o que dizer depois. */
-function marcarProveniencia(pessoas: PessoaSite[], fonte: FonteCatalogo): PessoaSite[] {
+/**
+ * Carimba em cada pessoa de onde ela veio, para o veredito saber o que dizer depois. `urlLida`
+ * é a URL que respondeu: a alternativa, quando foi ela (spec 2026-10-23 §3.3).
+ */
+function marcarProveniencia(pessoas: PessoaSite[], fonte: FonteCatalogo, urlLida: string): PessoaSite[] {
   return pessoas.map((p) => ({
     ...p,
-    fonteUrl: fonte.url,
+    fonteUrl: urlLida,
     ...(fonte.rotulo ? { rotuloFonte: fonte.rotulo } : {}),
     ...(fonte.propoeInclusao ? { propoeInclusao: true } : {}),
   }));
@@ -249,6 +327,7 @@ async function analisarGrupo(
         resolvida.responsavel,
       ),
       leituras: SEM_LEITURAS,
+      tentadas: SEM_TENTADAS,
     };
   }
 
@@ -268,11 +347,14 @@ async function analisarGrupo(
   const { lidas, primariaParcial } = reaproveitarParcial(lidasHoje, contatos, deps, agora);
   const urlPrimaria = resolvida.fontes[0]?.url;
   const primariaReaproveitada = lidas[0]?.reaproveitada;
+  const primariaAlternativa = lidas[0]?.alternativa;
+  // Toda URL pedida hoje, principal e alternativa, sai com o grupo para o mapa de falhas (§3.4).
+  const tentadas = lidas.flatMap((l) => l.tentadas);
   // Toda fonte que contribuiu entra na composição, na ordem do catálogo: dado oficial da
   // Camada 1 nunca é descartado, nem quando a primária caiu. O que a falha de UMA fonte
   // entre várias suspende é a CONCLUSÃO, não a comparação — ver `leituraParcial` abaixo.
   const pessoasPagina = unirFontes(
-    lidas.map((l) => (l.conteudo ? marcarProveniencia(l.conteudo.pessoas, l.fonte) : [])),
+    lidas.map((l) => (l.conteudo ? marcarProveniencia(l.conteudo.pessoas, l.fonte, urlLida(l)) : [])),
   );
   const naoContribuiram = lidas.filter((l) => !contribuiu(l));
   const algumaContribuiu = lidas.some(contribuiu);
@@ -307,12 +389,14 @@ async function analisarGrupo(
           resolvida.responsavel,
         ),
         leituras: SEM_LEITURAS,
+        tentadas,
       };
     }
     // sem URL → sem fonte
     return {
       grupo: comResponsavel(compararGrupo(grupo, contatos, undefined, resolvida.grupoCanonico), resolvida.responsavel),
       leituras: SEM_LEITURAS,
+      tentadas,
     };
   }
 
@@ -343,16 +427,19 @@ async function analisarGrupo(
         resolvida.responsavel,
       ),
       leituras: SEM_LEITURAS,
+      tentadas,
     };
   }
   // Ressalva atribuída A CADA fonte que não compôs — sem identificar qual, "HTTP 403" parece
   // falha da primária. Vale para as duas formas de não compor, inclusive a que NÃO suspende o
   // veredito: o usuário tem que saber que aquela fonte não trouxe nada. Fonte secundária
   // reaproveitada pela memória também é anotada aqui (spec 2026-10-20 §5.1, passo 6), sem
-  // mudar o veredito. Só rótulo/URL e o motivo técnico: nunca um contato.
+  // mudar o veredito, e a secundária lida pela URL alternativa (spec 2026-10-23 §3.3). Só
+  // rótulo/URL e o motivo técnico: nunca um contato.
   const anotacoes = [
     ...naoContribuiram.map((l) => `${identificarFonte(l.fonte)}: ${l.erro ?? MOTIVO_SEM_NINGUEM}`),
     ...lidas.slice(1).flatMap((l) => (l.reaproveitada ? [`${identificarFonte(l.fonte)}: ${anotacaoReaproveitada(l.reaproveitada)}`] : [])),
+    ...lidas.slice(1).flatMap((l) => (l.alternativa ? [`${identificarFonte(l.fonte)}: lida pela URL alternativa (${l.alternativa.motivoPrincipal})`] : [])),
   ];
   const erro = algumaContribuiu && anotacoes.length > 0 ? anotacoes.join(" · ") : undefined;
   // Marca o grupo quando a composição dependeu do conhecimento da IA (não 100% oficial).
@@ -364,11 +451,14 @@ async function analisarGrupo(
         ...(erro ? { erroFonte: erro } : {}),
         // Primária substituída pela guardada: o grupo sai LIDO, com a data e o motivo (§5.1, passo 6).
         ...(primariaReaproveitada && urlPrimaria ? { reaproveitada: { url: urlPrimaria, ...primariaReaproveitada } } : {}),
+        // Primária lida pela URL alternativa: a `fonteUrl` do grupo continua a principal (§3.3).
+        ...(primariaAlternativa ? { alternativa: primariaAlternativa } : {}),
         ...(usouConhecimento || !urlPrimaria ? { viaPesquisaAmpla: true } : {}),
       },
       resolvida.responsavel,
     ),
     leituras: leiturasBoas(lidas, primariaParcial, agora),
+    tentadas,
   };
 }
 
@@ -408,6 +498,7 @@ async function analisarGrupoIndividual(
     Promise.all(aLer.map((f) => lerFonte(f, deps, agora, individualComConteudo, MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO))),
   ]);
   const porUrl = new Map<string, IndividualLida>(lidasInd.map((l) => [l.fonte.url, l]));
+  const tentadas = [...(lidaGeral?.tentadas ?? []), ...lidasInd.flatMap((l) => l.tentadas)];
 
   // Fonte do cargo do grupo: a lista de denominações, ou o motivo de ela não ter vindo.
   const geralContribuiu = lidaGeral !== undefined && contribuiu(lidaGeral);
@@ -452,7 +543,7 @@ async function analisarGrupoIndividual(
       geral ? `${identificarFonte(geral)}: ${lidaGeral?.erro ?? MOTIVO_PAGINA_SEM_CONTEUDO}` : undefined,
       caidas > 0 ? textoIndividuaisCaidas(caidas) : undefined,
     ].filter(Boolean).join(" · ");
-    return { grupo: { ...marcarFonteInacessivel(grupo, contatos, geral?.url, motivo, grupoCanonico), individuais }, leituras: SEM_LEITURAS };
+    return { grupo: { ...marcarFonteInacessivel(grupo, contatos, geral?.url, motivo, grupoCanonico), individuais }, leituras: SEM_LEITURAS, tentadas };
   }
 
   // GUARDA DE GRUPO (§4.3 de 2026-10-15): duas ou mais individuais lidas HOJE com conteúdo e
@@ -461,7 +552,7 @@ async function analisarGrupoIndividual(
   // páginas reaproveitadas não contam: já foram leituras boas (spec 2026-10-20 §5.2).
   const confirmadasHoje = vereditos.filter((v) => v.lidaHoje && v.nomeConfirmado).length;
   if (lidas >= MIN_CONTATOS_LEITURA_SUSPEITA && confirmadasHoje === 0) {
-    return { grupo: { ...marcarFonteInacessivel(grupo, contatos, geral?.url, MOTIVO_LEITURA_SUSPEITA, grupoCanonico), individuais }, leituras: SEM_LEITURAS };
+    return { grupo: { ...marcarFonteInacessivel(grupo, contatos, geral?.url, MOTIVO_LEITURA_SUSPEITA, grupoCanonico), individuais }, leituras: SEM_LEITURAS, tentadas };
   }
 
   const erros = [
@@ -471,7 +562,7 @@ async function analisarGrupoIndividual(
   // Fonte de grupo que compõe pessoas (não é o caso do catálogo de hoje): só propõe inclusão.
   const novosDaGeral =
     geral && geral.casamento !== "cargo" && geralContribuiu
-      ? novosForaDaPlanilha(marcarProveniencia(lidaGeral!.conteudo!.pessoas, geral), contatos)
+      ? novosForaDaPlanilha(marcarProveniencia(lidaGeral!.conteudo!.pessoas, geral, urlLida(lidaGeral!)), contatos)
       : [];
   return {
     grupo: {
@@ -490,6 +581,7 @@ async function analisarGrupoIndividual(
       ...lidasInd.filter(individualComConteudo).map((l) => guardar(l, agora)),
       ...(lidaGeral && contribuiu(lidaGeral) ? [guardar(lidaGeral, agora)] : []),
     ],
+    tentadas,
   };
 }
 
@@ -506,7 +598,7 @@ function anexarEnderecos(grupo: ResultadoGrupo, indice?: IndiceEnderecos): Resul
   };
 }
 
-function resumir(grupos: ResultadoGrupo[]): ResumoAnalise {
+function resumir(grupos: ResultadoGrupo[], falhas: FalhasPorUrl): ResumoAnalise {
   const resumo: ResumoAnalise = {
     total: 0,
     verde: 0,
@@ -521,7 +613,7 @@ function resumir(grupos: ResultadoGrupo[]): ResumoAnalise {
     gruposFonteInacessivel: 0,
     gruposViaPesquisaAmpla: 0,
     gruposReaproveitados: 0,
-    urlsCaidasRepetidas: 0,
+    urlsCaidasRepetidas: contarUrlsCaidas(falhas),
     gruposComMudanca: 0,
   };
   for (const g of grupos) {
@@ -558,5 +650,7 @@ export async function analisar(
   // A memória que sai desta varredura (spec 2026-10-20 §6, passo 3): a anterior podada,
   // sobreposta pelas leituras boas de hoje e pelas reaproveitadas, com a data original.
   const leituras = mesclarLeituras(deps.leiturasAnteriores ?? {}, analisados.flatMap((a) => a.leituras), agora);
-  return { arquivoNome, grupos, resumo: resumir(grupos), leituras };
+  // URLs que falharam hoje somam uma coleta à contagem anterior; as lidas saem do mapa (spec 2026-10-23 §3.4).
+  const falhas = atualizarFalhas(deps.falhasAnteriores ?? {}, analisados.flatMap((a) => a.tentadas), agora);
+  return { arquivoNome, grupos, resumo: resumir(grupos, falhas), leituras, falhas };
 }

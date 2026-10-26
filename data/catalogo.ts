@@ -154,6 +154,8 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp1: "fernanda.goncalves@senado.leg.br",
     emailResp2: "adriana.conceicao.santos@senado.leg.br",
     emailBackup: "thassia.lima@senado.leg.br",
+    // Sem fonte. Candidata da planilha de 23/10: https://biblioteca2.presidencia.gov.br/acervo/
+    // (respondeu vazio em 23/10); cadastrar só quando responder e a página for conferida.
     fontes: [],
   },
   {
@@ -164,7 +166,11 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp1: "cleria.rosa@senado.leg.br",
     emailResp2: "MARIAINE@senado.leg.br",
     emailBackup: "beatriz.silveira@senado.leg.br",
-    fontes: [],
+    fontes: [
+      // Planilha de 23/10, conferida com fetch em 23/10 (200, lista de 26 itens, sem cargo).
+      // Garibaldi: o Contatos prevalece sobre o nome da página (spec 2026-10-23 §4.2).
+      { url: "https://www25.senado.leg.br/web/senadores/nova-republica", ativo: true, nomesDoContatos: ["Garibaldi Alves Filho"] },
+    ],
   },
   {
     nome: "Ex-Senadores",
@@ -187,8 +193,10 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     fontes: [],
     // Spec 2026-10-15 §3.2: uma página oficial por UF, transcrita da planilha de conferência
     // do GT (Referencia 2/Conferencia contatos 06_10.xlsx, aba "Sites Governo Estados").
-    // Ficam fora, por decisão do Clovis: MT e MG (Diário Oficial), SC (PDF do Diário
-    // Oficial), PE (notícia do TSE) e DF (página da vice). Esses cinco saem "cadastrar fonte".
+    // Planilha de 23/10 (spec 2026-10-23 §5): PE e DF entram por notícia de órgão oficial, só
+    // como `provisoria: true` (até a posse de 2027), conferidas com fetch em 23/10. MT, MG e SC
+    // continuam sem individual (conferência manual pelo Diário Oficial: IOMAT, Jornal Minas
+    // Gerais, DOE/SC) e saem "cadastrar fonte". RO, TO e ES mantêm a URL atual, a rever após 25/10.
     // MS: a URL tem fragmento "#/QuemEQuem" e a página é montada por JavaScript: o fetch
     // traz só a casca do SPA, e o Chrome headless monta a página com "GOVERNADOR:"
     // (medido em 2026-10-15). Por isso é lida pelo navegador (`navegador: true`).
@@ -207,10 +215,14 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       { url: "https://www.ce.gov.br/o-governo/", ativo: true, chave: { uf: "CE" }, campos: ["nome", "cargo"] },
       { url: "https://egma.ma.gov.br/integrantes-do-governo", ativo: true, chave: { uf: "MA" }, campos: ["nome", "cargo"] },
       { url: "https://paraiba.pb.gov.br/governadoria/governador-1", ativo: true, chave: { uf: "PB" }, campos: ["nome", "cargo"] },
+      // Provisória (notícia do TSE), planilha de 23/10.
+      { url: "https://www.tse.jus.br/comunicacao/noticias/2026/Outubro/raquel-lyra-psd-e-reeleita-governadora-de-pernambuco", ativo: true, chave: { uf: "PE" }, campos: ["nome", "cargo"], provisoria: true },
       { url: "https://www.pi.gov.br/governador/", ativo: true, chave: { uf: "PI" }, campos: ["nome", "cargo"] },
       { url: "https://www.rn.gov.br/postagem/governadora/", ativo: true, chave: { uf: "RN" }, campos: ["nome", "cargo"] },
       { url: "https://www.se.gov.br/agencia/governo", ativo: true, chave: { uf: "SE" }, campos: ["nome", "cargo"] },
       { url: "https://goias.gov.br/administracao-direta/", ativo: true, chave: { uf: "GO" }, campos: ["nome", "cargo"] },
+      // Provisória (notícia da Câmara Legislativa do DF), planilha de 23/10.
+      { url: "https://www.cl.df.gov.br/-/celina-leao-toma-posse-como-governadora-do-distrito-federal", ativo: true, chave: { uf: "DF" }, campos: ["nome", "cargo"], provisoria: true },
       { url: "https://www.transparencia.ms.gov.br/#/QuemEQuem", ativo: true, chave: { uf: "MS" }, campos: ["nome", "cargo"], navegador: true },
       { url: "https://www.es.gov.br/governo/governador", ativo: true, chave: { uf: "ES" }, campos: ["nome", "cargo"] },
       { url: "https://www.rj.gov.br/pagina/sobre-o-governo9806", ativo: true, chave: { uf: "RJ" }, campos: ["nome", "cargo"], navegador: "janela" },
@@ -248,15 +260,18 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     // 2026-10-15: 15 nomes da planilha não casavam com o do Contatos pela régua de igualdade
     // normalizada (em geral a planilha trazia o nome mais longo)). O comentário de cada linha é o cargo da planilha,
     // só para localizar a linha. AGU e CGU cobrem nome E cargo; as demais, só nome.
+    // `urlAlternativa` (planilha de 23/10, as cinco responderam 200 em 23/10): Casa Civil,
+    // Secom, Cultura, Defesa e Igualdade Racial. Só é lida quando a principal falha
+    // (spec 2026-10-23 §3.3).
     fontesIndividuais: [
       // Ministra de Estado da Casa Civil da Presidência da República
-      { url: "https://www.gov.br/casacivil/pt-br/composicao/ministra", ativo: true, chave: { nome: "Miriam Belchior" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/casacivil/pt-br/composicao/ministra", ativo: true, urlAlternativa: "https://www.gov.br/casacivil/pt-br/composicao/gabinete-do-ministro/quem-e-quem-1", chave: { nome: "Miriam Belchior" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Secretaria-Geral da Presidência da República
       { url: "https://www.gov.br/secretariageral/pt-br/composicao/ministro", ativo: true, chave: { nome: "Guilherme Boulos" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Secretaria de Relações Institucionais da Presidência da República
       { url: "https://www.gov.br/sri/pt-br/composicao/ministra-1", ativo: true, chave: { nome: "José Guimarães" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Secretaria de Comunicação Social da Presidência da República
-      { url: "https://www.gov.br/secom/pt-br/acesso-a-informacao/institucional/quem-e-quem", ativo: true, chave: { nome: "Sidônio Palmeira" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/secom/pt-br/acesso-a-informacao/institucional/quem-e-quem", ativo: true, urlAlternativa: "https://www.gov.br/secom/pt-br/composicao/ministro-e-assistencia-direta/sidonio-cardoso-palmeira", chave: { nome: "Sidônio Palmeira" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado Chefe do Gabinete de Segurança Institucional da Presidência da República
       { url: "https://www.gov.br/gsi/pt-br/composicao/gabinete/ministro", ativo: true, chave: { nome: "Marcos Antonio Amaro Dos Santos" }, campos: ["nome"], navegador: "janela" },
       // Advogado-Geral da União
@@ -272,9 +287,9 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       // Ministro de Estado das Comunicações
       { url: "https://www.gov.br/mcom/pt-br/composicao/ministro", ativo: true, chave: { nome: "Frederico de Siqueira Filho" }, campos: ["nome"], navegador: "janela" },
       // Ministra de Estado da Cultura
-      { url: "https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra", ativo: true, chave: { nome: "Margareth Menezes" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra", ativo: true, urlAlternativa: "https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra/margareth-menezes-1", chave: { nome: "Margareth Menezes" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Defesa
-      { url: "https://www.gov.br/defesa/pt-br/composicao/quem-e-quem", ativo: true, chave: { nome: "José Mucio" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/defesa/pt-br/composicao/quem-e-quem", ativo: true, urlAlternativa: "https://www.gov.br/defesa/pt-br/composicao/gabinete-do-ministro/jose-mucio-monteiro-filho", chave: { nome: "José Mucio" }, campos: ["nome"], navegador: "janela" },
       // Ministra de Estado do Desenvolvimento Agrário e Agricultura Familiar
       { url: "https://www.gov.br/mda/pt-br/acesso-a-informacao/institucional/quem-e-quem/gabinete-da-ministra", ativo: true, chave: { nome: "Fernanda Machiaveli" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado do Desenvolvimento e Assistência Social, Família e Combate à Fome
@@ -294,7 +309,7 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       // Ministra de Estado da Gestão e da Inovação em Serviços Públicos
       { url: "https://www.gov.br/gestao/pt-br/composicao/quem-e-quem/ministra-e-orgaos-de-assistencia-direta", ativo: true, chave: { nome: "Esther Dweck" }, campos: ["nome"], navegador: "janela" },
       // Ministra de Estado da Igualdade Racial
-      { url: "https://www.gov.br/igualdaderacial/pt-br/composicao/quem-e-quem", ativo: true, chave: { nome: "Rachel Barros" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/igualdaderacial/pt-br/composicao/quem-e-quem", ativo: true, urlAlternativa: "https://www.gov.br/igualdaderacial/pt-br/composicao/gabinete-da-ministra/rachel-barros-de-oliveira", chave: { nome: "Rachel Barros" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Integração e do Desenvolvimento Regional
       { url: "https://www.gov.br/mdr/pt-br/composicao/ministro-e-secretarios", ativo: true, chave: { nome: "Antônio Waldez Góes da Silva" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Justiça e Segurança Pública
@@ -350,6 +365,16 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailBackup: "andriele@senado.leg.br",
     fontes: [
       { url: "https://www.stj.jus.br/web/verMinistrosSTJ?parametro=1", ativo: true },
+      // Planilha de 23/10, conferida com fetch em 23/10 (200, 1 página). PDF da composição: os
+      // convocados são os nomes seguidos de "**" (spec 2026-10-23 §5.1 e §5.2).
+      {
+        url: "https://www.stj.jus.br/sites/portalp/SiteAssets/Paginas/Institucional/Composicao/Composicao-do-STJ.pdf",
+        ativo: true,
+        tipo: "pdf",
+        rotulo: "convocado",
+        propoeInclusao: true,
+        marcador: { textos: ["**"] },
+      },
     ],
   },
   {
@@ -402,6 +427,15 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       // 2026-10-20: a antiga `/en/ministros` passou a responder HTTP 404 (medido em 19/10); a
       // página em português responde 200 com a lista (título "Ministros - TST").
       { url: "https://www.tst.jus.br/ministros", ativo: true },
+      // Planilha de 23/10, conferida com fetch em 23/10 (200, 6 marcas "(convocad…)"). Só as
+      // pessoas cujo nome é seguido de "(convocado)" ou "(convocada)" (spec 2026-10-23 §5.2).
+      {
+        url: "https://www.tst.jus.br/orgaos",
+        ativo: true,
+        rotulo: "convocado",
+        propoeInclusao: true,
+        marcador: { textos: ["(convocado)", "(convocada)"] },
+      },
     ],
   },
   {
@@ -468,7 +502,11 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp1: "daniela.gonzaga@senado.leg.br",
     emailResp2: "ramena.schleier@senado.leg.br",
     emailBackup: "adriana.conceicao.santos@senado.leg.br",
-    fontes: [],
+    fontes: [
+      // Planilha de 23/10, conferida com fetch em 23/10 (200). Nome em `strong` e cargo no
+      // parágrafo seguinte, coberto por fixture (spec 2026-10-23 §5).
+      { url: "https://www.mpf.mp.br/o-mpf/o-mpf/membros/procurador-geral-da-republica", ativo: true },
+    ],
   },
   {
     nome: "Senadores (Acre a Goiás)",
@@ -488,19 +526,6 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
         // Giordano, Irajá). Não propõe inclusão: a lista traz também suplente convocado,
         // que o GT não convida (e-mail de 2026-07-20).
         tabela: { colunas: { nome: 0, uf: 2 } },
-      },
-      {
-        url: "https://www25.senado.leg.br/web/senadores/fora-de-exercicio",
-        ativo: true,
-        rotulo: "fora de exercício",
-        propoeInclusao: true,
-        // Só os titulares afastados. Ficam de fora "Suplentes que exerceram o cargo" e a
-        // 2ª tabela (falecimento, perda de mandato, renúncia): não são senadores em
-        // mandato. Ver docs/superpowers/specs/2026-09-24-segunda-fonte-senadores-fora-de-exercicio.md
-        tabela: {
-          colunas: { nome: 0, uf: 2, motivo: 3 },
-          secoes: ["Assunção de cargo", "Licença com convocação de suplente"],
-        },
       },
     ],
   },
@@ -523,19 +548,6 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
         // que o GT não convida (e-mail de 2026-07-20).
         tabela: { colunas: { nome: 0, uf: 2 } },
       },
-      {
-        url: "https://www25.senado.leg.br/web/senadores/fora-de-exercicio",
-        ativo: true,
-        rotulo: "fora de exercício",
-        propoeInclusao: true,
-        // Só os titulares afastados. Ficam de fora "Suplentes que exerceram o cargo" e a
-        // 2ª tabela (falecimento, perda de mandato, renúncia): não são senadores em
-        // mandato. Ver docs/superpowers/specs/2026-09-24-segunda-fonte-senadores-fora-de-exercicio.md
-        tabela: {
-          colunas: { nome: 0, uf: 2, motivo: 3 },
-          secoes: ["Assunção de cargo", "Licença com convocação de suplente"],
-        },
-      },
     ],
   },
   {
@@ -557,18 +569,22 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
         // que o GT não convida (e-mail de 2026-07-20).
         tabela: { colunas: { nome: 0, uf: 2 } },
       },
+    ],
+  },
+  {
+    // Grupo novo da planilha de 23/10 (spec 2026-10-23 §5): substitui a segunda fonte
+    // "fora de exercício" dos três grupos de Senadores. Página conferida com fetch em 23/10
+    // (200). Tem duas tabelas com o mesmo cabeçalho; a dos titulares é a primeira (índice 0,
+    // fixture em tests/scrape-tabela.test.ts). Suplentes não entram. Propõe inclusão:
+    // afastado ainda não movido pelo GT aparece aqui como inclusão e em "Senadores" como
+    // possível saída. Sem responsáveis: a planilha de 23/10 não os traz.
+    nome: "Senadores fora de exercício",
+    fontes: [
       {
-        url: "https://www25.senado.leg.br/web/senadores/fora-de-exercicio",
+        url: "https://www25.senado.leg.br/web/senadores/fora-de-exercicio/-/f/por-tipo",
         ativo: true,
-        rotulo: "fora de exercício",
         propoeInclusao: true,
-        // Só os titulares afastados. Ficam de fora "Suplentes que exerceram o cargo" e a
-        // 2ª tabela (falecimento, perda de mandato, renúncia): não são senadores em
-        // mandato. Ver docs/superpowers/specs/2026-09-24-segunda-fonte-senadores-fora-de-exercicio.md
-        tabela: {
-          colunas: { nome: 0, uf: 2, motivo: 3 },
-          secoes: ["Assunção de cargo", "Licença com convocação de suplente"],
-        },
+        tabela: { indice: 0, colunas: { nome: 0, uf: 2, motivo: 3 } },
       },
     ],
   },

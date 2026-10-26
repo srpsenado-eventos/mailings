@@ -7,7 +7,7 @@ import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { MOTIVO_NAVEGADOR_AUSENTE } from "@/lib/navegador";
 import { CATALOGO } from "@/data/catalogo";
 import { MOTIVO_SEM_NINGUEM } from "@/lib/memoria-leitura";
-import type { ContatoPlanilha, ConteudoFonte, LeituraGuardada, LeiturasGuardadas } from "@/lib/types";
+import type { ContatoPlanilha, ConteudoFonte, FonteCatalogo, LeituraGuardada, LeiturasGuardadas } from "@/lib/types";
 
 /**
  * `Tratamento` e `Endereçamento` coerentes e conformes: a auditoria dos dois campos roda
@@ -480,11 +480,24 @@ describe("Senadores de ponta a ponta (fixtures das duas páginas reais)", () => 
     readFileSync(join(__dirname, "fixtures", arquivo), "utf8");
 
   const grupoMA = CATALOGO.find((g) => g.nome === "Senadores (Maranhão ao Piauí)")!;
+  // Desde a planilha de 23/10 o catálogo não traz mais a segunda fonte nos Senadores (virou o
+  // grupo "Senadores fora de exercício"). O mecanismo de segunda fonte continua valendo e é
+  // testado aqui com a entrada como era no catálogo até 23/10.
+  const SEGUNDA_FONTE: FonteCatalogo = {
+    url: FORA,
+    ativo: true,
+    rotulo: "fora de exercício",
+    propoeInclusao: true,
+    tabela: {
+      colunas: { nome: 0, uf: 2, motivo: 3 },
+      secoes: ["Assunção de cargo", "Licença com convocação de suplente"],
+    },
+  };
 
   const deps: Dependencias = {
     resolverFonte: () => ({
       grupoCanonico: grupoMA.nome,
-      fontes: grupoMA.fontes.filter((f) => f.ativo),
+      fontes: [...grupoMA.fontes.filter((f) => f.ativo), SEGUNDA_FONTE],
       ufs: grupoMA.ufs,
       fontesIndividuais: [],
       sugestoes: [],

@@ -539,6 +539,9 @@ export function extrairTabela(html: string, url: string, cfg: ExtracaoTabela): C
 export interface OpcoesRaspagem {
   /** Extração estruturada declarada no catálogo. Ausente → extração de texto padrão. */
   tabela?: ExtracaoTabela;
+  /** Só tipos: o comportamento chega com a extração por PDF e por marcador (spec 2026-10-23 §5). */
+  marcador?: readonly string[];
+  tipo?: "html" | "pdf";
   timeoutMs?: number;
 }
 

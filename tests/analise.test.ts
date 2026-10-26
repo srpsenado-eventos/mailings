@@ -946,6 +946,9 @@ describe("URL alternativa (spec 2026-10-23 §3.3)", () => {
     const g = r.grupos[0];
     expect(g.reaproveitada).toEqual({ url: "https://orgao.gov.br", lidaEm: guardada.lidaEm, motivo: "HTTP 404 · URL alternativa: HTTP 500" });
     expect(r.leituras?.[ALT]?.lidaEm).toBe(guardada.lidaEm);
+    expect(Object.keys(r.leituras ?? {})).toEqual([ALT]);
+    // A proveniência do contato é a página de onde o conteúdo guardado veio.
+    expect(g.contatos[0].fonteUrl).toBe(ALT);
   });
   test("leitura boa pela alternativa entra na memória sob a URL da alternativa", async () => {
     const r = await analisar("c.xlsx", [contatos[0]], depsAlt({ "https://orgao.gov.br": "HTTP 404", [ALT]: { ...fonte, url: ALT } }));

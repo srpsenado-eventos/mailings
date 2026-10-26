@@ -293,6 +293,16 @@ describe("alternativa e falhas nas páginas individuais (spec 2026-10-23 §3.3, 
     expect(r.grupos[0].individuais).toEqual({ lidas: 2, caidas: 0 });
     expect(r.falhas).toEqual({ [URL_GO]: expect.objectContaining({ coletas: 1, motivo: "HTTP 404" }) });
   });
+  test("lista geral de cargos lida pela alternativa: alternativa no grupo, cargo cita a alternativa, fonteUrl do grupo é a principal", async () => {
+    const ALT_GERAL = "https://www.gov.br/planalto/pt-br/ministros-alternativa";
+    const resolvidaMin: FonteResolvida = { ...RESOLVIDA_MIN, fontes: [{ ...geral, urlAlternativa: ALT_GERAL }] };
+    const r = await analisar("c.xlsx", [ministra], { resolverFonte: resolver(resolvidaMin, RESOLVIDA_GOV), raspar: rasparDe({ [URL_GERAL]: "HTTP 404", [ALT_GERAL]: { ...paginaGeral, url: ALT_GERAL }, [URL_MIN]: paginaMin }), extrairComposicao: async () => [] });
+    const g = r.grupos[0];
+    expect(g.fonteUrl).toBe(URL_GERAL);
+    expect(g.alternativa).toEqual({ url: ALT_GERAL, motivoPrincipal: "HTTP 404" });
+    expect(g.contatos[0].comparacoes.find((x) => x.campo === "cargo")?.fonteUrl).toBe(ALT_GERAL);
+    expect(g.contatos[0].semaforo).toBe("verde");
+  });
   test("individual sem conteúdo legível conta como falha da URL em falhas", async () => {
     const r = await analisar("c.xlsx", [govRs], { resolverFonte: resolver(RESOLVIDA_MIN, RESOLVIDA_GOV), raspar: rasparDe({ [URL_RS]: { ...paginaRs, textoLimpo: "menu" } }), extrairComposicao: async () => [] });
     expect(r.falhas?.[URL_RS]?.motivo).toBe(MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO);

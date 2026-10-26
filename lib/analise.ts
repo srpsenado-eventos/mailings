@@ -142,6 +142,15 @@ function urlLida<F extends FonteLegivel>(l: Leitura<F>): string {
 }
 
 /**
+ * A URL da página de onde o conteúdo realmente veio: a da memória, quando ele foi reaproveitado
+ * (pode ser a alternativa), senão a lida hoje. É a proveniência que o contato cita e a chave sob
+ * a qual a leitura volta à memória.
+ */
+function urlDoConteudo<F extends FonteLegivel>(l: Leitura<F>): string {
+  return l.urlDaMemoria ?? urlLida(l);
+}
+
+/**
  * Lê a URL principal e, se ela não serviu (`serviu` falsa, conforme quem chama) e a fonte tem
  * URL alternativa, lê a alternativa com o mesmo raspador (spec 2026-10-23 §3.3). A alternativa
  * que serve entra com `alternativa: { url, motivoPrincipal }`; as duas falhando, o erro diz os
@@ -213,7 +222,7 @@ async function lerFonte<F extends FonteLegivel>(
  * estava guardada (§4.3).
  */
 function guardar<F extends FonteLegivel>(l: Leitura<F>, agora: Date): LeituraGuardada {
-  return { url: l.urlDaMemoria ?? urlLida(l), lidaEm: l.reaproveitada?.lidaEm ?? agora.toISOString(), conteudo: l.conteudo as ConteudoFonte };
+  return { url: urlDoConteudo(l), lidaEm: l.reaproveitada?.lidaEm ?? agora.toISOString(), conteudo: l.conteudo as ConteudoFonte };
 }
 
 /**
@@ -264,13 +273,14 @@ function leiturasBoas(lidas: readonly FonteLida[], primariaParcial: boolean, ago
 }
 
 /**
- * Carimba em cada pessoa de onde ela veio, para o veredito saber o que dizer depois. `urlLida`
- * é a URL que respondeu: a alternativa, quando foi ela (spec 2026-10-23 §3.3).
+ * Carimba em cada pessoa de onde ela veio, para o veredito saber o que dizer depois. `url` é a
+ * página de onde o conteúdo veio (`urlDoConteudo`): a alternativa, quando foi ela (spec
+ * 2026-10-23 §3.3).
  */
-function marcarProveniencia(pessoas: PessoaSite[], fonte: FonteCatalogo, urlLida: string): PessoaSite[] {
+function marcarProveniencia(pessoas: PessoaSite[], fonte: FonteCatalogo, url: string): PessoaSite[] {
   return pessoas.map((p) => ({
     ...p,
-    fonteUrl: urlLida,
+    fonteUrl: url,
     ...(fonte.rotulo ? { rotuloFonte: fonte.rotulo } : {}),
     ...(fonte.propoeInclusao ? { propoeInclusao: true } : {}),
   }));
@@ -354,7 +364,7 @@ async function analisarGrupo(
   // Camada 1 nunca é descartado, nem quando a primária caiu. O que a falha de UMA fonte
   // entre várias suspende é a CONCLUSÃO, não a comparação — ver `leituraParcial` abaixo.
   const pessoasPagina = unirFontes(
-    lidas.map((l) => (l.conteudo ? marcarProveniencia(l.conteudo.pessoas, l.fonte, urlLida(l)) : [])),
+    lidas.map((l) => (l.conteudo ? marcarProveniencia(l.conteudo.pessoas, l.fonte, urlDoConteudo(l)) : [])),
   );
   const naoContribuiram = lidas.filter((l) => !contribuiu(l));
   const algumaContribuiu = lidas.some(contribuiu);
@@ -505,7 +515,7 @@ async function analisarGrupoIndividual(
   const listaCargos: ListaCargos | undefined =
     geral && geral.casamento === "cargo"
       ? geralContribuiu
-        ? { url: geral.url, cargos: listaDeCargos(lidaGeral!.conteudo!) }
+        ? { url: urlDoConteudo(lidaGeral!), cargos: listaDeCargos(lidaGeral!.conteudo!) }
         : { url: geral.url, erro: lidaGeral?.erro ?? MOTIVO_PAGINA_SEM_CONTEUDO }
       : undefined;
 
@@ -562,7 +572,7 @@ async function analisarGrupoIndividual(
   // Fonte de grupo que compõe pessoas (não é o caso do catálogo de hoje): só propõe inclusão.
   const novosDaGeral =
     geral && geral.casamento !== "cargo" && geralContribuiu
-      ? novosForaDaPlanilha(marcarProveniencia(lidaGeral!.conteudo!.pessoas, geral, urlLida(lidaGeral!)), contatos)
+      ? novosForaDaPlanilha(marcarProveniencia(lidaGeral!.conteudo!.pessoas, geral, urlDoConteudo(lidaGeral!)), contatos)
       : [];
   return {
     grupo: {
@@ -574,6 +584,8 @@ async function analisarGrupoIndividual(
       ...(erros.length > 0 ? { erroFonte: erros.join(" · ") } : {}),
       // A geral é a `fonteUrl` do grupo: reaproveitada, o cabeçalho diz a data e o motivo.
       ...(geral && geralReaproveitada ? { reaproveitada: { url: geral.url, ...geralReaproveitada } } : {}),
+      // Geral lida pela URL alternativa: a `fonteUrl` do grupo continua a principal (spec 2026-10-23 §3.3).
+      ...(lidaGeral?.alternativa ? { alternativa: lidaGeral.alternativa } : {}),
       individuais,
     },
     // §4.3: individuais com conteúdo e geral com denominação entram na memória; reaproveitadas voltam com a data original.

@@ -1007,3 +1007,63 @@ describe("falhas por URL em coletas seguidas (spec 2026-10-23 §3.4)", () => {
     expect(r2.falhas?.["https://orgao.gov.br"]?.motivo).toBe(MOTIVO_SEM_NINGUEM);
   });
 });
+
+describe("mudança de composição (spec 2026-10-23 §3.4; decisões 1 e 2 do plano)", () => {
+  const agora = () => new Date("2026-10-21T12:00:00.000Z");
+  // Nomes fictícios sem token em comum entre si (pontuarPessoa casa por token; um sobrenome repetido casaria a pessoa errada).
+  const dez = ["Aline Borges Teixeira", "Bruno Cardoso Mendes", "Cláudia Ferraz Nogueira", "Diego Pacheco Ramos", "Elisa Quintela Sá", "Fábio Guimarães Lopes", "Gisele Vasconcelos Dutra", "Hugo Barbosa Peixoto", "Irene Castelo Branco", "Jorge Linhares Moura"];
+  const novos = ["Karen Oliveira Prado", "Leonardo Siqueira Fontes", "Marina Dantas Rezende", "Nelson Figueira Cunha", "Olívia Monteiro Tavares", "Paulo Zanetti Correia", "Quitéria Amaral Xavier"];
+  const menu = Array.from({ length: 10 }, (_, i) => `Item Menu ${i + 1}`);
+  const contatosDez: ContatoPlanilha[] = dez.map((nome) => ({ nome, grupo: "ORG", ...CADASTRO_OK }));
+  const conteudo = (lista: string[]): ConteudoFonte => ({ url: "https://orgao.gov.br", textoLimpo: lista.join("\n"), destaques: [], pessoas: lista.map((nome) => ({ nome, cargo: "Ministro" })) });
+  const guardada: LeituraGuardada = { url: "https://orgao.gov.br", lidaEm: "2026-10-16T12:00:00.000Z", conteudo: conteudo(dez) };
+  const depsCom = (hoje: ConteudoFonte): Dependencias => ({ ...deps, raspar: async () => hoje, leiturasAnteriores: { "https://orgao.gov.br": guardada }, agora });
+
+  test("7 de 10 nomes novos: grupo lido com mudouFormato, saídas aparecem, leitura de hoje não entra na memória, resumo conta", async () => {
+    const hoje = conteudo([...dez.slice(0, 3), ...novos]);
+    const r = await analisar("c.xlsx", contatosDez, depsCom(hoje));
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBeUndefined();
+    expect(g.reaproveitada).toBeUndefined();
+    expect(g.mudouFormato).toEqual({ lidaEm: guardada.lidaEm, trocados: 7, total: 10 });
+    expect(g.contatos.filter((c) => c.possivelSaida)).toHaveLength(7);
+    expect(r.leituras?.["https://orgao.gov.br"]?.lidaEm).toBe(guardada.lidaEm);
+    expect(r.resumo.gruposComMudanca).toBe(1);
+  });
+  test("3 de 10 novos não é mudança: leitura de hoje vale e entra na memória", async () => {
+    const hoje = conteudo([...dez.slice(0, 7), ...novos.slice(0, 3)]);
+    const r = await analisar("c.xlsx", contatosDez, depsCom(hoje));
+    expect(r.grupos[0].mudouFormato).toBeUndefined();
+    expect(r.leituras?.["https://orgao.gov.br"]?.lidaEm).toBe(agora().toISOString());
+  });
+  test("página truncada (2 de 10, todos guardados) continua leitura parcial reaproveitada, não mudança", async () => {
+    const r = await analisar("c.xlsx", contatosDez, depsCom(conteudo(dez.slice(0, 2))));
+    expect(r.grupos[0].mudouFormato).toBeUndefined();
+    expect(r.grupos[0].reaproveitada?.motivo).toBe("página casou 2 de 10 contatos");
+  });
+  test("mudança que não casa ninguém continua leitura suspeita (inacessível), sem mudouFormato", async () => {
+    const r = await analisar("c.xlsx", contatosDez, depsCom(conteudo(menu)));
+    expect(r.grupos[0].fonteInacessivel).toBe(true);
+    expect(r.grupos[0].erroFonte).toBe(MOTIVO_LEITURA_SUSPEITA);
+    expect(r.grupos[0].mudouFormato).toBeUndefined();
+    expect(r.resumo.gruposComMudanca).toBe(0);
+  });
+  test("grupo de um contato nunca tem mudança", async () => {
+    const r = await analisar("c.xlsx", [contatosDez[0]], depsCom(conteudo(novos.slice(0, 5))));
+    expect(r.grupos[0].mudouFormato).toBeUndefined();
+  });
+  test("sem memória válida não há com o que comparar: sem mudança", async () => {
+    const hoje = conteudo([...novos, ...dez.slice(0, 3)]);
+    const r = await analisar("c.xlsx", contatosDez, { ...deps, raspar: async () => hoje, agora });
+    expect(r.grupos[0].mudouFormato).toBeUndefined();
+  });
+});
+
+test("nomesDoContatos da fonte do grupo faz o nome conferir (spec 2026-10-23 §4.2)", async () => {
+  const r = await analisar("c.xlsx", [{ nome: "Garibaldi Alves Filho", grupo: "ORG", ...CADASTRO_OK }], {
+    ...deps,
+    resolverFonte: () => ({ grupoCanonico: "ORG", fontes: [{ url: "https://orgao.gov.br", ativo: true, nomesDoContatos: ["Garibaldi Alves Filho"] }], fontesIndividuais: [], sugestoes: [] }),
+    raspar: async () => ({ ...fonte, pessoas: [{ nome: "Garibaldi Alves" }] }),
+  });
+  expect(r.grupos[0].contatos[0].semaforo).toBe("verde");
+});

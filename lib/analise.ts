@@ -9,6 +9,7 @@ import type {
   LeituraAlternativa,
   LeituraGuardada,
   LeiturasGuardadas,
+  MudancaDeComposicao,
   PessoaSite,
   Reaproveitamento,
   ResultadoAnalise,
@@ -18,6 +19,7 @@ import type {
 } from "@/lib/types";
 import { agruparPorGrupo } from "@/lib/planilha";
 import {
+  aplicarNomesDoContatos,
   compararContatoIndividual,
   compararContatoSemIndividual,
   compararGrupo,
@@ -36,10 +38,12 @@ import {
   atualizarFalhas,
   contarUrlsCaidas,
   ehLeituraParcial,
+  ehMudancaDeComposicao,
   leituraValida,
   mesclarLeituras,
   motivoLeituraParcial,
   MOTIVO_SEM_NINGUEM,
+  nomesNovos,
 } from "@/lib/memoria-leitura";
 import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { ScrapeError } from "@/lib/scrape";
@@ -267,6 +271,26 @@ function reaproveitarParcial(
   return { lidas: [trocada, ...lidas.slice(1)], primariaParcial: false };
 }
 
+/**
+ * Mudança de composição (spec 2026-10-23 §3.4; decisão 1 do plano): a primária lida HOJE traz
+ * mais da metade de nomes que não estavam na leitura guardada válida (da URL principal ou da
+ * alternativa). Mede os nomes NOVOS, não os guardados que sumiram: página truncada não é
+ * mudança, continua leitura parcial. Primária reaproveitada, sem ninguém ou que é só lista de
+ * cargos não tem o que medir; sem memória válida também não.
+ */
+function detectarMudanca(
+  primaria: FonteLida | undefined,
+  contatos: ContatoPlanilha[],
+  deps: Dependencias,
+  agora: Date,
+): MudancaDeComposicao | undefined {
+  if (!primaria || primaria.reaproveitada || !contribuiu(primaria) || primaria.fonte.casamento === "cargo") return undefined;
+  const guardada = guardadaValida(primaria.fonte, deps, agora);
+  if (!guardada) return undefined;
+  const m = nomesNovos(primaria.conteudo!.pessoas, guardada.conteudo.pessoas);
+  return ehMudancaDeComposicao(m, contatos.length) ? { lidaEm: guardada.lidaEm, ...m } : undefined;
+}
+
 /** §4.3: fontes que contribuíram entram na memória; a primária parcial de hoje não. */
 function leiturasBoas(lidas: readonly FonteLida[], primariaParcial: boolean, agora: Date): LeituraGuardada[] {
   return lidas.flatMap((l, i) => (!contribuiu(l) || (i === 0 && primariaParcial) ? [] : [guardar(l, agora)]));
@@ -353,8 +377,12 @@ async function analisarGrupo(
   const lidasHoje: FonteLida[] = await Promise.all(
     resolvida.fontes.map((fonte, i) => lerFonte(fonte, deps, agora, (l) => !falhou(l, i === 0), MOTIVO_SEM_NINGUEM, GUARDADA_COM_PESSOAS)),
   );
-  // Leitura parcial da primária (§5.1, passo 4): só a guardada que casa mais contatos a substitui.
-  const { lidas, primariaParcial } = reaproveitarParcial(lidasHoje, contatos, deps, agora);
+  // Decisão 2 do plano: a mudança de composição é medida com a leitura de hoje, ANTES do
+  // reaproveitamento parcial, e o impede: a leitura de hoje vale (as saídas aparecem) e não
+  // entra na memória (`primariaParcial`). Sem mudança, leitura parcial da primária (§5.1,
+  // passo 4): só a guardada que casa mais contatos a substitui.
+  const mudanca = detectarMudanca(lidasHoje[0], contatos, deps, agora);
+  const { lidas, primariaParcial } = mudanca ? { lidas: lidasHoje, primariaParcial: true } : reaproveitarParcial(lidasHoje, contatos, deps, agora);
   const urlPrimaria = resolvida.fontes[0]?.url;
   const primariaReaproveitada = lidas[0]?.reaproveitada;
   const primariaAlternativa = lidas[0]?.alternativa;
@@ -419,7 +447,11 @@ async function analisarGrupo(
   };
   // Leitura parcial: parte da composição oficial ficou de fora, então ninguém deste grupo
   // pode ser dado como saída — e o usuário precisa saber disso, na tela e no export.
-  const r = compararGrupo(grupo, contatos, fonte, resolvida.grupoCanonico, resolvida.ufs, leituraParcial);
+  // Nomes em que o Contatos prevalece sobre a grafia da página (spec 2026-10-23 §4.2).
+  const r = aplicarNomesDoContatos(
+    compararGrupo(grupo, contatos, fonte, resolvida.grupoCanonico, resolvida.ufs, leituraParcial),
+    resolvida.fontes.flatMap((f) => f.nomesDoContatos ?? []),
+  );
   // LEITURA SUSPEITA: composição real (página, memória e/ou IA) que não casa nenhum contato de
   // um grupo com 2+ contatos é, na prática, página que não montou, layout que mudou ou página
   // errada, nunca um grupo inteiro que saiu. Não se confia nela: o grupo fica indeterminado,
@@ -463,6 +495,8 @@ async function analisarGrupo(
         ...(primariaReaproveitada && urlPrimaria ? { reaproveitada: { url: urlPrimaria, ...primariaReaproveitada } } : {}),
         // Primária lida pela URL alternativa: a `fonteUrl` do grupo continua a principal (§3.3).
         ...(primariaAlternativa ? { alternativa: primariaAlternativa } : {}),
+        // Composição trocou mais da metade dos nomes: sai lido, e a tela segura a publicação (§3.4).
+        ...(mudanca ? { mudouFormato: mudanca } : {}),
         ...(usouConhecimento || !urlPrimaria ? { viaPesquisaAmpla: true } : {}),
       },
       resolvida.responsavel,
@@ -530,10 +564,15 @@ async function analisarGrupoIndividual(
     }
     const lida = porUrl.get(l.fonte.url)!;
     const v = compararContatoIndividual({ contato: l.contato, fonte: l.fonte, lida, listaCargos, grupoCanonico });
-    // Página reaproveitada: o contato é comparado como se ela fosse de hoje; só a data fica registrada (§5.2).
+    // Página reaproveitada: o contato é comparado como se ela fosse de hoje; só a data fica
+    // registrada (§5.2). Fonte provisória (notícia): o contato leva a marca (spec 2026-10-23 §5).
     return {
       ...v,
-      resultado: lida.reaproveitada ? { ...v.resultado, leituraDe: lida.reaproveitada.lidaEm } : v.resultado,
+      resultado: {
+        ...v.resultado,
+        ...(lida.reaproveitada ? { leituraDe: lida.reaproveitada.lidaEm } : {}),
+        ...(l.fonte.provisoria ? { provisoria: true as const } : {}),
+      },
       lidaHoje: lida.reaproveitada === undefined,
     };
   });
@@ -544,7 +583,14 @@ async function analisarGrupoIndividual(
   const caidas = lidasInd.length - lidas - reaproveitadasInd;
   const geralReaproveitada = lidaGeral?.reaproveitada;
   const reaproveitadas = reaproveitadasInd + (geralReaproveitada ? 1 : 0);
-  const individuais = { lidas, caidas, ...(reaproveitadas > 0 ? { reaproveitadas } : {}) };
+  // Contatos ligados a fonte provisória (spec 2026-10-23 §5); só aparece quando maior que zero.
+  const provisorias = ligacoes.filter((l) => l.fonte?.provisoria).length;
+  const individuais = {
+    lidas,
+    caidas,
+    ...(reaproveitadas > 0 ? { reaproveitadas } : {}),
+    ...(provisorias > 0 ? { provisorias } : {}),
+  };
   const geralFalhou = geral !== undefined && !geralContribuiu;
 
   // Nenhuma fonte, de grupo ou individual, com conteúdo (hoje ou pela memória): grupo inacessível, como sempre.
@@ -633,6 +679,7 @@ function resumir(grupos: ResultadoGrupo[], falhas: FalhasPorUrl): ResumoAnalise 
     if (g.fonteInacessivel) resumo.gruposFonteInacessivel += 1;
     if (g.viaPesquisaAmpla) resumo.gruposViaPesquisaAmpla += 1;
     if (g.reaproveitada || (g.individuais?.reaproveitadas ?? 0) > 0) resumo.gruposReaproveitados += 1;
+    if (g.mudouFormato) resumo.gruposComMudanca += 1;
     resumo.novo += g.novos.length;
     for (const c of g.contatos) {
       resumo.total += 1;

@@ -308,3 +308,12 @@ describe("alternativa e falhas nas páginas individuais (spec 2026-10-23 §3.3, 
     expect(r.falhas?.[URL_RS]?.motivo).toBe(MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO);
   });
 });
+
+test("fonte individual provisória marca o contato e conta no grupo (spec 2026-10-23 §5)", async () => {
+  const provisoria: FonteIndividual = { ...individuaisGov[0], provisoria: true };
+  const r = await analisar("c.xlsx", [govGo, govRs], { resolverFonte: resolver(RESOLVIDA_MIN, { ...RESOLVIDA_GOV, fontesIndividuais: [provisoria, individuaisGov[1]] }), raspar: rasparDe({ [URL_GO]: paginaGo, [URL_RS]: paginaRs }), extrairComposicao: async () => [] });
+  const g = r.grupos[0];
+  expect(g.contatos.find((c) => c.contato.nome === govGo.nome)?.provisoria).toBe(true);
+  expect(g.contatos.find((c) => c.contato.nome === govRs.nome)?.provisoria).toBeUndefined();
+  expect(g.individuais).toEqual({ lidas: 2, caidas: 0, provisorias: 1 });
+});

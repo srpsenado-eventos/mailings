@@ -521,6 +521,8 @@ function resumir(grupos: ResultadoGrupo[]): ResumoAnalise {
     gruposFonteInacessivel: 0,
     gruposViaPesquisaAmpla: 0,
     gruposReaproveitados: 0,
+    urlsCaidasRepetidas: 0,
+    gruposComMudanca: 0,
   };
   for (const g of grupos) {
     if (g.semFonte) resumo.gruposSemFonte += 1;

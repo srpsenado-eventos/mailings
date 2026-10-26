@@ -91,6 +91,24 @@ export interface Reaproveitamento {
   motivo: string;
 }
 
+/** URL do catálogo que falhou em coletas seguidas (spec 2026-10-23 §3.4). Sem PII: só URL, datas e motivo técnico. */
+export interface FalhaDeUrl {
+  /** Primeira coleta em que a URL falhou, ISO 8601. Mantida enquanto a URL continuar falhando. */
+  desde: string;
+  /** Coletas seguidas em que a URL falhou (a de hoje inclusa). */
+  coletas: number;
+  /** Motivo técnico da falha de hoje ("HTTP 404"). */
+  motivo: string;
+}
+/** Chave: a URL do catálogo. */
+export type FalhasPorUrl = Record<string, FalhaDeUrl>;
+/** Uma URL que esta varredura tentou ler: `erro` ausente é sucesso. */
+export interface TentativaDeUrl { url: string; erro?: string }
+/** A URL principal falhou e a alternativa cadastrada respondeu (spec 2026-10-23 §3.3). */
+export interface LeituraAlternativa { url: string; motivoPrincipal: string }
+/** A página de hoje trouxe mais da metade de nomes que não estavam na leitura guardada (spec 2026-10-23 §3.4). */
+export interface MudancaDeComposicao { lidaEm: string; trocados: number; total: number }
+
 export type Semaforo = "verde" | "amarelo" | "vermelho" | "novo" | "indeterminado";
 export type OrigemVeredito = "oficial" | "pesquisa_ampla";
 
@@ -144,6 +162,10 @@ export interface ResultadoContato {
   observacao?: string;
   /** ISO 8601 da leitura reaproveitada da página individual do contato (spec 2026-10-20 §5.2). Ausente quando lida nesta varredura. */
   leituraDe?: string;
+  /** A página individual do contato foi lida pela URL alternativa (spec 2026-10-23 §3.3). */
+  alternativa?: LeituraAlternativa;
+  /** A fonte individual do contato é provisória (notícia) (spec 2026-10-23 §5). */
+  provisoria?: true;
   /**
    * Auditoria de endereço (Camada D). **Não** entra em `camposDivergentes` nem muda
    * `semaforo`: ver docs/superpowers/specs/2026-10-01-auditoria-de-endereco-camada-d.md
@@ -178,12 +200,17 @@ export interface ResultadoGrupo {
    * Nunca junto com `fonteInacessivel` nem com `viaPesquisaAmpla`.
    */
   reaproveitada?: Reaproveitamento & { url: string };
+  /** A primária do grupo foi lida pela URL alternativa (spec 2026-10-23 §3.3). */
+  alternativa?: LeituraAlternativa;
+  /** A composição de hoje trocou mais da metade dos nomes em relação à guardada (spec 2026-10-23 §3.4). Segura a publicação. */
+  mudouFormato?: MudancaDeComposicao;
   /**
    * Páginas individuais ligadas a contatos do grupo: lidas com conteúdo hoje, caídas, e as que
    * entraram pela memória (spec 2026-10-15 §6.1; 2026-10-20 §4.1). `reaproveitadas` só aparece
-   * quando maior que zero; retrato antigo não o traz.
+   * quando maior que zero; retrato antigo não o traz. `provisorias` conta contatos ligados a
+   * fonte provisória; só aparece quando maior que zero.
    */
-  individuais?: { lidas: number; caidas: number; reaproveitadas?: number };
+  individuais?: { lidas: number; caidas: number; reaproveitadas?: number; provisorias?: number };
   /**
    * Quando o rótulo da planilha não casa nenhum grupo cadastrado (semFonte),
    * nomes cadastrados mais próximos para orientar o usuário a alinhar a planilha.
@@ -215,6 +242,10 @@ export interface ResumoAnalise {
   gruposViaPesquisaAmpla: number;
   /** Grupos com `reaproveitada` ou com `individuais.reaproveitadas > 0` (spec 2026-10-20). */
   gruposReaproveitados: number;
+  /** URLs do catálogo caídas há `MIN_COLETAS_URL_CAIDA` ou mais coletas seguidas (spec 2026-10-23 §3.4). */
+  urlsCaidasRepetidas: number;
+  /** Grupos com `mudouFormato`. */
+  gruposComMudanca: number;
 }
 
 export interface ResultadoAnalise {
@@ -225,6 +256,8 @@ export interface ResultadoAnalise {
   eleicao?: ResultadoEleicao;
   /** Memória de leitura que sai desta varredura (spec 2026-10-20 §6). Só no retrato local; ausente em retrato antigo. */
   leituras?: LeiturasGuardadas;
+  /** URLs do catálogo que falharam em coletas seguidas (spec 2026-10-23 §3.4). Vai para a web: não tem PII. */
+  falhas?: FalhasPorUrl;
 }
 
 /**
@@ -317,6 +350,14 @@ export interface FonteCatalogo {
    * saída nem proposta de inclusão (spec 2026-10-15 §5.3).
    */
   casamento?: "pessoa" | "cargo";
+  /** Lida só quando a principal falha; o que casar é comparado contra ela (spec 2026-10-23 §3.3). Mesmo domínio oficial. */
+  urlAlternativa?: string;
+  /** Nomes, como estão no Contatos, em que o Contatos prevalece sobre a grafia da página (spec 2026-10-23 §4.2). */
+  nomesDoContatos?: readonly string[];
+  /** Ausente = HTML. "pdf": o corpo é lido por `extrairConteudoPdf` (spec 2026-10-23 §5.1). */
+  tipo?: "html" | "pdf";
+  /** Extração por marcador: só as pessoas cujo nome é seguido de um destes textos (spec 2026-10-23 §5.2). */
+  marcador?: { textos: readonly string[] };
 }
 
 /** Chave que liga uma fonte individual ao contato: a UF do cargo, ou o nome como está no Contatos. */
@@ -333,10 +374,13 @@ export interface FonteIndividual {
   /** Obrigatório e sempre com "nome": `["nome", "cargo"]` ou `["nome"]`. */
   campos: readonly CampoFonte[];
   navegador?: true | "janela";
+  urlAlternativa?: string;
+  /** Notícia de órgão oficial no lugar de página institucional, até a posse de 2027 (spec 2026-10-23 §5). */
+  provisoria?: true;
 }
 
 /** Uma fonte que o raspador sabe ler: o que `FonteCatalogo` e `FonteIndividual` têm em comum. */
-export type FonteLegivel = Pick<FonteCatalogo, "url" | "tabela" | "navegador">;
+export type FonteLegivel = Pick<FonteCatalogo, "url" | "tabela" | "navegador" | "urlAlternativa" | "tipo" | "marcador">;
 
 /**
  * Grupo no catálogo versionado (`data/catalogo.ts`), com responsáveis internos

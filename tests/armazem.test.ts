@@ -11,7 +11,7 @@ const retrato: Retrato = {
   resumo: {
     total: 0, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0,
     enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-    gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
+    gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0,
   },
   geradoEm: "2026-10-01T17:12:00.000Z",
   planilhaContatos: { nome: "c.xlsx", linhas: 0 },

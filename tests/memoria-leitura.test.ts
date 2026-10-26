@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { atualizarFalhas, contarUrlsCaidas, falhasDoRetrato, MIN_COLETAS_URL_CAIDA, ehMudancaDeComposicao, FRACAO_MINIMA_TROCADA, nomesNovos } from "@/lib/memoria-leitura";
 import {
   anotacaoReaproveitada,
   descreverMotivoDeHoje,
@@ -175,5 +176,58 @@ describe("memoriaDoRetrato (§6 passo 1 e §10)", () => {
       grupos: [{ grupo: "G", fonteUrl: URL_A, semFonte: false, novos: [], contatos: [{ contato: { nome: "Ana", grupo: "G" }, semaforo: "verde", score: 1, camposDivergentes: [], origem: "oficial", comparacoes: [{ campo: "nome", valorPlanilha: "Ana", valorEsperado: "Ana", situacao: "confere" }] }] }],
     } as unknown as Retrato;
     expect(memoriaDoRetrato(r, AGORA)[URL_A].conteudo.pessoas).toEqual([{ nome: "Ana" }]);
+  });
+});
+
+describe("falhas por URL (spec 2026-10-23 §3.4)", () => {
+  const D19 = "2026-10-19T12:00:00.000Z";
+  const hoje = new Date("2026-10-21T12:00:00.000Z");
+  test("URL que falha pela primeira vez entra com coletas 1 e desde = agora", () => {
+    const f = atualizarFalhas({}, [{ url: "https://a.gov.br", erro: "HTTP 404" }], hoje);
+    expect(f).toEqual({ "https://a.gov.br": { desde: hoje.toISOString(), coletas: 1, motivo: "HTTP 404" } });
+  });
+  test("URL que falha de novo soma coletas, mantém desde e troca o motivo pelo de hoje", () => {
+    const f = atualizarFalhas({ "https://a.gov.br": { desde: D19, coletas: 1, motivo: "HTTP 404" } }, [{ url: "https://a.gov.br", erro: "tempo esgotado" }], hoje);
+    expect(f["https://a.gov.br"]).toEqual({ desde: D19, coletas: 2, motivo: "tempo esgotado" });
+  });
+  test("URL lida hoje sai do mapa; URL não tentada fica como está", () => {
+    const antes = { "https://a.gov.br": { desde: D19, coletas: 1, motivo: "HTTP 404" }, "https://b.gov.br": { desde: D19, coletas: 3, motivo: "HTTP 500" } };
+    const f = atualizarFalhas(antes, [{ url: "https://a.gov.br" }], hoje);
+    expect(f).toEqual({ "https://b.gov.br": antes["https://b.gov.br"] });
+    expect(antes["https://a.gov.br"]).toBeDefined(); // não muta a entrada
+  });
+  test("sucesso na mesma varredura apaga a falha da URL, em qualquer ordem", () => {
+    const f = atualizarFalhas({}, [{ url: "https://a.gov.br", erro: "HTTP 429 (3 tentativas)" }, { url: "https://a.gov.br" }], hoje);
+    expect(f).toEqual({});
+  });
+  test("contarUrlsCaidas conta só coletas >= MIN_COLETAS_URL_CAIDA", () => {
+    expect(MIN_COLETAS_URL_CAIDA).toBe(2);
+    expect(contarUrlsCaidas({ a: { desde: D19, coletas: 1, motivo: "x" }, b: { desde: D19, coletas: 2, motivo: "x" }, c: { desde: D19, coletas: 5, motivo: "x" } })).toBe(2);
+  });
+  test("falhasDoRetrato devolve o mapa do retrato e descarta entrada com forma errada; retrato sem o campo ou ausente dá vazio", () => {
+    const boa = { desde: D19, coletas: 2, motivo: "HTTP 404" };
+    expect(falhasDoRetrato({ falhas: { "https://a.gov.br": boa, "https://b.gov.br": { coletas: "2" } } } as never)).toEqual({ "https://a.gov.br": boa });
+    expect(falhasDoRetrato({} as never)).toEqual({});
+    expect(falhasDoRetrato(undefined)).toEqual({});
+  });
+});
+
+describe("mudança de composição (spec 2026-10-23 §3.4; decisão 1 do plano)", () => {
+  const p = (...nomes: string[]) => nomes.map((nome) => ({ nome }));
+  test("conta os nomes distintos de hoje e quantos não estão na guardada (igualdade após normalizarNome)", () => {
+    expect(nomesNovos(p("Ana Silva", "ANA SILVA", "Beto Souza", "Carla Lima"), p("Ana Silva", "Beto Souza"))).toEqual({ trocados: 1, total: 3 });
+  });
+  test("página truncada (todos os nomes de hoje estão na guardada) não tem nomes novos", () => {
+    expect(nomesNovos(p("Ana Silva", "Beto Souza"), p("Ana Silva", "Beto Souza", "Carla Lima", "Dora Reis"))).toEqual({ trocados: 0, total: 2 });
+  });
+  test("é mudança com mais da metade de nomes novos em grupo com 2+ contatos", () => {
+    expect(FRACAO_MINIMA_TROCADA).toBe(0.5);
+    expect(ehMudancaDeComposicao({ trocados: 7, total: 10 }, 10)).toBe(true);
+    expect(ehMudancaDeComposicao({ trocados: 5, total: 10 }, 10)).toBe(false);
+    expect(ehMudancaDeComposicao({ trocados: 3, total: 10 }, 10)).toBe(false);
+  });
+  test("grupo de um contato e página sem nomes nunca são mudança", () => {
+    expect(ehMudancaDeComposicao({ trocados: 1, total: 1 }, 1)).toBe(false);
+    expect(ehMudancaDeComposicao({ trocados: 0, total: 0 }, 5)).toBe(false);
   });
 });

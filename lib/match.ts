@@ -566,7 +566,8 @@ export interface NomeAchado {
  * o mesmo nome normalizado, ou o nome inteiro como trecho contíguo do texto, com fronteira de
  * palavra. Vias não exatas (decisão R9, spec §9), para nome de duas ou mais palavras: uma
  * `PessoaSite`, ou um trecho do texto, com todos os nomes do Contatos na ordem numa janela
- * com até três nomes a mais ("Guilherme Boulos" acha "Guilherme Castro Boulos").
+ * com até três nomes a mais ("Guilherme Boulos" acha "Guilherme Castro Boulos"). Por último,
+ * o nome mais curto em destaque (spec 2026-10-23 §4.1, `nomeCurtoEmDestaque`).
  * `undefined` é nome ausente.
  */
 export function nomeNaPagina(nome: string, c: ConteudoFonte): NomeAchado | undefined {
@@ -583,7 +584,44 @@ export function nomeNaPagina(nome: string, c: ConteudoFonte): NomeAchado | undef
   const pessoaLonga = c.pessoas.find((p) => janelaDoNome(tokens, palavrasDe(normalizarNome(p.nome))) !== undefined);
   if (pessoaLonga) return { pessoa: pessoaLonga, nomeNaPagina: pessoaLonga.nome, exato: false };
   const doTexto = janelaDoNome(tokens, palavrasDe(c.textoLimpo));
-  return doTexto ? { nomeNaPagina: doTexto, exato: false } : undefined;
+  if (doTexto) return { nomeNaPagina: doTexto, exato: false };
+  const curto = nomeCurtoEmDestaque(tokens, c);
+  if (curto) return curto;
+  return undefined;
+}
+
+/** Partes significativas de um nome: normalizado, sem tratamento e sem conectivos. */
+function partesDoNome(nome: string): string[] {
+  return soPalavras(normalizarNome(nome))
+    .split(" ")
+    .filter((t) => t.length > 0 && !CONECTIVOS_NOME.has(t));
+}
+
+/** Todas as `partes` aparecem em `alvo`, na mesma ordem (não precisam ser vizinhas). */
+function ehSubsequencia(partes: readonly string[], alvo: readonly string[]): boolean {
+  let k = 0;
+  for (const parte of alvo) {
+    if (k < partes.length && parte === partes[k]) k += 1;
+  }
+  return k === partes.length;
+}
+
+/**
+ * Nome mais curto em destaque (spec 2026-10-23 §4.1): a página individual publica o nome
+ * político ("Waldez Góes") e o Contatos tem o nome civil ("Antônio Waldez Góes da Silva").
+ * Reconhece quando uma pessoa estruturada, ou um destaque (negrito, título), tem duas ou mais
+ * partes, menos partes que o nome do Contatos, e todas elas nele, na ordem. Nunca é exato:
+ * sai "Nome diverge" com o nome da página.
+ */
+function nomeCurtoEmDestaque(alvo: readonly string[], c: ConteudoFonte): NomeAchado | undefined {
+  const reconhece = (candidato: string): boolean => {
+    const partes = partesDoNome(candidato);
+    return partes.length >= 2 && partes.length < alvo.length && ehSubsequencia(partes, alvo);
+  };
+  const pessoa = c.pessoas.find((p) => reconhece(p.nome));
+  if (pessoa) return { pessoa, nomeNaPagina: pessoa.nome, exato: false };
+  const destaque = c.destaques.find(reconhece);
+  return destaque ? { nomeNaPagina: destaque, exato: false } : undefined;
 }
 
 /** Denominações de cargo publicadas por uma fonte `casamento: "cargo"`, únicas, na ordem da página. */

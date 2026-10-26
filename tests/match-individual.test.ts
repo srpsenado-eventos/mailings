@@ -308,3 +308,35 @@ describe("novosForaDaPlanilha e marcarFonteInacessivel sem URL", () => {
     expect(g.contatos[0].semaforo).toBe("indeterminado");
   });
 });
+
+describe("nome mais curto em destaque (spec 2026-10-23 §4.1)", () => {
+  const pagina = (destaques: string[], pessoas: { nome: string; cargo?: string }[] = []): ConteudoFonte => ({ url: "https://www.gov.br/x", textoLimpo: "Gabinete do ministro. ".repeat(20), destaques, pessoas });
+  test("'Waldez Góes' em destaque reconhece 'Antônio Waldez Góes da Silva' e sai divergente com o nome da página", () => {
+    const a = nomeNaPagina("Antônio Waldez Góes da Silva", pagina(["Waldez Góes"]));
+    expect(a).toEqual({ nomeNaPagina: "Waldez Góes", exato: false });
+  });
+  test("pessoa estruturada mais curta reconhece e traz o cargo", () => {
+    const a = nomeNaPagina("Antonio Vladimir Moura Lima", pagina([], [{ nome: "Vladimir Lima", cargo: "Ministro de Estado das Cidades" }]));
+    expect(a?.pessoa?.cargo).toBe("Ministro de Estado das Cidades");
+    expect(a?.exato).toBe(false);
+  });
+  test("uma parte só não reconhece", () => {
+    expect(nomeNaPagina("Antônio Waldez Góes da Silva", pagina(["Waldez"]))).toBeUndefined();
+  });
+  test("partes fora de ordem não reconhecem", () => {
+    expect(nomeNaPagina("Antônio Waldez Góes da Silva", pagina(["Góes Waldez"]))).toBeUndefined();
+  });
+  test("parte que não está no nome do Contatos não reconhece", () => {
+    expect(nomeNaPagina("Antônio Waldez Góes da Silva", pagina(["Waldez Pereira"]))).toBeUndefined();
+  });
+  test("conectivos não contam como parte: 'Góes da Silva' tem duas partes e reconhece", () => {
+    expect(nomeNaPagina("Antônio Waldez Góes da Silva", pagina(["Góes da Silva"]))?.exato).toBe(false);
+  });
+  test("o veredito do contato é amarelo, nome divergente com o nome da página, nunca saída", () => {
+    const v = compararContatoIndividual({ contato: contato({ nome: "Antônio Waldez Góes da Silva" }), fonte: indNome, lida: { conteudo: pagina(["Waldez Góes"]) } });
+    expect(v.resultado.semaforo).toBe("amarelo");
+    expect(v.resultado.possivelSaida).toBeUndefined();
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")).toMatchObject({ situacao: "divergente", valorEsperado: "Waldez Góes" });
+    expect(v.nomeConfirmado).toBe(true);
+  });
+});

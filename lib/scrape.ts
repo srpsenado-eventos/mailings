@@ -469,7 +469,9 @@ export function extrairConteudo(html: string, url: string): ConteudoFonte {
 
   // destaques ANTES de mutar o DOM (extrairLinhas insere "\n").
   const destaquesBrutos: string[] = [];
-  $("strong, b").each((_, el) => {
+  // Títulos h1–h3 também: a página individual do gov.br põe o nome político no `h1`
+  // (spec 2026-10-23 §4.1). O filtro `ehNome` abaixo tira "Composição" e afins.
+  $("strong, b, h1, h2, h3").each((_, el) => {
     const txt = $(el).text().replace(/\s+/g, " ").trim();
     if (txt) destaquesBrutos.push(txt);
   });

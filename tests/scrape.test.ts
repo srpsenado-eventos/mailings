@@ -672,3 +672,10 @@ describe("linha de cargo entre dois nomes não vota a orientação", () => {
     expect(c.textoLimpo).not.toMatch(/Colegiados, Comissões e Corregedoria/);
   });
 });
+
+test("títulos h1–h3 que parecem nome entram em destaques (spec 2026-10-23 §4.1)", () => {
+  const c = extrairConteudo("<main><h1>Waldez Góes</h1><h2>Composição</h2><p>Ministro de Estado da Integração.</p><strong>Currículo</strong></main>", "https://www.gov.br/x");
+  expect(c.destaques).toContain("Waldez Góes");
+  expect(c.destaques).not.toContain("Composição");
+  expect(c.destaques).not.toContain("Currículo");
+});

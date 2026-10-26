@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { decodificarCorpo, extrairConteudo, raspar, ScrapeError } from "@/lib/scrape";
+import { decodificarCorpo, extrairConteudo, extrairPorMarcador, raspar, ScrapeError } from "@/lib/scrape";
 
 const html = readFileSync(resolve(__dirname, "fixtures/orgao-exemplo.html"), "utf-8");
 
@@ -678,4 +678,29 @@ test("títulos h1–h3 que parecem nome entram em destaques (spec 2026-10-23 §4
   expect(c.destaques).toContain("Waldez Góes");
   expect(c.destaques).not.toContain("Composição");
   expect(c.destaques).not.toContain("Currículo");
+});
+
+describe("extração por marcador (spec 2026-10-23 §5.2)", () => {
+  test("pessoas cujo nome é seguido do marcador, com cargo = palavra de cargo que antecede + marcador sem parênteses", () => {
+    const texto = "Presidente: Ministra Ana Maria Política Completa\nDesembargador Carlos Alberto Exemplo Souza (convocado)\nDesembargadora Dora Exemplo Reis (convocada)\nSecretaria-Geral";
+    expect(extrairPorMarcador(texto, ["(convocado)", "(convocada)"])).toEqual([
+      { nome: "Carlos Alberto Exemplo Souza", cargo: "Desembargador convocado", origem: "pagina" },
+      { nome: "Dora Exemplo Reis", cargo: "Desembargadora convocada", origem: "pagina" },
+    ]);
+  });
+  test("marcador ** sem palavra de cargo antes: pessoa sem cargo", () => {
+    expect(extrairPorMarcador("Ana Maria Política Completa **\nBeto Souza", ["**"])).toEqual([{ nome: "Ana Maria Política Completa", origem: "pagina" }]);
+  });
+  test("nome de uma palavra antes do marcador não vira pessoa", () => {
+    expect(extrairPorMarcador("Fulano (convocado)", ["(convocado)"])).toEqual([]);
+  });
+  test("fixture do TST /orgaos: só os 6 convocados, com cargo", () => {
+    const c = extrairConteudo(readFileSync(resolve(__dirname, "fixtures/tst-orgaos.html"), "utf-8"), "https://www.tst.jus.br/orgaos", { marcador: ["(convocado)", "(convocada)"] });
+    expect(c.pessoas).toHaveLength(6);
+    expect(c.pessoas.every((p) => /^Desembargador(a)? convocad[oa]$/.test(p.cargo ?? ""))).toBe(true);
+  });
+  test("sem marcador, a mesma fixture segue a extração padrão (dezenas de pessoas)", () => {
+    const c = extrairConteudo(readFileSync(resolve(__dirname, "fixtures/tst-orgaos.html"), "utf-8"), "https://www.tst.jus.br/orgaos");
+    expect(c.pessoas.length).toBeGreaterThan(6);
+  });
 });

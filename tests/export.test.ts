@@ -578,3 +578,46 @@ describe("memória de leitura no export (spec 2026-10-20 §7)", () => {
     expect(resultadoParaLinhas(comIndividual)[0].Observacao).toBe("Leitura de 19/10 reaproveitada");
   });
 });
+
+describe("leitura resiliente no export (spec 2026-10-23 §6)", () => {
+  test("ressalvas da leitura resiliente na coluna Observacao (spec 2026-10-23 §6)", () => {
+    const resiliente: ResultadoAnalise = {
+      ...analise,
+      grupos: [{
+        ...analise.grupos[0],
+        alternativa: { url: "https://orgao.gov.br/alternativa", motivoPrincipal: "HTTP 404" },
+        mudouFormato: { lidaEm: "2026-10-16T12:00:00.000Z", trocados: 7, total: 10 },
+        contatos: [{ ...analise.grupos[0].contatos[0], alternativa: { url: "https://orgao.gov.br/alternativa", motivoPrincipal: "HTTP 404" }, provisoria: true }],
+      }],
+      falhas: { "https://orgao.gov.br": { desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" } },
+    };
+    const linhas = resultadoParaLinhas(resiliente);
+    expect(linhas[0].Observacao).toContain("Lida pela URL alternativa; a principal não respondeu (HTTP 404)");
+    expect(linhas[0].Observacao).toContain("Composição mudou: ");
+    expect(linhas[0].Observacao).toContain("Fonte caída há 2 coletas");
+    expect(linhas[0].Observacao).toContain("Fonte provisória: notícia");
+    expect(linhas[0].Observacao).toContain("Lida pela URL alternativa (HTTP 404)");
+  });
+
+  test("grupo inacessível com URL caída leva só o aviso de URL caída; sem falhas, nada muda", () => {
+    const inacessivel: ResultadoAnalise = {
+      ...analise,
+      grupos: [{ ...analise.grupos[0], fonteInacessivel: true, erroFonte: "HTTP 404" }],
+      falhas: { "https://orgao.gov.br": { desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" } },
+    };
+    expect(resultadoParaLinhas(inacessivel)[0].Observacao).toBe("Fonte caída há 2 coletas, desde 19/10: conferir se o endereço mudou");
+    expect(resultadoParaLinhas({ ...inacessivel, falhas: undefined })[0].Observacao).toBe("");
+  });
+
+  test("individual provisória: a frase não sai duas vezes na mesma célula", () => {
+    const provisoria: ResultadoAnalise = {
+      ...analise,
+      grupos: [{
+        ...analise.grupos[0],
+        individuais: { lidas: 1, caidas: 0, provisorias: 1 },
+        contatos: [{ ...analise.grupos[0].contatos[0], provisoria: true }],
+      }],
+    };
+    expect(resultadoParaLinhas(provisoria)[0].Observacao).toBe("Fonte provisória: notícia");
+  });
+});

@@ -527,20 +527,24 @@ export function procedenciaDoContato(c: ResultadoContato, g: ResultadoGrupo, fal
   const nome = compNome?.fonteUrl ?? c.fonteUrl;
   // A alternativa marca a linha cuja URL é a lida pela alternativa; a provisória, a linha do nome.
   const pelaAlternativa = (url: string) => c.alternativa?.url === url;
-  if (nome) linhas.push({ rotulo: "Nome", texto: nome, url: nome, lida: compNome?.situacao !== "nao_verificado", ...leituraDe(nome, true), ...ressalvasDaLinha(nome, falhas, pelaAlternativa(nome), Boolean(c.provisoria)) });
+  // O aviso de URL caída é da principal (é ela que entra em `falhas`), não da alternativa lida.
+  const urlDoAviso = (url: string) => (pelaAlternativa(url) ? c.alternativa?.urlPrincipal : undefined) ?? (g.alternativa?.url === url ? g.alternativa.urlPrincipal : undefined) ?? url;
+  if (nome) linhas.push({ rotulo: "Nome", texto: nome, url: nome, lida: compNome?.situacao !== "nao_verificado", ...leituraDe(nome, true), ...ressalvasDaLinha(urlDoAviso(nome), falhas, pelaAlternativa(nome), Boolean(c.provisoria)) });
   const compCargo = comparacaoDeValor(c, "cargo");
   const cargo = compCargo?.fonteUrl;
-  if (cargo) linhas.push({ rotulo: "Cargo", texto: cargo, url: cargo, lida: compCargo?.situacao !== "nao_verificado", ...leituraDe(cargo, cargo === c.fonteUrl), ...ressalvasDaLinha(cargo, falhas, pelaAlternativa(cargo), false) });
+  if (cargo) linhas.push({ rotulo: "Cargo", texto: cargo, url: cargo, lida: compCargo?.situacao !== "nao_verificado", ...leituraDe(cargo, cargo === c.fonteUrl), ...ressalvasDaLinha(urlDoAviso(cargo), falhas, pelaAlternativa(cargo), false) });
   return linhas;
 }
 
-/** "38 páginas individuais lidas · 4 reaproveitadas · 2 provisórias (notícia) · 2 inacessíveis", no cabeçalho do grupo. Partes zeradas somem; retrato antigo não traz `reaproveitadas` nem `provisorias`. */
+/**
+ * "38 páginas individuais lidas · 4 reaproveitadas · 2 inacessíveis", no cabeçalho do grupo.
+ * Partes zeradas somem; retrato antigo não traz `reaproveitadas`. As provisórias não entram: o
+ * cabeçalho já diz `TEXTO_FONTE_PROVISORIA` ao lado.
+ */
 export function textoIndividuais(i: { lidas: number; caidas: number; reaproveitadas?: number; provisorias?: number }): string {
   const partes = [i.lidas === 1 ? "1 página individual lida" : `${i.lidas} páginas individuais lidas`];
   const r = i.reaproveitadas ?? 0;
   if (r > 0) partes.push(`${r} ${r === 1 ? "reaproveitada" : "reaproveitadas"}`);
-  const p = i.provisorias ?? 0;
-  if (p > 0) partes.push(`${p} ${p === 1 ? "provisória" : "provisórias"} (notícia)`);
   if (i.caidas > 0) partes.push(`${i.caidas} ${i.caidas === 1 ? "inacessível" : "inacessíveis"}`);
   return partes.join(" · ");
 }
@@ -561,7 +565,7 @@ export function textoSituacaoDosGrupos(r: Partial<ResumoAnalise>): string {
   ].filter((i) => i.n > 0);
   const grupos = itens.map((i, idx) => `${i.n} ${idx === 0 ? (i.n === 1 ? "grupo " : "grupos ") : ""}${i.n === 1 ? i.um : i.varios}`);
   const caidas = n(r.urlsCaidasRepetidas);
-  const urls = caidas > 0 ? [`${caidas} ${caidas === 1 ? "URL caída" : "URLs caídas"} há ${MIN_COLETAS_URL_CAIDA} coletas`] : [];
+  const urls = caidas > 0 ? [`${caidas} ${caidas === 1 ? "URL caída" : "URLs caídas"} há ${MIN_COLETAS_URL_CAIDA} ou mais coletas`] : [];
   return [...grupos, ...urls].join(" · ");
 }
 

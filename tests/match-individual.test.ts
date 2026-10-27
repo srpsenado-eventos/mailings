@@ -268,10 +268,16 @@ describe("compararContatoIndividual (tabela §5.2)", () => {
   });
   test("lida pela alternativa: as comparações e o fonteUrl apontam para a URL lida", () => {
     const alt = "https://www.exemplar.gov.br/governo-alternativa";
-    const v = compararContatoIndividual({ contato: governador, fonte: indNomeCargo, lida: { conteudo: { ...estado, url: alt }, alternativa: { url: alt, motivoPrincipal: "HTTP 404" } } });
+    const v = compararContatoIndividual({ contato: governador, fonte: indNomeCargo, lida: { conteudo: { ...estado, url: alt }, alternativa: { url: alt, urlPrincipal: indNomeCargo.url, motivoPrincipal: "HTTP 404" } } });
     expect(v.resultado.fonteUrl).toBe(alt);
     expect(v.resultado.comparacoes.find((c) => c.campo === "nome")?.fonteUrl).toBe(alt);
-    expect(v.resultado.alternativa).toEqual({ url: alt, motivoPrincipal: "HTTP 404" });
+    expect(v.resultado.alternativa).toEqual({ url: alt, urlPrincipal: indNomeCargo.url, motivoPrincipal: "HTTP 404" });
+  });
+  test("página reaproveitada da memória da alternativa: as comparações e o fonteUrl apontam para a URL do conteúdo", () => {
+    const alt = "https://www.exemplar.gov.br/governo-alternativa";
+    const v = compararContatoIndividual({ contato: governador, fonte: indNomeCargo, lida: { conteudo: { ...estado, url: alt }, urlDaMemoria: alt } });
+    expect(v.resultado.fonteUrl).toBe(alt);
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")?.fonteUrl).toBe(alt);
   });
 });
 

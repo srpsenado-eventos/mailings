@@ -585,9 +585,9 @@ describe("leitura resiliente no export (spec 2026-10-23 §6)", () => {
       ...analise,
       grupos: [{
         ...analise.grupos[0],
-        alternativa: { url: "https://orgao.gov.br/alternativa", motivoPrincipal: "HTTP 404" },
+        alternativa: { url: "https://orgao.gov.br/alternativa", urlPrincipal: "https://orgao.gov.br", motivoPrincipal: "HTTP 404" },
         mudouFormato: { lidaEm: "2026-10-16T12:00:00.000Z", trocados: 7, total: 10 },
-        contatos: [{ ...analise.grupos[0].contatos[0], alternativa: { url: "https://orgao.gov.br/alternativa", motivoPrincipal: "HTTP 404" }, provisoria: true }],
+        contatos: [{ ...analise.grupos[0].contatos[0], alternativa: { url: "https://orgao.gov.br/alternativa", urlPrincipal: "https://orgao.gov.br", motivoPrincipal: "HTTP 404" }, provisoria: true }],
       }],
       falhas: { "https://orgao.gov.br": { desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" } },
     };
@@ -609,15 +609,38 @@ describe("leitura resiliente no export (spec 2026-10-23 §6)", () => {
     expect(resultadoParaLinhas({ ...inacessivel, falhas: undefined })[0].Observacao).toBe("");
   });
 
-  test("individual provisória: a frase não sai duas vezes na mesma célula", () => {
-    const provisoria: ResultadoAnalise = {
+  test("fonte provisória só na linha do contato que tem (PE), não nos demais governadores do grupo", () => {
+    const base = analise.grupos[0].contatos[0];
+    const governadores: ResultadoAnalise = {
       ...analise,
       grupos: [{
         ...analise.grupos[0],
-        individuais: { lidas: 1, caidas: 0, provisorias: 1 },
-        contatos: [{ ...analise.grupos[0].contatos[0], provisoria: true }],
+        individuais: { lidas: 2, caidas: 0, provisorias: 1 },
+        contatos: [
+          { ...base, contato: { ...base.contato, nome: "Governador De Goiás" } },
+          { ...base, contato: { ...base.contato, nome: "Governadora De Pernambuco" }, provisoria: true },
+        ],
       }],
     };
-    expect(resultadoParaLinhas(provisoria)[0].Observacao).toBe("Fonte provisória: notícia");
+    const [go, pe] = resultadoParaLinhas(governadores);
+    expect(go.Observacao).not.toContain("Fonte provisória: notícia");
+    expect(pe.Observacao).toBe("Fonte provisória: notícia");
+  });
+
+  test("individual lida pela alternativa: o aviso de URL caída vem da principal, que é a que entra em falhas", () => {
+    const PRINCIPAL = "https://pe.gov.br/governadora";
+    const ALT = "https://pe.gov.br/governadora-alternativa";
+    const base = analise.grupos[0].contatos[0];
+    const individual: ResultadoAnalise = {
+      ...analise,
+      grupos: [{
+        ...analise.grupos[0],
+        fonteUrl: undefined,
+        individuais: { lidas: 1, caidas: 0 },
+        contatos: [{ ...base, fonteUrl: ALT, alternativa: { url: ALT, urlPrincipal: PRINCIPAL, motivoPrincipal: "HTTP 404" } }],
+      }],
+      falhas: { [PRINCIPAL]: { desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" } },
+    };
+    expect(resultadoParaLinhas(individual)[0].Observacao).toBe("Lida pela URL alternativa (HTTP 404) · Fonte caída há 2 coletas, desde 19/10: conferir se o endereço mudou");
   });
 });

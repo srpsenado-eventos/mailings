@@ -104,8 +104,12 @@ export interface FalhaDeUrl {
 export type FalhasPorUrl = Record<string, FalhaDeUrl>;
 /** Uma URL que esta varredura tentou ler: `erro` ausente é sucesso. */
 export interface TentativaDeUrl { url: string; erro?: string }
-/** A URL principal falhou e a alternativa cadastrada respondeu (spec 2026-10-23 §3.3). */
-export interface LeituraAlternativa { url: string; motivoPrincipal: string }
+/**
+ * A URL principal falhou e a alternativa cadastrada respondeu (spec 2026-10-23 §3.3). `url` é a
+ * alternativa (a lida); `urlPrincipal` é a que falhou, a que entra em `falhas` e da qual a tela
+ * tira o aviso de URL caída.
+ */
+export interface LeituraAlternativa { url: string; urlPrincipal: string; motivoPrincipal: string }
 /** A página de hoje trouxe mais da metade de nomes que não estavam na leitura guardada (spec 2026-10-23 §3.4). */
 export interface MudancaDeComposicao { lidaEm: string; trocados: number; total: number }
 

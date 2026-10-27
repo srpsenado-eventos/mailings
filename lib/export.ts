@@ -96,8 +96,7 @@ function fonteDoCargo(c: ResultadoContato): string {
 /**
  * Observação do contato mais as ressalvas do grupo (leitura reaproveitada, fonte que não
  * respondeu). Quem trabalha a partir do download precisa das mesmas ressalvas que a tela dá:
- * sem elas, a linha parece um veredito completo. A mesma frase não sai duas vezes na célula
- * (fonte provisória vem do grupo e do contato).
+ * sem elas, a linha parece um veredito completo. A mesma frase não sai duas vezes na célula.
  */
 function observacaoCom(observacao: string | undefined, ressalvas: readonly string[]): string {
   return [...new Set([observacao, ...ressalvas].filter(Boolean))].join(" · ");
@@ -123,13 +122,16 @@ function ressalvasDoGrupo(g: ResultadoGrupo, falhas: FalhasPorUrl | undefined): 
     ...(g.mudouFormato ? [textoMudanca(g.mudouFormato)] : []),
     ...(g.alternativa ? [textoAlternativa(g.alternativa)] : []),
     ...(caida ? [caida] : []),
-    ...((g.individuais?.provisorias ?? 0) > 0 ? [TEXTO_FONTE_PROVISORIA] : []),
   ];
 }
 
-/** Ressalvas da leitura resiliente que são do contato: página lida pela alternativa, fonte provisória, página individual caída em coletas seguidas. */
+/**
+ * Ressalvas da leitura resiliente que são do contato: página lida pela alternativa, fonte
+ * provisória (só na linha do contato que tem; os demais do grupo não), página individual caída
+ * em coletas seguidas. O aviso de URL caída é da principal, a que entra em `falhas`.
+ */
 function ressalvasDoContato(c: ResultadoContato, g: ResultadoGrupo, falhas: FalhasPorUrl | undefined): string[] {
-  const caida = g.individuais ? avisoUrlCaida(falhas, c.fonteUrl) : undefined;
+  const caida = g.individuais ? avisoUrlCaida(falhas, c.alternativa?.urlPrincipal ?? c.fonteUrl) : undefined;
   return [
     ...(c.leituraDe ? [`Leitura de ${diaMes(c.leituraDe)} reaproveitada`] : []),
     ...(c.alternativa ? [`Lida pela URL alternativa (${c.alternativa.motivoPrincipal})`] : []),

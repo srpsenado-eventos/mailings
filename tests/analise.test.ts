@@ -1001,7 +1001,7 @@ describe("URL alternativa (spec 2026-10-23 §3.3)", () => {
     const g = r.grupos[0];
     expect(g.fonteInacessivel).toBeUndefined();
     expect(g.fonteUrl).toBe("https://orgao.gov.br");
-    expect(g.alternativa).toEqual({ url: ALT, motivoPrincipal: "HTTP 404" });
+    expect(g.alternativa).toEqual({ url: ALT, urlPrincipal: "https://orgao.gov.br", motivoPrincipal: "HTTP 404" });
     expect(g.contatos[0].semaforo).toBe("verde");
     expect(g.contatos[0].fonteUrl).toBe(ALT);
   });

@@ -177,7 +177,7 @@ async function lerHoje<F extends FonteLegivel>(
   const alternativaServiu = serviu({ fonte, ...alternativa, tentadas: [] });
   const tentadas = [tentadaPrincipal, tentativa(url, alternativa, alternativaServiu, motivoPadrao)];
   const motivoPrincipal = principal.erro ?? motivoPadrao;
-  if (alternativaServiu) return { fonte, conteudo: alternativa.conteudo, alternativa: { url, motivoPrincipal }, tentadas };
+  if (alternativaServiu) return { fonte, conteudo: alternativa.conteudo, alternativa: { url, urlPrincipal: fonte.url, motivoPrincipal }, tentadas };
   return { fonte, erro: `${motivoPrincipal} · URL alternativa: ${alternativa.erro ?? motivoPadrao}`, tentadas };
 }
 

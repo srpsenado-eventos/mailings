@@ -696,8 +696,10 @@ export interface EntradaIndividual {
   /**
    * Leitura da página individual: conteúdo OU motivo da falha. `alternativa`: a principal não
    * serviu e o conteúdo veio da URL alternativa cadastrada (spec 2026-10-23 §3.3).
+   * `urlDaMemoria`: o conteúdo foi reaproveitado da memória e estava guardado sob esta URL (pode
+   * ser a alternativa).
    */
-  lida: { conteudo?: ConteudoFonte; erro?: string; alternativa?: LeituraAlternativa };
+  lida: { conteudo?: ConteudoFonte; erro?: string; alternativa?: LeituraAlternativa; urlDaMemoria?: string };
   /** Fonte do cargo do grupo (`casamento: "cargo"`), quando o grupo tem; a individual cobre o cargo quando declara. */
   listaCargos?: ListaCargos;
   grupoCanonico?: string;
@@ -716,8 +718,9 @@ export interface VereditoIndividual {
 /** Veredito de um contato ligado a uma fonte individual: a tabela da spec 2026-10-15 §5.2. */
 export function compararContatoIndividual(e: EntradaIndividual): VereditoIndividual {
   const { contato, fonte, lida, listaCargos, grupoCanonico } = e;
-  // A URL de onde o conteúdo veio: a alternativa, quando foi ela que respondeu (spec 2026-10-23 §3.3).
-  const url = lida.alternativa?.url ?? fonte.url;
+  // A URL de onde o conteúdo veio: a da memória, quando ele foi reaproveitado (pode ser a
+  // alternativa), ou a alternativa, quando foi ela que respondeu hoje (spec 2026-10-23 §3.3).
+  const url = lida.urlDaMemoria ?? lida.alternativa?.url ?? fonte.url;
   const pelaAlternativa = lida.alternativa ? { alternativa: lida.alternativa } : {};
   const cobreCargo = fonte.campos.includes("cargo");
   const protocolo = comparacoesTratamento(contato, grupoCanonico);

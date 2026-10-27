@@ -822,7 +822,7 @@ describe("memória de leitura no painel (spec 2026-10-20 §7)", () => {
 
 describe("textos da leitura resiliente (spec 2026-10-23 §6)", () => {
   test("cabeçalhos", () => {
-    expect(textoAlternativa({ url: "https://x", motivoPrincipal: "HTTP 404" })).toBe("Lida pela URL alternativa; a principal não respondeu (HTTP 404)");
+    expect(textoAlternativa({ url: "https://x", urlPrincipal: "https://p", motivoPrincipal: "HTTP 404" })).toBe("Lida pela URL alternativa; a principal não respondeu (HTTP 404)");
     expect(textoUrlCaida({ desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" })).toBe("Fonte caída há 2 coletas, desde 19/10: conferir se o endereço mudou");
     expect(textoMudanca({ lidaEm: "2026-10-16T12:00:00.000Z", trocados: 7, total: 10 })).toBe("Composição mudou: 7 de 10 nomes não estavam na leitura de 16/10; confira");
     expect(TEXTO_FONTE_PROVISORIA).toBe("Fonte provisória: notícia");
@@ -836,14 +836,14 @@ describe("textos da leitura resiliente (spec 2026-10-23 §6)", () => {
     expect(avisoUrlCaida(falhas, undefined)).toBeUndefined();
   });
 
-  test("textoIndividuais com provisórias", () => {
-    expect(textoIndividuais({ lidas: 24, caidas: 1, provisorias: 2 })).toBe("24 páginas individuais lidas · 2 provisórias (notícia) · 1 inacessível");
-    expect(textoIndividuais({ lidas: 24, caidas: 0, provisorias: 1 })).toBe("24 páginas individuais lidas · 1 provisória (notícia)");
+  test("textoIndividuais não repete as provisórias (o cabeçalho já diz 'Fonte provisória: notícia')", () => {
+    expect(textoIndividuais({ lidas: 24, caidas: 1, provisorias: 2 })).toBe("24 páginas individuais lidas · 1 inacessível");
+    expect(textoIndividuais({ lidas: 24, caidas: 0, provisorias: 1 })).toBe("24 páginas individuais lidas");
   });
 
   test("textoSituacaoDosGrupos com mudança e URLs caídas", () => {
-    expect(textoSituacaoDosGrupos({ gruposSemFonte: 3, gruposComMudanca: 1, urlsCaidasRepetidas: 2 })).toBe("3 grupos sem fonte · 1 com mudança de composição · 2 URLs caídas há 2 coletas");
-    expect(textoSituacaoDosGrupos({ urlsCaidasRepetidas: 1 })).toBe("1 URL caída há 2 coletas");
+    expect(textoSituacaoDosGrupos({ gruposSemFonte: 3, gruposComMudanca: 1, urlsCaidasRepetidas: 2 })).toBe("3 grupos sem fonte · 1 com mudança de composição · 2 URLs caídas há 2 ou mais coletas");
+    expect(textoSituacaoDosGrupos({ urlsCaidasRepetidas: 1 })).toBe("1 URL caída há 2 ou mais coletas");
   });
 
   test("procedência do contato: alternativa, provisória e URL caída", () => {
@@ -852,22 +852,23 @@ describe("textos da leitura resiliente (spec 2026-10-23 §6)", () => {
     const g: ResultadoGrupo = { grupo: "Governadores", semFonte: false, contatos: [], novos: [], individuais: { lidas: 1, caidas: 0, provisorias: 1 } };
     const c = contato({
       fonteUrl: ALTERNATIVA,
-      alternativa: { url: ALTERNATIVA, motivoPrincipal: "HTTP 404" },
+      alternativa: { url: ALTERNATIVA, urlPrincipal: PRINCIPAL, motivoPrincipal: "HTTP 404" },
       provisoria: true,
       comparacoes: [{ ...confere("nome", "pagina", "Ana"), fonteUrl: ALTERNATIVA }],
     });
-    const falhas = { [ALTERNATIVA]: { desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" }, [PRINCIPAL]: { desde: "2026-10-19T12:00:00.000Z", coletas: 1, motivo: "HTTP 404" } };
+    // Quem entra em `falhas` é a principal: a alternativa respondeu.
+    const falhas = { [PRINCIPAL]: { desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" } };
     const linhas = procedenciaDoContato(c, g, falhas);
     expect(linhas[0]).toMatchObject({ rotulo: "Nome", alternativa: true, provisoria: true, caida: expect.stringMatching(/^Fonte caída há 2 coletas/) });
     // Sem `falhas` (retrato antigo) não há aviso; sem alternativa nem provisória, nada a mais.
     expect(procedenciaDoContato(c, g)[0].caida).toBeUndefined();
-    expect(procedenciaDoContato(contato({ fonteUrl: PRINCIPAL, comparacoes: [{ ...confere("nome", "pagina", "Ana"), fonteUrl: PRINCIPAL }] }), g, falhas)).toEqual([
+    expect(procedenciaDoContato(contato({ fonteUrl: PRINCIPAL, comparacoes: [{ ...confere("nome", "pagina", "Ana"), fonteUrl: PRINCIPAL }] }), g, { [PRINCIPAL]: { ...falhas[PRINCIPAL], coletas: 1 } })).toEqual([
       { rotulo: "Nome", texto: PRINCIPAL, url: PRINCIPAL, lida: true },
     ]);
   });
 
   test("procedência do grupo comum: alternativa e URL caída pela fonteUrl do grupo", () => {
-    const g: ResultadoGrupo = { ...grupoComFonte, alternativa: { url: "https://alt.gov.br", motivoPrincipal: "HTTP 404" } };
+    const g: ResultadoGrupo = { ...grupoComFonte, alternativa: { url: "https://alt.gov.br", urlPrincipal: "https://orgao.gov.br", motivoPrincipal: "HTTP 404" } };
     const falhas = { "https://orgao.gov.br": { desde: "2026-10-19T12:00:00.000Z", coletas: 3, motivo: "HTTP 404" } };
     expect(procedenciaDoContato(contato({}), g, falhas)[0]).toMatchObject({ rotulo: "Nome e cargo", alternativa: true, caida: "Fonte caída há 3 coletas, desde 19/10: conferir se o endereço mudou" });
   });

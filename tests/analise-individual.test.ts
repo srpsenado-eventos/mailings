@@ -288,7 +288,7 @@ describe("alternativa e falhas nas páginas individuais (spec 2026-10-23 §3.3, 
     const c = r.grupos[0].contatos.find((x) => x.contato.nome === govGo.nome)!;
     expect(c.semaforo).toBe("verde");
     expect(c.fonteUrl).toBe(ALT_GO);
-    expect(c.alternativa).toEqual({ url: ALT_GO, motivoPrincipal: "HTTP 404" });
+    expect(c.alternativa).toEqual({ url: ALT_GO, urlPrincipal: URL_GO, motivoPrincipal: "HTTP 404" });
     expect(c.comparacoes.find((x) => x.campo === "nome")?.fonteUrl).toBe(ALT_GO);
     expect(r.grupos[0].individuais).toEqual({ lidas: 2, caidas: 0 });
     expect(r.falhas).toEqual({ [URL_GO]: expect.objectContaining({ coletas: 1, motivo: "HTTP 404" }) });
@@ -299,7 +299,7 @@ describe("alternativa e falhas nas páginas individuais (spec 2026-10-23 §3.3, 
     const r = await analisar("c.xlsx", [ministra], { resolverFonte: resolver(resolvidaMin, RESOLVIDA_GOV), raspar: rasparDe({ [URL_GERAL]: "HTTP 404", [ALT_GERAL]: { ...paginaGeral, url: ALT_GERAL }, [URL_MIN]: paginaMin }), extrairComposicao: async () => [] });
     const g = r.grupos[0];
     expect(g.fonteUrl).toBe(URL_GERAL);
-    expect(g.alternativa).toEqual({ url: ALT_GERAL, motivoPrincipal: "HTTP 404" });
+    expect(g.alternativa).toEqual({ url: ALT_GERAL, urlPrincipal: URL_GERAL, motivoPrincipal: "HTTP 404" });
     expect(g.contatos[0].comparacoes.find((x) => x.campo === "cargo")?.fonteUrl).toBe(ALT_GERAL);
     expect(g.contatos[0].semaforo).toBe("verde");
   });

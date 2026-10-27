@@ -465,7 +465,9 @@ function removerMoldura($: RaizCheerio): void {
     // página do PGR (Plone) rendeu 112 caracteres e nenhuma pessoa em 23/10; a causa provável,
     // reproduzida em tests/fixtures/mpf-pgr.html, é o miolo dentro do bloco do menu lateral
     // ("menu-lateral"), que o menu principal e o rodapé deixam abaixo de 80% do texto.
-    if (alvo.find(CONTEUDO_PRINCIPAL).length > 0) return;
+    // O próprio conteúdo principal também nunca é moldura: na página real do PGR (27/10) o
+    // miolo é `<main class="row row-offcanvas ...">`, e "offcanvas" apagava o main inteiro.
+    if (alvo.is(CONTEUDO_PRINCIPAL) || alvo.find(CONTEUDO_PRINCIPAL).length > 0) return;
     alvo.remove();
   });
 }

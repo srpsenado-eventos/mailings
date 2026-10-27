@@ -744,3 +744,27 @@ test("PGR (Plone, nome em strong e cargo no parágrafo seguinte): uma pessoa com
   expect(c.pessoas).toContainEqual(expect.objectContaining({ nome: "Fulano Exemplo Pereira", cargo: expect.stringMatching(/Procurador-Geral da República/) }));
   expect(c.textoLimpo.length).toBeGreaterThan(300);
 });
+
+test("o próprio main nunca é moldura, mesmo com classe de off-canvas (página real do PGR, 27/10)", () => {
+  // Na página real o miolo fica em <main class="row row-offcanvas ...">: "offcanvas" é palavra de
+  // moldura, e o filtro apagava o próprio main. O extrator saía só com o aviso de cookies.
+  const html = `<html><body>
+    <header><nav>Início · Institucional · Transparência · Serviços · Imprensa · Contato · Mapa do site</nav></header>
+    <div class="outer-wrapper"><div class="container">
+      <main id="main-container" class="row row-offcanvas row-offcanvas-right">
+        <article id="content"><div id="content-core">
+          <p>O procurador-geral da República é o chefe do Ministério Público Federal e exerce as funções do Ministério Público junto ao Supremo Tribunal Federal e ao Superior Tribunal de Justiça, sendo também o procurador-geral Eleitoral.</p>
+          <p><strong>Fulano Exemplo Pereira </strong></p>
+          <p align="justify"><strong>Procurador-Geral da República, Presidente do Conselho Nacional do Ministério Público e Procurador-Geral Eleitoral.</strong></p>
+          <p>Ingressou no Ministério Público Federal em 1987, tendo sido aprovado em primeiro lugar no concurso público de provas e títulos.</p>
+        </div></article>
+      </main>
+    </div></div>
+    <footer>Rodapé do portal com endereço, telefones, redes sociais, política de privacidade e mapa do site completo.</footer>
+  </body></html>`;
+  const c = extrairConteudo(html, "https://www.mpf.mp.br/o-mpf/o-mpf/membros/procurador-geral-da-republica");
+  // O nome é o que importa: a linha de cargo junta três funções numa frase e o extrator não a toma
+  // como cargo; o cargo do PGR sai "fonte não informa", neutro.
+  expect(c.pessoas.map((p) => p.nome)).toContain("Fulano Exemplo Pereira");
+  expect(c.textoLimpo).toContain("Procurador-Geral da República");
+});

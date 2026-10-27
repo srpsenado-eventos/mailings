@@ -315,10 +315,20 @@ describe("nome mais curto em destaque (spec 2026-10-23 §4.1)", () => {
     const a = nomeNaPagina("Antônio Waldez Góes da Silva", pagina(["Waldez Góes"]));
     expect(a).toEqual({ nomeNaPagina: "Waldez Góes", exato: false });
   });
-  test("pessoa estruturada mais curta reconhece e traz o cargo", () => {
-    const a = nomeNaPagina("Antonio Vladimir Moura Lima", pagina([], [{ nome: "Vladimir Lima", cargo: "Ministro de Estado das Cidades" }]));
+  test("nome curto em destaque com a pessoa estruturada do mesmo nome reconhece e traz o cargo", () => {
+    const a = nomeNaPagina("Antonio Vladimir Moura Lima", pagina(["Vladimir Lima"], [{ nome: "Vladimir Lima", cargo: "Ministro de Estado das Cidades" }]));
     expect(a?.pessoa?.cargo).toBe("Ministro de Estado das Cidades");
+    expect(a?.nomeNaPagina).toBe("Vladimir Lima");
     expect(a?.exato).toBe(false);
+  });
+  test("pessoa curta só em `pessoas`, sem destaque, não reconhece (o assessor do gabinete não esconde a saída)", () => {
+    expect(nomeNaPagina("Antonio Vladimir Moura Lima", pagina([], [{ nome: "Vladimir Lima", cargo: "Assessor Especial" }]))).toBeUndefined();
+  });
+  test("dois destaques distintos que reconhecem: ambíguo, não reconhece", () => {
+    expect(nomeNaPagina("Antônio Waldez Góes da Silva", pagina(["Waldez Góes", "Antônio Silva"]))).toBeUndefined();
+  });
+  test("o mesmo destaque repetido (título e negrito) não é ambiguidade", () => {
+    expect(nomeNaPagina("Antônio Waldez Góes da Silva", pagina(["Waldez Góes", "WALDEZ GÓES"]))).toEqual({ nomeNaPagina: "Waldez Góes", exato: false });
   });
   test("uma parte só não reconhece", () => {
     expect(nomeNaPagina("Antônio Waldez Góes da Silva", pagina(["Waldez"]))).toBeUndefined();

@@ -609,19 +609,25 @@ function ehSubsequencia(partes: readonly string[], alvo: readonly string[]): boo
 /**
  * Nome mais curto em destaque (spec 2026-10-23 §4.1): a página individual publica o nome
  * político ("Waldez Góes") e o Contatos tem o nome civil ("Antônio Waldez Góes da Silva").
- * Reconhece quando uma pessoa estruturada, ou um destaque (negrito, título), tem duas ou mais
- * partes, menos partes que o nome do Contatos, e todas elas nele, na ordem. Nunca é exato:
- * sai "Nome diverge" com o nome da página.
+ * Reconhece quando um destaque (título h1–h3, negrito) tem duas ou mais partes, menos partes
+ * que o nome do Contatos, e todas elas nele, na ordem. Só destaque: a página "quem é quem"
+ * lista o gabinete no texto, e um assessor com duas partes do nome do ministro esconderia uma
+ * saída real. Dois destaques distintos (após `normalizarNome`) que reconhecem são ambíguos e
+ * não reconhecem. A pessoa estruturada com o mesmo nome do destaque vem em `pessoa` (traz o
+ * cargo). Nunca é exato: sai "Nome diverge" com o nome da página.
  */
 function nomeCurtoEmDestaque(alvo: readonly string[], c: ConteudoFonte): NomeAchado | undefined {
   const reconhece = (candidato: string): boolean => {
     const partes = partesDoNome(candidato);
     return partes.length >= 2 && partes.length < alvo.length && ehSubsequencia(partes, alvo);
   };
-  const pessoa = c.pessoas.find((p) => reconhece(p.nome));
-  if (pessoa) return { pessoa, nomeNaPagina: pessoa.nome, exato: false };
-  const destaque = c.destaques.find(reconhece);
-  return destaque ? { nomeNaPagina: destaque, exato: false } : undefined;
+  const candidatos = c.destaques.filter(reconhece);
+  const chaves = new Set(candidatos.map((d) => normalizarNome(d)));
+  if (chaves.size !== 1) return undefined;
+  const destaque = candidatos[0];
+  const chave = normalizarNome(destaque);
+  const pessoa = c.pessoas.find((p) => normalizarNome(p.nome) === chave);
+  return pessoa ? { pessoa, nomeNaPagina: destaque, exato: false } : { nomeNaPagina: destaque, exato: false };
 }
 
 /** Denominações de cargo publicadas por uma fonte `casamento: "cargo"`, únicas, na ordem da página. */

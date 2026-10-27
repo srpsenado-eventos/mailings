@@ -512,3 +512,32 @@ describe("Senadora com tratamento e endereçamento femininos (tabela real)", () 
     expect(comparacoesCoerencia(contato)).toEqual([]);
   });
 });
+
+describe("resolverRegra — Ministro de Estado pelo prefixo (2026-10-27)", () => {
+  const primeiraLinha = (cargo: string) => resolverRegra(cargo)?.cargoDestinatario.split("\n")[0];
+
+  test("cargo que começa com 'Ministro de Estado' usa a regra de Ministro de Estado, por longo que seja o nome da pasta", () => {
+    for (const cargo of [
+      "Ministro de Estado da Justiça e Segurança Pública",
+      "Ministro de Estado das Relações Exteriores",
+      "Ministro de Estado do Empreendedorismo, da Microempresa e da Empresa de Pequeno Porte",
+      "Ministro de Estado Chefe do Gabinete de Segurança Institucional da Presidência da República",
+    ]) expect(primeiraLinha(cargo)).toBe("Ministro de Estado");
+  });
+
+  test("'Ministra de Estado' também, sem acento e em maiúsculas", () => {
+    expect(primeiraLinha("Ministra de Estado da Casa Civil da Presidência da República")).toBe("Ministro de Estado");
+    expect(primeiraLinha("MINISTRA DE ESTADO DA GESTAO E DA INOVACAO EM SERVICOS PUBLICOS")).toBe("Ministro de Estado");
+  });
+
+  test("Advogado-Geral da União tem status de ministro e usa a mesma regra", () => {
+    expect(primeiraLinha("Advogado-Geral da União")).toBe("Ministro de Estado");
+    expect(primeiraLinha("Advogada-Geral da União")).toBe("Ministro de Estado");
+  });
+
+  test("substituto e interino não herdam a regra do titular pelo prefixo", () => {
+    expect(primeiraLinha("Ministro de Estado Substituto da Fazenda")).not.toBe("Ministro de Estado");
+    expect(primeiraLinha("Ministro de Estado Interino da Saúde")).not.toBe("Ministro de Estado");
+  });
+
+});

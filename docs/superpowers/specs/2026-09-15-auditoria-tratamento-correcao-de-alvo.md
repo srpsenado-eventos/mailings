@@ -166,3 +166,7 @@ Não entra nesta correção, e cada um vale tarefa própria:
 Tarefas 1 a 4 seguem válidas e commitadas; nada precisa ser desfeito. `expandirFormas`,
 `REGRAS_TRATAMENTO`, `resolverRegra` e o contrato `sem_regra` / `protocolo` / `valorEsperado` são
 todos reaproveitados. Muda o alvo de `comparacoesProtocolo` e entra a Camada A.
+
+## Adendo de 2026-10-27: Ministro de Estado pelo prefixo
+
+Decisão do Clovis em 27/10. A similaridade com "Ministro de Estado" ficava abaixo do limiar (0,6) quando o nome da pasta é longo ("Ministro de Estado da Justiça e Segurança Pública", 0,54), e 19 dos 38 ministros da base de 27/10 saíam "sem regra" em tratamento e endereçamento, com o cadastro igual ao dos demais. Regra: cargo cujo texto normalizado começa com "ministro de estado" (gênero neutralizado, então "Ministra de Estado" também) usa a regra de Ministro de Estado, sem passar pela similaridade; o Advogado-Geral da União (ou Advogada-Geral) também, pela nota da própria tabela ("incluir nesse padrão as autoridades com status de Ministro de Estado"). Cargo com qualificador (substituto, interino etc.) não herda a regra por aqui. Implementado em `resolverRegra` (`lib/tratamento.ts`, `ehMinistroDeEstado`). Com a base de 27/10, os 38 ministros passam a conferir.

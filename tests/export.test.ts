@@ -627,6 +627,24 @@ describe("leitura resiliente no export (spec 2026-10-23 §6)", () => {
     expect(pe.Observacao).toBe("Fonte provisória: notícia");
   });
 
+  test("site de campanha na linha do contato; true de retrato antigo sai como notícia (spec 2026-10-26)", () => {
+    const base = analise.grupos[0].contatos[0];
+    const eleitos: ResultadoAnalise = {
+      ...analise,
+      grupos: [{
+        ...analise.grupos[0],
+        individuais: { lidas: 2, caidas: 0, provisorias: 2 },
+        contatos: [
+          { ...base, contato: { ...base.contato, nome: "Eleito Do Espírito Santo" }, provisoria: "campanha" },
+          { ...base, contato: { ...base.contato, nome: "Governadora Antiga" }, provisoria: true },
+        ],
+      }],
+    };
+    const [es, antiga] = resultadoParaLinhas(eleitos);
+    expect(es.Observacao).toBe("Fonte provisória: site de campanha");
+    expect(antiga.Observacao).toBe("Fonte provisória: notícia");
+  });
+
   test("individual lida pela alternativa: o aviso de URL caída vem da principal, que é a que entra em falhas", () => {
     const PRINCIPAL = "https://pe.gov.br/governadora";
     const ALT = "https://pe.gov.br/governadora-alternativa";

@@ -514,6 +514,17 @@ async function analisarGrupo(
   };
 }
 
+/** Dia `AAAA-MM-DD` no fuso de Brasília ("en-CA" já formata assim). */
+const FORMATO_DIA_BRASILIA = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "America/Sao_Paulo" });
+
+/**
+ * Fonte individual ainda dentro da validade (spec 2026-10-26 §3.3): sem `validaAte`, ou com o dia
+ * da varredura em Brasília até ele, inclusive. Fonte vencida é tratada como inativa.
+ */
+function individualVigente(fonte: FonteIndividual, agora: Date): boolean {
+  return fonte.validaAte === undefined || FORMATO_DIA_BRASILIA.format(agora) <= fonte.validaAte;
+}
+
 function individualComConteudo(l: { conteudo?: ConteudoFonte; erro?: string }): boolean {
   return l.erro === undefined && l.conteudo !== undefined && paginaComConteudo(l.conteudo);
 }
@@ -538,7 +549,9 @@ async function analisarGrupoIndividual(
   agora: Date,
 ): Promise<AnaliseDoGrupo> {
   const grupoCanonico = resolvida.grupoCanonico;
-  const ligacoes = contatos.map((c) => ({ contato: c, fonte: fonteIndividualDe(c, resolvida.fontesIndividuais) }));
+  // Fonte vencida não liga contato nem é lida: o contato sai "cadastrar fonte", nunca saída (spec 2026-10-26 §3.3).
+  const vigentes = resolvida.fontesIndividuais.filter((f) => individualVigente(f, agora));
+  const ligacoes = contatos.map((c) => ({ contato: c, fonte: fonteIndividualDe(c, vigentes) }));
   // Cada URL é lida UMA vez, mesmo com dois contatos ligados a ela; individual sem contato não é lida.
   const aLer = [...new Map(ligacoes.flatMap((l) => (l.fonte ? [[l.fonte.url, l.fonte] as const] : []))).values()];
   const geral = resolvida.fontes[0];
@@ -573,13 +586,13 @@ async function analisarGrupoIndividual(
     const lida = porUrl.get(l.fonte.url)!;
     const v = compararContatoIndividual({ contato: l.contato, fonte: l.fonte, lida, listaCargos, grupoCanonico });
     // Página reaproveitada: o contato é comparado como se ela fosse de hoje; só a data fica
-    // registrada (§5.2). Fonte provisória (notícia): o contato leva a marca (spec 2026-10-23 §5).
+    // registrada (§5.2). Fonte provisória: o contato leva o tipo (spec 2026-10-23 §5; 2026-10-26 §3.1).
     return {
       ...v,
       resultado: {
         ...v.resultado,
         ...(lida.reaproveitada ? { leituraDe: lida.reaproveitada.lidaEm } : {}),
-        ...(l.fonte.provisoria ? { provisoria: true as const } : {}),
+        ...(l.fonte.provisoria ? { provisoria: l.fonte.provisoria } : {}),
       },
       lidaHoje: lida.reaproveitada === undefined,
     };

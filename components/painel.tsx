@@ -9,7 +9,7 @@ import { grupoDeputados, NOME_GRUPO_DEPUTADOS, temGrupoDeputados } from "@/lib/p
 import { avisoDaEleicao, ehFiltroEleicao, FILTROS_ELEICAO, secoesDeEleicao, secoesDeGoverno } from "@/lib/painel-eleicao";
 import { PublicarButton } from "@/components/publicar-button";
 import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-contato";
-import { avisoUrlCaida, cartoesDoResumo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoAlternativa, textoCabecalhoWeb, textoDataHora, TEXTO_FONTE_PROVISORIA, textoIndividuais, textoMudanca, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, type Filtro } from "@/lib/painel";
+import { avisoUrlCaida, cartoesDoResumo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoAlternativa, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoMudanca, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, textosProvisorias, type Filtro } from "@/lib/painel";
 import { autoridadesRepetidas, etiquetaDeRepeticao, textoRepetidas } from "@/lib/repetidos";
 import type { FalhasPorUrl, ResultadoGrupo, Retrato } from "@/lib/types";
 
@@ -42,7 +42,7 @@ function EstadoDaFonte({ g, falhas }: { g: ResultadoGrupo; falhas?: FalhasPorUrl
       {g.reaproveitada && <span className="text-atencao">{textoReaproveitada(g.reaproveitada)} · </span>}
       {g.viaPesquisaAmpla && <span className="text-atencao">≈ via IA — confira · </span>}
       {g.individuais && <span>{textoIndividuais(g.individuais)} · </span>}
-      {(g.individuais?.provisorias ?? 0) > 0 && <span className="text-atencao">{TEXTO_FONTE_PROVISORIA} · </span>}
+      {textosProvisorias(g).map((t) => <span key={t} className="text-atencao">{t} · </span>)}
       {g.erroFonte && <span className="text-atencao">uma fonte não respondeu: {g.erroFonte} · </span>}
       {g.fonteUrl && g.fonteUrl.startsWith("http") && (
         <a href={g.fonteUrl} target="_blank" rel="noreferrer" className="text-acao underline">abrir fonte</a>

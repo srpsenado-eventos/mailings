@@ -327,7 +327,9 @@ describe("resolverGrupoEFonte com fontes individuais", () => {
   test("rótulo 'Governadores Eleitos' casa o grupo exato e não herda as individuais de Governadores", () => {
     const r = resolverGrupoEFonte("Governadores Eleitos", CATALOGO);
     expect(r.grupoCanonico).toBe("Governadores Eleitos");
-    expect(r.fontesIndividuais).toEqual([]);
+    // Só os sites de campanha do próprio grupo (spec 2026-10-26), nenhuma página dos governadores atuais.
+    expect(r.fontesIndividuais.map((f) => f.url)).toEqual(["https://lorenzopazolini10.com.br/", "https://cadudelula.com.br/", "https://vicentinho45.com.br/"]);
+    expect(r.fontesIndividuais.every((f) => f.provisoria === "campanha")).toBe(true);
     expect(r.fontes).toEqual([]);
   });
 });

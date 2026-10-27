@@ -481,7 +481,7 @@ describe("Senadores de ponta a ponta (fixtures das duas páginas reais)", () => 
 
   const grupoMA = CATALOGO.find((g) => g.nome === "Senadores (Maranhão ao Piauí)")!;
   // Desde a planilha de 23/10 o catálogo não traz mais a segunda fonte nos Senadores (virou o
-  // grupo "Senadores fora de exercício"). O mecanismo de segunda fonte continua valendo e é
+  // grupo "Senadores titulares fora de exercício"). O mecanismo de segunda fonte continua valendo e é
   // testado aqui com a entrada como era no catálogo até 23/10.
   const SEGUNDA_FONTE: FonteCatalogo = {
     url: FORA,

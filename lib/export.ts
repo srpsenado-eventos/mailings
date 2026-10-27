@@ -2,7 +2,7 @@ import * as XLSX from "xlsx";
 import { coerenciasVisiveis, textoCoerencia, ROTULOS_CAMPO_TRATAMENTO } from "@/lib/tratamento";
 import { rotuloAchadoEndereco } from "@/lib/endereco";
 import { anotacaoReaproveitada, diaMes } from "@/lib/memoria-leitura";
-import { avisoUrlCaida, TEXTO_FONTE_PROVISORIA, textoAlternativa, textoMudanca } from "@/lib/painel";
+import { avisoUrlCaida, textoAlternativa, textoFonteProvisoria, textoMudanca, tipoProvisoria } from "@/lib/painel";
 import type {
   AuditoriaEndereco,
   ComparacaoCampo,
@@ -132,10 +132,11 @@ function ressalvasDoGrupo(g: ResultadoGrupo, falhas: FalhasPorUrl | undefined): 
  */
 function ressalvasDoContato(c: ResultadoContato, g: ResultadoGrupo, falhas: FalhasPorUrl | undefined): string[] {
   const caida = g.individuais ? avisoUrlCaida(falhas, c.alternativa?.urlPrincipal ?? c.fonteUrl) : undefined;
+  const provisoria = tipoProvisoria(c.provisoria);
   return [
     ...(c.leituraDe ? [`Leitura de ${diaMes(c.leituraDe)} reaproveitada`] : []),
     ...(c.alternativa ? [`Lida pela URL alternativa (${c.alternativa.motivoPrincipal})`] : []),
-    ...(c.provisoria ? [TEXTO_FONTE_PROVISORIA] : []),
+    ...(provisoria ? [textoFonteProvisoria(provisoria)] : []),
     ...(caida ? [caida] : []),
   ];
 }

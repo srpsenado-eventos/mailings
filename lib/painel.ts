@@ -24,6 +24,7 @@ import type {
   ResumoAnalise,
   Retrato,
   SituacaoEndereco,
+  TipoFonteProvisoria,
 } from "@/lib/types";
 
 /**
@@ -464,8 +465,34 @@ export function textoMudanca(m: MudancaDeComposicao): string {
   return `Composição mudou: ${m.trocados} de ${m.total} nomes não estavam na leitura de ${diaMes(m.lidaEm)}; confira`;
 }
 
-/** Cabeçalho do grupo e procedência do contato com fonte individual provisória (spec 2026-10-23 §5). */
-export const TEXTO_FONTE_PROVISORIA = "Fonte provisória: notícia";
+/** Cabeçalho do grupo, export e procedência do contato com fonte provisória por notícia (spec 2026-10-23 §5). */
+export const TEXTO_FONTE_PROVISORIA_NOTICIA = "Fonte provisória: notícia";
+/** Idem, site de campanha de governador eleito (spec 2026-10-26 §3.1). */
+export const TEXTO_FONTE_PROVISORIA_CAMPANHA = "Fonte provisória: site de campanha";
+
+/** Tipo da provisória do contato; `true` de retrato anterior a 26/10 é notícia. */
+export function tipoProvisoria(p: ResultadoContato["provisoria"]): TipoFonteProvisoria | undefined {
+  return p === true ? "noticia" : p;
+}
+
+/** "Fonte provisória: notícia" ou "Fonte provisória: site de campanha". */
+export function textoFonteProvisoria(t: TipoFonteProvisoria): string {
+  return t === "campanha" ? TEXTO_FONTE_PROVISORIA_CAMPANHA : TEXTO_FONTE_PROVISORIA_NOTICIA;
+}
+
+/** O mesmo texto, para o meio da linha de procedência ("…, fonte provisória: notícia"). */
+export function textoProvisoriaNaProcedencia(t: TipoFonteProvisoria): string {
+  const texto = textoFonteProvisoria(t);
+  return texto.charAt(0).toLowerCase() + texto.slice(1);
+}
+
+const ORDEM_PROVISORIAS: readonly TipoFonteProvisoria[] = ["noticia", "campanha"];
+
+/** Cabeçalho do grupo: um texto por tipo de fonte provisória presente entre os contatos (spec 2026-10-26 §3.1). */
+export function textosProvisorias(g: ResultadoGrupo): string[] {
+  const presentes = new Set(g.contatos.map((c) => tipoProvisoria(c.provisoria)));
+  return ORDEM_PROVISORIAS.filter((t) => presentes.has(t)).map(textoFonteProvisoria);
+}
 
 /** Aviso da URL quando ela está caída há `MIN_COLETAS_URL_CAIDA` ou mais coletas; senão `undefined`. Retrato antigo não traz `falhas`. */
 export function avisoUrlCaida(falhas: FalhasPorUrl | undefined, url: string | undefined): string | undefined {
@@ -485,7 +512,7 @@ export interface LinhaProcedencia {
   lida: boolean;
   leituraDe?: string;
   alternativa?: true;
-  provisoria?: true;
+  provisoria?: TipoFonteProvisoria;
   caida?: string;
 }
 
@@ -494,12 +521,12 @@ function ressalvasDaLinha(
   url: string | undefined,
   falhas: FalhasPorUrl | undefined,
   alternativa: boolean,
-  provisoria: boolean,
+  provisoria: TipoFonteProvisoria | undefined,
 ): Pick<LinhaProcedencia, "alternativa" | "provisoria" | "caida"> {
   const caida = avisoUrlCaida(falhas, url);
   return {
     ...(alternativa ? { alternativa: true as const } : {}),
-    ...(provisoria ? { provisoria: true as const } : {}),
+    ...(provisoria ? { provisoria } : {}),
     ...(caida ? { caida } : {}),
   };
 }
@@ -514,7 +541,7 @@ export function procedenciaDoContato(c: ResultadoContato, g: ResultadoGrupo, fal
   const deGrupo = g.reaproveitada ? { leituraDe: g.reaproveitada.lidaEm } : {};
   if (!g.individuais) {
     const p = procedenciaNomeCargo(g);
-    return p ? [{ rotulo: "Nome e cargo", ...p, lida: true, ...deGrupo, ...ressalvasDaLinha(g.fonteUrl, falhas, Boolean(g.alternativa), false) }] : [];
+    return p ? [{ rotulo: "Nome e cargo", ...p, lida: true, ...deGrupo, ...ressalvasDaLinha(g.fonteUrl, falhas, Boolean(g.alternativa), undefined) }] : [];
   }
   // Página individual reaproveitada: data no contato; geral reaproveitada: data no grupo, pela URL.
   const leituraDe = (url: string, daIndividual: boolean): { leituraDe?: string } => {
@@ -529,17 +556,17 @@ export function procedenciaDoContato(c: ResultadoContato, g: ResultadoGrupo, fal
   const pelaAlternativa = (url: string) => c.alternativa?.url === url;
   // O aviso de URL caída é da principal (é ela que entra em `falhas`), não da alternativa lida.
   const urlDoAviso = (url: string) => (pelaAlternativa(url) ? c.alternativa?.urlPrincipal : undefined) ?? (g.alternativa?.url === url ? g.alternativa.urlPrincipal : undefined) ?? url;
-  if (nome) linhas.push({ rotulo: "Nome", texto: nome, url: nome, lida: compNome?.situacao !== "nao_verificado", ...leituraDe(nome, true), ...ressalvasDaLinha(urlDoAviso(nome), falhas, pelaAlternativa(nome), Boolean(c.provisoria)) });
+  if (nome) linhas.push({ rotulo: "Nome", texto: nome, url: nome, lida: compNome?.situacao !== "nao_verificado", ...leituraDe(nome, true), ...ressalvasDaLinha(urlDoAviso(nome), falhas, pelaAlternativa(nome), tipoProvisoria(c.provisoria)) });
   const compCargo = comparacaoDeValor(c, "cargo");
   const cargo = compCargo?.fonteUrl;
-  if (cargo) linhas.push({ rotulo: "Cargo", texto: cargo, url: cargo, lida: compCargo?.situacao !== "nao_verificado", ...leituraDe(cargo, cargo === c.fonteUrl), ...ressalvasDaLinha(urlDoAviso(cargo), falhas, pelaAlternativa(cargo), false) });
+  if (cargo) linhas.push({ rotulo: "Cargo", texto: cargo, url: cargo, lida: compCargo?.situacao !== "nao_verificado", ...leituraDe(cargo, cargo === c.fonteUrl), ...ressalvasDaLinha(urlDoAviso(cargo), falhas, pelaAlternativa(cargo), undefined) });
   return linhas;
 }
 
 /**
  * "38 páginas individuais lidas · 4 reaproveitadas · 2 inacessíveis", no cabeçalho do grupo.
  * Partes zeradas somem; retrato antigo não traz `reaproveitadas`. As provisórias não entram: o
- * cabeçalho já diz `TEXTO_FONTE_PROVISORIA` ao lado.
+ * cabeçalho já diz `textosProvisorias` ao lado.
  */
 export function textoIndividuais(i: { lidas: number; caidas: number; reaproveitadas?: number; provisorias?: number }): string {
   const partes = [i.lidas === 1 ? "1 página individual lida" : `${i.lidas} páginas individuais lidas`];

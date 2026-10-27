@@ -1,13 +1,14 @@
 import { describe, expect, test } from "vitest";
 import { CATALOGO } from "@/data/catalogo";
 import { normalizarNome } from "@/lib/normalize";
+import { resolverGrupoEFonte } from "@/lib/catalogo";
 
 // Tabela dos titulares em `/fora-de-exercicio/-/f/por-tipo`: a primeira das duas (fixture de
 // 23/10, tests/scrape-tabela.test.ts).
 const INDICE_TITULARES = 0;
 
 describe("catálogo real (data/catalogo.ts)", () => {
-  test("tem os 35 grupos (33 migrados do banco + Governadores Eleitos + Senadores fora de exercício)", () => {
+  test("tem os 35 grupos (33 migrados do banco + Governadores Eleitos + Senadores titulares fora de exercício)", () => {
     expect(CATALOGO).toHaveLength(35);
   });
 
@@ -17,9 +18,15 @@ describe("catálogo real (data/catalogo.ts)", () => {
   });
 
   describe("planilha de 23/10 (spec 2026-10-23 §5)", () => {
-    test("Senadores fora de exercício: grupo novo, tabela por tipo, propõe inclusão", () => {
-      const g = CATALOGO.find((x) => x.nome === "Senadores fora de exercício")!;
-      expect(g.fontes).toEqual([{ url: "https://www25.senado.leg.br/web/senadores/fora-de-exercicio/-/f/por-tipo", ativo: true, propoeInclusao: true, tabela: { indice: INDICE_TITULARES, colunas: { nome: 0, uf: 2, motivo: 3 } } }]);
+    test("Senadores titulares fora de exercício: grupo novo, tabela por tipo, propõe inclusão", () => {
+      const g = CATALOGO.find((x) => x.nome === "Senadores titulares fora de exercício")!;
+      expect(g.fontes).toEqual([{ url: "https://www25.senado.leg.br/web/senadores/fora-de-exercicio/-/f/por-tipo", ativo: true, propoeInclusao: true, tabela: { indice: INDICE_TITULARES, colunas: { nome: 0, uf: 2, motivo: 3 }, secoes: ["Assunção de cargo", "Licença com convocação de suplente"] } }]);
+    });
+
+    test("o rótulo da base de 27/10 casa o grupo dos senadores titulares fora de exercício, e não os de Senadores", () => {
+      const r = resolverGrupoEFonte("Senadores titulares fora de exercício - Posse 2027");
+      expect(r.grupoCanonico).toBe("Senadores titulares fora de exercício");
+      expect(r.fontes.map((f) => f.url)).toEqual(["https://www25.senado.leg.br/web/senadores/fora-de-exercicio/-/f/por-tipo"]);
     });
 
     test("TST: /ministros primária e /orgaos por marcador propondo convocados", () => {
@@ -52,9 +59,9 @@ describe("catálogo real (data/catalogo.ts)", () => {
       const ind = CATALOGO.flatMap((g) => g.fontesIndividuais ?? []);
       const principalDe = (nome: string) => ind.find((f) => "nome" in f.chave && f.chave.nome === nome);
       expect(principalDe("Miriam Belchior")?.url).toBe("https://www.gov.br/casacivil/pt-br/composicao/gabinete-do-ministro/quem-e-quem-1");
-      expect(principalDe("Margareth Menezes")?.url).toBe("https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra/margareth-menezes-1");
-      expect(principalDe("José Mucio")?.url).toBe("https://www.gov.br/defesa/pt-br/composicao/gabinete-do-ministro/jose-mucio-monteiro-filho");
-      expect(principalDe("Rachel Barros")?.url).toBe("https://www.gov.br/igualdaderacial/pt-br/composicao/gabinete-da-ministra/rachel-barros-de-oliveira");
+      expect(principalDe("Margareth Menezes da Purificação")?.url).toBe("https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra/margareth-menezes-1");
+      expect(principalDe("José Mucio Monteiro Filho")?.url).toBe("https://www.gov.br/defesa/pt-br/composicao/gabinete-do-ministro/jose-mucio-monteiro-filho");
+      expect(principalDe("Rachel Barros de Oliveira")?.url).toBe("https://www.gov.br/igualdaderacial/pt-br/composicao/gabinete-da-ministra/rachel-barros-de-oliveira");
       const ac = ind.find((f) => "uf" in f.chave && f.chave.uf === "AC");
       expect(ac).toMatchObject({ url: "https://agencia.ac.gov.br/governadora/", urlAlternativa: "https://estado.ac.gov.br/orgao-entidades/" });
     });
@@ -84,8 +91,28 @@ describe("catálogo real (data/catalogo.ts)", () => {
     const DOMINIO_OFICIAL = /^https:\/\/[a-z0-9.-]+\.(gov|jus|leg|mp|def)\.br(\/|$)/i;
     const comIndividuais = CATALOGO.filter((g) => (g.fontesIndividuais ?? []).length > 0);
 
-    test("só Governadores e Ministros de Estado têm fontes individuais", () => {
-      expect(comIndividuais.map((g) => g.nome).sort()).toEqual(["Governadores", "Ministros de Estado"]);
+    test("só Governadores, Governadores Eleitos e Ministros de Estado têm fontes individuais", () => {
+      expect(comIndividuais.map((g) => g.nome).sort()).toEqual(["Governadores", "Governadores Eleitos", "Ministros de Estado"]);
+    });
+
+    test("Governadores Eleitos: 3 sites de campanha (ES, RN, TO), provisórios, só nome, válidos até 5/1/2027 (spec 2026-10-26)", () => {
+      const g = CATALOGO.find((x) => x.nome === "Governadores Eleitos")!;
+      expect(g.fontes).toEqual([]);
+      expect(g.fontesIndividuais).toEqual([
+        { url: "https://lorenzopazolini10.com.br/", ativo: true, chave: { uf: "ES" }, campos: ["nome"], provisoria: "campanha", validaAte: "2027-01-05" },
+        { url: "https://cadudelula.com.br/", ativo: true, chave: { uf: "RN" }, campos: ["nome"], provisoria: "campanha", validaAte: "2027-01-05" },
+        { url: "https://vicentinho45.com.br/", ativo: true, chave: { uf: "TO" }, campos: ["nome"], provisoria: "campanha", validaAte: "2027-01-05" },
+      ]);
+    });
+
+    test("site de campanha (domínio não oficial) só nas três individuais de Governadores Eleitos", () => {
+      const todas = CATALOGO.flatMap((g) => [...g.fontes.map((f) => ({ grupo: g.nome, url: f.url, provisoria: undefined as unknown })), ...(g.fontesIndividuais ?? []).map((f) => ({ grupo: g.nome, url: f.url, provisoria: f.provisoria as unknown }))]);
+      const campanha = todas.filter((f) => f.provisoria === "campanha");
+      expect(campanha.map((f) => f.grupo)).toEqual(["Governadores Eleitos", "Governadores Eleitos", "Governadores Eleitos"]);
+      const individuais = CATALOGO.flatMap((g) => g.fontesIndividuais ?? []);
+      const naoOficiais = individuais.filter((f) => !DOMINIO_OFICIAL.test(f.url));
+      expect(naoOficiais.map((f) => f.url)).toEqual(campanha.map((f) => f.url));
+      expect(individuais.filter((f) => f.validaAte).map((f) => f.url)).toEqual(campanha.map((f) => f.url));
     });
 
     test("Governadores: 24 individuais ativas, por UF, nome e cargo, sem fonte de grupo", () => {
@@ -98,9 +125,11 @@ describe("catálogo real (data/catalogo.ts)", () => {
       expect(ufs).toEqual(["AC","AL","AM","AP","BA","CE","DF","ES","GO","MA","MS","PA","PB","PE","PI","PR","RJ","RN","RO","RR","RS","SE","SP","TO"]);
     });
 
-    test("Governadores: provisórias (notícia) só em PE e DF, com nome e cargo", () => {
+    test("Governadores: provisórias (notícia) só em PE e DF, com nome e cargo, sem validade", () => {
       const ind = CATALOGO.find((x) => x.nome === "Governadores")!.fontesIndividuais ?? [];
-      const provisorias = ind.filter((f) => f.provisoria === true);
+      expect(ind.filter((f) => f.provisoria && f.provisoria !== "noticia")).toEqual([]);
+      expect(ind.filter((f) => f.validaAte)).toEqual([]);
+      const provisorias = ind.filter((f) => f.provisoria === "noticia");
       expect(provisorias.map((f) => ("uf" in f.chave ? f.chave.uf : "")).sort()).toEqual(["DF", "PE"]);
       expect(provisorias.every((f) => f.campos.join(",") === "nome,cargo")).toBe(true);
     });
@@ -119,10 +148,10 @@ describe("catálogo real (data/catalogo.ts)", () => {
       ]);
     });
 
-    test("toda individual é de domínio oficial, tem campos com 'nome' e chave única no grupo", () => {
+    test("toda individual é de domínio oficial (salvo o site de campanha), tem campos com 'nome' e chave única no grupo", () => {
       for (const g of comIndividuais) {
         const ind = g.fontesIndividuais ?? [];
-        expect(ind.filter((f) => !DOMINIO_OFICIAL.test(f.url)).map((f) => f.url)).toEqual([]);
+        expect(ind.filter((f) => f.provisoria !== "campanha" && !DOMINIO_OFICIAL.test(f.url)).map((f) => f.url)).toEqual([]);
         expect(ind.filter((f) => f.campos.length === 0 || !f.campos.includes("nome")).map((f) => f.url)).toEqual([]);
         const chaves = ind.map((f) => ("uf" in f.chave ? `uf:${f.chave.uf}` : `nome:${normalizarNome(f.chave.nome)}`));
         expect(new Set(chaves).size).toBe(chaves.length);

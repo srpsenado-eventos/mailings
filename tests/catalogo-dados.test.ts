@@ -1,13 +1,14 @@
 import { describe, expect, test } from "vitest";
 import { CATALOGO } from "@/data/catalogo";
 import { normalizarNome } from "@/lib/normalize";
+import { resolverGrupoEFonte } from "@/lib/catalogo";
 
 // Tabela dos titulares em `/fora-de-exercicio/-/f/por-tipo`: a primeira das duas (fixture de
 // 23/10, tests/scrape-tabela.test.ts).
 const INDICE_TITULARES = 0;
 
 describe("catálogo real (data/catalogo.ts)", () => {
-  test("tem os 35 grupos (33 migrados do banco + Governadores Eleitos + Senadores fora de exercício)", () => {
+  test("tem os 35 grupos (33 migrados do banco + Governadores Eleitos + Senadores titulares fora de exercício)", () => {
     expect(CATALOGO).toHaveLength(35);
   });
 
@@ -17,9 +18,15 @@ describe("catálogo real (data/catalogo.ts)", () => {
   });
 
   describe("planilha de 23/10 (spec 2026-10-23 §5)", () => {
-    test("Senadores fora de exercício: grupo novo, tabela por tipo, propõe inclusão", () => {
-      const g = CATALOGO.find((x) => x.nome === "Senadores fora de exercício")!;
+    test("Senadores titulares fora de exercício: grupo novo, tabela por tipo, propõe inclusão", () => {
+      const g = CATALOGO.find((x) => x.nome === "Senadores titulares fora de exercício")!;
       expect(g.fontes).toEqual([{ url: "https://www25.senado.leg.br/web/senadores/fora-de-exercicio/-/f/por-tipo", ativo: true, propoeInclusao: true, tabela: { indice: INDICE_TITULARES, colunas: { nome: 0, uf: 2, motivo: 3 } } }]);
+    });
+
+    test("o rótulo da base de 27/10 casa o grupo dos senadores titulares fora de exercício, e não os de Senadores", () => {
+      const r = resolverGrupoEFonte("Senadores titulares fora de exercício - Posse 2027");
+      expect(r.grupoCanonico).toBe("Senadores titulares fora de exercício");
+      expect(r.fontes.map((f) => f.url)).toEqual(["https://www25.senado.leg.br/web/senadores/fora-de-exercicio/-/f/por-tipo"]);
     });
 
     test("TST: /ministros primária e /orgaos por marcador propondo convocados", () => {
@@ -52,9 +59,9 @@ describe("catálogo real (data/catalogo.ts)", () => {
       const ind = CATALOGO.flatMap((g) => g.fontesIndividuais ?? []);
       const principalDe = (nome: string) => ind.find((f) => "nome" in f.chave && f.chave.nome === nome);
       expect(principalDe("Miriam Belchior")?.url).toBe("https://www.gov.br/casacivil/pt-br/composicao/gabinete-do-ministro/quem-e-quem-1");
-      expect(principalDe("Margareth Menezes")?.url).toBe("https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra/margareth-menezes-1");
-      expect(principalDe("José Mucio")?.url).toBe("https://www.gov.br/defesa/pt-br/composicao/gabinete-do-ministro/jose-mucio-monteiro-filho");
-      expect(principalDe("Rachel Barros")?.url).toBe("https://www.gov.br/igualdaderacial/pt-br/composicao/gabinete-da-ministra/rachel-barros-de-oliveira");
+      expect(principalDe("Margareth Menezes da Purificação")?.url).toBe("https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra/margareth-menezes-1");
+      expect(principalDe("José Mucio Monteiro Filho")?.url).toBe("https://www.gov.br/defesa/pt-br/composicao/gabinete-do-ministro/jose-mucio-monteiro-filho");
+      expect(principalDe("Rachel Barros de Oliveira")?.url).toBe("https://www.gov.br/igualdaderacial/pt-br/composicao/gabinete-da-ministra/rachel-barros-de-oliveira");
       const ac = ind.find((f) => "uf" in f.chave && f.chave.uf === "AC");
       expect(ac).toMatchObject({ url: "https://agencia.ac.gov.br/governadora/", urlAlternativa: "https://estado.ac.gov.br/orgao-entidades/" });
     });

@@ -284,41 +284,41 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       // Ministra de Estado da Casa Civil da Presidência da República
       { url: "https://www.gov.br/casacivil/pt-br/composicao/gabinete-do-ministro/quem-e-quem-1", ativo: true, urlAlternativa: "https://www.gov.br/casacivil/pt-br/composicao/ministra", chave: { nome: "Miriam Belchior" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Secretaria-Geral da Presidência da República
-      { url: "https://www.gov.br/secretariageral/pt-br/composicao/ministro", ativo: true, chave: { nome: "Guilherme Boulos" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/secretariageral/pt-br/composicao/ministro", ativo: true, chave: { nome: "Guilherme Castro Boulos" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Secretaria de Relações Institucionais da Presidência da República
-      { url: "https://www.gov.br/sri/pt-br/composicao/ministra-1", ativo: true, chave: { nome: "José Guimarães" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/sri/pt-br/composicao/ministra-1", ativo: true, chave: { nome: "José Nobre Guimarães" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Secretaria de Comunicação Social da Presidência da República
-      { url: "https://www.gov.br/secom/pt-br/acesso-a-informacao/institucional/quem-e-quem", ativo: true, urlAlternativa: "https://www.gov.br/secom/pt-br/composicao/ministro-e-assistencia-direta/sidonio-cardoso-palmeira", chave: { nome: "Sidônio Palmeira" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/secom/pt-br/acesso-a-informacao/institucional/quem-e-quem", ativo: true, urlAlternativa: "https://www.gov.br/secom/pt-br/composicao/ministro-e-assistencia-direta/sidonio-cardoso-palmeira", chave: { nome: "Sidônio Cardoso Palmeira" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado Chefe do Gabinete de Segurança Institucional da Presidência da República
       { url: "https://www.gov.br/gsi/pt-br/composicao/gabinete/ministro", ativo: true, chave: { nome: "Marcos Antonio Amaro Dos Santos" }, campos: ["nome"], navegador: "janela" },
       // Advogado-Geral da União
       { url: "https://www.gov.br/agu/pt-br/acesso-a-informacao/institucional/quem", ativo: true, chave: { nome: "Jorge Messias" }, campos: ["nome", "cargo"], navegador: "janela" },
       // Ministro da Controladoria-Geral da União
-      { url: "https://www.gov.br/cgu/pt-br/composicao/ministro", ativo: true, chave: { nome: "Vinicius de Carvalho" }, campos: ["nome", "cargo"], navegador: "janela" },
+      { url: "https://www.gov.br/cgu/pt-br/composicao/ministro", ativo: true, chave: { nome: "Vinicius Marques de Carvalho" }, campos: ["nome", "cargo"], navegador: "janela" },
       // Ministro de Estado da Agricultura e Pecuária
-      { url: "https://www.gov.br/agricultura/pt-br/composicao/ministro-e-staff/andre-carlos-alves-de-paula-filho", ativo: true, chave: { nome: "André de Paula" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/agricultura/pt-br/composicao/ministro-e-staff/andre-carlos-alves-de-paula-filho", ativo: true, chave: { nome: "André Carlos Alves de Paula Filho" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado das Cidades
-      { url: "https://www.gov.br/cidades/pt-br/composicao/ministro-das-cidades", ativo: true, chave: { nome: "Antonio Vladimir Moura Lima" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/cidades/pt-br/composicao/ministro-das-cidades", ativo: true, chave: { nome: "Vladimir Lima" }, campos: ["nome"], navegador: "janela" },
       // Ministra de Estado da Ciência, Tecnologia e Inovação
       { url: "https://www.gov.br/mcti/pt-br/acesso-a-informacao/institucional/quem-e-quem", ativo: true, chave: { nome: "Luciana Santos" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado das Comunicações
       { url: "https://www.gov.br/mcom/pt-br/composicao/ministro", ativo: true, chave: { nome: "Frederico de Siqueira Filho" }, campos: ["nome"], navegador: "janela" },
       // Ministra de Estado da Cultura
-      { url: "https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra/margareth-menezes-1", ativo: true, urlAlternativa: "https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra", chave: { nome: "Margareth Menezes" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra/margareth-menezes-1", ativo: true, urlAlternativa: "https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra", chave: { nome: "Margareth Menezes da Purificação" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Defesa
-      { url: "https://www.gov.br/defesa/pt-br/composicao/gabinete-do-ministro/jose-mucio-monteiro-filho", ativo: true, urlAlternativa: "https://www.gov.br/defesa/pt-br/composicao/quem-e-quem", chave: { nome: "José Mucio" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/defesa/pt-br/composicao/gabinete-do-ministro/jose-mucio-monteiro-filho", ativo: true, urlAlternativa: "https://www.gov.br/defesa/pt-br/composicao/quem-e-quem", chave: { nome: "José Mucio Monteiro Filho" }, campos: ["nome"], navegador: "janela" },
       // Ministra de Estado do Desenvolvimento Agrário e Agricultura Familiar
-      { url: "https://www.gov.br/mda/pt-br/acesso-a-informacao/institucional/quem-e-quem/gabinete-da-ministra", ativo: true, chave: { nome: "Fernanda Machiaveli" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/mda/pt-br/acesso-a-informacao/institucional/quem-e-quem/gabinete-da-ministra", ativo: true, chave: { nome: "Fernanda Machiaveli Morão de Oliveira" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado do Desenvolvimento e Assistência Social, Família e Combate à Fome
       { url: "https://www.gov.br/mds/pt-br/composicao/ministro", ativo: true, chave: { nome: "Wellington Dias" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado do Desenvolvimento, Indústria, Comércio e Serviços
-      { url: "https://www.gov.br/mdic/pt-br/composicao/ministro/marcio-fernando-elias-rosa", ativo: true, chave: { nome: "Márcio Elias Rosa" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/mdic/pt-br/composicao/ministro/marcio-fernando-elias-rosa", ativo: true, chave: { nome: "Márcio Fernando Elias Rosa" }, campos: ["nome"], navegador: "janela" },
       // Ministra de Estado dos Direitos Humanos e da Cidadania
       { url: "https://www.gov.br/mdh/pt-br/composicao/quem-e-quem", ativo: true, chave: { nome: "JANINE MELLO DOS SANTOS" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Educação
-      { url: "https://www.gov.br/mec/pt-br/composicao/gabinete-do-ministro/leonardo-osvaldo-barchini-rosa", ativo: true, chave: { nome: "Leonardo Barchini" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/mec/pt-br/composicao/gabinete-do-ministro/leonardo-osvaldo-barchini-rosa", ativo: true, chave: { nome: "Leonardo Osvaldo Barchini Rosa" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado do Empreendedorismo, da Microempresa e da Empresa de Pequeno Porte
-      { url: "https://www.gov.br/memp/pt-br/composicao/ministro/marcio-franca?activeAccordion=accordion-panel-1", ativo: true, chave: { nome: "Paulo Henrique Pereira" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/memp/pt-br/composicao/ministro/marcio-franca?activeAccordion=accordion-panel-1", ativo: true, chave: { nome: "Paulo Henrique Rodrigues Pereira" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado do Esporte
       { url: "https://www.gov.br/esporte/pt-br/composicao/Gabinete-do-Ministro/paulo-henrique-perna-cordeiro", ativo: true, chave: { nome: "Paulo Henrique Perna Cordeiro" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Fazenda
@@ -326,9 +326,9 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       // Ministra de Estado da Gestão e da Inovação em Serviços Públicos
       { url: "https://www.gov.br/gestao/pt-br/composicao/quem-e-quem/ministra-e-orgaos-de-assistencia-direta", ativo: true, chave: { nome: "Esther Dweck" }, campos: ["nome"], navegador: "janela" },
       // Ministra de Estado da Igualdade Racial
-      { url: "https://www.gov.br/igualdaderacial/pt-br/composicao/gabinete-da-ministra/rachel-barros-de-oliveira", ativo: true, urlAlternativa: "https://www.gov.br/igualdaderacial/pt-br/composicao/quem-e-quem", chave: { nome: "Rachel Barros" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/igualdaderacial/pt-br/composicao/gabinete-da-ministra/rachel-barros-de-oliveira", ativo: true, urlAlternativa: "https://www.gov.br/igualdaderacial/pt-br/composicao/quem-e-quem", chave: { nome: "Rachel Barros de Oliveira" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Integração e do Desenvolvimento Regional
-      { url: "https://www.gov.br/mdr/pt-br/composicao/ministro-e-secretarios", ativo: true, chave: { nome: "Antônio Waldez Góes da Silva" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/mdr/pt-br/composicao/ministro-e-secretarios", ativo: true, chave: { nome: "Waldez Góes" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Justiça e Segurança Pública
       { url: "https://www.gov.br/mj/pt-br/acesso-a-informacao/institucional/sumario/quemequem/gabinete-do-ministro-1", ativo: true, chave: { nome: "Wellington César Lima e Silva" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado do Meio Ambiente e Mudança do Clima
@@ -347,7 +347,7 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       // Ministro de Estado dos Povos Indígenas
       { url: "https://www.gov.br/povosindigenas/pt-br/composicao/ministro-e-orgaos-de-assistencia-direta/ministro", ativo: true, chave: { nome: "Luiz Henrique Eloy Amado" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Previdência Social
-      { url: "https://www.gov.br/previdencia/pt-br/composicao/ministro-e-secretarios", ativo: true, chave: { nome: "Wolney Queiroz" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/previdencia/pt-br/composicao/ministro-e-secretarios", ativo: true, chave: { nome: "Wolney Queiroz Maciel" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado das Relações Exteriores
       { url: "https://www.gov.br/mre/pt-br/composicao/gabinete-do-ministro-das-relacoes-exteriores/embaixador-mauro-luiz-iecker-vieira", ativo: true, chave: { nome: "Embaixador Mauro Vieira" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Saúde
@@ -595,7 +595,10 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     // fixture em tests/scrape-tabela.test.ts). Suplentes não entram. Propõe inclusão:
     // afastado ainda não movido pelo GT aparece aqui como inclusão e em "Senadores" como
     // possível saída. Sem responsáveis: a planilha de 23/10 não os traz.
-    nome: "Senadores fora de exercício",
+    // 2026-10-27: a base de contatos de 27/10 trouxe o rótulo "Senadores titulares fora de
+    // exercício - Posse 2027"; o nome cadastrado segue o começo do rótulo, que casa por
+    // `casaSegmento` (nome cadastrado no começo do rótulo, seguido de espaço).
+    nome: "Senadores titulares fora de exercício",
     fontes: [
       {
         url: "https://www25.senado.leg.br/web/senadores/fora-de-exercicio/-/f/por-tipo",

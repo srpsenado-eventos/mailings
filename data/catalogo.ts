@@ -604,7 +604,10 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
         url: "https://www25.senado.leg.br/web/senadores/fora-de-exercicio/-/f/por-tipo",
         ativo: true,
         propoeInclusao: true,
-        tabela: { indice: 0, colunas: { nome: 0, uf: 2, motivo: 3 } },
+        // A tabela 0 traz três seções (medido em 27/10): "Assunção de cargo…", "Licença com
+        // convocação de suplente…" e "Suplentes que exerceram o cargo". Suplentes não entram
+        // (spec 2026-10-23 §5): só as duas primeiras, como na antiga segunda fonte dos Senadores.
+        tabela: { indice: 0, colunas: { nome: 0, uf: 2, motivo: 3 }, secoes: ["Assunção de cargo", "Licença com convocação de suplente"] },
       },
     ],
   },

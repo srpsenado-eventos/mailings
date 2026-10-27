@@ -20,7 +20,7 @@ describe("catálogo real (data/catalogo.ts)", () => {
   describe("planilha de 23/10 (spec 2026-10-23 §5)", () => {
     test("Senadores titulares fora de exercício: grupo novo, tabela por tipo, propõe inclusão", () => {
       const g = CATALOGO.find((x) => x.nome === "Senadores titulares fora de exercício")!;
-      expect(g.fontes).toEqual([{ url: "https://www25.senado.leg.br/web/senadores/fora-de-exercicio/-/f/por-tipo", ativo: true, propoeInclusao: true, tabela: { indice: INDICE_TITULARES, colunas: { nome: 0, uf: 2, motivo: 3 } } }]);
+      expect(g.fontes).toEqual([{ url: "https://www25.senado.leg.br/web/senadores/fora-de-exercicio/-/f/por-tipo", ativo: true, propoeInclusao: true, tabela: { indice: INDICE_TITULARES, colunas: { nome: 0, uf: 2, motivo: 3 }, secoes: ["Assunção de cargo", "Licença com convocação de suplente"] } }]);
     });
 
     test("o rótulo da base de 27/10 casa o grupo dos senadores titulares fora de exercício, e não os de Senadores", () => {

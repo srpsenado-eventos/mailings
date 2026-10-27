@@ -168,3 +168,7 @@ O plano `docs/superpowers/plans/2026-10-26-leitura-resiliente-e-revisao-do-catal
 17. (Decisão E) O resumo `urlsCaidasRepetidas` conta só as URLs tentadas nesta varredura com 2 ou mais coletas; o mapa `falhas` continua guardando as não visitadas (ajuste 4).
 
 Decisão da revisão de 26/10: página de hoje com "pessoas" que não casam nenhum contato, mesmo com leitura guardada válida, agora cai em **leitura suspeita** (grupo inacessível, que segura a publicação) em vez de ser reaproveitada como no passo 4 do §5.1 da spec de 2026-10-20.
+
+## 12. Mudança de 27/10
+
+Presidente da Câmara: o Clovis revogou a decisão 5 do §2. A fonte passa a ser a página do deputado que preside a Câmara (`https://www.camara.leg.br/deputados/160674`), sem a Mesa Diretora, nem como alternativa. Fetch de 27/10: 200, nome parlamentar em destaque; a página não diz "Presidente", e o cargo sai "fonte não informa". Na troca da presidência, a URL precisa ser trocada à mão.

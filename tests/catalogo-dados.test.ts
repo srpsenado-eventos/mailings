@@ -214,3 +214,10 @@ describe("catálogo real (data/catalogo.ts)", () => {
     });
   });
 });
+
+describe("Presidente da Câmara (2026-10-27)", () => {
+  test("a fonte é a página do deputado que preside a Câmara, não a Mesa Diretora", () => {
+    const g = CATALOGO.find((x) => x.nome === "Presidente da Câmara dos Deputados")!;
+    expect(g.fontes).toEqual([{ url: "https://www.camara.leg.br/deputados/160674", ativo: true }]);
+  });
+});

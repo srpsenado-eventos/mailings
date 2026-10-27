@@ -717,6 +717,14 @@ describe("extração por marcador (spec 2026-10-23 §5.2)", () => {
   test("nome de uma palavra antes do marcador não vira pessoa", () => {
     expect(extrairPorMarcador("Fulano (convocado)", ["(convocado)"])).toEqual([]);
   });
+  test("inicial abreviada no meio do nome ('João B. Silva') fica no nome", () => {
+    expect(extrairPorMarcador("Desembargador João B. Silva (convocado)", ["(convocado)"])).toEqual([
+      { nome: "João B. Silva", cargo: "Desembargador convocado", origem: "pagina" },
+    ]);
+  });
+  test("inicial não conta como parte significativa: 'B. Silva' sozinho não vira pessoa", () => {
+    expect(extrairPorMarcador("Desembargador B. Silva (convocado)", ["(convocado)"])).toEqual([]);
+  });
   test("fixture do TST /orgaos: só os 6 convocados, com cargo", () => {
     const c = extrairConteudo(readFileSync(resolve(__dirname, "fixtures/tst-orgaos.html"), "utf-8"), "https://www.tst.jus.br/orgaos", { marcador: ["(convocado)", "(convocada)"] });
     expect(c.pessoas).toHaveLength(6);

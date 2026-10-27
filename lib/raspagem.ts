@@ -40,6 +40,15 @@ function montarOpcoes(fonte: FonteLegivel): OpcoesRaspagem {
   };
 }
 
+/**
+ * A janela só aplica a extração por tabela: o marcador e o PDF ficariam de fora, e a página
+ * inteira entraria no lugar da lista filtrada (TST `/orgaos`: ~145 pessoas viraria dezenas de
+ * inclusões falsas). Fonte assim não vai à janela no 403/401; vale o erro do fetch.
+ */
+function janelaLeComoOFetch(fonte: FonteLegivel): boolean {
+  return !fonte.marcador && fonte.tipo !== "pdf";
+}
+
 export async function rasparFonte(fonte: FonteLegivel, raspadores: Raspadores = RASPADORES_PADRAO): Promise<ConteudoFonte> {
   const opcoes = montarOpcoes(fonte);
   if (fonte.navegador === "janela") return raspadores.porJanela(fonte.url, opcoes);
@@ -47,7 +56,7 @@ export async function rasparFonte(fonte: FonteLegivel, raspadores: Raspadores = 
   try {
     return await raspadores.porFetch(fonte.url, opcoes);
   } catch (erro) {
-    if (!(erro instanceof ScrapeError) || !MOTIVOS_BLOQUEIO_FETCH.includes(erro.motivo)) throw erro;
+    if (!(erro instanceof ScrapeError) || !MOTIVOS_BLOQUEIO_FETCH.includes(erro.motivo) || !janelaLeComoOFetch(fonte)) throw erro;
     // Site que bloqueia o fetch costuma liberar o Chrome com janela. Se a janela também
     // falha ou não traz conteúdo legível, vale o motivo do fetch (o mais informativo).
     const daJanela = await raspadores.porJanela(fonte.url, opcoes).catch(() => undefined);

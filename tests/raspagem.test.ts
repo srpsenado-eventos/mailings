@@ -27,6 +27,19 @@ describe("rasparFonte escolhe o caminho pela fonte do catálogo", () => {
     expect(r.porNavegador).not.toHaveBeenCalled();
   });
 
+  test("marcador e tipo chegam ao fetch em `opcoes`; ausentes na fonte, ficam ausentes", async () => {
+    const r = raspadoresFalsos();
+    await rasparFonte({ url: "https://tst.jus.br/orgaos", marcador: { textos: ["(convocado)", "(convocada)"] } }, r);
+    expect(r.porFetch).toHaveBeenLastCalledWith("https://tst.jus.br/orgaos", { marcador: ["(convocado)", "(convocada)"] });
+    await rasparFonte({ url: "https://stj.jus.br/lista.pdf", tipo: "pdf" }, r);
+    expect(r.porFetch).toHaveBeenLastCalledWith("https://stj.jus.br/lista.pdf", { tipo: "pdf" });
+    await rasparFonte({ url: "https://a.gov.br/lista" }, r);
+    const opcoes = r.porFetch.mock.calls.at(-1)?.[1];
+    expect(opcoes).toEqual({});
+    expect(opcoes).not.toHaveProperty("marcador");
+    expect(opcoes).not.toHaveProperty("tipo");
+  });
+
   test("fonte com navegador vai pelo Chrome e nunca pelo fetch", async () => {
     const r = raspadoresFalsos();
     await rasparFonte({ url: "https://portal.tcu.gov.br/autoridades", navegador: true }, r);
@@ -91,6 +104,20 @@ describe("HTTP 403 ao fetch vai para a janela (spec 2026-10-23 §3.1)", () => {
     r.porFetch.mockRejectedValue(new ScrapeError("https://a.gov.br", "HTTP 403"));
     r.porJanela.mockResolvedValue({ url: "https://a.gov.br", textoLimpo: "What code is in the image?", destaques: [], pessoas: [] });
     await expect(rasparFonte({ url: "https://a.gov.br" }, r)).rejects.toMatchObject({ motivo: "HTTP 403" });
+  });
+  test("fonte com marcador e 403: vale o erro do fetch, a janela não é chamada (ela ignora o marcador)", async () => {
+    const r = raspadoresFalsos();
+    r.porFetch.mockRejectedValue(new ScrapeError("https://tst.jus.br/orgaos", "HTTP 403"));
+    r.porJanela.mockResolvedValue(comConteudo("https://tst.jus.br/orgaos"));
+    await expect(rasparFonte({ url: "https://tst.jus.br/orgaos", marcador: { textos: ["(convocado)"] } }, r)).rejects.toMatchObject({ motivo: "HTTP 403" });
+    expect(r.porJanela).not.toHaveBeenCalled();
+  });
+  test("fonte PDF e 403: vale o erro do fetch, a janela não é chamada (ela não lê PDF)", async () => {
+    const r = raspadoresFalsos();
+    r.porFetch.mockRejectedValue(new ScrapeError("https://stj.jus.br/lista.pdf", "HTTP 403"));
+    r.porJanela.mockResolvedValue(comConteudo("https://stj.jus.br/lista.pdf"));
+    await expect(rasparFonte({ url: "https://stj.jus.br/lista.pdf", tipo: "pdf" }, r)).rejects.toMatchObject({ motivo: "HTTP 403" });
+    expect(r.porJanela).not.toHaveBeenCalled();
   });
   test("fonte com navegador (headless) nunca passa pela janela", async () => {
     const r = raspadoresFalsos();

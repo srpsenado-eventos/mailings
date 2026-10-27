@@ -477,6 +477,11 @@ function removerMoldura($: RaizCheerio): void {
 const SEPARADORES_DO_MARCADOR = /[·,;:(|]/;
 /** Palavra que pode compor nome próprio: começa em maiúscula e só tem letras, apóstrofo ou hífen. */
 const PALAVRA_DE_NOME = /^[A-ZÀ-Ý][\p{L}'’-]*$/u;
+/**
+ * Inicial abreviada ("B." em "João B. Silva"): faz parte do nome, mas não conta como parte
+ * significativa. Sem ela o nome parava antes da inicial, sobrava só "Silva" e o convocado sumia.
+ */
+const INICIAL_DO_NOME = /^[A-ZÀ-Ý]\.$/;
 
 /** Palavra de cargo, inclusive composta ("Vice-Presidente", "Procurador-Geral"). */
 function ehPalavraDeCargo(palavra: string): boolean {
@@ -524,7 +529,8 @@ function limitesDoNome(palavras: readonly string[]): LimitesDoNome {
   while (inicio > 0) {
     const palavra = palavras[inicio - 1];
     const conectivoMinusculo = CONECTOR.test(palavra) && palavra === palavra.toLowerCase();
-    if (!conectivoMinusculo && (!PALAVRA_DE_NOME.test(palavra) || ehPalavraDeCargo(palavra))) break;
+    const ehDoNome = PALAVRA_DE_NOME.test(palavra) || INICIAL_DO_NOME.test(palavra);
+    if (!conectivoMinusculo && (!ehDoNome || ehPalavraDeCargo(palavra))) break;
     inicio -= 1;
   }
   const anterior = inicio > 0 ? palavras[inicio - 1] : undefined;
@@ -544,7 +550,7 @@ function pessoaAntesDoMarcador(trecho: string, marcador: string): PessoaSite | u
   const palavras = trecho.trim().split(/\s+/).filter(Boolean);
   const { inicio, palavraDeCargo } = limitesDoNome(palavras);
   const nome = palavras.slice(inicio);
-  if (nome.filter((p) => !CONECTOR.test(p)).length < 2) return undefined;
+  if (nome.filter((p) => !CONECTOR.test(p) && !INICIAL_DO_NOME.test(p)).length < 2) return undefined;
   const cargo =
     palavraDeCargo !== undefined ? `${palavraDeCargo} ${sufixoDoMarcador(marcador)}`.trim() : undefined;
   return { nome: nome.join(" "), ...(cargo ? { cargo } : {}), origem: "pagina" };

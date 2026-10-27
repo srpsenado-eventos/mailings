@@ -36,6 +36,7 @@ import {
 import {
   anotacaoReaproveitada,
   atualizarFalhas,
+  chaveDaLeitura,
   contarUrlsCaidas,
   ehLeituraParcial,
   ehMudancaDeComposicao,
@@ -44,6 +45,7 @@ import {
   motivoLeituraParcial,
   MOTIVO_SEM_NINGUEM,
   nomesNovos,
+  type LeituraColhida,
 } from "@/lib/memoria-leitura";
 import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { ScrapeError } from "@/lib/scrape";
@@ -184,12 +186,14 @@ const GUARDADA_COM_PESSOAS = (g: LeituraGuardada): boolean => g.conteudo.pessoas
 
 /**
  * A leitura guardada da fonte, se existe e está no prazo (§5.3): a da URL principal e, sem ela,
- * a da URL alternativa (spec 2026-10-23 §3.3).
+ * a da URL alternativa (spec 2026-10-23 §3.3). Cada uma procurada pela sua chave, que leva a
+ * forma de extração da fonte (`chaveDaLeitura`): a leitura em texto de uma URL nunca serve à
+ * fonte que lê a mesma URL como tabela, nem o contrário.
  */
 function guardadaValida(fonte: FonteLegivel, deps: Dependencias, agora: Date): LeituraGuardada | undefined {
   const urls = fonte.urlAlternativa ? [fonte.url, fonte.urlAlternativa] : [fonte.url];
   return urls
-    .map((url) => deps.leiturasAnteriores?.[url])
+    .map((url) => deps.leiturasAnteriores?.[chaveDaLeitura(url, fonte)])
     .find((g): g is LeituraGuardada => g !== undefined && leituraValida(g, agora));
 }
 
@@ -223,10 +227,14 @@ async function lerFonte<F extends FonteLegivel>(
 /**
  * O que entra na memória por esta leitura, sob a URL de onde o conteúdo veio (a alternativa,
  * quando foi ela que respondeu): reaproveitada volta com a data original e sob a URL em que
- * estava guardada (§4.3).
+ * estava guardada (§4.3). A chave do mapa leva também a forma de extração da fonte.
  */
-function guardar<F extends FonteLegivel>(l: Leitura<F>, agora: Date): LeituraGuardada {
-  return { url: urlDoConteudo(l), lidaEm: l.reaproveitada?.lidaEm ?? agora.toISOString(), conteudo: l.conteudo as ConteudoFonte };
+function guardar<F extends FonteLegivel>(l: Leitura<F>, agora: Date): LeituraColhida {
+  const url = urlDoConteudo(l);
+  return {
+    chave: chaveDaLeitura(url, l.fonte),
+    leitura: { url, lidaEm: l.reaproveitada?.lidaEm ?? agora.toISOString(), conteudo: l.conteudo as ConteudoFonte },
+  };
 }
 
 /**
@@ -235,11 +243,11 @@ function guardar<F extends FonteLegivel>(l: Leitura<F>, agora: Date): LeituraGua
  */
 interface AnaliseDoGrupo {
   grupo: ResultadoGrupo;
-  leituras: LeituraGuardada[];
+  leituras: LeituraColhida[];
   tentadas: TentativaDeUrl[];
 }
 
-const SEM_LEITURAS: LeituraGuardada[] = [];
+const SEM_LEITURAS: LeituraColhida[] = [];
 const SEM_TENTADAS: TentativaDeUrl[] = [];
 
 /**
@@ -292,7 +300,7 @@ function detectarMudanca(
 }
 
 /** §4.3: fontes que contribuíram entram na memória; a primária parcial de hoje não. */
-function leiturasBoas(lidas: readonly FonteLida[], primariaParcial: boolean, agora: Date): LeituraGuardada[] {
+function leiturasBoas(lidas: readonly FonteLida[], primariaParcial: boolean, agora: Date): LeituraColhida[] {
   return lidas.flatMap((l, i) => (!contribuiu(l) || (i === 0 && primariaParcial) ? [] : [guardar(l, agora)]));
 }
 
@@ -656,7 +664,7 @@ function anexarEnderecos(grupo: ResultadoGrupo, indice?: IndiceEnderecos): Resul
   };
 }
 
-function resumir(grupos: ResultadoGrupo[], falhas: FalhasPorUrl): ResumoAnalise {
+function resumir(grupos: ResultadoGrupo[], falhas: FalhasPorUrl, tentadasHoje: ReadonlySet<string>): ResumoAnalise {
   const resumo: ResumoAnalise = {
     total: 0,
     verde: 0,
@@ -671,7 +679,7 @@ function resumir(grupos: ResultadoGrupo[], falhas: FalhasPorUrl): ResumoAnalise 
     gruposFonteInacessivel: 0,
     gruposViaPesquisaAmpla: 0,
     gruposReaproveitados: 0,
-    urlsCaidasRepetidas: contarUrlsCaidas(falhas),
+    urlsCaidasRepetidas: contarUrlsCaidas(falhas, tentadasHoje),
     gruposComMudanca: 0,
   };
   for (const g of grupos) {
@@ -710,6 +718,9 @@ export async function analisar(
   // sobreposta pelas leituras boas de hoje e pelas reaproveitadas, com a data original.
   const leituras = mesclarLeituras(deps.leiturasAnteriores ?? {}, analisados.flatMap((a) => a.leituras), agora);
   // URLs que falharam hoje somam uma coleta à contagem anterior; as lidas saem do mapa (spec 2026-10-23 §3.4).
-  const falhas = atualizarFalhas(deps.falhasAnteriores ?? {}, analisados.flatMap((a) => a.tentadas), agora);
-  return { arquivoNome, grupos, resumo: resumir(grupos, falhas), leituras, falhas };
+  const tentadas = analisados.flatMap((a) => a.tentadas);
+  const falhas = atualizarFalhas(deps.falhasAnteriores ?? {}, tentadas, agora);
+  // O resumo conta só as URLs caídas tentadas hoje: é o que a tela mostra na linha do grupo.
+  const tentadasHoje = new Set(tentadas.map((t) => t.url));
+  return { arquivoNome, grupos, resumo: resumir(grupos, falhas, tentadasHoje), leituras, falhas };
 }

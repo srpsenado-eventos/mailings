@@ -6,7 +6,7 @@ import { extrairConteudo, extrairTabela, ScrapeError } from "@/lib/scrape";
 import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { MOTIVO_NAVEGADOR_AUSENTE } from "@/lib/navegador";
 import { CATALOGO } from "@/data/catalogo";
-import { MOTIVO_SEM_NINGUEM } from "@/lib/memoria-leitura";
+import { chaveDaLeitura, MOTIVO_SEM_NINGUEM } from "@/lib/memoria-leitura";
 import type { ContatoPlanilha, ConteudoFonte, FonteCatalogo, LeituraGuardada, LeiturasGuardadas } from "@/lib/types";
 
 /**
@@ -912,6 +912,72 @@ describe("memória de leitura com duas fontes no grupo (§5.1 passo 6)", () => {
   });
 });
 
+describe("memória por forma de extração: a mesma URL lida como texto e como tabela (regressão)", () => {
+  // Caso real: "Presidente do Senado" lê em-exercicio como texto; os grupos de Senadores leem a
+  // mesma URL como tabela, a única forma que traz os senadores de nome de uma palavra.
+  const URL_SENADO = "https://senado.leg.br/em-exercicio";
+  const TABELA = { colunas: { nome: 0, uf: 2 } };
+  const CHAVE_TABELA = chaveDaLeitura(URL_SENADO, { tabela: TABELA });
+  const AGORA = new Date("2026-10-21T12:00:00.000Z");
+  const LIDA_EM = "2026-10-19T12:00:00.000Z";
+  const comoTexto: ConteudoFonte = { url: URL_SENADO, textoLimpo: "Davi Exemplo Presidente\nAna Senadora Exemplo", destaques: [], pessoas: [{ nome: "Davi Exemplo Presidente" }, { nome: "Ana Senadora Exemplo" }] };
+  const comoTabela: ConteudoFonte = { url: URL_SENADO, textoLimpo: "Weverton\nAna Senadora Exemplo", destaques: [], pessoas: [{ nome: "Weverton", uf: "MA" }, { nome: "Ana Senadora Exemplo", uf: "MA" }] };
+  const contatosSenado: ContatoPlanilha[] = [
+    { nome: "Davi Exemplo Presidente", grupo: "PRES", ...CADASTRO_OK },
+    { nome: "Weverton", grupo: "SEN", ...CADASTRO_OK },
+    { nome: "Ana Senadora Exemplo", grupo: "SEN", ...CADASTRO_OK },
+  ];
+  const resolverSenado: Dependencias["resolverFonte"] = (grupo) =>
+    grupo === "PRES"
+      ? { grupoCanonico: "PRES", fontes: [{ url: URL_SENADO, ativo: true }], fontesIndividuais: [], sugestoes: [] }
+      : { grupoCanonico: "SEN", fontes: [{ url: URL_SENADO, ativo: true, tabela: TABELA }], fontesIndividuais: [], sugestoes: [] };
+  const depsSenado = (raspar: Dependencias["raspar"], leituras: LeiturasGuardadas = {}): Dependencias => ({
+    resolverFonte: resolverSenado,
+    raspar,
+    extrairComposicao: async () => [],
+    leiturasAnteriores: leituras,
+    agora: () => AGORA,
+  });
+  const lerTudo: Dependencias["raspar"] = async (f) => (f.tabela ? comoTabela : comoTexto);
+  const tabelaCaida: Dependencias["raspar"] = async (f) => {
+    if (f.tabela) throw new Error("HTTP 503");
+    return comoTexto;
+  };
+
+  test("a memória sai com duas entradas distintas, a de texto sob a URL e a de tabela sob a sua chave", async () => {
+    const r = await analisar("c.xlsx", contatosSenado, depsSenado(lerTudo));
+    expect(Object.keys(r.leituras ?? {}).sort()).toEqual([URL_SENADO, CHAVE_TABELA].sort());
+    expect(r.leituras?.[URL_SENADO]?.conteudo).toEqual(comoTexto);
+    expect(r.leituras?.[CHAVE_TABELA]?.conteudo).toEqual(comoTabela);
+    expect(r.leituras?.[CHAVE_TABELA]?.url).toBe(URL_SENADO);
+  });
+
+  test("primária de tabela caída: reaproveita a leitura de tabela, e o senador de nome de uma palavra não vira possível saída", async () => {
+    const memoria: LeiturasGuardadas = {
+      [URL_SENADO]: { url: URL_SENADO, lidaEm: LIDA_EM, conteudo: comoTexto },
+      [CHAVE_TABELA]: { url: URL_SENADO, lidaEm: LIDA_EM, conteudo: comoTabela },
+    };
+    const r = await analisar("c.xlsx", contatosSenado, depsSenado(tabelaCaida, memoria));
+    const sen = r.grupos.find((g) => g.grupo === "SEN")!;
+    expect(sen.reaproveitada).toEqual({ url: URL_SENADO, lidaEm: LIDA_EM, motivo: "HTTP 503" });
+    const weverton = sen.contatos.find((c) => c.contato.nome === "Weverton")!;
+    expect(weverton.possivelSaida).toBeFalsy();
+    expect(weverton.semaforo).toBe("verde");
+    // A leitura de texto de hoje não sobrescreve a de tabela reaproveitada.
+    expect(r.leituras?.[CHAVE_TABELA]?.conteudo).toEqual(comoTabela);
+    expect(r.leituras?.[URL_SENADO]?.lidaEm).toBe(AGORA.toISOString());
+  });
+
+  test("memória antiga só com a leitura em texto: o grupo de tabela não a reaproveita e ninguém vira possível saída", async () => {
+    const memoria: LeiturasGuardadas = { [URL_SENADO]: { url: URL_SENADO, lidaEm: LIDA_EM, conteudo: comoTexto } };
+    const r = await analisar("c.xlsx", contatosSenado, depsSenado(tabelaCaida, memoria));
+    const sen = r.grupos.find((g) => g.grupo === "SEN")!;
+    expect(sen.reaproveitada).toBeUndefined();
+    expect(sen.fonteInacessivel).toBe(true);
+    expect(sen.contatos.some((c) => c.possivelSaida)).toBe(false);
+  });
+});
+
 /** Raspador por URL: conteúdo, ou string = erro com esse motivo; URL fora do mapa também é erro. */
 function rasparDe(mapa: Record<string, ConteudoFonte | string>): Dependencias["raspar"] {
   return async (f) => {
@@ -1007,6 +1073,12 @@ describe("falhas por URL em coletas seguidas (spec 2026-10-23 §3.4)", () => {
   test("URL lida hoje sai de falhas; sem falhasAnteriores o mapa começa vazio", async () => {
     const r = await analisar("c.xlsx", [contatos[0]], { ...deps, agora, falhasAnteriores: { "https://orgao.gov.br": { desde: "2026-10-19T12:00:00.000Z", coletas: 3, motivo: "HTTP 404" } } });
     expect(r.falhas).toEqual({});
+  });
+  test("entrada antiga de URL não tentada hoje (coletas 5) fica no mapa mas não conta no resumo", async () => {
+    const antiga = { desde: "2026-10-01T12:00:00.000Z", coletas: 5, motivo: "HTTP 404" };
+    const r = await analisar("c.xlsx", [contatos[0]], { ...deps, agora, falhasAnteriores: { "https://nao-visitada.gov.br": antiga } });
+    expect(r.falhas).toEqual({ "https://nao-visitada.gov.br": antiga });
+    expect(r.resumo.urlsCaidasRepetidas).toBe(0);
   });
   test("primária sem ninguém (grupo de fonte) conta como falha da URL; secundária sem ninguém não", async () => {
     const r = await analisar("c.xlsx", [contatos[0]], {

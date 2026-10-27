@@ -1,5 +1,5 @@
 import { normalizarNome } from "@/lib/normalize";
-import type { FalhasPorUrl, LeituraGuardada, LeiturasGuardadas, PessoaSite, Reaproveitamento, ResultadoContato, ResultadoGrupo, Retrato, TentativaDeUrl } from "@/lib/types";
+import type { FalhasPorUrl, FonteLegivel, LeituraGuardada, LeiturasGuardadas, PessoaSite, Reaproveitamento, ResultadoContato, ResultadoGrupo, Retrato, TentativaDeUrl } from "@/lib/types";
 
 /**
  * Memória de leitura por página (spec 2026-10-20): validade, poda, mescla e reconstrução.
@@ -72,27 +72,56 @@ export function ehLeituraGuardada(v: unknown): v is LeituraGuardada {
   return ehObjeto(v) && typeof v.url === "string" && typeof v.lidaEm === "string" && ehConteudoFonte(v.conteudo);
 }
 
-/** Só as entradas com forma certa, chave igual à `url` e dentro do prazo. Devolve objeto novo. */
+/**
+ * Chave da leitura no mapa da memória. A mesma URL pode ser lida de formas diferentes por
+ * grupos diferentes (a lista dos senadores em exercício é lida como texto pelo grupo do
+ * Presidente do Senado e como tabela pelos grupos de Senadores): cada forma guarda a sua
+ * leitura, senão a última a gravar vence e a outra reaproveita uma extração que não é a dela.
+ * A fonte de extração padrão fica sob a URL pura, para a memória já gravada continuar valendo.
+ * Sufixos na ordem tabela, marcador, pdf. `LeituraGuardada.url` continua a URL real.
+ */
+export function chaveDaLeitura(url: string, fonte: Pick<FonteLegivel, "tabela" | "marcador" | "tipo">): string {
+  const sufixos = [
+    ...(fonte.tabela ? [`#tabela:${JSON.stringify(fonte.tabela)}`] : []),
+    ...(fonte.marcador ? [`#marcador:${JSON.stringify(fonte.marcador.textos)}`] : []),
+    ...(fonte.tipo === "pdf" ? ["#pdf"] : []),
+  ];
+  return `${url}${sufixos.join("")}`;
+}
+
+/** A chave é a `url` da leitura, pura ou com o sufixo de forma de extração (`chaveDaLeitura`). */
+function chaveCombinaComUrl(chave: string, url: string): boolean {
+  return chave === url || chave.startsWith(`${url}#`);
+}
+
+/** Só as entradas com forma certa, chave da própria `url` e dentro do prazo. Devolve objeto novo. */
 export function podarLeituras(leituras: unknown, agora: Date): LeiturasGuardadas {
   if (!ehObjeto(leituras)) return {};
   const validas: LeiturasGuardadas = {};
-  for (const [url, l] of Object.entries(leituras)) {
-    if (ehLeituraGuardada(l) && l.url === url && leituraValida(l, agora)) validas[url] = l;
+  for (const [chave, l] of Object.entries(leituras)) {
+    if (ehLeituraGuardada(l) && chaveCombinaComUrl(chave, l.url) && leituraValida(l, agora)) validas[chave] = l;
   }
   return validas;
 }
 
+/** Uma leitura desta varredura e a chave sob a qual ela entra na memória (`chaveDaLeitura`). */
+export interface LeituraColhida {
+  chave: string;
+  leitura: LeituraGuardada;
+}
+
 /**
  * §6 passo 3: a memória anterior podada, sobreposta pelas leituras desta varredura (as boas de
- * hoje, com a data de hoje, e as reaproveitadas, com a data original). Na mesma URL, a leitura de
- * data mais recente vence, qualquer que seja a ordem (grupos que compartilham a página podem ler
- * hoje um e reaproveitar a guardada no outro). Não muta a entrada.
+ * hoje, com a data de hoje, e as reaproveitadas, com a data original). Na mesma chave (mesma URL
+ * e mesma forma de extração), a leitura de data mais recente vence, qualquer que seja a ordem
+ * (grupos que compartilham a página podem ler hoje um e reaproveitar a guardada no outro). Não
+ * muta a entrada.
  */
-export function mesclarLeituras(anteriores: LeiturasGuardadas, colhidas: readonly LeituraGuardada[], agora: Date): LeiturasGuardadas {
+export function mesclarLeituras(anteriores: LeiturasGuardadas, colhidas: readonly LeituraColhida[], agora: Date): LeiturasGuardadas {
   const saida = podarLeituras(anteriores, agora);
-  for (const l of colhidas) {
-    const existente = saida[l.url];
-    if (!existente || Date.parse(l.lidaEm) >= Date.parse(existente.lidaEm)) saida[l.url] = l;
+  for (const { chave, leitura } of colhidas) {
+    const existente = saida[chave];
+    if (!existente || Date.parse(leitura.lidaEm) >= Date.parse(existente.lidaEm)) saida[chave] = leitura;
   }
   return saida;
 }
@@ -185,17 +214,33 @@ export function atualizarFalhas(anteriores: FalhasPorUrl, tentadas: readonly Ten
   return saida;
 }
 
-export function contarUrlsCaidas(falhas: FalhasPorUrl): number {
-  return Object.values(falhas).filter((f) => f.coletas >= MIN_COLETAS_URL_CAIDA).length;
+/**
+ * URLs caídas há `MIN_COLETAS_URL_CAIDA` coletas ou mais, entre as TENTADAS nesta varredura: é o
+ * que a tela consegue mostrar (o aviso sai na linha do grupo ou do contato lido hoje). O mapa
+ * `falhas` mantém as URLs não visitadas (decisão 4 do plano), mas elas não entram na conta.
+ */
+export function contarUrlsCaidas(falhas: FalhasPorUrl, tentadasHoje: ReadonlySet<string>): number {
+  return Object.entries(falhas).filter(([url, f]) => tentadasHoje.has(url) && f.coletas >= MIN_COLETAS_URL_CAIDA).length;
 }
 
-/** `retrato.falhas` com forma válida (desde string, coletas número, motivo string); senão `{}`. Retrato ausente ou sem o campo: `{}`. */
+function coletasValidas(c: unknown): c is number {
+  return typeof c === "number" && Number.isFinite(c) && c >= 1;
+}
+
+function dataValida(d: unknown): d is string {
+  return typeof d === "string" && !Number.isNaN(Date.parse(d));
+}
+
+/**
+ * `retrato.falhas` com forma válida (desde data legível, coletas número finito >= 1, motivo
+ * string); o resto é descartado. Retrato ausente ou sem o campo: `{}`.
+ */
 export function falhasDoRetrato(retrato: Pick<Retrato, "falhas"> | undefined): FalhasPorUrl {
   const bruto: unknown = retrato?.falhas;
   if (!ehObjeto(bruto)) return {};
   const validas: FalhasPorUrl = {};
   for (const [url, f] of Object.entries(bruto)) {
-    if (ehObjeto(f) && typeof f.desde === "string" && typeof f.coletas === "number" && typeof f.motivo === "string") {
+    if (ehObjeto(f) && dataValida(f.desde) && coletasValidas(f.coletas) && typeof f.motivo === "string") {
       validas[url] = { desde: f.desde, coletas: f.coletas, motivo: f.motivo };
     }
   }

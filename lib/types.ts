@@ -81,7 +81,7 @@ export interface LeituraGuardada {
   conteudo: ConteudoFonte;
 }
 
-/** Chave: a URL da página. */
+/** Chave: a URL da página, com o sufixo da forma de extração quando ela não é a padrão (`chaveDaLeitura`). */
 export type LeiturasGuardadas = Record<string, LeituraGuardada>;
 
 /** A leitura de hoje foi substituída pela guardada: de quando ela é e por que a de hoje não serviu. */
@@ -242,7 +242,7 @@ export interface ResumoAnalise {
   gruposViaPesquisaAmpla: number;
   /** Grupos com `reaproveitada` ou com `individuais.reaproveitadas > 0` (spec 2026-10-20). */
   gruposReaproveitados: number;
-  /** URLs do catálogo caídas há `MIN_COLETAS_URL_CAIDA` ou mais coletas seguidas (spec 2026-10-23 §3.4). */
+  /** URLs do catálogo tentadas nesta varredura e caídas há `MIN_COLETAS_URL_CAIDA` ou mais coletas seguidas (spec 2026-10-23 §3.4). */
   urlsCaidasRepetidas: number;
   /** Grupos com `mudouFormato`. */
   gruposComMudanca: number;

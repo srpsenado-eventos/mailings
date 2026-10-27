@@ -226,6 +226,17 @@ function candidatosDe(regra: RegraTratamento): readonly Candidato[] {
   return candidatos;
 }
 
+/** Nome do cargo da regra de Ministro de Estado na tabela, já normalizado. */
+const CARGO_MINISTRO_DE_ESTADO = "ministro de estado";
+
+/**
+ * Cargo (normalizado, gênero neutralizado) que usa a regra de Ministro de Estado sem passar
+ * pela similaridade: começa com "ministro de estado", ou é o Advogado-Geral da União.
+ */
+function ehMinistroDeEstado(alvo: string): boolean {
+  return /^ministro de estado\b/.test(alvo) || /^advogad[oa]-geral da uniao$/.test(alvo);
+}
+
 /**
  * Resolve o `Cargo` livre da planilha para uma entrada da tabela de protocolo.
  * Ordem: exceção manual → casamento exato normalizado → similaridade.
@@ -256,6 +267,16 @@ export function resolverRegra(
   if (exata) return exata;
 
   const qualificacaoAlvo = qualificadoresDe(alvo);
+
+  // Ministro de Estado pelo prefixo (decisão do Clovis, 2026-10-27): a similaridade com
+  // "Ministro de Estado" cai abaixo do limiar quando o nome da pasta é longo ("…da Justiça e
+  // Segurança Pública", 0,54), e metade dos ministros saía "sem regra". O Advogado-Geral da
+  // União tem status de ministro (a tabela manda incluí-lo na regra). Substituto e interino
+  // não herdam a regra do titular por aqui (ver `QUALIFICADORES`).
+  if (qualificacaoAlvo === "" && ehMinistroDeEstado(alvo)) {
+    const regraMinistro = regras.find((r) => candidatosDe(r).some((c) => c.nome === CARGO_MINISTRO_DE_ESTADO));
+    if (regraMinistro) return regraMinistro;
+  }
   const pontuadas = regras
     .flatMap((r) => {
       const nomes = candidatosDe(r).filter((c) => c.qualificacao === qualificacaoAlvo);

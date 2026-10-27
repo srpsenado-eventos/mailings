@@ -464,7 +464,11 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp2: "fernanda.goncalves@senado.leg.br",
     emailBackup: "thiago.pinto@senado.leg.br",
     fontes: [
-      { url: "https://www.camara.leg.br/deputados/mesa-diretora", ativo: true },
+      // 2026-10-27, a pedido do Clovis: a fonte oficial é a página do deputado que preside a
+      // Câmara (antes, a Mesa Diretora, que trazia os outros membros como propostas de inclusão).
+      // Fetch de 27/10: 200, nome parlamentar em destaque e nome civil; a página não diz
+      // "Presidente", então o cargo sai "fonte não informa". Na troca da presidência, trocar a URL.
+      { url: "https://www.camara.leg.br/deputados/160674", ativo: true },
     ],
   },
   {

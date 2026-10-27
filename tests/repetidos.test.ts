@@ -1,10 +1,12 @@
 import { describe, expect, test } from "vitest";
 import {
-  autoridadesRepetidas, escolherGrupo, etiquetaDeRepeticao, filtrarRepetidas, MOTIVO_PARCIAL, MOTIVO_SEM_NIVEL,
-  textoRepetidas, type OcorrenciaRepetida,
+  autoridadesRepetidas, escolherGrupo, etiquetaDeRepeticao, filtrarRepetidas, MOTIVO_ELEITO_SEM_CARGO_ATUAL, MOTIVO_PARCIAL,
+  MOTIVO_SEM_NIVEL, ocorrenciasDeFora, textoEleitosRepetidos, textoRepetidas, type OcorrenciaRepetida,
 } from "@/lib/repetidos";
 import { situacaoDoContato } from "@/lib/painel";
-import type { ResultadoContato, ResultadoGrupo } from "@/lib/types";
+import type {
+  CasaLegislativa, DeputadoAtual, EleitoClassificado, GovernadorClassificado, ResultadoContato, ResultadoEleicao, ResultadoGrupo,
+} from "@/lib/types";
 
 const linha = (nome: string, cargo: string, extra: Partial<ResultadoContato> = {}): ResultadoContato => ({
   contato: { nome, cargo, grupo: "x" }, semaforo: "verde", score: 1, comparacoes: [], camposDivergentes: [], origem: "oficial", ...extra,
@@ -142,7 +144,7 @@ describe("autoridadesRepetidas", () => {
 
 describe("escolherGrupo", () => {
   const oc = (grupoRegra: string, nivel?: string): OcorrenciaRepetida => ({
-    grupo: grupoRegra, grupoRegra, chave: "ana", cargo: "x", ex: false, possivelSaida: false,
+    grupo: grupoRegra, grupoRegra, chave: "ana", cargo: "x", ex: false, possivelSaida: false, origem: "contatos",
     ...(nivel ? { nivel: { nivel, nominata: "x" } } : {}),
   });
 
@@ -204,5 +206,235 @@ describe("filtro e texto", () => {
   test("texto do link", () => {
     expect(textoRepetidas(1)).toBe("1 autoridade em mais de um grupo");
     expect(textoRepetidas(10)).toBe("10 autoridades em mais de um grupo");
+  });
+});
+
+const deputado = (nomeParlamentar: string, nomeCivil: string, uf = "CE"): DeputadoAtual => ({ uf, nomeParlamentar, nomeCivil });
+const eleito = (casa: CasaLegislativa, nomeUrna: string, nomeCompleto: string, uf = "SP"): EleitoClassificado => ({
+  eleito: { casa, uf, nomeUrna, nomeCompleto, situacaoTse: "Eleito", statusMandato: "x" },
+  destino: "reeleito", projecao: false, contatos: [],
+});
+const governadorEleito = (nomeUrna: string, nomeCompleto: string, uf = "SP"): GovernadorClassificado => ({
+  eleito: { uf, nomeUrna, nomeCompleto, situacaoTse: "Eleito", statusMandato: "x" },
+  destino: "outro_cargo", contatos: [],
+});
+const eleicao = (extra: Partial<ResultadoEleicao> = {}): ResultadoEleicao => ({
+  arquivos: [], eleitos: [], camaraNoContatos: false, ...extra,
+});
+const exPresidenteSenado = (nome: string) => grupo("Ex-Presidentes do Senado", [linha(nome, "Ex-Presidente do Senado Federal")]);
+
+describe("ocorrenciasDeFora", () => {
+  test("sem eleição não há ocorrência de fora", () => {
+    expect(ocorrenciasDeFora(undefined)).toEqual([]);
+  });
+
+  test("deputado atual entra com os dois nomes, no nível 4.14", () => {
+    const [p, ...resto] = ocorrenciasDeFora(eleicao({ deputadosAtuais: [deputado("Ciro Fictício", "Ciro Fictício de Souza")] }));
+    expect(resto).toEqual([]);
+    expect(p.nomes).toEqual(["Ciro Fictício", "Ciro Fictício de Souza"]);
+    expect(p.ocorrencia).toMatchObject({
+      grupo: "Deputados Federais", grupoRegra: "Deputados Federais", chave: "ciro ficticio", cargo: "Deputado Federal",
+      nivel: { nivel: "4.14" }, ex: false, possivelSaida: false, origem: "camara",
+    });
+  });
+
+  test("deputados atuais ficam de fora quando o grupo existe no Contatos", () => {
+    expect(ocorrenciasDeFora(eleicao({ camaraNoContatos: true, deputadosAtuais: [deputado("Ciro Fictício", "Ciro Fictício de Souza")] }))).toEqual([]);
+  });
+
+  test("eleitos levam o grupo e o nível de eleito; governador do DF é 4.11.1", () => {
+    const fora = ocorrenciasDeFora(eleicao({
+      eleitos: [eleito("senado", "Rui Fictício", "Rui Fictício Lima"), eleito("camara", "Lia Fictícia", "Lia Fictícia Prado")],
+      governadores: {
+        eleitos: [governadorEleito("Edu Fictício", "Eduardo Fictício", "GO"), governadorEleito("Bel Fictícia", "Isabel Fictícia", "DF")],
+        segundoTurno: [],
+      },
+    }));
+    expect(fora.map((p) => [p.ocorrencia.grupoRegra, p.ocorrencia.nivel?.nivel, p.ocorrencia.origem])).toEqual([
+      ["Senadores Eleitos", "4.13.1", "eleicao"],
+      ["Deputados Federais Eleitos", "4.14.1", "eleicao"],
+      ["Governadores Eleitos", "4.12.1", "eleicao"],
+      ["Governadores Eleitos", "4.11.1", "eleicao"],
+    ]);
+  });
+});
+
+describe("autoridadesRepetidas com as listas de fora do Contatos", () => {
+  test("ex-presidente do Senado que é deputado atual é convidado por Deputados Federais", () => {
+    const [a, ...resto] = autoridadesRepetidas(
+      [exPresidenteSenado("Ciro Fictício")],
+      eleicao({ deputadosAtuais: [deputado("Ciro Fictício", "Ciro Fictício")] }),
+    );
+    expect(resto).toEqual([]);
+    expect(a.nome).toBe("Ciro Fictício");
+    expect(a.situacao).toBe("decidido");
+    expect(a.convidaPor?.grupoRegra).toBe("Deputados Federais");
+    expect(a.convidaPor?.origem).toBe("camara");
+    expect(a.motivo).toBe("Cargo atual (Deputados Federais) vence cargo de ex- (Ex-Presidentes do Senado)");
+    expect(a.eleicao).toBeUndefined();
+    expect(a.ocorrencias.map((o) => o.origem)).toEqual(["contatos", "camara"]);
+  });
+
+  test("nome parlamentar igual e civil mais longo dão um caso só, decidido", () => {
+    const lista = autoridadesRepetidas(
+      [exPresidenteSenado("Ciro Fictício")],
+      eleicao({ deputadosAtuais: [deputado("Ciro Fictício", "Ciro Fictício Gomes de Souza")] }),
+    );
+    expect(lista).toHaveLength(1);
+    expect(lista[0].situacao).toBe("decidido");
+    expect(lista[0].ocorrencias).toHaveLength(2);
+  });
+
+  test("casa pelo nome civil quando o parlamentar é diferente", () => {
+    const [a] = autoridadesRepetidas(
+      [exPresidenteSenado("Ciro Fictício Gomes")],
+      eleicao({ deputadosAtuais: [deputado("Cirinho", "Ciro Fictício Gomes")] }),
+    );
+    expect(a.situacao).toBe("decidido");
+    expect(a.convidaPor?.grupoRegra).toBe("Deputados Federais");
+  });
+
+  test("nome parcial com a lista de fora vai para conferir", () => {
+    const [a, ...resto] = autoridadesRepetidas(
+      [exPresidenteSenado("Mauro Fictício")],
+      eleicao({ deputadosAtuais: [deputado("Mauro Fictício Filho", "Mauro Fictício Filho")] }),
+    );
+    expect(resto).toEqual([]);
+    expect(a.situacao).toBe("conferir");
+    expect(a.motivo).toBe(MOTIVO_PARCIAL);
+    expect(a.ocorrencias).toHaveLength(2);
+  });
+
+  test("lista da Câmara é ignorada quando o grupo Deputados Federais existe no Contatos", () => {
+    expect(autoridadesRepetidas(
+      [exPresidenteSenado("Ciro Fictício")],
+      eleicao({ camaraNoContatos: true, deputadosAtuais: [deputado("Ciro Fictício", "Ciro Fictício")] }),
+    )).toEqual([]);
+  });
+
+  test("senador reeleito é convidado por Senadores, com a marca da eleição", () => {
+    const [a, ...resto] = autoridadesRepetidas(
+      [grupo("Senadores", [linha("Rui Fictício", "Senador")])],
+      eleicao({ eleitos: [eleito("senado", "Rui Fictício", "Rui Fictício Lima")] }),
+    );
+    expect(resto).toEqual([]);
+    expect(a.situacao).toBe("decidido");
+    expect(a.convidaPor?.grupoRegra).toBe("Senadores");
+    expect(a.motivo).toBe("Eleição 2026: convidar pelo grupo atual (Ata 14)");
+    expect(a.eleicao).toBe(true);
+  });
+
+  test("senador eleito governador é convidado por Senadores", () => {
+    const [a] = autoridadesRepetidas(
+      [grupo("Senadores", [linha("Rui Fictício", "Senador")])],
+      eleicao({ governadores: { eleitos: [governadorEleito("Rui Fictício", "Rui Fictício Lima")], segundoTurno: [] } }),
+    );
+    expect(a.situacao).toBe("decidido");
+    expect(a.convidaPor?.grupoRegra).toBe("Senadores");
+    expect(a.eleicao).toBe(true);
+  });
+
+  test("eleito no nível mais alto não tira o convite do grupo atual", () => {
+    const [a] = autoridadesRepetidas(
+      [grupo("Senadores", [linha("Rui Fictício", "Senador")])],
+      eleicao({ governadores: { eleitos: [governadorEleito("Rui Fictício", "Rui Fictício", "DF")], segundoTurno: [] } }),
+    );
+    expect(a.convidaPor?.grupoRegra).toBe("Senadores");
+  });
+
+  test("eleito que no Contatos só tem cargo de ex- vai para conferir", () => {
+    const [a] = autoridadesRepetidas(
+      [exPresidenteSenado("Rui Fictício")],
+      eleicao({ eleitos: [eleito("senado", "Rui Fictício", "Rui Fictício Lima")] }),
+    );
+    expect(a.situacao).toBe("conferir");
+    expect(a.convidaPor).toBeUndefined();
+    expect(a.motivo).toBe(MOTIVO_ELEITO_SEM_CARGO_ATUAL);
+    expect(a.eleicao).toBe(true);
+  });
+
+  test("deputado reeleito que é ex-presidente do Senado é convidado pela Câmara", () => {
+    const [a] = autoridadesRepetidas(
+      [exPresidenteSenado("Ciro Fictício")],
+      eleicao({
+        deputadosAtuais: [deputado("Ciro Fictício", "Ciro Fictício de Souza")],
+        eleitos: [eleito("camara", "Ciro Fictício", "Ciro Fictício de Souza", "CE")],
+      }),
+    );
+    expect(a.situacao).toBe("decidido");
+    expect(a.convidaPor?.grupoRegra).toBe("Deputados Federais");
+    expect(a.eleicao).toBe(true);
+    expect(a.ocorrencias.map((o) => o.origem)).toEqual(["contatos", "camara", "eleicao"]);
+  });
+
+  test("eleito não liga como parcial dois nomes do mesmo grupo do Contatos", () => {
+    const lista = autoridadesRepetidas(
+      [grupo("Senadores", [linha("José Fictício", "Senador"), linha("José Fictício Lima", "Senador")])],
+      eleicao({ eleitos: [eleito("senado", "José Fictício", "José Fictício Prado")] }),
+    );
+    expect(lista).toHaveLength(1);
+    expect(lista[0].situacao).toBe("decidido");
+    expect(lista[0].ocorrencias.map((o) => o.chave)).toEqual(["jose ficticio", "jose ficticio"]);
+  });
+
+  test("pessoa só nas listas de fora não entra", () => {
+    expect(autoridadesRepetidas(
+      [grupo("Senadores", [linha("Outra Pessoa", "Senador")])],
+      eleicao({
+        deputadosAtuais: [deputado("Ciro Fictício", "Ciro Fictício de Souza")],
+        eleitos: [eleito("camara", "Ciro Fictício", "Ciro Fictício de Souza", "CE")],
+      }),
+    )).toEqual([]);
+  });
+
+  test("os dois nomes da mesma pessoa de fora não viram parcial entre si", () => {
+    expect(autoridadesRepetidas(
+      [grupo("Senadores", [linha("Outra Pessoa", "Senador")])],
+      eleicao({ deputadosAtuais: [deputado("Ciro Fictício", "Ciro Fictício de Souza")] }),
+    )).toEqual([]);
+  });
+
+  test("sem eleição, o resultado é o de hoje", () => {
+    const grupos = [stf(), tse(), exPresidenteSenado("Rui Fictício"), grupo("Senadores", [linha("Rui Fictício", "Senador")])];
+    const sem = autoridadesRepetidas(grupos);
+    expect(autoridadesRepetidas(grupos, undefined)).toEqual(sem);
+    expect(autoridadesRepetidas(grupos, eleicao())).toEqual(sem);
+    expect(sem.map((a) => [a.nome, a.situacao, a.convidaPor?.grupoRegra])).toEqual([
+      ["Ana Fictícia", "decidido", "Ministros do STF"],
+      ["Rui Fictício", "decidido", "Senadores"],
+    ]);
+    expect(sem.flatMap((a) => a.ocorrencias.map((o) => o.origem))).toEqual(["contatos", "contatos", "contatos", "contatos"]);
+  });
+
+  test("etiqueta: vermelha no grupo de ex- de quem é convidado pela Câmara", () => {
+    const repetidas = autoridadesRepetidas(
+      [exPresidenteSenado("Ciro Fictício")],
+      eleicao({ deputadosAtuais: [deputado("Ciro Fictício", "Ciro Fictício")] }),
+    );
+    expect(etiquetaDeRepeticao(repetidas, linha("Ciro Fictício", "Ex-Presidente do Senado Federal"), "Ex-Presidentes do Senado")).toEqual({
+      campo: "grupo", tom: "ruim", texto: "Autoridade a ser convidada pelo grupo Deputados Federais",
+      explicacao: "Cargo atual (Deputados Federais) vence cargo de ex- (Ex-Presidentes do Senado)",
+    });
+  });
+
+  test("etiqueta: reeleito decidido fica sem etiqueta de repetição", () => {
+    const repetidas = autoridadesRepetidas(
+      [grupo("Senadores", [linha("Rui Fictício", "Senador")])],
+      eleicao({ eleitos: [eleito("senado", "Rui Fictício", "Rui Fictício Lima")] }),
+    );
+    expect(etiquetaDeRepeticao(repetidas, linha("Rui Fictício", "Senador"), "Senadores")).toBeUndefined();
+  });
+
+  test("etiqueta: a linha do grupo de eleitos do Contatos não pega a ocorrência de fora", () => {
+    const repetidas = autoridadesRepetidas(
+      [exPresidenteSenado("Rui Fictício")],
+      eleicao({ eleitos: [eleito("senado", "Rui Fictício", "Rui Fictício Lima")] }),
+    );
+    expect(etiquetaDeRepeticao(repetidas, linha("Rui Fictício", "Senador eleito"), "Senadores Eleitos")).toBeUndefined();
+  });
+
+  test("contadores: eleitos à parte das demais", () => {
+    expect(textoEleitosRepetidos(1)).toBe("1 eleito já no Contatos");
+    expect(textoEleitosRepetidos(14)).toBe("14 eleitos já no Contatos");
   });
 });

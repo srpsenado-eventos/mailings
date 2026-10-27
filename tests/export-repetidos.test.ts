@@ -51,7 +51,7 @@ describe("export das autoridades em mais de um grupo", () => {
 
   test("ocorrência sem nível aparece como fora da Nominata", () => {
     const o: OcorrenciaRepetida = {
-      grupo: "g", grupoRegra: "Embaixadores", chave: "ana", cargo: "Embaixadora", ex: false, possivelSaida: false,
+      grupo: "g", grupoRegra: "Embaixadores", chave: "ana", cargo: "Embaixadora", ex: false, possivelSaida: false, origem: "contatos",
     };
     expect(descreverOcorrencia(o)).toBe("Embaixadores: Embaixadora (fora da Nominata)");
   });

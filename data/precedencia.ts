@@ -2,7 +2,7 @@
  * Precedência usada para escolher por qual grupo uma autoridade presente em mais de um
  * grupo do Contatos será convidada (spec 2026-10-14). Fonte: a Nominata do GT,
  * `GT Posse/Nominata/Nominata 2027_Modelo após ajustes Daniel (1).xlsx` (Decreto 70.274/72
- * com os acréscimos do GT). Número e texto copiados da planilha; só os níveis dos grupos
+ * com os acréscimos do GT; a mesma planilha está também em `Orientações de montagem/`). Número e texto copiados da planilha; só os níveis dos grupos
  * do catálogo entram aqui.
  *
  * `ex: true` marca cargo de "ex-": perde para qualquer cargo atual, seja qual for o nível
@@ -57,6 +57,8 @@ export const PRECEDENCIA: readonly RegraPrecedencia[] = [
     nivel: n("4.12", "Governadores dos estados da União"),
   },
   { grupo: "Senadores", ex: false, nivel: n("4.13", "Senadores") },
+  // Hoje vale para a lista da planilha da Câmara (spec 2026-10-27); também quando o grupo existir no Contatos.
+  { grupo: "Deputados Federais", ex: false, nivel: n("4.14", "Deputados federais") },
   {
     grupo: "Ministros do STJ", ex: false,
     presidente: n("5.5.1", "Presidente do Superior Tribunal de Justiça"),
@@ -94,3 +96,14 @@ export const PRECEDENCIA: readonly RegraPrecedencia[] = [
   { grupo: "Conselho Nacional do Ministério Público (CNMP)", ex: false },
   { grupo: "Presidente da OAB Nacional", ex: false },
 ];
+
+/**
+ * Níveis dos eleitos de 2026 (spec 2026-10-27 §3), só para exibição em `/repetidos`: pela Ata 14,
+ * o eleito que já tem cargo atual é convidado pelo grupo atual, nunca pelo de eleitos.
+ */
+export const NIVEIS_ELEITOS = {
+  governadorDistritoFederal: n("4.11.1", "Governador do Distrito Federal eleito"),
+  governador: n("4.12.1", "Governadores eleitos dos estados da União"),
+  senado: n("4.13.1", "Senadores eleitos"),
+  camara: n("4.14.1", "Deputados federais eleitos"),
+} as const satisfies Record<string, NivelPrecedencia>;

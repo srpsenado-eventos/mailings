@@ -2,19 +2,51 @@ import { describe, expect, test } from "vitest";
 import { CATALOGO } from "@/data/catalogo";
 import { normalizarNome } from "@/lib/normalize";
 
+// Tabela dos titulares em `/fora-de-exercicio/-/f/por-tipo`: a primeira das duas (fixture de
+// 23/10, tests/scrape-tabela.test.ts).
+const INDICE_TITULARES = 0;
+
 describe("catálogo real (data/catalogo.ts)", () => {
-  test("Ministros do TST lê /ministros (a antiga /en/ministros responde 404 desde 2026-10-19)", () => {
-    const tst = CATALOGO.find((g) => g.nome === "Ministros do TST");
-    expect(tst?.fontes.map((f) => f.url)).toEqual(["https://www.tst.jus.br/ministros"]);
+  test("tem os 35 grupos (33 migrados do banco + Governadores Eleitos + Senadores fora de exercício)", () => {
+    expect(CATALOGO).toHaveLength(35);
   });
 
-  test("tem os 34 grupos (33 migrados do banco + Governadores Eleitos)", () => {
-    expect(CATALOGO).toHaveLength(34);
-  });
-
-  test("tem as 24 fontes cadastradas (21 migradas do banco + 3 de fora de exercício)", () => {
+  test("tem as 26 fontes de grupo (24 − 3 de fora de exercício nos Senadores + grupo novo, TST /orgaos, STJ PDF, PGR e Ex-Presidentes do Senado)", () => {
     const total = CATALOGO.reduce((n, g) => n + g.fontes.length, 0);
-    expect(total).toBe(24);
+    expect(total).toBe(26);
+  });
+
+  describe("planilha de 23/10 (spec 2026-10-23 §5)", () => {
+    test("Senadores fora de exercício: grupo novo, tabela por tipo, propõe inclusão", () => {
+      const g = CATALOGO.find((x) => x.nome === "Senadores fora de exercício")!;
+      expect(g.fontes).toEqual([{ url: "https://www25.senado.leg.br/web/senadores/fora-de-exercicio/-/f/por-tipo", ativo: true, propoeInclusao: true, tabela: { indice: INDICE_TITULARES, colunas: { nome: 0, uf: 2, motivo: 3 } } }]);
+    });
+
+    test("TST: /ministros primária e /orgaos por marcador propondo convocados", () => {
+      const tst = CATALOGO.find((g) => g.nome === "Ministros do TST")!;
+      expect(tst.fontes.map((f) => f.url)).toEqual(["https://www.tst.jus.br/ministros", "https://www.tst.jus.br/orgaos"]);
+      expect(tst.fontes[1]).toMatchObject({ ativo: true, rotulo: "convocado", propoeInclusao: true, marcador: { textos: ["(convocado)", "(convocada)"] } });
+    });
+
+    test("STJ: segunda fonte é o PDF da composição, por marcador **", () => {
+      const stj = CATALOGO.find((g) => g.nome === "Ministros do STJ")!;
+      expect(stj.fontes[1]).toMatchObject({ url: "https://www.stj.jus.br/sites/portalp/SiteAssets/Paginas/Institucional/Composicao/Composicao-do-STJ.pdf", ativo: true, tipo: "pdf", rotulo: "convocado", propoeInclusao: true, marcador: { textos: ["**"] } });
+    });
+
+    test("PGR e Ex-Presidentes do Senado ganharam fonte; Garibaldi é exceção de nome", () => {
+      expect(CATALOGO.find((g) => g.nome === "Procurador-Geral da República")?.fontes).toEqual([{ url: "https://www.mpf.mp.br/o-mpf/o-mpf/membros/procurador-geral-da-republica", ativo: true }]);
+      expect(CATALOGO.find((g) => g.nome === "Ex-Presidentes do Senado")?.fontes).toEqual([{ url: "https://www25.senado.leg.br/web/senadores/nova-republica", ativo: true, nomesDoContatos: ["Garibaldi Alves Filho"] }]);
+    });
+
+    test("tipo pdf, marcador, nomesDoContatos e urlAlternativa só onde a spec manda; alternativas em domínio oficial", () => {
+      const fontes = CATALOGO.flatMap((g) => g.fontes);
+      expect(fontes.filter((f) => f.tipo === "pdf")).toHaveLength(1);
+      expect(fontes.filter((f) => f.marcador)).toHaveLength(2);
+      expect(fontes.filter((f) => f.nomesDoContatos)).toHaveLength(1);
+      const alternativas = CATALOGO.flatMap((g) => [...g.fontes, ...(g.fontesIndividuais ?? [])]).flatMap((f) => (f.urlAlternativa ? [f.urlAlternativa] : []));
+      expect(alternativas).toHaveLength(5);
+      expect(alternativas.every((u) => u.startsWith("https://www.gov.br/"))).toBe(true);
+    });
   });
 
   test("navegador headless só no MS (governador) e no TCU; 'janela' no gov.br federal e em AM, RR e RJ", () => {
@@ -45,14 +77,21 @@ describe("catálogo real (data/catalogo.ts)", () => {
       expect(comIndividuais.map((g) => g.nome).sort()).toEqual(["Governadores", "Ministros de Estado"]);
     });
 
-    test("Governadores: 22 individuais ativas, por UF, nome e cargo, sem fonte de grupo", () => {
+    test("Governadores: 24 individuais ativas, por UF, nome e cargo, sem fonte de grupo", () => {
       const g = CATALOGO.find((x) => x.nome === "Governadores")!;
       expect(g.fontes).toEqual([]);
       const ind = g.fontesIndividuais ?? [];
-      expect(ind).toHaveLength(22);
+      expect(ind).toHaveLength(24);
       expect(ind.every((f) => f.ativo && "uf" in f.chave && f.campos.length === 2)).toBe(true);
       const ufs = ind.map((f) => ("uf" in f.chave ? f.chave.uf : "")).sort();
-      expect(ufs).toEqual(["AC","AL","AM","AP","BA","CE","ES","GO","MA","MS","PA","PB","PI","PR","RJ","RN","RO","RR","RS","SE","SP","TO"]);
+      expect(ufs).toEqual(["AC","AL","AM","AP","BA","CE","DF","ES","GO","MA","MS","PA","PB","PE","PI","PR","RJ","RN","RO","RR","RS","SE","SP","TO"]);
+    });
+
+    test("Governadores: provisórias (notícia) só em PE e DF, com nome e cargo", () => {
+      const ind = CATALOGO.find((x) => x.nome === "Governadores")!.fontesIndividuais ?? [];
+      const provisorias = ind.filter((f) => f.provisoria === true);
+      expect(provisorias.map((f) => ("uf" in f.chave ? f.chave.uf : "")).sort()).toEqual(["DF", "PE"]);
+      expect(provisorias.every((f) => f.campos.join(",") === "nome,cargo")).toBe(true);
     });
 
     test("Ministros de Estado: geral é lista de cargos com janela; 38 individuais por nome; AGU e CGU cobrem cargo", () => {
@@ -114,26 +153,10 @@ describe("catálogo real (data/catalogo.ts)", () => {
   describe("grupos de Senadores", () => {
     const senadores = CATALOGO.filter((g) => g.nome.startsWith("Senadores ("));
 
-    test("são três e cada um tem as duas fontes, na ordem", () => {
+    test("são três e cada um lê só a lista em exercício (fora de exercício virou grupo próprio em 23/10)", () => {
       expect(senadores).toHaveLength(3);
       for (const g of senadores) {
-        expect(g.fontes.map((f) => f.url)).toEqual([
-          "https://www25.senado.leg.br/web/senadores/em-exercicio",
-          "https://www25.senado.leg.br/web/senadores/fora-de-exercicio",
-        ]);
-      }
-    });
-
-    test("só a fonte de fora de exercício propõe inclusão, e ela tem rótulo e seções", () => {
-      for (const g of senadores) {
-        const [primaria, secundaria] = g.fontes;
-        expect(primaria.propoeInclusao).toBeUndefined();
-        expect(secundaria.propoeInclusao).toBe(true);
-        expect(secundaria.rotulo).toBe("fora de exercício");
-        expect(secundaria.tabela?.secoes).toEqual([
-          "Assunção de cargo",
-          "Licença com convocação de suplente",
-        ]);
+        expect(g.fontes.map((f) => f.url)).toEqual(["https://www25.senado.leg.br/web/senadores/em-exercicio"]);
       }
     });
 

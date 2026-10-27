@@ -8,6 +8,7 @@ import type {
   CampoDivergente,
   ComparacaoCampo,
   FonteIndividual,
+  LeituraAlternativa,
   SituacaoCampo,
   OrigemVeredito,
   Semaforo,
@@ -463,6 +464,29 @@ export function compararGrupo(
   return { grupo, fonteUrl: fonte.url, semFonte: false, contatos: resultados, novos };
 }
 
+/**
+ * Exceção por fonte (spec 2026-10-23 §4.2): nos nomes listados (como estão no Contatos), o
+ * Contatos prevalece sobre a grafia da página. Contato da lista que casou uma pessoa da
+ * composição sai com o nome "confere" e o próprio nome como valor esperado; semáforo e
+ * divergências são refeitos a partir das comparações. Quem não casou continua possível
+ * saída: a exceção corrige a grafia, nunca a presença. Não muta a entrada.
+ */
+export function aplicarNomesDoContatos(grupo: ResultadoGrupo, nomes: readonly string[]): ResultadoGrupo {
+  if (nomes.length === 0) return grupo;
+  const prevalecem = new Set(nomes.map(normalizarNome));
+  return { ...grupo, contatos: grupo.contatos.map((c) => (prevalecem.has(normalizarNome(c.contato.nome)) ? nomeDoContatosConfere(c) : c)) };
+}
+
+/** Só o contato casado (verde ou amarelo, com nome lido na composição) muda; os demais voltam iguais. */
+function nomeDoContatosConfere(c: ResultadoContato): ResultadoContato {
+  const nomeLido = (comp: ComparacaoCampo): boolean => comp.campo === "nome" && comp.valorEsperado !== undefined;
+  const casou = (c.semaforo === "verde" || c.semaforo === "amarelo") && !c.possivelSaida && c.comparacoes.some(nomeLido);
+  if (!casou) return c;
+  const comparacoes = c.comparacoes.map((comp) => (nomeLido(comp) ? { ...comp, valorEsperado: c.contato.nome, situacao: "confere" as const } : comp));
+  const camposDivergentes = divergenciasDe(comparacoes);
+  return { ...c, comparacoes, camposDivergentes, semaforo: camposDivergentes.length > 0 ? "amarelo" : "verde" };
+}
+
 // ---------------------------------------------------------------------------
 // Fontes individuais por contato (spec 2026-10-15)
 // ---------------------------------------------------------------------------
@@ -542,7 +566,8 @@ export interface NomeAchado {
  * o mesmo nome normalizado, ou o nome inteiro como trecho contíguo do texto, com fronteira de
  * palavra. Vias não exatas (decisão R9, spec §9), para nome de duas ou mais palavras: uma
  * `PessoaSite`, ou um trecho do texto, com todos os nomes do Contatos na ordem numa janela
- * com até três nomes a mais ("Guilherme Boulos" acha "Guilherme Castro Boulos").
+ * com até três nomes a mais ("Guilherme Boulos" acha "Guilherme Castro Boulos"). Por último,
+ * o nome mais curto em destaque (spec 2026-10-23 §4.1, `nomeCurtoEmDestaque`).
  * `undefined` é nome ausente.
  */
 export function nomeNaPagina(nome: string, c: ConteudoFonte): NomeAchado | undefined {
@@ -559,7 +584,50 @@ export function nomeNaPagina(nome: string, c: ConteudoFonte): NomeAchado | undef
   const pessoaLonga = c.pessoas.find((p) => janelaDoNome(tokens, palavrasDe(normalizarNome(p.nome))) !== undefined);
   if (pessoaLonga) return { pessoa: pessoaLonga, nomeNaPagina: pessoaLonga.nome, exato: false };
   const doTexto = janelaDoNome(tokens, palavrasDe(c.textoLimpo));
-  return doTexto ? { nomeNaPagina: doTexto, exato: false } : undefined;
+  if (doTexto) return { nomeNaPagina: doTexto, exato: false };
+  const curto = nomeCurtoEmDestaque(tokens, c);
+  if (curto) return curto;
+  return undefined;
+}
+
+/** Partes significativas de um nome: normalizado, sem tratamento e sem conectivos. */
+function partesDoNome(nome: string): string[] {
+  return soPalavras(normalizarNome(nome))
+    .split(" ")
+    .filter((t) => t.length > 0 && !CONECTIVOS_NOME.has(t));
+}
+
+/** Todas as `partes` aparecem em `alvo`, na mesma ordem (não precisam ser vizinhas). */
+function ehSubsequencia(partes: readonly string[], alvo: readonly string[]): boolean {
+  let k = 0;
+  for (const parte of alvo) {
+    if (k < partes.length && parte === partes[k]) k += 1;
+  }
+  return k === partes.length;
+}
+
+/**
+ * Nome mais curto em destaque (spec 2026-10-23 §4.1): a página individual publica o nome
+ * político ("Waldez Góes") e o Contatos tem o nome civil ("Antônio Waldez Góes da Silva").
+ * Reconhece quando um destaque (título h1–h3, negrito) tem duas ou mais partes, menos partes
+ * que o nome do Contatos, e todas elas nele, na ordem. Só destaque: a página "quem é quem"
+ * lista o gabinete no texto, e um assessor com duas partes do nome do ministro esconderia uma
+ * saída real. Dois destaques distintos (após `normalizarNome`) que reconhecem são ambíguos e
+ * não reconhecem. A pessoa estruturada com o mesmo nome do destaque vem em `pessoa` (traz o
+ * cargo). Nunca é exato: sai "Nome diverge" com o nome da página.
+ */
+function nomeCurtoEmDestaque(alvo: readonly string[], c: ConteudoFonte): NomeAchado | undefined {
+  const reconhece = (candidato: string): boolean => {
+    const partes = partesDoNome(candidato);
+    return partes.length >= 2 && partes.length < alvo.length && ehSubsequencia(partes, alvo);
+  };
+  const candidatos = c.destaques.filter(reconhece);
+  const chaves = new Set(candidatos.map((d) => normalizarNome(d)));
+  if (chaves.size !== 1) return undefined;
+  const destaque = candidatos[0];
+  const chave = normalizarNome(destaque);
+  const pessoa = c.pessoas.find((p) => normalizarNome(p.nome) === chave);
+  return pessoa ? { pessoa, nomeNaPagina: destaque, exato: false } : { nomeNaPagina: destaque, exato: false };
 }
 
 /** Denominações de cargo publicadas por uma fonte `casamento: "cargo"`, únicas, na ordem da página. */
@@ -625,8 +693,13 @@ export interface EntradaIndividual {
   contato: ContatoPlanilha;
   /** A fonte individual que casou o contato. */
   fonte: FonteIndividual;
-  /** Leitura da página individual: conteúdo OU motivo da falha. */
-  lida: { conteudo?: ConteudoFonte; erro?: string };
+  /**
+   * Leitura da página individual: conteúdo OU motivo da falha. `alternativa`: a principal não
+   * serviu e o conteúdo veio da URL alternativa cadastrada (spec 2026-10-23 §3.3).
+   * `urlDaMemoria`: o conteúdo foi reaproveitado da memória e estava guardado sob esta URL (pode
+   * ser a alternativa).
+   */
+  lida: { conteudo?: ConteudoFonte; erro?: string; alternativa?: LeituraAlternativa; urlDaMemoria?: string };
   /** Fonte do cargo do grupo (`casamento: "cargo"`), quando o grupo tem; a individual cobre o cargo quando declara. */
   listaCargos?: ListaCargos;
   grupoCanonico?: string;
@@ -645,7 +718,10 @@ export interface VereditoIndividual {
 /** Veredito de um contato ligado a uma fonte individual: a tabela da spec 2026-10-15 §5.2. */
 export function compararContatoIndividual(e: EntradaIndividual): VereditoIndividual {
   const { contato, fonte, lida, listaCargos, grupoCanonico } = e;
-  const url = fonte.url;
+  // A URL de onde o conteúdo veio: a da memória, quando ele foi reaproveitado (pode ser a
+  // alternativa), ou a alternativa, quando foi ela que respondeu hoje (spec 2026-10-23 §3.3).
+  const url = lida.urlDaMemoria ?? lida.alternativa?.url ?? fonte.url;
+  const pelaAlternativa = lida.alternativa ? { alternativa: lida.alternativa } : {};
   const cobreCargo = fonte.campos.includes("cargo");
   const protocolo = comparacoesTratamento(contato, grupoCanonico);
   const cargoDe = (comp: ComparacaoCampo | undefined): ComparacaoCampo[] => (comp ? [comp] : []);
@@ -702,6 +778,7 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
         origem: "oficial",
         fonteUrl: url,
         observacao: OBSERVACAO_NAO_CONSTA_INDIVIDUAL,
+        ...pelaAlternativa,
       },
       nomeConfirmado: false,
       lidaComConteudo: true,
@@ -741,6 +818,7 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
       camposDivergentes,
       origem: "oficial",
       fonteUrl: url,
+      ...pelaAlternativa,
     },
     nomeConfirmado: true,
     lidaComConteudo: true,

@@ -9,11 +9,12 @@ import { grupoDeputados, NOME_GRUPO_DEPUTADOS, temGrupoDeputados } from "@/lib/p
 import { avisoDaEleicao, ehFiltroEleicao, FILTROS_ELEICAO, secoesDeEleicao, secoesDeGoverno } from "@/lib/painel-eleicao";
 import { PublicarButton } from "@/components/publicar-button";
 import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-contato";
-import { cartoesDoResumo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, type Filtro } from "@/lib/painel";
+import { avisoUrlCaida, cartoesDoResumo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoAlternativa, textoCabecalhoWeb, textoDataHora, TEXTO_FONTE_PROVISORIA, textoIndividuais, textoMudanca, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, type Filtro } from "@/lib/painel";
 import { autoridadesRepetidas, etiquetaDeRepeticao, textoRepetidas } from "@/lib/repetidos";
-import type { ResultadoGrupo, Retrato } from "@/lib/types";
+import type { FalhasPorUrl, ResultadoGrupo, Retrato } from "@/lib/types";
 
-function EstadoDaFonte({ g }: { g: ResultadoGrupo }) {
+function EstadoDaFonte({ g, falhas }: { g: ResultadoGrupo; falhas?: FalhasPorUrl }) {
+  const caida = avisoUrlCaida(falhas, g.fonteUrl);
   if (g.semFonte) {
     return (
       <span className="text-xs text-ruim">
@@ -27,6 +28,7 @@ function EstadoDaFonte({ g }: { g: ResultadoGrupo }) {
     return (
       <span className="text-xs text-atencao">
         Fonte inacessível, confira à mão{g.erroFonte ? `: ${g.erroFonte}` : ""}
+        {caida && <> · {caida}</>}
         {g.individuais && <> · {textoIndividuais(g.individuais)}</>}
         {g.fonteUrl && <> · <a href={g.fonteUrl} target="_blank" rel="noreferrer" className="underline">abrir</a></>}
       </span>
@@ -34,9 +36,13 @@ function EstadoDaFonte({ g }: { g: ResultadoGrupo }) {
   }
   return (
     <span className="text-xs text-cinza">
+      {g.mudouFormato && <span className="text-atencao">{textoMudanca(g.mudouFormato)} · </span>}
+      {g.alternativa && <span className="text-atencao">{textoAlternativa(g.alternativa)} · </span>}
+      {caida && <span className="text-atencao">{caida} · </span>}
       {g.reaproveitada && <span className="text-atencao">{textoReaproveitada(g.reaproveitada)} · </span>}
       {g.viaPesquisaAmpla && <span className="text-atencao">≈ via IA — confira · </span>}
       {g.individuais && <span>{textoIndividuais(g.individuais)} · </span>}
+      {(g.individuais?.provisorias ?? 0) > 0 && <span className="text-atencao">{TEXTO_FONTE_PROVISORIA} · </span>}
       {g.erroFonte && <span className="text-atencao">uma fonte não respondeu: {g.erroFonte} · </span>}
       {g.fonteUrl && g.fonteUrl.startsWith("http") && (
         <a href={g.fonteUrl} target="_blank" rel="noreferrer" className="text-acao underline">abrir fonte</a>
@@ -180,7 +186,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
                   </span>
                 </button>
                 <div className="grow" />
-                <EstadoDaFonte g={g} />
+                <EstadoDaFonte g={g} falhas={retrato.falhas} />
               </div>
               {aberto && (
                 <>

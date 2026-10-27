@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import { Agent } from "undici";
-import { normalizarTexto, nucleoDeNome } from "@/lib/normalize";
+import { PDFParse } from "pdf-parse";
+import { normalizarNome, normalizarTexto, nucleoDeNome } from "@/lib/normalize";
 import { CARGOS } from "@/lib/cargos";
 import type { ConteudoFonte, PessoaSite, ExtracaoTabela } from "@/lib/types";
 
@@ -439,6 +440,9 @@ const PALAVRAS_MOLDURA =
  */
 const MAX_FRACAO_MOLDURA = 0.8;
 
+/** Marcação do conteúdo principal da página: o bloco que a contém nunca é moldura. */
+const CONTEUDO_PRINCIPAL = "main, [role=main]";
+
 function tamanhoDoTexto(texto: string): number {
   return texto.replace(/\s+/g, " ").trim().length;
 }
@@ -457,28 +461,212 @@ function removerMoldura($: RaizCheerio): void {
       PALAVRAS_MOLDURA.test(marcas);
     if (!ehMoldura) return;
     if (tamanhoDoTexto(alvo.text()) / total >= MAX_FRACAO_MOLDURA) return;
+    // Bloco que contém o conteúdo principal não é moldura, por menor que seja a fração. A
+    // página do PGR (Plone) rendeu 112 caracteres e nenhuma pessoa em 23/10; a causa provável,
+    // reproduzida em tests/fixtures/mpf-pgr.html, é o miolo dentro do bloco do menu lateral
+    // ("menu-lateral"), que o menu principal e o rodapé deixam abaixo de 80% do texto.
+    if (alvo.find(CONTEUDO_PRINCIPAL).length > 0) return;
     alvo.remove();
   });
 }
 
+/**
+ * Caracteres que encerram, para trás, o trecho em que se procura o nome antes do marcador.
+ * O parêntese entra porque o próprio marcador do TST é "(convocado)".
+ */
+const SEPARADORES_DO_MARCADOR = /[·,;:(|]/;
+/** Palavra que pode compor nome próprio: começa em maiúscula e só tem letras, apóstrofo ou hífen. */
+const PALAVRA_DE_NOME = /^[A-ZÀ-Ý][\p{L}'’-]*$/u;
+/**
+ * Inicial abreviada ("B." em "João B. Silva"): faz parte do nome, mas não conta como parte
+ * significativa. Sem ela o nome parava antes da inicial, sobrava só "Silva" e o convocado sumia.
+ */
+const INICIAL_DO_NOME = /^[A-ZÀ-Ý]\.$/;
+
+/** Palavra de cargo, inclusive composta ("Vice-Presidente", "Procurador-Geral"). */
+function ehPalavraDeCargo(palavra: string): boolean {
+  return normalizarTexto(palavra)
+    .split("-")
+    .some((parte) => parte !== "" && ehTokenDeCargo(parte));
+}
+
+/** O que o marcador acrescenta ao cargo: "(convocado)" → "convocado"; "**" → nada. */
+function sufixoDoMarcador(marcador: string): string {
+  return marcador.replace(/[()*]/g, "").trim();
+}
+
+/**
+ * Qualificadores que, logo depois da palavra de cargo, continuam o cargo e não abrem o nome
+ * ("Desembargador Federal Olindo Menezes", "Desembargadora do Trabalho Fulana Silva"). Os
+ * convocados do STJ vêm em boa parte dos TRFs; sem isto o nome saía "Federal Olindo Menezes",
+ * não casava o contato e virava possível saída falsa e "novo" falso. Formas normalizadas.
+ */
+const QUALIFICADORES_DO_CARGO: readonly (readonly string[])[] = [
+  ["federal"], ["do", "trabalho"], ["substituto"], ["substituta"], ["convocado"], ["convocada"],
+];
+
+/** Posição logo depois dos qualificadores do cargo que começam em `inicio` (podem ser vários seguidos). */
+function depoisDosQualificadores(palavras: readonly string[], inicio: number): number {
+  let i = inicio;
+  for (;;) {
+    const qualificador = QUALIFICADORES_DO_CARGO.find((q) =>
+      q.every((parte, k) => i + k < palavras.length && normalizarTexto(palavras[i + k]) === parte),
+    );
+    if (!qualificador) return i;
+    i += qualificador.length;
+  }
+}
+
+/** Onde começa o nome que fecha `palavras` e a palavra de cargo que o antecede, se houver. */
+interface LimitesDoNome {
+  inicio: number;
+  palavraDeCargo?: string;
+}
+
+/** Nome: maiúsculas e conectivos minúsculos do fim para trás, parando no cargo. */
+function limitesDoNome(palavras: readonly string[]): LimitesDoNome {
+  let inicio = palavras.length;
+  while (inicio > 0) {
+    const palavra = palavras[inicio - 1];
+    const conectivoMinusculo = CONECTOR.test(palavra) && palavra === palavra.toLowerCase();
+    const ehDoNome = PALAVRA_DE_NOME.test(palavra) || INICIAL_DO_NOME.test(palavra);
+    if (!conectivoMinusculo && (!ehDoNome || ehPalavraDeCargo(palavra))) break;
+    inicio -= 1;
+  }
+  const anterior = inicio > 0 ? palavras[inicio - 1] : undefined;
+  const palavraDeCargo = anterior !== undefined && ehPalavraDeCargo(anterior) ? anterior : undefined;
+  if (palavraDeCargo !== undefined) inicio = depoisDosQualificadores(palavras, inicio);
+  // Conectivo não abre nome: "de Fulano Silva" vira "Fulano Silva".
+  while (inicio < palavras.length && CONECTOR.test(palavras[inicio])) inicio += 1;
+  return { inicio, ...(palavraDeCargo !== undefined ? { palavraDeCargo } : {}) };
+}
+
+/**
+ * A pessoa cujo nome fecha `trecho` (o texto entre o separador anterior e o marcador). O cargo
+ * só existe quando há palavra de cargo antes do nome (com ou sem qualificador no meio):
+ * "Desembargador" + "(convocado)" dá "Desembargador convocado"; o qualificador não entra.
+ */
+function pessoaAntesDoMarcador(trecho: string, marcador: string): PessoaSite | undefined {
+  const palavras = trecho.trim().split(/\s+/).filter(Boolean);
+  const { inicio, palavraDeCargo } = limitesDoNome(palavras);
+  const nome = palavras.slice(inicio);
+  if (nome.filter((p) => !CONECTOR.test(p) && !INICIAL_DO_NOME.test(p)).length < 2) return undefined;
+  const cargo =
+    palavraDeCargo !== undefined ? `${palavraDeCargo} ${sufixoDoMarcador(marcador)}`.trim() : undefined;
+  return { nome: nome.join(" "), ...(cargo ? { cargo } : {}), origem: "pagina" };
+}
+
+interface OcorrenciaDeMarcador {
+  indice: number;
+  marcador: string;
+}
+
+/** Posições de cada marcador na linha, na ordem do texto. */
+function ocorrenciasDosMarcadores(linha: string, textos: readonly string[]): OcorrenciaDeMarcador[] {
+  const achadas: OcorrenciaDeMarcador[] = [];
+  for (const marcador of textos) {
+    if (marcador === "") continue;
+    for (let i = linha.indexOf(marcador); i >= 0; i = linha.indexOf(marcador, i + marcador.length)) {
+      achadas.push({ indice: i, marcador });
+    }
+  }
+  return achadas.sort((a, b) => a.indice - b.indice);
+}
+
+/** Posição do último separador em `texto`, ou -1. */
+function ultimoSeparador(texto: string): number {
+  for (let i = texto.length - 1; i >= 0; i -= 1) {
+    if (SEPARADORES_DO_MARCADOR.test(texto[i])) return i;
+  }
+  return -1;
+}
+
+/**
+ * Extração por marcador (spec 2026-10-23 §5.2): só são pessoas os nomes seguidos de um dos
+ * `textos` cadastrados ("(convocado)" no TST, "**" no PDF do STJ). Para cada ocorrência, o
+ * nome é a sequência final de palavras em maiúscula do trecho anterior na mesma linha, com
+ * duas ou mais partes significativas. Nome repetido entra uma vez. Função pura.
+ */
+export function extrairPorMarcador(texto: string, textos: readonly string[]): PessoaSite[] {
+  const pessoas: PessoaSite[] = [];
+  const vistos = new Set<string>();
+  for (const linha of texto.split(/\r?\n/)) {
+    for (const { indice, marcador } of ocorrenciasDosMarcadores(linha, textos)) {
+      const antes = linha.slice(0, indice);
+      const pessoa = pessoaAntesDoMarcador(antes.slice(ultimoSeparador(antes) + 1), marcador);
+      if (!pessoa) continue;
+      const chave = normalizarNome(pessoa.nome);
+      if (vistos.has(chave)) continue;
+      vistos.add(chave);
+      pessoas.push(pessoa);
+    }
+  }
+  return pessoas;
+}
+
+/** Opções de extração de conteúdo (HTML ou PDF). */
+export interface OpcoesExtracao {
+  /** Textos que marcam as pessoas do grupo; presentes, só elas são extraídas. */
+  marcador?: readonly string[];
+}
+
 /** Extrai texto limpo + destaques + pessoas estruturadas de um HTML já baixado. Função pura. */
-export function extrairConteudo(html: string, url: string): ConteudoFonte {
+export function extrairConteudo(html: string, url: string, opcoes: OpcoesExtracao = {}): ConteudoFonte {
   const $ = cheerio.load(html);
   $("script, style, noscript").remove();
   removerMoldura($);
 
   // destaques ANTES de mutar o DOM (extrairLinhas insere "\n").
   const destaquesBrutos: string[] = [];
-  $("strong, b").each((_, el) => {
+  // Títulos h1–h3 também: a página individual do gov.br põe o nome político no `h1`
+  // (spec 2026-10-23 §4.1). O filtro `ehNome` abaixo tira "Composição" e afins.
+  $("strong, b, h1, h2, h3").each((_, el) => {
     const txt = $(el).text().replace(/\s+/g, " ").trim();
     if (txt) destaquesBrutos.push(txt);
   });
 
   const { linhas, titulos } = extrairLinhas($);
-  const pessoas = segmentarPessoas(linhas, titulos);
+  const pessoas = opcoes.marcador?.length
+    ? extrairPorMarcador(linhas.join("\n"), opcoes.marcador)
+    : segmentarPessoas(linhas, titulos);
   const destaques = [...new Set(destaquesBrutos.filter(ehNome))];
 
   return { url, textoLimpo: linhas.join(" "), destaques, pessoas };
+}
+
+/** Lê o texto de um PDF. Injetável, para os testes não dependerem do pdf-parse. */
+export type LeitorPdf = (bytes: Uint8Array) => Promise<string>;
+
+/** Leitor real, com pdf-parse. Copia os bytes (o pdf.js pode tomar o buffer) e sempre libera o documento. */
+export const lerTextoPdf: LeitorPdf = async (bytes) => {
+  const parser = new PDFParse({ data: new Uint8Array(bytes) });
+  try {
+    return (await parser.getText()).text;
+  } finally {
+    await parser.destroy();
+  }
+};
+
+/** Data da composição publicada no PDF ("Composição – 21/10/2026"). */
+const DATA_DA_COMPOSICAO = /Composição\s*[–-]\s*(\d{2}\/\d{2}\/\d{4})/;
+
+/**
+ * Conteúdo de uma fonte em PDF (spec 2026-10-23 §5.1, composição do STJ). Sem marcador não
+ * há como separar pessoa de texto num PDF: volta só o texto. Com marcador, cada pessoa leva
+ * no contexto a data da composição, quando o PDF a traz.
+ */
+export async function extrairConteudoPdf(
+  bytes: Uint8Array,
+  url: string,
+  opcoes: OpcoesExtracao = {},
+  lerPdf: LeitorPdf = lerTextoPdf,
+): Promise<ConteudoFonte> {
+  const texto = await lerPdf(bytes);
+  const data = DATA_DA_COMPOSICAO.exec(texto)?.[1];
+  const pessoas = opcoes.marcador?.length
+    ? extrairPorMarcador(texto, opcoes.marcador).map((p) => (data ? { ...p, contexto: `Composição – ${data}` } : p))
+    : [];
+  return { url, textoLimpo: texto, destaques: [], pessoas };
 }
 
 /**
@@ -539,22 +727,32 @@ export function extrairTabela(html: string, url: string, cfg: ExtracaoTabela): C
 export interface OpcoesRaspagem {
   /** Extração estruturada declarada no catálogo. Ausente → extração de texto padrão. */
   tabela?: ExtracaoTabela;
+  /** Só os nomes seguidos de um destes textos são pessoas (spec 2026-10-23 §5.2). */
+  marcador?: readonly string[];
+  /** "pdf": a fonte é um PDF, lido pelo pdf-parse (spec 2026-10-23 §5.1). Ausente → HTML. */
+  tipo?: "html" | "pdf";
   timeoutMs?: number;
 }
 
 /**
- * Baixa a página e extrai o conteúdo. Lança ScrapeError em falha de rede/timeout.
+ * Baixa a página (ou o PDF) e extrai o conteúdo. Lança ScrapeError em falha de rede/timeout.
  * Tenta TLS estrito primeiro; só em erro de certificado repete com TLS relaxado.
  */
 export async function raspar(url: string, opcoes: OpcoesRaspagem = {}): Promise<ConteudoFonte> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opcoes.timeoutMs ?? 15000);
+  const extracao: OpcoesExtracao = opcoes.marcador ? { marcador: opcoes.marcador } : {};
   try {
-    const html = await baixarHtml(url, ctrl.signal);
+    if (opcoes.tipo === "pdf") {
+      const bytes = await comRetryTls((dispatcher) => requisitarBytes(url, ctrl.signal, dispatcher));
+      if (bytes.length === 0) throw new ScrapeError(url, "PDF vazio");
+      return await extrairConteudoPdf(bytes, url, extracao);
+    }
+    const html = await comRetryTls((dispatcher) => requisitar(url, ctrl.signal, dispatcher));
     if (!html.trim()) throw new ScrapeError(url, "HTML vazio");
     return opcoes.tabela
       ? extrairTabela(html, url, opcoes.tabela)
-      : extrairConteudo(html, url);
+      : extrairConteudo(html, url, extracao);
   } catch (err) {
     if (err instanceof ScrapeError) throw err;
     throw new ScrapeError(url, err instanceof Error ? err.message : "erro desconhecido");
@@ -563,13 +761,13 @@ export async function raspar(url: string, opcoes: OpcoesRaspagem = {}): Promise<
   }
 }
 
-/** Faz o fetch e devolve o HTML, com retry de TLS relaxado em erro de certificado. */
-async function baixarHtml(url: string, signal: AbortSignal): Promise<string> {
+/** Faz a requisição; só em erro de certificado repete com TLS relaxado. */
+async function comRetryTls<T>(requisicao: (dispatcher?: Agent) => Promise<T>): Promise<T> {
   try {
-    return await requisitar(url, signal);
+    return await requisicao();
   } catch (err) {
     if (ehErroDeCertificado(err)) {
-      return await requisitar(url, signal, agenteTlsRelaxado);
+      return await requisicao(agenteTlsRelaxado);
     }
     throw err;
   }
@@ -611,10 +809,22 @@ export function decodificarCorpo(
 }
 
 /** Uma requisição HTTP; lança ScrapeError em status não-OK. */
-async function requisitar(url: string, signal: AbortSignal, dispatcher?: Agent): Promise<string> {
+async function buscar(url: string, signal: AbortSignal, dispatcher?: Agent): Promise<Response> {
   const opcoes: RequestInitComDispatcher = { signal, headers: HEADERS_NAVEGADOR };
   if (dispatcher) opcoes.dispatcher = dispatcher;
   const resp = await fetch(url, opcoes);
   if (!resp.ok) throw new ScrapeError(url, `HTTP ${resp.status}`);
+  return resp;
+}
+
+/** O corpo decodificado como texto, no charset declarado. */
+async function requisitar(url: string, signal: AbortSignal, dispatcher?: Agent): Promise<string> {
+  const resp = await buscar(url, signal, dispatcher);
   return decodificarCorpo(await resp.arrayBuffer(), resp.headers.get("content-type"));
+}
+
+/** O corpo em bytes, sem decodificar (PDF). */
+async function requisitarBytes(url: string, signal: AbortSignal, dispatcher?: Agent): Promise<Uint8Array> {
+  const resp = await buscar(url, signal, dispatcher);
+  return comoBytes(await resp.arrayBuffer());
 }

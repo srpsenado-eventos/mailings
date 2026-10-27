@@ -178,7 +178,7 @@ describe("aplicarEleicao", () => {
   const resultado: ResultadoAnalise = {
     arquivoNome: "base.xlsx",
     grupos: [senadores(joana, { id: "12", nome: "Pedro Ficticio", grupo: "Senadores", departamento: "PIAUÍ" })],
-    resumo: { total: 2, verde: 2, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0, gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0 },
+    resumo: { total: 2, verde: 2, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0, gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0 },
   };
 
   test("anexa a eleição só à linha casada, sem mudar semáforo nem resumo, e guarda o resultado", () => {
@@ -216,7 +216,7 @@ describe("aplicarEleicao: governadores", () => {
   const base = (): ResultadoAnalise => ({
     arquivoNome: "base.xlsx",
     grupos: [grupo("Governadores", [martaGov])],
-    resumo: { total: 1, verde: 1, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0, gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0 },
+    resumo: { total: 1, verde: 1, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0, gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0 },
   });
   const gs = { eleitos: [reeleitoGO], segundoTurno: [] };
 

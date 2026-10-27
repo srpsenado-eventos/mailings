@@ -1,7 +1,7 @@
 import { coerenciasVisiveis, textoCoerencia } from "@/lib/tratamento";
 import { excessoDoNumero, LIMITE_NUMERO, rotuloAchadoEndereco } from "@/lib/endereco";
 import { colunasDaBase, textoCelula } from "@/lib/ajuste-numero";
-import { descreverMotivoDeHoje, diaMes } from "@/lib/memoria-leitura";
+import { descreverMotivoDeHoje, diaMes, MIN_COLETAS_URL_CAIDA } from "@/lib/memoria-leitura";
 import { normalizarTexto } from "@/lib/normalize";
 import { ColunaFaltanteError } from "@/lib/planilha";
 import { ehFiltroEleicao, passaFiltroEleicao, type FiltroEleicao } from "@/lib/painel-eleicao";
@@ -11,6 +11,10 @@ import type {
   BaseEnderecos,
   ComparacaoCampo,
   EnderecoEstruturado,
+  FalhaDeUrl,
+  FalhasPorUrl,
+  LeituraAlternativa,
+  MudancaDeComposicao,
   PessoaSite,
   Reaproveitamento,
   ResultadoAnalise,
@@ -445,8 +449,60 @@ export function textoReaproveitada(r: Reaproveitamento & { url?: string }): stri
   return `Leitura de ${diaMes(r.lidaEm)} reaproveitada: ${descreverMotivoDeHoje(r.motivo)}`;
 }
 
-/** Uma linha do rodapé de procedência. `lida` é falsa quando a página daquele campo não foi lida nesta varredura; `leituraDe` é a data da leitura reaproveitada (spec 2026-10-20 §7). */
-export interface LinhaProcedencia { rotulo: string; texto: string; url?: string; lida: boolean; leituraDe?: string }
+/** Cabeçalho do grupo lido pela alternativa (spec 2026-10-23 §6): "Lida pela URL alternativa; a principal não respondeu (HTTP 404)". */
+export function textoAlternativa(a: LeituraAlternativa): string {
+  return `Lida pela URL alternativa; a principal não respondeu (${a.motivoPrincipal})`;
+}
+
+/** Aviso de URL caída em coletas seguidas (spec 2026-10-23 §6): "Fonte caída há 2 coletas, desde 19/10: conferir se o endereço mudou". */
+export function textoUrlCaida(f: FalhaDeUrl): string {
+  return `Fonte caída há ${f.coletas} coletas, desde ${diaMes(f.desde)}: conferir se o endereço mudou`;
+}
+
+/** Cabeçalho do grupo com mudança de composição (spec 2026-10-23 §6, decisão 1 do plano de 2026-10-26). */
+export function textoMudanca(m: MudancaDeComposicao): string {
+  return `Composição mudou: ${m.trocados} de ${m.total} nomes não estavam na leitura de ${diaMes(m.lidaEm)}; confira`;
+}
+
+/** Cabeçalho do grupo e procedência do contato com fonte individual provisória (spec 2026-10-23 §5). */
+export const TEXTO_FONTE_PROVISORIA = "Fonte provisória: notícia";
+
+/** Aviso da URL quando ela está caída há `MIN_COLETAS_URL_CAIDA` ou mais coletas; senão `undefined`. Retrato antigo não traz `falhas`. */
+export function avisoUrlCaida(falhas: FalhasPorUrl | undefined, url: string | undefined): string | undefined {
+  const f = url ? falhas?.[url] : undefined;
+  return f && f.coletas >= MIN_COLETAS_URL_CAIDA ? textoUrlCaida(f) : undefined;
+}
+
+/**
+ * Uma linha do rodapé de procedência. `lida` é falsa quando a página daquele campo não foi lida
+ * nesta varredura; `leituraDe` é a data da leitura reaproveitada (spec 2026-10-20 §7);
+ * `alternativa`, `provisoria` e `caida` vêm da leitura resiliente (spec 2026-10-23 §6).
+ */
+export interface LinhaProcedencia {
+  rotulo: string;
+  texto: string;
+  url?: string;
+  lida: boolean;
+  leituraDe?: string;
+  alternativa?: true;
+  provisoria?: true;
+  caida?: string;
+}
+
+/** Campos opcionais da leitura resiliente numa linha de procedência; ausentes quando não se aplicam. */
+function ressalvasDaLinha(
+  url: string | undefined,
+  falhas: FalhasPorUrl | undefined,
+  alternativa: boolean,
+  provisoria: boolean,
+): Pick<LinhaProcedencia, "alternativa" | "provisoria" | "caida"> {
+  const caida = avisoUrlCaida(falhas, url);
+  return {
+    ...(alternativa ? { alternativa: true as const } : {}),
+    ...(provisoria ? { provisoria: true as const } : {}),
+    ...(caida ? { caida } : {}),
+  };
+}
 
 /**
  * Rodapé "De onde veio cada resposta", por contato. Grupo com fontes individuais: o nome vem da
@@ -454,11 +510,11 @@ export interface LinhaProcedencia { rotulo: string; texto: string; url?: string;
  * `lida: false` quando a comparação daquele campo é `nao_verificado`. Grupo comum: a linha
  * única de `procedenciaNomeCargo`.
  */
-export function procedenciaDoContato(c: ResultadoContato, g: ResultadoGrupo): LinhaProcedencia[] {
+export function procedenciaDoContato(c: ResultadoContato, g: ResultadoGrupo, falhas?: FalhasPorUrl): LinhaProcedencia[] {
   const deGrupo = g.reaproveitada ? { leituraDe: g.reaproveitada.lidaEm } : {};
   if (!g.individuais) {
     const p = procedenciaNomeCargo(g);
-    return p ? [{ rotulo: "Nome e cargo", ...p, lida: true, ...deGrupo }] : [];
+    return p ? [{ rotulo: "Nome e cargo", ...p, lida: true, ...deGrupo, ...ressalvasDaLinha(g.fonteUrl, falhas, Boolean(g.alternativa), false) }] : [];
   }
   // Página individual reaproveitada: data no contato; geral reaproveitada: data no grupo, pela URL.
   const leituraDe = (url: string, daIndividual: boolean): { leituraDe?: string } => {
@@ -469,15 +525,23 @@ export function procedenciaDoContato(c: ResultadoContato, g: ResultadoGrupo): Li
   const linhas: LinhaProcedencia[] = [];
   const compNome = comparacaoDeValor(c, "nome");
   const nome = compNome?.fonteUrl ?? c.fonteUrl;
-  if (nome) linhas.push({ rotulo: "Nome", texto: nome, url: nome, lida: compNome?.situacao !== "nao_verificado", ...leituraDe(nome, true) });
+  // A alternativa marca a linha cuja URL é a lida pela alternativa; a provisória, a linha do nome.
+  const pelaAlternativa = (url: string) => c.alternativa?.url === url;
+  // O aviso de URL caída é da principal (é ela que entra em `falhas`), não da alternativa lida.
+  const urlDoAviso = (url: string) => (pelaAlternativa(url) ? c.alternativa?.urlPrincipal : undefined) ?? (g.alternativa?.url === url ? g.alternativa.urlPrincipal : undefined) ?? url;
+  if (nome) linhas.push({ rotulo: "Nome", texto: nome, url: nome, lida: compNome?.situacao !== "nao_verificado", ...leituraDe(nome, true), ...ressalvasDaLinha(urlDoAviso(nome), falhas, pelaAlternativa(nome), Boolean(c.provisoria)) });
   const compCargo = comparacaoDeValor(c, "cargo");
   const cargo = compCargo?.fonteUrl;
-  if (cargo) linhas.push({ rotulo: "Cargo", texto: cargo, url: cargo, lida: compCargo?.situacao !== "nao_verificado", ...leituraDe(cargo, cargo === c.fonteUrl) });
+  if (cargo) linhas.push({ rotulo: "Cargo", texto: cargo, url: cargo, lida: compCargo?.situacao !== "nao_verificado", ...leituraDe(cargo, cargo === c.fonteUrl), ...ressalvasDaLinha(urlDoAviso(cargo), falhas, pelaAlternativa(cargo), false) });
   return linhas;
 }
 
-/** "38 páginas individuais lidas · 4 reaproveitadas · 2 inacessíveis", no cabeçalho do grupo. Partes zeradas somem; retrato antigo não traz `reaproveitadas`. */
-export function textoIndividuais(i: { lidas: number; caidas: number; reaproveitadas?: number }): string {
+/**
+ * "38 páginas individuais lidas · 4 reaproveitadas · 2 inacessíveis", no cabeçalho do grupo.
+ * Partes zeradas somem; retrato antigo não traz `reaproveitadas`. As provisórias não entram: o
+ * cabeçalho já diz `TEXTO_FONTE_PROVISORIA` ao lado.
+ */
+export function textoIndividuais(i: { lidas: number; caidas: number; reaproveitadas?: number; provisorias?: number }): string {
   const partes = [i.lidas === 1 ? "1 página individual lida" : `${i.lidas} páginas individuais lidas`];
   const r = i.reaproveitadas ?? 0;
   if (r > 0) partes.push(`${r} ${r === 1 ? "reaproveitada" : "reaproveitadas"}`);
@@ -485,7 +549,11 @@ export function textoIndividuais(i: { lidas: number; caidas: number; reaproveita
   return partes.join(" · ");
 }
 
-/** Linha de situação dos grupos, abaixo dos cartões (spec 2026-10-20 §7). Vazia quando tudo é zero. */
+/**
+ * Linha de situação dos grupos, abaixo dos cartões (spec 2026-10-20 §7 e 2026-10-23 §6). Vazia
+ * quando tudo é zero. As URLs caídas vêm no fim, com o próprio substantivo; retrato antigo não
+ * traz `gruposComMudanca` nem `urlsCaidasRepetidas`.
+ */
 export function textoSituacaoDosGrupos(r: Partial<ResumoAnalise>): string {
   const n = (v: number | undefined) => v ?? 0;
   const itens = [
@@ -493,10 +561,12 @@ export function textoSituacaoDosGrupos(r: Partial<ResumoAnalise>): string {
     { n: n(r.gruposFonteInacessivel), um: "inacessível", varios: "inacessíveis" },
     { n: n(r.gruposViaPesquisaAmpla), um: "via IA", varios: "via IA" },
     { n: n(r.gruposReaproveitados), um: "com leitura reaproveitada", varios: "com leitura reaproveitada" },
+    { n: n(r.gruposComMudanca), um: "com mudança de composição", varios: "com mudança de composição" },
   ].filter((i) => i.n > 0);
-  return itens
-    .map((i, idx) => `${i.n} ${idx === 0 ? (i.n === 1 ? "grupo " : "grupos ") : ""}${i.n === 1 ? i.um : i.varios}`)
-    .join(" · ");
+  const grupos = itens.map((i, idx) => `${i.n} ${idx === 0 ? (i.n === 1 ? "grupo " : "grupos ") : ""}${i.n === 1 ? i.um : i.varios}`);
+  const caidas = n(r.urlsCaidasRepetidas);
+  const urls = caidas > 0 ? [`${caidas} ${caidas === 1 ? "URL caída" : "URLs caídas"} há ${MIN_COLETAS_URL_CAIDA} ou mais coletas`] : [];
+  return [...grupos, ...urls].join(" · ");
 }
 
 /** "01/10, 14h12", no fuso de Brasília, como o cabeçalho do mockup. */

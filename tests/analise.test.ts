@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { analisar, MOTIVO_LEITURA_SUSPEITA, type Dependencias } from "@/lib/analise";
 import { extrairConteudo, extrairTabela, ScrapeError } from "@/lib/scrape";
 import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { MOTIVO_NAVEGADOR_AUSENTE } from "@/lib/navegador";
 import { CATALOGO } from "@/data/catalogo";
-import type { ContatoPlanilha, ConteudoFonte, LeituraGuardada, LeiturasGuardadas } from "@/lib/types";
+import { chaveDaLeitura, MOTIVO_SEM_NINGUEM } from "@/lib/memoria-leitura";
+import type { ContatoPlanilha, ConteudoFonte, FonteCatalogo, LeituraGuardada, LeiturasGuardadas } from "@/lib/types";
 
 /**
  * `Tratamento` e `Endereçamento` coerentes e conformes: a auditoria dos dois campos roda
@@ -479,11 +480,24 @@ describe("Senadores de ponta a ponta (fixtures das duas páginas reais)", () => 
     readFileSync(join(__dirname, "fixtures", arquivo), "utf8");
 
   const grupoMA = CATALOGO.find((g) => g.nome === "Senadores (Maranhão ao Piauí)")!;
+  // Desde a planilha de 23/10 o catálogo não traz mais a segunda fonte nos Senadores (virou o
+  // grupo "Senadores fora de exercício"). O mecanismo de segunda fonte continua valendo e é
+  // testado aqui com a entrada como era no catálogo até 23/10.
+  const SEGUNDA_FONTE: FonteCatalogo = {
+    url: FORA,
+    ativo: true,
+    rotulo: "fora de exercício",
+    propoeInclusao: true,
+    tabela: {
+      colunas: { nome: 0, uf: 2, motivo: 3 },
+      secoes: ["Assunção de cargo", "Licença com convocação de suplente"],
+    },
+  };
 
   const deps: Dependencias = {
     resolverFonte: () => ({
       grupoCanonico: grupoMA.nome,
-      fontes: grupoMA.fontes.filter((f) => f.ativo),
+      fontes: [...grupoMA.fontes.filter((f) => f.ativo), SEGUNDA_FONTE],
       ufs: grupoMA.ufs,
       fontesIndividuais: [],
       sugestoes: [],
@@ -896,4 +910,245 @@ describe("memória de leitura com duas fontes no grupo (§5.1 passo 6)", () => {
     expect(g.contatos[2].possivelSaida).toBe(true);
     expect(r.resumo.gruposReaproveitados).toBe(0);
   });
+});
+
+describe("memória por forma de extração: a mesma URL lida como texto e como tabela (regressão)", () => {
+  // Caso real: "Presidente do Senado" lê em-exercicio como texto; os grupos de Senadores leem a
+  // mesma URL como tabela, a única forma que traz os senadores de nome de uma palavra.
+  const URL_SENADO = "https://senado.leg.br/em-exercicio";
+  const TABELA = { colunas: { nome: 0, uf: 2 } };
+  const CHAVE_TABELA = chaveDaLeitura(URL_SENADO, { tabela: TABELA });
+  const AGORA = new Date("2026-10-21T12:00:00.000Z");
+  const LIDA_EM = "2026-10-19T12:00:00.000Z";
+  const comoTexto: ConteudoFonte = { url: URL_SENADO, textoLimpo: "Davi Exemplo Presidente\nAna Senadora Exemplo", destaques: [], pessoas: [{ nome: "Davi Exemplo Presidente" }, { nome: "Ana Senadora Exemplo" }] };
+  const comoTabela: ConteudoFonte = { url: URL_SENADO, textoLimpo: "Weverton\nAna Senadora Exemplo", destaques: [], pessoas: [{ nome: "Weverton", uf: "MA" }, { nome: "Ana Senadora Exemplo", uf: "MA" }] };
+  const contatosSenado: ContatoPlanilha[] = [
+    { nome: "Davi Exemplo Presidente", grupo: "PRES", ...CADASTRO_OK },
+    { nome: "Weverton", grupo: "SEN", ...CADASTRO_OK },
+    { nome: "Ana Senadora Exemplo", grupo: "SEN", ...CADASTRO_OK },
+  ];
+  const resolverSenado: Dependencias["resolverFonte"] = (grupo) =>
+    grupo === "PRES"
+      ? { grupoCanonico: "PRES", fontes: [{ url: URL_SENADO, ativo: true }], fontesIndividuais: [], sugestoes: [] }
+      : { grupoCanonico: "SEN", fontes: [{ url: URL_SENADO, ativo: true, tabela: TABELA }], fontesIndividuais: [], sugestoes: [] };
+  const depsSenado = (raspar: Dependencias["raspar"], leituras: LeiturasGuardadas = {}): Dependencias => ({
+    resolverFonte: resolverSenado,
+    raspar,
+    extrairComposicao: async () => [],
+    leiturasAnteriores: leituras,
+    agora: () => AGORA,
+  });
+  const lerTudo: Dependencias["raspar"] = async (f) => (f.tabela ? comoTabela : comoTexto);
+  const tabelaCaida: Dependencias["raspar"] = async (f) => {
+    if (f.tabela) throw new Error("HTTP 503");
+    return comoTexto;
+  };
+
+  test("a memória sai com duas entradas distintas, a de texto sob a URL e a de tabela sob a sua chave", async () => {
+    const r = await analisar("c.xlsx", contatosSenado, depsSenado(lerTudo));
+    expect(Object.keys(r.leituras ?? {}).sort()).toEqual([URL_SENADO, CHAVE_TABELA].sort());
+    expect(r.leituras?.[URL_SENADO]?.conteudo).toEqual(comoTexto);
+    expect(r.leituras?.[CHAVE_TABELA]?.conteudo).toEqual(comoTabela);
+    expect(r.leituras?.[CHAVE_TABELA]?.url).toBe(URL_SENADO);
+  });
+
+  test("primária de tabela caída: reaproveita a leitura de tabela, e o senador de nome de uma palavra não vira possível saída", async () => {
+    const memoria: LeiturasGuardadas = {
+      [URL_SENADO]: { url: URL_SENADO, lidaEm: LIDA_EM, conteudo: comoTexto },
+      [CHAVE_TABELA]: { url: URL_SENADO, lidaEm: LIDA_EM, conteudo: comoTabela },
+    };
+    const r = await analisar("c.xlsx", contatosSenado, depsSenado(tabelaCaida, memoria));
+    const sen = r.grupos.find((g) => g.grupo === "SEN")!;
+    expect(sen.reaproveitada).toEqual({ url: URL_SENADO, lidaEm: LIDA_EM, motivo: "HTTP 503" });
+    const weverton = sen.contatos.find((c) => c.contato.nome === "Weverton")!;
+    expect(weverton.possivelSaida).toBeFalsy();
+    expect(weverton.semaforo).toBe("verde");
+    // A leitura de texto de hoje não sobrescreve a de tabela reaproveitada.
+    expect(r.leituras?.[CHAVE_TABELA]?.conteudo).toEqual(comoTabela);
+    expect(r.leituras?.[URL_SENADO]?.lidaEm).toBe(AGORA.toISOString());
+  });
+
+  test("memória antiga só com a leitura em texto: o grupo de tabela não a reaproveita e ninguém vira possível saída", async () => {
+    const memoria: LeiturasGuardadas = { [URL_SENADO]: { url: URL_SENADO, lidaEm: LIDA_EM, conteudo: comoTexto } };
+    const r = await analisar("c.xlsx", contatosSenado, depsSenado(tabelaCaida, memoria));
+    const sen = r.grupos.find((g) => g.grupo === "SEN")!;
+    expect(sen.reaproveitada).toBeUndefined();
+    expect(sen.fonteInacessivel).toBe(true);
+    expect(sen.contatos.some((c) => c.possivelSaida)).toBe(false);
+  });
+});
+
+/** Raspador por URL: conteúdo, ou string = erro com esse motivo; URL fora do mapa também é erro. */
+function rasparDe(mapa: Record<string, ConteudoFonte | string>): Dependencias["raspar"] {
+  return async (f) => {
+    const v = mapa[f.url];
+    if (v === undefined) throw new Error(`sem página para ${f.url}`);
+    if (typeof v === "string") throw new Error(v);
+    return v;
+  };
+}
+
+describe("URL alternativa (spec 2026-10-23 §3.3)", () => {
+  const ALT = "https://orgao.gov.br/alternativa";
+  const depsAlt = (mapa: Record<string, ConteudoFonte | string>, extra: Partial<Dependencias> = {}): Dependencias => ({
+    ...deps,
+    resolverFonte: () => ({ grupoCanonico: "ORG", fontes: [{ url: "https://orgao.gov.br", ativo: true, urlAlternativa: ALT }], fontesIndividuais: [], sugestoes: [] }),
+    raspar: rasparDe(mapa),
+    ...extra,
+  });
+  test("principal com erro e alternativa boa: grupo lido pela alternativa, fonteUrl do grupo é a principal, do contato é a alternativa", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], depsAlt({ "https://orgao.gov.br": "HTTP 404", [ALT]: { ...fonte, url: ALT } }));
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBeUndefined();
+    expect(g.fonteUrl).toBe("https://orgao.gov.br");
+    expect(g.alternativa).toEqual({ url: ALT, urlPrincipal: "https://orgao.gov.br", motivoPrincipal: "HTTP 404" });
+    expect(g.contatos[0].semaforo).toBe("verde");
+    expect(g.contatos[0].fonteUrl).toBe(ALT);
+  });
+  test("principal sem ninguém também abre a alternativa, com o motivo 'não trouxe ninguém'", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], depsAlt({ "https://orgao.gov.br": { ...fonte, pessoas: [] }, [ALT]: { ...fonte, url: ALT } }));
+    expect(r.grupos[0].alternativa?.motivoPrincipal).toBe(MOTIVO_SEM_NINGUEM);
+  });
+  test("principal boa: a alternativa não é lida", async () => {
+    const raspar = vi.fn(rasparDe({ "https://orgao.gov.br": fonte, [ALT]: { ...fonte, url: ALT } }));
+    await analisar("c.xlsx", [contatos[0]], depsAlt({}, { raspar }));
+    expect(raspar.mock.calls.map((c) => c[0].url)).toEqual(["https://orgao.gov.br"]);
+  });
+  test("as duas falham: inacessível, com os dois motivos", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], depsAlt({ "https://orgao.gov.br": "HTTP 404", [ALT]: "HTTP 500 (3 tentativas)" }));
+    expect(r.grupos[0].fonteInacessivel).toBe(true);
+    expect(r.grupos[0].erroFonte).toBe("HTTP 404 · URL alternativa: HTTP 500 (3 tentativas)");
+  });
+  test("memória da alternativa serve quando as duas falham: reaproveitada com url = principal, leitura guardada sob a alternativa", async () => {
+    const guardada: LeituraGuardada = { url: ALT, lidaEm: "2026-10-19T12:00:00.000Z", conteudo: { ...fonte, url: ALT } };
+    const r = await analisar("c.xlsx", [contatos[0]], depsAlt({ "https://orgao.gov.br": "HTTP 404", [ALT]: "HTTP 500" }, { leiturasAnteriores: { [ALT]: guardada }, agora: () => new Date("2026-10-21T12:00:00.000Z") }));
+    const g = r.grupos[0];
+    expect(g.reaproveitada).toEqual({ url: "https://orgao.gov.br", lidaEm: guardada.lidaEm, motivo: "HTTP 404 · URL alternativa: HTTP 500" });
+    expect(r.leituras?.[ALT]?.lidaEm).toBe(guardada.lidaEm);
+    expect(Object.keys(r.leituras ?? {})).toEqual([ALT]);
+    // A proveniência do contato é a página de onde o conteúdo guardado veio.
+    expect(g.contatos[0].fonteUrl).toBe(ALT);
+  });
+  test("leitura boa pela alternativa entra na memória sob a URL da alternativa", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], depsAlt({ "https://orgao.gov.br": "HTTP 404", [ALT]: { ...fonte, url: ALT } }));
+    expect(Object.keys(r.leituras ?? {})).toEqual([ALT]);
+  });
+  test("secundária lida pela alternativa: compõe o grupo e vira anotação em erroFonte, sem alternativa no grupo", async () => {
+    const FORA = "https://orgao.gov.br/fora";
+    const FORA_ALT = "https://orgao.gov.br/fora-alternativa";
+    const r = await analisar("c.xlsx", [contatos[0]], {
+      ...deps,
+      resolverFonte: () => ({ grupoCanonico: "ORG", fontes: [{ url: "https://orgao.gov.br", ativo: true }, { url: FORA, ativo: true, rotulo: "fora", urlAlternativa: FORA_ALT }], fontesIndividuais: [], sugestoes: [] }),
+      raspar: rasparDe({ "https://orgao.gov.br": fonte, [FORA]: "HTTP 404", [FORA_ALT]: { ...fonte, url: FORA_ALT, pessoas: [{ nome: "Outra Pessoa Afastada", cargo: "Senadora", origem: "pagina" }] } }),
+    });
+    const g = r.grupos[0];
+    expect(g.erroFonte).toBe("fora: lida pela URL alternativa (HTTP 404)");
+    expect(g.alternativa).toBeUndefined();
+    expect(g.contatos[0].semaforo).toBe("verde");
+    expect(r.falhas).toEqual({ [FORA]: expect.objectContaining({ coletas: 1, motivo: "HTTP 404" }) });
+  });
+});
+
+describe("falhas por URL em coletas seguidas (spec 2026-10-23 §3.4)", () => {
+  const agora = () => new Date("2026-10-21T12:00:00.000Z");
+  test("URL que falhou entra em falhas com coletas 1; o resumo não conta antes de 2", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], { ...deps, raspar: async () => { throw new ScrapeError("https://orgao.gov.br", "HTTP 404"); }, agora });
+    expect(r.falhas).toEqual({ "https://orgao.gov.br": { desde: agora().toISOString(), coletas: 1, motivo: "HTTP 404" } });
+    expect(r.resumo.urlsCaidasRepetidas).toBe(0);
+  });
+  test("segunda coleta seguida: coletas 2, desde mantido, resumo conta 1; grupo reaproveitado pela memória também conta", async () => {
+    const desde = "2026-10-19T12:00:00.000Z";
+    const guardada: LeituraGuardada = { url: "https://orgao.gov.br", lidaEm: desde, conteudo: fonte };
+    const r = await analisar("c.xlsx", [contatos[0]], {
+      ...deps,
+      raspar: async () => { throw new ScrapeError("https://orgao.gov.br", "HTTP 404"); },
+      agora,
+      falhasAnteriores: { "https://orgao.gov.br": { desde, coletas: 1, motivo: "HTTP 404" } },
+      leiturasAnteriores: { "https://orgao.gov.br": guardada },
+    });
+    expect(r.grupos[0].reaproveitada).toBeDefined();
+    expect(r.falhas?.["https://orgao.gov.br"]).toEqual({ desde, coletas: 2, motivo: "HTTP 404" });
+    expect(r.resumo.urlsCaidasRepetidas).toBe(1);
+  });
+  test("URL lida hoje sai de falhas; sem falhasAnteriores o mapa começa vazio", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], { ...deps, agora, falhasAnteriores: { "https://orgao.gov.br": { desde: "2026-10-19T12:00:00.000Z", coletas: 3, motivo: "HTTP 404" } } });
+    expect(r.falhas).toEqual({});
+  });
+  test("entrada antiga de URL não tentada hoje (coletas 5) fica no mapa mas não conta no resumo", async () => {
+    const antiga = { desde: "2026-10-01T12:00:00.000Z", coletas: 5, motivo: "HTTP 404" };
+    const r = await analisar("c.xlsx", [contatos[0]], { ...deps, agora, falhasAnteriores: { "https://nao-visitada.gov.br": antiga } });
+    expect(r.falhas).toEqual({ "https://nao-visitada.gov.br": antiga });
+    expect(r.resumo.urlsCaidasRepetidas).toBe(0);
+  });
+  test("primária sem ninguém (grupo de fonte) conta como falha da URL; secundária sem ninguém não", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], {
+      ...deps,
+      resolverFonte: () => ({ grupoCanonico: "ORG", fontes: [{ url: "https://orgao.gov.br", ativo: true }, { url: "https://orgao.gov.br/fora", ativo: true, rotulo: "fora" }], fontesIndividuais: [], sugestoes: [] }),
+      raspar: async (f) => (f.url === "https://orgao.gov.br" ? fonte : { ...fonte, url: f.url, pessoas: [] }),
+      agora,
+    });
+    expect(r.falhas).toEqual({});
+    const r2 = await analisar("c.xlsx", [contatos[0]], { ...deps, raspar: async () => ({ ...fonte, pessoas: [] }), agora });
+    expect(r2.falhas?.["https://orgao.gov.br"]?.motivo).toBe(MOTIVO_SEM_NINGUEM);
+  });
+});
+
+describe("mudança de composição (spec 2026-10-23 §3.4; decisões 1 e 2 do plano)", () => {
+  const agora = () => new Date("2026-10-21T12:00:00.000Z");
+  // Nomes fictícios sem token em comum entre si (pontuarPessoa casa por token; um sobrenome repetido casaria a pessoa errada).
+  const dez = ["Aline Borges Teixeira", "Bruno Cardoso Mendes", "Cláudia Ferraz Nogueira", "Diego Pacheco Ramos", "Elisa Quintela Sá", "Fábio Guimarães Lopes", "Gisele Vasconcelos Dutra", "Hugo Barbosa Peixoto", "Irene Castelo Branco", "Jorge Linhares Moura"];
+  const novos = ["Karen Oliveira Prado", "Leonardo Siqueira Fontes", "Marina Dantas Rezende", "Nelson Figueira Cunha", "Olívia Monteiro Tavares", "Paulo Zanetti Correia", "Quitéria Amaral Xavier"];
+  const menu = Array.from({ length: 10 }, (_, i) => `Item Menu ${i + 1}`);
+  const contatosDez: ContatoPlanilha[] = dez.map((nome) => ({ nome, grupo: "ORG", ...CADASTRO_OK }));
+  const conteudo = (lista: string[]): ConteudoFonte => ({ url: "https://orgao.gov.br", textoLimpo: lista.join("\n"), destaques: [], pessoas: lista.map((nome) => ({ nome, cargo: "Ministro" })) });
+  const guardada: LeituraGuardada = { url: "https://orgao.gov.br", lidaEm: "2026-10-16T12:00:00.000Z", conteudo: conteudo(dez) };
+  const depsCom = (hoje: ConteudoFonte): Dependencias => ({ ...deps, raspar: async () => hoje, leiturasAnteriores: { "https://orgao.gov.br": guardada }, agora });
+
+  test("7 de 10 nomes novos: grupo lido com mudouFormato, saídas aparecem, leitura de hoje não entra na memória, resumo conta", async () => {
+    const hoje = conteudo([...dez.slice(0, 3), ...novos]);
+    const r = await analisar("c.xlsx", contatosDez, depsCom(hoje));
+    const g = r.grupos[0];
+    expect(g.fonteInacessivel).toBeUndefined();
+    expect(g.reaproveitada).toBeUndefined();
+    expect(g.mudouFormato).toEqual({ lidaEm: guardada.lidaEm, trocados: 7, total: 10 });
+    expect(g.contatos.filter((c) => c.possivelSaida)).toHaveLength(7);
+    expect(r.leituras?.["https://orgao.gov.br"]?.lidaEm).toBe(guardada.lidaEm);
+    expect(r.resumo.gruposComMudanca).toBe(1);
+  });
+  test("3 de 10 novos não é mudança: leitura de hoje vale e entra na memória", async () => {
+    const hoje = conteudo([...dez.slice(0, 7), ...novos.slice(0, 3)]);
+    const r = await analisar("c.xlsx", contatosDez, depsCom(hoje));
+    expect(r.grupos[0].mudouFormato).toBeUndefined();
+    expect(r.leituras?.["https://orgao.gov.br"]?.lidaEm).toBe(agora().toISOString());
+  });
+  test("página truncada (2 de 10, todos guardados) continua leitura parcial reaproveitada, não mudança", async () => {
+    const r = await analisar("c.xlsx", contatosDez, depsCom(conteudo(dez.slice(0, 2))));
+    expect(r.grupos[0].mudouFormato).toBeUndefined();
+    expect(r.grupos[0].reaproveitada?.motivo).toBe("página casou 2 de 10 contatos");
+  });
+  test("mudança que não casa ninguém continua leitura suspeita (inacessível), sem mudouFormato", async () => {
+    const r = await analisar("c.xlsx", contatosDez, depsCom(conteudo(menu)));
+    expect(r.grupos[0].fonteInacessivel).toBe(true);
+    expect(r.grupos[0].erroFonte).toBe(MOTIVO_LEITURA_SUSPEITA);
+    expect(r.grupos[0].mudouFormato).toBeUndefined();
+    expect(r.resumo.gruposComMudanca).toBe(0);
+  });
+  test("grupo de um contato nunca tem mudança", async () => {
+    const r = await analisar("c.xlsx", [contatosDez[0]], depsCom(conteudo(novos.slice(0, 5))));
+    expect(r.grupos[0].mudouFormato).toBeUndefined();
+  });
+  test("sem memória válida não há com o que comparar: sem mudança", async () => {
+    const hoje = conteudo([...novos, ...dez.slice(0, 3)]);
+    const r = await analisar("c.xlsx", contatosDez, { ...deps, raspar: async () => hoje, agora });
+    expect(r.grupos[0].mudouFormato).toBeUndefined();
+  });
+});
+
+test("nomesDoContatos da fonte do grupo faz o nome conferir (spec 2026-10-23 §4.2)", async () => {
+  const r = await analisar("c.xlsx", [{ nome: "Garibaldi Alves Filho", grupo: "ORG", ...CADASTRO_OK }], {
+    ...deps,
+    resolverFonte: () => ({ grupoCanonico: "ORG", fontes: [{ url: "https://orgao.gov.br", ativo: true, nomesDoContatos: ["Garibaldi Alves Filho"] }], fontesIndividuais: [], sugestoes: [] }),
+    raspar: async () => ({ ...fonte, pessoas: [{ nome: "Garibaldi Alves" }] }),
+  });
+  expect(r.grupos[0].contatos[0].semaforo).toBe("verde");
 });

@@ -1,6 +1,14 @@
 import { describe, expect, test } from "vitest";
 import {
   anotacaoReaproveitada,
+  atualizarFalhas,
+  chaveDaLeitura,
+  contarUrlsCaidas,
+  ehMudancaDeComposicao,
+  falhasDoRetrato,
+  FRACAO_MINIMA_TROCADA,
+  MIN_COLETAS_URL_CAIDA,
+  nomesNovos,
   descreverMotivoDeHoje,
   diaMes,
   ehLeituraGuardada,
@@ -61,6 +69,14 @@ describe("podarLeituras", () => {
     };
     expect(Object.keys(podarLeituras(entrada, AGORA))).toEqual([URL_A]);
   });
+  test("aceita chave com sufixo de extração da mesma URL (`${url}#...`), não de outra URL", () => {
+    const entrada: unknown = {
+      [`${URL_A}#tabela:{"colunaNome":0}`]: leitura(URL_A, "2026-10-16T12:00:00.000Z"),
+      [`${URL_B}#pdf`]: leitura(URL_A, "2026-10-16T12:00:00.000Z"),
+      [`${URL_A}x#pdf`]: leitura(URL_A, "2026-10-16T12:00:00.000Z"),
+    };
+    expect(Object.keys(podarLeituras(entrada, AGORA))).toEqual([`${URL_A}#tabela:{"colunaNome":0}`]);
+  });
   test("entrada que não é objeto vira memória vazia", () => {
     expect(podarLeituras("nada", AGORA)).toEqual({});
     expect(podarLeituras(undefined, AGORA)).toEqual({});
@@ -71,6 +87,25 @@ describe("podarLeituras", () => {
   });
 });
 
+/** Colhida sob a chave da URL pura (fonte de extração padrão), ou sob a chave dada. */
+const colhida = (l: LeituraGuardada, chave: string = l.url) => ({ chave, leitura: l });
+
+describe("chaveDaLeitura (memória por forma de extração)", () => {
+  const TABELA = { indice: 1, colunas: { nome: 0, uf: 2 } };
+  test("fonte padrão: a URL pura", () => {
+    expect(chaveDaLeitura(URL_A, {})).toBe(URL_A);
+    expect(chaveDaLeitura(URL_A, { tipo: "html" })).toBe(URL_A);
+  });
+  test("com tabela, marcador ou pdf: sufixo próprio", () => {
+    expect(chaveDaLeitura(URL_A, { tabela: TABELA })).toBe(`${URL_A}#tabela:${JSON.stringify(TABELA)}`);
+    expect(chaveDaLeitura(URL_A, { marcador: { textos: ["(convocado)", "(convocada)"] } })).toBe(`${URL_A}#marcador:["(convocado)","(convocada)"]`);
+    expect(chaveDaLeitura(URL_A, { tipo: "pdf" })).toBe(`${URL_A}#pdf`);
+  });
+  test("mais de um: sufixos combinados na ordem tabela, marcador, pdf", () => {
+    expect(chaveDaLeitura(URL_A, { tipo: "pdf", marcador: { textos: ["X"] }, tabela: TABELA })).toBe(`${URL_A}#tabela:${JSON.stringify(TABELA)}#marcador:["X"]#pdf`);
+  });
+});
+
 describe("mesclarLeituras", () => {
   const anteriores: LeiturasGuardadas = {
     [URL_A]: leitura(URL_A, "2026-10-16T12:00:00.000Z", ["Velha"]),
@@ -78,21 +113,31 @@ describe("mesclarLeituras", () => {
     "https://vencida": leitura("https://vencida", "2026-10-01T12:00:00.000Z"),
   };
   test("a boa de hoje vence a anterior; URL não visitada permanece; vencida é podada; não muta a entrada", () => {
-    const saida = mesclarLeituras(anteriores, [leitura(URL_A, AGORA.toISOString(), ["Nova"])], AGORA);
+    const saida = mesclarLeituras(anteriores, [colhida(leitura(URL_A, AGORA.toISOString(), ["Nova"]))], AGORA);
     expect(saida[URL_A].conteudo.pessoas).toEqual([{ nome: "Nova" }]);
     expect(saida[URL_B].lidaEm).toBe("2026-10-15T12:00:00.000Z");
     expect(saida["https://vencida"]).toBeUndefined();
     expect(anteriores[URL_A].conteudo.pessoas).toEqual([{ nome: "Velha" }]);
   });
   test("reaproveitada colhida mantém a data original", () => {
-    const saida = mesclarLeituras(anteriores, [leitura(URL_A, "2026-10-16T12:00:00.000Z", ["Velha"])], AGORA);
+    const saida = mesclarLeituras(anteriores, [colhida(leitura(URL_A, "2026-10-16T12:00:00.000Z", ["Velha"]))], AGORA);
     expect(saida[URL_A].lidaEm).toBe("2026-10-16T12:00:00.000Z");
   });
   test("duas colhidas da mesma URL: a mais recente vence, qualquer que seja a ordem", () => {
     const antiga = leitura(URL_A, "2026-10-16T12:00:00.000Z", ["Antiga"]);
     const nova = leitura(URL_A, AGORA.toISOString(), ["Nova"]);
-    expect(mesclarLeituras({}, [nova, antiga], AGORA)[URL_A].conteudo.pessoas).toEqual([{ nome: "Nova" }]);
-    expect(mesclarLeituras({}, [antiga, nova], AGORA)[URL_A].conteudo.pessoas).toEqual([{ nome: "Nova" }]);
+    expect(mesclarLeituras({}, [colhida(nova), colhida(antiga)], AGORA)[URL_A].conteudo.pessoas).toEqual([{ nome: "Nova" }]);
+    expect(mesclarLeituras({}, [colhida(antiga), colhida(nova)], AGORA)[URL_A].conteudo.pessoas).toEqual([{ nome: "Nova" }]);
+  });
+  test("mesma URL com extrações diferentes: duas entradas, cada uma sob a sua chave, com a url real", () => {
+    const texto = leitura(URL_A, AGORA.toISOString(), ["Texto"]);
+    const tabela = leitura(URL_A, AGORA.toISOString(), ["Tabela"]);
+    const chaveTabela = `${URL_A}#tabela:{"colunaNome":0}`;
+    const saida = mesclarLeituras({}, [colhida(tabela, chaveTabela), colhida(texto)], AGORA);
+    expect(Object.keys(saida).sort()).toEqual([URL_A, chaveTabela].sort());
+    expect(saida[chaveTabela].url).toBe(URL_A);
+    expect(saida[chaveTabela].conteudo.pessoas).toEqual([{ nome: "Tabela" }]);
+    expect(saida[URL_A].conteudo.pessoas).toEqual([{ nome: "Texto" }]);
   });
 });
 
@@ -175,5 +220,75 @@ describe("memoriaDoRetrato (§6 passo 1 e §10)", () => {
       grupos: [{ grupo: "G", fonteUrl: URL_A, semFonte: false, novos: [], contatos: [{ contato: { nome: "Ana", grupo: "G" }, semaforo: "verde", score: 1, camposDivergentes: [], origem: "oficial", comparacoes: [{ campo: "nome", valorPlanilha: "Ana", valorEsperado: "Ana", situacao: "confere" }] }] }],
     } as unknown as Retrato;
     expect(memoriaDoRetrato(r, AGORA)[URL_A].conteudo.pessoas).toEqual([{ nome: "Ana" }]);
+  });
+});
+
+describe("falhas por URL (spec 2026-10-23 §3.4)", () => {
+  const D19 = "2026-10-19T12:00:00.000Z";
+  const hoje = new Date("2026-10-21T12:00:00.000Z");
+  test("URL que falha pela primeira vez entra com coletas 1 e desde = agora", () => {
+    const f = atualizarFalhas({}, [{ url: "https://a.gov.br", erro: "HTTP 404" }], hoje);
+    expect(f).toEqual({ "https://a.gov.br": { desde: hoje.toISOString(), coletas: 1, motivo: "HTTP 404" } });
+  });
+  test("URL que falha de novo soma coletas, mantém desde e troca o motivo pelo de hoje", () => {
+    const f = atualizarFalhas({ "https://a.gov.br": { desde: D19, coletas: 1, motivo: "HTTP 404" } }, [{ url: "https://a.gov.br", erro: "tempo esgotado" }], hoje);
+    expect(f["https://a.gov.br"]).toEqual({ desde: D19, coletas: 2, motivo: "tempo esgotado" });
+  });
+  test("URL lida hoje sai do mapa; URL não tentada fica como está", () => {
+    const antes = { "https://a.gov.br": { desde: D19, coletas: 1, motivo: "HTTP 404" }, "https://b.gov.br": { desde: D19, coletas: 3, motivo: "HTTP 500" } };
+    const f = atualizarFalhas(antes, [{ url: "https://a.gov.br" }], hoje);
+    expect(f).toEqual({ "https://b.gov.br": antes["https://b.gov.br"] });
+    expect(antes["https://a.gov.br"]).toBeDefined(); // não muta a entrada
+  });
+  test("sucesso na mesma varredura apaga a falha da URL, em qualquer ordem", () => {
+    const f = atualizarFalhas({}, [{ url: "https://a.gov.br", erro: "HTTP 429 (3 tentativas)" }, { url: "https://a.gov.br" }], hoje);
+    expect(f).toEqual({});
+  });
+  test("contarUrlsCaidas conta só coletas >= MIN_COLETAS_URL_CAIDA entre as URLs tentadas hoje", () => {
+    expect(MIN_COLETAS_URL_CAIDA).toBe(2);
+    const falhas = { a: { desde: D19, coletas: 1, motivo: "x" }, b: { desde: D19, coletas: 2, motivo: "x" }, c: { desde: D19, coletas: 5, motivo: "x" } };
+    expect(contarUrlsCaidas(falhas, new Set(["a", "b", "c"]))).toBe(2);
+  });
+  test("contarUrlsCaidas: entrada antiga de URL não tentada hoje não conta, mesmo com 5 coletas", () => {
+    const falhas = { b: { desde: D19, coletas: 2, motivo: "x" }, antiga: { desde: D19, coletas: 5, motivo: "x" } };
+    expect(contarUrlsCaidas(falhas, new Set(["b"]))).toBe(1);
+  });
+  test("falhasDoRetrato devolve o mapa do retrato e descarta entrada com forma errada; retrato sem o campo ou ausente dá vazio", () => {
+    const boa = { desde: D19, coletas: 2, motivo: "HTTP 404" };
+    expect(falhasDoRetrato({ falhas: { "https://a.gov.br": boa, "https://b.gov.br": { coletas: "2" } } } as never)).toEqual({ "https://a.gov.br": boa });
+    expect(falhasDoRetrato({} as never)).toEqual({});
+    expect(falhasDoRetrato(undefined)).toEqual({});
+  });
+  test("falhasDoRetrato descarta coletas que não é número finito >= 1 e desde que não é data", () => {
+    const boa = { desde: D19, coletas: 1, motivo: "HTTP 404" };
+    const falhas = {
+      "https://boa.gov.br": boa,
+      "https://zero.gov.br": { ...boa, coletas: 0 },
+      "https://negativa.gov.br": { ...boa, coletas: -3 },
+      "https://nan.gov.br": { ...boa, coletas: Number.NaN },
+      "https://infinita.gov.br": { ...boa, coletas: Number.POSITIVE_INFINITY },
+      "https://data-ruim.gov.br": { ...boa, desde: "ontem" },
+    };
+    expect(falhasDoRetrato({ falhas } as never)).toEqual({ "https://boa.gov.br": boa });
+  });
+});
+
+describe("mudança de composição (spec 2026-10-23 §3.4; decisão 1 do plano)", () => {
+  const p = (...nomes: string[]) => nomes.map((nome) => ({ nome }));
+  test("conta os nomes distintos de hoje e quantos não estão na guardada (igualdade após normalizarNome)", () => {
+    expect(nomesNovos(p("Ana Silva", "ANA SILVA", "Beto Souza", "Carla Lima"), p("Ana Silva", "Beto Souza"))).toEqual({ trocados: 1, total: 3 });
+  });
+  test("página truncada (todos os nomes de hoje estão na guardada) não tem nomes novos", () => {
+    expect(nomesNovos(p("Ana Silva", "Beto Souza"), p("Ana Silva", "Beto Souza", "Carla Lima", "Dora Reis"))).toEqual({ trocados: 0, total: 2 });
+  });
+  test("é mudança com mais da metade de nomes novos em grupo com 2+ contatos", () => {
+    expect(FRACAO_MINIMA_TROCADA).toBe(0.5);
+    expect(ehMudancaDeComposicao({ trocados: 7, total: 10 }, 10)).toBe(true);
+    expect(ehMudancaDeComposicao({ trocados: 5, total: 10 }, 10)).toBe(false);
+    expect(ehMudancaDeComposicao({ trocados: 3, total: 10 }, 10)).toBe(false);
+  });
+  test("grupo de um contato e página sem nomes nunca são mudança", () => {
+    expect(ehMudancaDeComposicao({ trocados: 1, total: 1 }, 1)).toBe(false);
+    expect(ehMudancaDeComposicao({ trocados: 0, total: 0 }, 5)).toBe(false);
   });
 });

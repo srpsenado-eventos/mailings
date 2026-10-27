@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  avisoUrlCaida,
   camposDoEndereco,
   cartoesDoResumo,
   contarContatos,
@@ -21,6 +22,10 @@ import {
   textoNumeroNaBase,
   textoReaproveitada,
   textoSituacaoDosGrupos,
+  TEXTO_FONTE_PROVISORIA,
+  textoAlternativa,
+  textoMudanca,
+  textoUrlCaida,
 } from "@/lib/painel";
 import { ColunaFaltanteError } from "@/lib/planilha";
 import type {
@@ -311,7 +316,7 @@ describe("cartoesDoResumo", () => {
     const cartoes = cartoesDoResumo({
       total: 10, verde: 4, amarelo: 2, vermelho: 3, novo: 1, indeterminado: 1,
       enderecosAConfirmar: 5, possivelSaida: 2, contatosSemFonte: 1,
-      gruposSemFonte: 1, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
+      gruposSemFonte: 1, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0,
     });
     expect(cartoes).toEqual([
       { rotulo: "Conferem", valor: 4 },
@@ -356,7 +361,7 @@ describe("textoDataHora", () => {
 describe("montarRetrato", () => {
   const resultado: ResultadoAnalise = {
     arquivoNome: "c.xlsx", grupos: [],
-    resumo: { total: 0, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0, gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0 },
+    resumo: { total: 0, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0, gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0 },
   };
 
   test("com as duas planilhas", () => {
@@ -812,5 +817,59 @@ describe("memória de leitura no painel (spec 2026-10-20 §7)", () => {
 
   test("cartoesDoResumo não ganha cartão novo", () => {
     expect(cartoesDoResumo({ gruposReaproveitados: 5 }).map((c) => c.rotulo)).toEqual(["Conferem", "Com divergência", "Possível saída", "Não verificados", "Propostas de inclusão", "Endereços a confirmar"]);
+  });
+});
+
+describe("textos da leitura resiliente (spec 2026-10-23 §6)", () => {
+  test("cabeçalhos", () => {
+    expect(textoAlternativa({ url: "https://x", urlPrincipal: "https://p", motivoPrincipal: "HTTP 404" })).toBe("Lida pela URL alternativa; a principal não respondeu (HTTP 404)");
+    expect(textoUrlCaida({ desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" })).toBe("Fonte caída há 2 coletas, desde 19/10: conferir se o endereço mudou");
+    expect(textoMudanca({ lidaEm: "2026-10-16T12:00:00.000Z", trocados: 7, total: 10 })).toBe("Composição mudou: 7 de 10 nomes não estavam na leitura de 16/10; confira");
+    expect(TEXTO_FONTE_PROVISORIA).toBe("Fonte provisória: notícia");
+  });
+
+  test("avisoUrlCaida só com coletas >= 2 e URL presente", () => {
+    const falhas = { "https://a": { desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "x" }, "https://b": { desde: "2026-10-19T12:00:00.000Z", coletas: 1, motivo: "x" } };
+    expect(avisoUrlCaida(falhas, "https://a")).toMatch(/^Fonte caída há 2 coletas/);
+    expect(avisoUrlCaida(falhas, "https://b")).toBeUndefined();
+    expect(avisoUrlCaida(undefined, "https://a")).toBeUndefined();
+    expect(avisoUrlCaida(falhas, undefined)).toBeUndefined();
+  });
+
+  test("textoIndividuais não repete as provisórias (o cabeçalho já diz 'Fonte provisória: notícia')", () => {
+    expect(textoIndividuais({ lidas: 24, caidas: 1, provisorias: 2 })).toBe("24 páginas individuais lidas · 1 inacessível");
+    expect(textoIndividuais({ lidas: 24, caidas: 0, provisorias: 1 })).toBe("24 páginas individuais lidas");
+  });
+
+  test("textoSituacaoDosGrupos com mudança e URLs caídas", () => {
+    expect(textoSituacaoDosGrupos({ gruposSemFonte: 3, gruposComMudanca: 1, urlsCaidasRepetidas: 2 })).toBe("3 grupos sem fonte · 1 com mudança de composição · 2 URLs caídas há 2 ou mais coletas");
+    expect(textoSituacaoDosGrupos({ urlsCaidasRepetidas: 1 })).toBe("1 URL caída há 2 ou mais coletas");
+  });
+
+  test("procedência do contato: alternativa, provisória e URL caída", () => {
+    const PRINCIPAL = "https://www.gov.br/exemplo/ministra";
+    const ALTERNATIVA = "https://www.gov.br/exemplo/gabinete/ministra-1";
+    const g: ResultadoGrupo = { grupo: "Governadores", semFonte: false, contatos: [], novos: [], individuais: { lidas: 1, caidas: 0, provisorias: 1 } };
+    const c = contato({
+      fonteUrl: ALTERNATIVA,
+      alternativa: { url: ALTERNATIVA, urlPrincipal: PRINCIPAL, motivoPrincipal: "HTTP 404" },
+      provisoria: true,
+      comparacoes: [{ ...confere("nome", "pagina", "Ana"), fonteUrl: ALTERNATIVA }],
+    });
+    // Quem entra em `falhas` é a principal: a alternativa respondeu.
+    const falhas = { [PRINCIPAL]: { desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" } };
+    const linhas = procedenciaDoContato(c, g, falhas);
+    expect(linhas[0]).toMatchObject({ rotulo: "Nome", alternativa: true, provisoria: true, caida: expect.stringMatching(/^Fonte caída há 2 coletas/) });
+    // Sem `falhas` (retrato antigo) não há aviso; sem alternativa nem provisória, nada a mais.
+    expect(procedenciaDoContato(c, g)[0].caida).toBeUndefined();
+    expect(procedenciaDoContato(contato({ fonteUrl: PRINCIPAL, comparacoes: [{ ...confere("nome", "pagina", "Ana"), fonteUrl: PRINCIPAL }] }), g, { [PRINCIPAL]: { ...falhas[PRINCIPAL], coletas: 1 } })).toEqual([
+      { rotulo: "Nome", texto: PRINCIPAL, url: PRINCIPAL, lida: true },
+    ]);
+  });
+
+  test("procedência do grupo comum: alternativa e URL caída pela fonteUrl do grupo", () => {
+    const g: ResultadoGrupo = { ...grupoComFonte, alternativa: { url: "https://alt.gov.br", urlPrincipal: "https://orgao.gov.br", motivoPrincipal: "HTTP 404" } };
+    const falhas = { "https://orgao.gov.br": { desde: "2026-10-19T12:00:00.000Z", coletas: 3, motivo: "HTTP 404" } };
+    expect(procedenciaDoContato(contato({}), g, falhas)[0]).toMatchObject({ rotulo: "Nome e cargo", alternativa: true, caida: "Fonte caída há 3 coletas, desde 19/10: conferir se o endereço mudou" });
   });
 });

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import { analisar, MOTIVO_LEITURA_SUSPEITA, type Dependencias } from "@/lib/analise";
-import { OBSERVACAO_SEM_INDIVIDUAL } from "@/lib/match";
+import { MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO, OBSERVACAO_SEM_INDIVIDUAL } from "@/lib/match";
 import { extrairConteudo } from "@/lib/scrape";
 import type { ContatoPlanilha, ConteudoFonte, FonteIndividual, FonteCatalogo } from "@/lib/types";
 import type { FonteResolvida } from "@/lib/catalogo";
@@ -277,4 +277,43 @@ describe("memória de leitura nas páginas individuais e na lista geral (spec 20
     const r = await analisar("c.xlsx", [govGo, govRs], comMemoria({ [URL_GO]: captcha, [URL_RS]: "HTTP 503" }, {}));
     expect(r.leituras).toEqual({});
   });
+});
+
+describe("alternativa e falhas nas páginas individuais (spec 2026-10-23 §3.3, §3.4)", () => {
+  const ALT_GO = "https://go.gov.br/governador-alternativa";
+  const individuaisAlt: FonteIndividual[] = [{ ...individuaisGov[0], urlAlternativa: ALT_GO }, individuaisGov[1]];
+  const resolvida: FonteResolvida = { ...RESOLVIDA_GOV, fontesIndividuais: individuaisAlt };
+  test("individual principal caída e alternativa com conteúdo: contato verificado, alternativa no contato, fonteUrl é a lida", async () => {
+    const r = await analisar("c.xlsx", [govGo, govRs], { resolverFonte: resolver(RESOLVIDA_MIN, resolvida), raspar: rasparDe({ [URL_GO]: "HTTP 404", [ALT_GO]: { ...paginaGo, url: ALT_GO }, [URL_RS]: paginaRs }), extrairComposicao: async () => [] });
+    const c = r.grupos[0].contatos.find((x) => x.contato.nome === govGo.nome)!;
+    expect(c.semaforo).toBe("verde");
+    expect(c.fonteUrl).toBe(ALT_GO);
+    expect(c.alternativa).toEqual({ url: ALT_GO, urlPrincipal: URL_GO, motivoPrincipal: "HTTP 404" });
+    expect(c.comparacoes.find((x) => x.campo === "nome")?.fonteUrl).toBe(ALT_GO);
+    expect(r.grupos[0].individuais).toEqual({ lidas: 2, caidas: 0 });
+    expect(r.falhas).toEqual({ [URL_GO]: expect.objectContaining({ coletas: 1, motivo: "HTTP 404" }) });
+  });
+  test("lista geral de cargos lida pela alternativa: alternativa no grupo, cargo cita a alternativa, fonteUrl do grupo é a principal", async () => {
+    const ALT_GERAL = "https://www.gov.br/planalto/pt-br/ministros-alternativa";
+    const resolvidaMin: FonteResolvida = { ...RESOLVIDA_MIN, fontes: [{ ...geral, urlAlternativa: ALT_GERAL }] };
+    const r = await analisar("c.xlsx", [ministra], { resolverFonte: resolver(resolvidaMin, RESOLVIDA_GOV), raspar: rasparDe({ [URL_GERAL]: "HTTP 404", [ALT_GERAL]: { ...paginaGeral, url: ALT_GERAL }, [URL_MIN]: paginaMin }), extrairComposicao: async () => [] });
+    const g = r.grupos[0];
+    expect(g.fonteUrl).toBe(URL_GERAL);
+    expect(g.alternativa).toEqual({ url: ALT_GERAL, urlPrincipal: URL_GERAL, motivoPrincipal: "HTTP 404" });
+    expect(g.contatos[0].comparacoes.find((x) => x.campo === "cargo")?.fonteUrl).toBe(ALT_GERAL);
+    expect(g.contatos[0].semaforo).toBe("verde");
+  });
+  test("individual sem conteúdo legível conta como falha da URL em falhas", async () => {
+    const r = await analisar("c.xlsx", [govRs], { resolverFonte: resolver(RESOLVIDA_MIN, RESOLVIDA_GOV), raspar: rasparDe({ [URL_RS]: { ...paginaRs, textoLimpo: "menu" } }), extrairComposicao: async () => [] });
+    expect(r.falhas?.[URL_RS]?.motivo).toBe(MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO);
+  });
+});
+
+test("fonte individual provisória marca o contato e conta no grupo (spec 2026-10-23 §5)", async () => {
+  const provisoria: FonteIndividual = { ...individuaisGov[0], provisoria: true };
+  const r = await analisar("c.xlsx", [govGo, govRs], { resolverFonte: resolver(RESOLVIDA_MIN, { ...RESOLVIDA_GOV, fontesIndividuais: [provisoria, individuaisGov[1]] }), raspar: rasparDe({ [URL_GO]: paginaGo, [URL_RS]: paginaRs }), extrairComposicao: async () => [] });
+  const g = r.grupos[0];
+  expect(g.contatos.find((c) => c.contato.nome === govGo.nome)?.provisoria).toBe(true);
+  expect(g.contatos.find((c) => c.contato.nome === govRs.nome)?.provisoria).toBeUndefined();
+  expect(g.individuais).toEqual({ lidas: 2, caidas: 0, provisorias: 1 });
 });

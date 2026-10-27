@@ -29,7 +29,7 @@ const analise: ResultadoAnalise = {
   ],
   resumo: {
     total: 1, verde: 0, amarelo: 1, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-    gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
+    gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0,
   },
 };
 
@@ -70,7 +70,7 @@ describe("resultadoParaLinhas", () => {
       ],
       resumo: {
         total: 0, verde: 0, amarelo: 0, vermelho: 0, novo: 1, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
+        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0,
       },
     };
     const linha = resultadoParaLinhas(analise)[0];
@@ -108,7 +108,7 @@ describe("resultadoParaLinhas", () => {
       ],
       resumo: {
         total: 1, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 1, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
+        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0,
       },
     };
 
@@ -152,7 +152,7 @@ describe("resultadoParaLinhas", () => {
       ],
       resumo: {
         total: 1, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 1, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-        gruposSemFonte: 0, gruposFonteInacessivel: 1, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
+        gruposSemFonte: 0, gruposFonteInacessivel: 1, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0,
       },
     };
 
@@ -205,7 +205,7 @@ function analiseCom(comparacoes: ComparacaoCampo[], contato: ContatoPlanilha): R
     ],
     resumo: {
       total: 1, verde: 0, amarelo: 1, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-      gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
+      gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0,
     },
   };
 }
@@ -450,7 +450,7 @@ function analiseComContato(over: Partial<ResultadoContato>): ResultadoAnalise {
     ],
     resumo: {
       total: 1, verde: 1, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-      gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0,
+      gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0,
     },
   };
 }
@@ -576,5 +576,71 @@ describe("memória de leitura no export (spec 2026-10-20 §7)", () => {
       grupos: [{ ...analise.grupos[0], contatos: [{ ...analise.grupos[0].contatos[0], leituraDe: "2026-10-19T10:00:00.000Z" }] }],
     };
     expect(resultadoParaLinhas(comIndividual)[0].Observacao).toBe("Leitura de 19/10 reaproveitada");
+  });
+});
+
+describe("leitura resiliente no export (spec 2026-10-23 §6)", () => {
+  test("ressalvas da leitura resiliente na coluna Observacao (spec 2026-10-23 §6)", () => {
+    const resiliente: ResultadoAnalise = {
+      ...analise,
+      grupos: [{
+        ...analise.grupos[0],
+        alternativa: { url: "https://orgao.gov.br/alternativa", urlPrincipal: "https://orgao.gov.br", motivoPrincipal: "HTTP 404" },
+        mudouFormato: { lidaEm: "2026-10-16T12:00:00.000Z", trocados: 7, total: 10 },
+        contatos: [{ ...analise.grupos[0].contatos[0], alternativa: { url: "https://orgao.gov.br/alternativa", urlPrincipal: "https://orgao.gov.br", motivoPrincipal: "HTTP 404" }, provisoria: true }],
+      }],
+      falhas: { "https://orgao.gov.br": { desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" } },
+    };
+    const linhas = resultadoParaLinhas(resiliente);
+    expect(linhas[0].Observacao).toContain("Lida pela URL alternativa; a principal não respondeu (HTTP 404)");
+    expect(linhas[0].Observacao).toContain("Composição mudou: ");
+    expect(linhas[0].Observacao).toContain("Fonte caída há 2 coletas");
+    expect(linhas[0].Observacao).toContain("Fonte provisória: notícia");
+    expect(linhas[0].Observacao).toContain("Lida pela URL alternativa (HTTP 404)");
+  });
+
+  test("grupo inacessível com URL caída leva só o aviso de URL caída; sem falhas, nada muda", () => {
+    const inacessivel: ResultadoAnalise = {
+      ...analise,
+      grupos: [{ ...analise.grupos[0], fonteInacessivel: true, erroFonte: "HTTP 404" }],
+      falhas: { "https://orgao.gov.br": { desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" } },
+    };
+    expect(resultadoParaLinhas(inacessivel)[0].Observacao).toBe("Fonte caída há 2 coletas, desde 19/10: conferir se o endereço mudou");
+    expect(resultadoParaLinhas({ ...inacessivel, falhas: undefined })[0].Observacao).toBe("");
+  });
+
+  test("fonte provisória só na linha do contato que tem (PE), não nos demais governadores do grupo", () => {
+    const base = analise.grupos[0].contatos[0];
+    const governadores: ResultadoAnalise = {
+      ...analise,
+      grupos: [{
+        ...analise.grupos[0],
+        individuais: { lidas: 2, caidas: 0, provisorias: 1 },
+        contatos: [
+          { ...base, contato: { ...base.contato, nome: "Governador De Goiás" } },
+          { ...base, contato: { ...base.contato, nome: "Governadora De Pernambuco" }, provisoria: true },
+        ],
+      }],
+    };
+    const [go, pe] = resultadoParaLinhas(governadores);
+    expect(go.Observacao).not.toContain("Fonte provisória: notícia");
+    expect(pe.Observacao).toBe("Fonte provisória: notícia");
+  });
+
+  test("individual lida pela alternativa: o aviso de URL caída vem da principal, que é a que entra em falhas", () => {
+    const PRINCIPAL = "https://pe.gov.br/governadora";
+    const ALT = "https://pe.gov.br/governadora-alternativa";
+    const base = analise.grupos[0].contatos[0];
+    const individual: ResultadoAnalise = {
+      ...analise,
+      grupos: [{
+        ...analise.grupos[0],
+        fonteUrl: undefined,
+        individuais: { lidas: 1, caidas: 0 },
+        contatos: [{ ...base, fonteUrl: ALT, alternativa: { url: ALT, urlPrincipal: PRINCIPAL, motivoPrincipal: "HTTP 404" } }],
+      }],
+      falhas: { [PRINCIPAL]: { desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" } },
+    };
+    expect(resultadoParaLinhas(individual)[0].Observacao).toBe("Lida pela URL alternativa (HTTP 404) · Fonte caída há 2 coletas, desde 19/10: conferir se o endereço mudou");
   });
 });

@@ -266,6 +266,19 @@ describe("compararContatoIndividual (tabela §5.2)", () => {
       expect(v.resultado.comparacoes.some((c) => c.origemValor === "coerencia" || c.origemValor === "protocolo")).toBe(true);
     }
   });
+  test("lida pela alternativa: as comparações e o fonteUrl apontam para a URL lida", () => {
+    const alt = "https://www.exemplar.gov.br/governo-alternativa";
+    const v = compararContatoIndividual({ contato: governador, fonte: indNomeCargo, lida: { conteudo: { ...estado, url: alt }, alternativa: { url: alt, urlPrincipal: indNomeCargo.url, motivoPrincipal: "HTTP 404" } } });
+    expect(v.resultado.fonteUrl).toBe(alt);
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")?.fonteUrl).toBe(alt);
+    expect(v.resultado.alternativa).toEqual({ url: alt, urlPrincipal: indNomeCargo.url, motivoPrincipal: "HTTP 404" });
+  });
+  test("página reaproveitada da memória da alternativa: as comparações e o fonteUrl apontam para a URL do conteúdo", () => {
+    const alt = "https://www.exemplar.gov.br/governo-alternativa";
+    const v = compararContatoIndividual({ contato: governador, fonte: indNomeCargo, lida: { conteudo: { ...estado, url: alt }, urlDaMemoria: alt } });
+    expect(v.resultado.fonteUrl).toBe(alt);
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")?.fonteUrl).toBe(alt);
+  });
 });
 
 describe("compararContatoSemIndividual (§5.4)", () => {
@@ -299,5 +312,47 @@ describe("novosForaDaPlanilha e marcarFonteInacessivel sem URL", () => {
     expect(g.fonteUrl).toBeUndefined();
     expect(g.contatos[0].fonteUrl).toBeUndefined();
     expect(g.contatos[0].semaforo).toBe("indeterminado");
+  });
+});
+
+describe("nome mais curto em destaque (spec 2026-10-23 §4.1)", () => {
+  const pagina = (destaques: string[], pessoas: { nome: string; cargo?: string }[] = []): ConteudoFonte => ({ url: "https://www.gov.br/x", textoLimpo: "Gabinete do ministro. ".repeat(20), destaques, pessoas });
+  test("'Waldez Góes' em destaque reconhece 'Antônio Waldez Góes da Silva' e sai divergente com o nome da página", () => {
+    const a = nomeNaPagina("Antônio Waldez Góes da Silva", pagina(["Waldez Góes"]));
+    expect(a).toEqual({ nomeNaPagina: "Waldez Góes", exato: false });
+  });
+  test("nome curto em destaque com a pessoa estruturada do mesmo nome reconhece e traz o cargo", () => {
+    const a = nomeNaPagina("Antonio Vladimir Moura Lima", pagina(["Vladimir Lima"], [{ nome: "Vladimir Lima", cargo: "Ministro de Estado das Cidades" }]));
+    expect(a?.pessoa?.cargo).toBe("Ministro de Estado das Cidades");
+    expect(a?.nomeNaPagina).toBe("Vladimir Lima");
+    expect(a?.exato).toBe(false);
+  });
+  test("pessoa curta só em `pessoas`, sem destaque, não reconhece (o assessor do gabinete não esconde a saída)", () => {
+    expect(nomeNaPagina("Antonio Vladimir Moura Lima", pagina([], [{ nome: "Vladimir Lima", cargo: "Assessor Especial" }]))).toBeUndefined();
+  });
+  test("dois destaques distintos que reconhecem: ambíguo, não reconhece", () => {
+    expect(nomeNaPagina("Antônio Waldez Góes da Silva", pagina(["Waldez Góes", "Antônio Silva"]))).toBeUndefined();
+  });
+  test("o mesmo destaque repetido (título e negrito) não é ambiguidade", () => {
+    expect(nomeNaPagina("Antônio Waldez Góes da Silva", pagina(["Waldez Góes", "WALDEZ GÓES"]))).toEqual({ nomeNaPagina: "Waldez Góes", exato: false });
+  });
+  test("uma parte só não reconhece", () => {
+    expect(nomeNaPagina("Antônio Waldez Góes da Silva", pagina(["Waldez"]))).toBeUndefined();
+  });
+  test("partes fora de ordem não reconhecem", () => {
+    expect(nomeNaPagina("Antônio Waldez Góes da Silva", pagina(["Góes Waldez"]))).toBeUndefined();
+  });
+  test("parte que não está no nome do Contatos não reconhece", () => {
+    expect(nomeNaPagina("Antônio Waldez Góes da Silva", pagina(["Waldez Pereira"]))).toBeUndefined();
+  });
+  test("conectivos não contam como parte: 'Góes da Silva' tem duas partes e reconhece", () => {
+    expect(nomeNaPagina("Antônio Waldez Góes da Silva", pagina(["Góes da Silva"]))?.exato).toBe(false);
+  });
+  test("o veredito do contato é amarelo, nome divergente com o nome da página, nunca saída", () => {
+    const v = compararContatoIndividual({ contato: contato({ nome: "Antônio Waldez Góes da Silva" }), fonte: indNome, lida: { conteudo: pagina(["Waldez Góes"]) } });
+    expect(v.resultado.semaforo).toBe("amarelo");
+    expect(v.resultado.possivelSaida).toBeUndefined();
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")).toMatchObject({ situacao: "divergente", valorEsperado: "Waldez Góes" });
+    expect(v.nomeConfirmado).toBe(true);
   });
 });

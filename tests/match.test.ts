@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  aplicarNomesDoContatos,
   compararContato,
   compararGrupo,
   contarContatosCasados,
@@ -492,5 +493,26 @@ describe("contarContatosCasados (spec 2026-10-20 §5.1)", () => {
   });
   test("composição vazia casa zero", () => {
     expect(contarContatosCasados(contatos, [])).toBe(0);
+  });
+});
+
+describe("aplicarNomesDoContatos (spec 2026-10-23 §4.2)", () => {
+  const contatos = [{ nome: "Garibaldi Alves Filho", grupo: "G", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" }, { nome: "Outra Pessoa Qualquer", grupo: "G", tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" }];
+  const fonte = { url: "https://x.leg.br", textoLimpo: "", destaques: [], pessoas: [{ nome: "Garibaldi Alves" }, { nome: "Outra Pessoa" }] };
+  test("nome da lista que casou sai confere com o nome do Contatos; os demais não mudam", () => {
+    const g = aplicarNomesDoContatos(compararGrupo("G", contatos, fonte), ["Garibaldi Alves Filho"]);
+    const [gar, outra] = g.contatos;
+    expect(gar.comparacoes.find((c) => c.campo === "nome")).toMatchObject({ situacao: "confere", valorEsperado: "Garibaldi Alves Filho" });
+    expect(gar.semaforo).toBe("verde");
+    expect(gar.camposDivergentes.some((d) => d.campo === "nome")).toBe(false);
+    expect(outra.comparacoes.find((c) => c.campo === "nome")?.situacao).toBe("divergente");
+  });
+  test("nome da lista que não casou ninguém continua possível saída", () => {
+    const g = aplicarNomesDoContatos(compararGrupo("G", contatos, { ...fonte, pessoas: [{ nome: "Ninguém Conhecido" }] }), ["Garibaldi Alves Filho"]);
+    expect(g.contatos[0].possivelSaida).toBe(true);
+  });
+  test("lista vazia devolve o grupo igual", () => {
+    const antes = compararGrupo("G", contatos, fonte);
+    expect(aplicarNomesDoContatos(antes, [])).toEqual(antes);
   });
 });

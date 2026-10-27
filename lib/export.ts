@@ -2,9 +2,11 @@ import * as XLSX from "xlsx";
 import { coerenciasVisiveis, textoCoerencia, ROTULOS_CAMPO_TRATAMENTO } from "@/lib/tratamento";
 import { rotuloAchadoEndereco } from "@/lib/endereco";
 import { anotacaoReaproveitada, diaMes } from "@/lib/memoria-leitura";
+import { avisoUrlCaida, TEXTO_FONTE_PROVISORIA, textoAlternativa, textoMudanca } from "@/lib/painel";
 import type {
   AuditoriaEndereco,
   ComparacaoCampo,
+  FalhasPorUrl,
   ResultadoAnalise,
   ResultadoContato,
   ResultadoGrupo,
@@ -94,10 +96,10 @@ function fonteDoCargo(c: ResultadoContato): string {
 /**
  * Observação do contato mais as ressalvas do grupo (leitura reaproveitada, fonte que não
  * respondeu). Quem trabalha a partir do download precisa das mesmas ressalvas que a tela dá:
- * sem elas, a linha parece um veredito completo.
+ * sem elas, a linha parece um veredito completo. A mesma frase não sai duas vezes na célula.
  */
 function observacaoCom(observacao: string | undefined, ressalvas: readonly string[]): string {
-  return [observacao, ...ressalvas].filter(Boolean).join(" · ");
+  return [...new Set([observacao, ...ressalvas].filter(Boolean))].join(" · ");
 }
 
 function primeiraMaiuscula(t: string): string {
@@ -107,20 +109,41 @@ function primeiraMaiuscula(t: string): string {
 /**
  * Ressalvas do grupo a repetir na linha de cada contato. No grupo inteiro inacessível a
  * observação do contato já diz que a fonte não pôde ser lida: repetir o motivo aqui daria a
- * mesma frase duas vezes na mesma célula. A tela suprime pelo mesmo motivo.
+ * mesma frase duas vezes na mesma célula. A tela suprime pelo mesmo motivo; só o aviso de URL
+ * caída em coletas seguidas continua, porque diz outra coisa (conferir o endereço; spec
+ * 2026-10-23 §6).
  */
-function ressalvasDoGrupo(g: ResultadoGrupo): string[] {
-  if (g.fonteInacessivel) return [];
+function ressalvasDoGrupo(g: ResultadoGrupo, falhas: FalhasPorUrl | undefined): string[] {
+  const caida = avisoUrlCaida(falhas, g.fonteUrl);
+  if (g.fonteInacessivel) return caida ? [caida] : [];
   return [
     ...(g.reaproveitada ? [primeiraMaiuscula(anotacaoReaproveitada(g.reaproveitada))] : []),
     ...(g.erroFonte ? [`fonte não respondeu — ${g.erroFonte}`] : []),
+    ...(g.mudouFormato ? [textoMudanca(g.mudouFormato)] : []),
+    ...(g.alternativa ? [textoAlternativa(g.alternativa)] : []),
+    ...(caida ? [caida] : []),
+  ];
+}
+
+/**
+ * Ressalvas da leitura resiliente que são do contato: página lida pela alternativa, fonte
+ * provisória (só na linha do contato que tem; os demais do grupo não), página individual caída
+ * em coletas seguidas. O aviso de URL caída é da principal, a que entra em `falhas`.
+ */
+function ressalvasDoContato(c: ResultadoContato, g: ResultadoGrupo, falhas: FalhasPorUrl | undefined): string[] {
+  const caida = g.individuais ? avisoUrlCaida(falhas, c.alternativa?.urlPrincipal ?? c.fonteUrl) : undefined;
+  return [
+    ...(c.leituraDe ? [`Leitura de ${diaMes(c.leituraDe)} reaproveitada`] : []),
+    ...(c.alternativa ? [`Lida pela URL alternativa (${c.alternativa.motivoPrincipal})`] : []),
+    ...(c.provisoria ? [TEXTO_FONTE_PROVISORIA] : []),
+    ...(caida ? [caida] : []),
   ];
 }
 
 export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, string>[] {
   const linhas: Record<string, string>[] = [];
   for (const g of analise.grupos) {
-    const ressalvas = ressalvasDoGrupo(g);
+    const ressalvas = ressalvasDoGrupo(g, analise.falhas);
     for (const c of g.contatos) {
       const linha: Record<string, string> = {
         Grupo: g.grupo,
@@ -128,7 +151,7 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
         Divergencias: [...new Set(c.camposDivergentes.map((d) => d.campo))].join(", "),
         Origem: c.origem,
         Fonte: c.fonteUrl ?? "",
-        Observacao: observacaoCom(c.observacao, [...(c.leituraDe ? [`Leitura de ${diaMes(c.leituraDe)} reaproveitada`] : []), ...ressalvas]),
+        Observacao: observacaoCom(c.observacao, [...ressalvasDoContato(c, g, analise.falhas), ...ressalvas]),
         "Fonte do cargo": fonteDoCargo(c),
       };
       for (const f of CAMPOS) {

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { decodificarCorpo, extrairConteudo, raspar, ScrapeError } from "@/lib/scrape";
+import { decodificarCorpo, extrairConteudo, extrairPorMarcador, raspar, ScrapeError } from "@/lib/scrape";
 
 const html = readFileSync(resolve(__dirname, "fixtures/orgao-exemplo.html"), "utf-8");
 
@@ -671,4 +671,76 @@ describe("linha de cargo entre dois nomes não vota a orientação", () => {
     expect(c.pessoas.some((p) => p.cargo?.startsWith("Ministro-Substituto"))).toBe(false);
     expect(c.textoLimpo).not.toMatch(/Colegiados, Comissões e Corregedoria/);
   });
+});
+
+test("títulos h1–h3 que parecem nome entram em destaques (spec 2026-10-23 §4.1)", () => {
+  const c = extrairConteudo("<main><h1>Waldez Góes</h1><h2>Composição</h2><p>Ministro de Estado da Integração.</p><strong>Currículo</strong></main>", "https://www.gov.br/x");
+  expect(c.destaques).toContain("Waldez Góes");
+  expect(c.destaques).not.toContain("Composição");
+  expect(c.destaques).not.toContain("Currículo");
+});
+
+describe("extração por marcador (spec 2026-10-23 §5.2)", () => {
+  test("pessoas cujo nome é seguido do marcador, com cargo = palavra de cargo que antecede + marcador sem parênteses", () => {
+    const texto = "Presidente: Ministra Ana Maria Política Completa\nDesembargador Carlos Alberto Exemplo Souza (convocado)\nDesembargadora Dora Exemplo Reis (convocada)\nSecretaria-Geral";
+    expect(extrairPorMarcador(texto, ["(convocado)", "(convocada)"])).toEqual([
+      { nome: "Carlos Alberto Exemplo Souza", cargo: "Desembargador convocado", origem: "pagina" },
+      { nome: "Dora Exemplo Reis", cargo: "Desembargadora convocada", origem: "pagina" },
+    ]);
+  });
+  test("marcador ** sem palavra de cargo antes: pessoa sem cargo", () => {
+    expect(extrairPorMarcador("Ana Maria Política Completa **\nBeto Souza", ["**"])).toEqual([{ nome: "Ana Maria Política Completa", origem: "pagina" }]);
+  });
+  test("qualificador logo depois do cargo ('Federal') fica fora do nome e do cargo", () => {
+    expect(extrairPorMarcador("Desembargador Federal Olindo Menezes **", ["**"])).toEqual([
+      { nome: "Olindo Menezes", cargo: "Desembargador", origem: "pagina" },
+    ]);
+    expect(extrairPorMarcador("Desembargador Federal Olindo Menezes (convocado)", ["(convocado)"])).toEqual([
+      { nome: "Olindo Menezes", cargo: "Desembargador convocado", origem: "pagina" },
+    ]);
+  });
+  test("qualificador de duas palavras ('do Trabalho') fica fora do nome", () => {
+    expect(extrairPorMarcador("Desembargadora do Trabalho Fulana Silva (convocada)", ["(convocada)"])).toEqual([
+      { nome: "Fulana Silva", cargo: "Desembargadora convocada", origem: "pagina" },
+    ]);
+  });
+  test("qualificadores seguidos ('Substituto', 'Convocado') também saem do nome", () => {
+    expect(extrairPorMarcador("Desembargador Federal Substituto Convocado Olindo Menezes **", ["**"])).toEqual([
+      { nome: "Olindo Menezes", cargo: "Desembargador", origem: "pagina" },
+    ]);
+  });
+  test("'Federal' sem palavra de cargo antes continua parte do nome", () => {
+    expect(extrairPorMarcador("Federal Olindo Menezes **", ["**"])).toEqual([
+      { nome: "Federal Olindo Menezes", origem: "pagina" },
+    ]);
+  });
+  test("nome de uma palavra antes do marcador não vira pessoa", () => {
+    expect(extrairPorMarcador("Fulano (convocado)", ["(convocado)"])).toEqual([]);
+  });
+  test("inicial abreviada no meio do nome ('João B. Silva') fica no nome", () => {
+    expect(extrairPorMarcador("Desembargador João B. Silva (convocado)", ["(convocado)"])).toEqual([
+      { nome: "João B. Silva", cargo: "Desembargador convocado", origem: "pagina" },
+    ]);
+  });
+  test("inicial não conta como parte significativa: 'B. Silva' sozinho não vira pessoa", () => {
+    expect(extrairPorMarcador("Desembargador B. Silva (convocado)", ["(convocado)"])).toEqual([]);
+  });
+  test("fixture do TST /orgaos: só os 6 convocados, com cargo", () => {
+    const c = extrairConteudo(readFileSync(resolve(__dirname, "fixtures/tst-orgaos.html"), "utf-8"), "https://www.tst.jus.br/orgaos", { marcador: ["(convocado)", "(convocada)"] });
+    expect(c.pessoas).toHaveLength(6);
+    expect(c.pessoas.every((p) => /^Desembargador(a)? convocad[oa]$/.test(p.cargo ?? ""))).toBe(true);
+  });
+  test("sem marcador, a mesma fixture segue a extração padrão (dezenas de pessoas)", () => {
+    const c = extrairConteudo(readFileSync(resolve(__dirname, "fixtures/tst-orgaos.html"), "utf-8"), "https://www.tst.jus.br/orgaos");
+    expect(c.pessoas.length).toBeGreaterThan(6);
+  });
+});
+
+test("PGR (Plone, nome em strong e cargo no parágrafo seguinte): uma pessoa com nome e cargo (spec 2026-10-23 §5)", () => {
+  // O brief usava "Fulano Exemplo Procurador", mas "procurador" é palavra do léxico de cargos e
+  // `pareceNome` reprova o trecho por isso, com ou sem moldura. O nome real do PGR não tem
+  // palavra de cargo; o fictício também não pode ter.
+  const c = extrairConteudo(readFileSync(resolve(__dirname, "fixtures/mpf-pgr.html"), "utf-8"), "https://www.mpf.mp.br/o-mpf/o-mpf/membros/procurador-geral-da-republica");
+  expect(c.pessoas).toContainEqual(expect.objectContaining({ nome: "Fulano Exemplo Pereira", cargo: expect.stringMatching(/Procurador-Geral da República/) }));
+  expect(c.textoLimpo.length).toBeGreaterThan(300);
 });

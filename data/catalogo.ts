@@ -202,8 +202,13 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     // (medido em 2026-10-15). Por isso é lida pelo navegador (`navegador: true`).
     // AM, RR e RJ: o fetch falhava ("fetch failed" no AM; RR e RJ só com a casca da página)
     // e o Chrome com janela traz a página inteira (medido em 2026-10-16): `navegador: "janela"`.
+    // AC (2026-10-26, fornecida pelo Clovis): a página institucional da governadora na agência
+    // oficial do Acre passa a primária (fetch 200, nome e "governadora" no texto); a antiga
+    // `orgao-entidades`, que vinha sem conteúdo legível, fica como alternativa.
+    // DF: o portal df.gov.br (fornecido em 26/10) não traz o nome da governadora no texto e
+    // geraria possível saída falsa; fica a notícia da CLDF.
     fontesIndividuais: [
-      { url: "https://estado.ac.gov.br/orgao-entidades/", ativo: true, chave: { uf: "AC" }, campos: ["nome", "cargo"] },
+      { url: "https://agencia.ac.gov.br/governadora/", ativo: true, urlAlternativa: "https://estado.ac.gov.br/orgao-entidades/", chave: { uf: "AC" }, campos: ["nome", "cargo"] },
       { url: "https://amapa.gov.br/gestores", ativo: true, chave: { uf: "AP" }, campos: ["nome", "cargo"] },
       { url: "https://www.transparencia.am.gov.br/estrutura-organizacional/", ativo: true, chave: { uf: "AM" }, campos: ["nome", "cargo"], navegador: "janela" },
       { url: "https://www.pa.gov.br/orgao?id_orgao=2", ativo: true, chave: { uf: "PA" }, campos: ["nome", "cargo"] },
@@ -262,10 +267,12 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     // só para localizar a linha. AGU e CGU cobrem nome E cargo; as demais, só nome.
     // `urlAlternativa` (planilha de 23/10, as cinco responderam 200 em 23/10): Casa Civil,
     // Secom, Cultura, Defesa e Igualdade Racial. Só é lida quando a principal falha
-    // (spec 2026-10-23 §3.3).
+    // (spec 2026-10-23 §3.3). Em 2026-10-26, a pedido do Clovis, Casa Civil, Cultura, Defesa e
+    // Igualdade Racial passaram a ler primeiro o link principal da planilha de 23/10; a URL
+    // antiga, que confirmou o nome em 20/10, virou a alternativa.
     fontesIndividuais: [
       // Ministra de Estado da Casa Civil da Presidência da República
-      { url: "https://www.gov.br/casacivil/pt-br/composicao/ministra", ativo: true, urlAlternativa: "https://www.gov.br/casacivil/pt-br/composicao/gabinete-do-ministro/quem-e-quem-1", chave: { nome: "Miriam Belchior" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/casacivil/pt-br/composicao/gabinete-do-ministro/quem-e-quem-1", ativo: true, urlAlternativa: "https://www.gov.br/casacivil/pt-br/composicao/ministra", chave: { nome: "Miriam Belchior" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Secretaria-Geral da Presidência da República
       { url: "https://www.gov.br/secretariageral/pt-br/composicao/ministro", ativo: true, chave: { nome: "Guilherme Boulos" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Secretaria de Relações Institucionais da Presidência da República
@@ -287,9 +294,9 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       // Ministro de Estado das Comunicações
       { url: "https://www.gov.br/mcom/pt-br/composicao/ministro", ativo: true, chave: { nome: "Frederico de Siqueira Filho" }, campos: ["nome"], navegador: "janela" },
       // Ministra de Estado da Cultura
-      { url: "https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra", ativo: true, urlAlternativa: "https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra/margareth-menezes-1", chave: { nome: "Margareth Menezes" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra/margareth-menezes-1", ativo: true, urlAlternativa: "https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra", chave: { nome: "Margareth Menezes" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Defesa
-      { url: "https://www.gov.br/defesa/pt-br/composicao/quem-e-quem", ativo: true, urlAlternativa: "https://www.gov.br/defesa/pt-br/composicao/gabinete-do-ministro/jose-mucio-monteiro-filho", chave: { nome: "José Mucio" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/defesa/pt-br/composicao/gabinete-do-ministro/jose-mucio-monteiro-filho", ativo: true, urlAlternativa: "https://www.gov.br/defesa/pt-br/composicao/quem-e-quem", chave: { nome: "José Mucio" }, campos: ["nome"], navegador: "janela" },
       // Ministra de Estado do Desenvolvimento Agrário e Agricultura Familiar
       { url: "https://www.gov.br/mda/pt-br/acesso-a-informacao/institucional/quem-e-quem/gabinete-da-ministra", ativo: true, chave: { nome: "Fernanda Machiaveli" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado do Desenvolvimento e Assistência Social, Família e Combate à Fome
@@ -309,7 +316,7 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       // Ministra de Estado da Gestão e da Inovação em Serviços Públicos
       { url: "https://www.gov.br/gestao/pt-br/composicao/quem-e-quem/ministra-e-orgaos-de-assistencia-direta", ativo: true, chave: { nome: "Esther Dweck" }, campos: ["nome"], navegador: "janela" },
       // Ministra de Estado da Igualdade Racial
-      { url: "https://www.gov.br/igualdaderacial/pt-br/composicao/quem-e-quem", ativo: true, urlAlternativa: "https://www.gov.br/igualdaderacial/pt-br/composicao/gabinete-da-ministra/rachel-barros-de-oliveira", chave: { nome: "Rachel Barros" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/igualdaderacial/pt-br/composicao/gabinete-da-ministra/rachel-barros-de-oliveira", ativo: true, urlAlternativa: "https://www.gov.br/igualdaderacial/pt-br/composicao/quem-e-quem", chave: { nome: "Rachel Barros" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Integração e do Desenvolvimento Regional
       { url: "https://www.gov.br/mdr/pt-br/composicao/ministro-e-secretarios", ativo: true, chave: { nome: "Antônio Waldez Góes da Silva" }, campos: ["nome"], navegador: "janela" },
       // Ministro de Estado da Justiça e Segurança Pública

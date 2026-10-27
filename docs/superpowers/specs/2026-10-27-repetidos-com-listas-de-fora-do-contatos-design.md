@@ -1,6 +1,6 @@
 # Autoridades repetidas: incluir as listas de fora do Contatos
 
-Data: 2026-10-27. Situação: decisões tomadas com o Clovis; aguardando revisão deste texto. Complementa a spec de 2026-10-14 (autoridades em mais de um grupo) e substitui o item 5 do §2 dela ("Fora: os reeleitos").
+Data: 2026-10-27. Situação: aprovada pelo Clovis em 27/10, com as duas propostas do §7 (eleito só com cargo de "ex-" fica em "Conferir"; seção própria para os eleitos em `/repetidos`). Complementa a spec de 2026-10-14 (autoridades em mais de um grupo) e substitui o item 5 do §2 dela ("Fora: os reeleitos").
 
 ## 1. Problema
 

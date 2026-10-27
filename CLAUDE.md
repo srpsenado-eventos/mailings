@@ -10,7 +10,7 @@ Repositório remoto: `github.com/srpsenado-eventos/mailings`, branch base `main`
 
 ## Estado do projeto (2026-10-26)
 
-- Suíte: 50 arquivos, 1117 testes, verde (2026-10-26). `npm run typecheck` limpo. Memória de leitura em `.fiscal/retrato.json` (`leituras`); falhas por URL em `falhas` (vai para a web).
+- Suíte: 50 arquivos, 1118 testes, verde (2026-10-26). `npm run typecheck` limpo. Memória de leitura em `.fiscal/retrato.json` (`leituras`); falhas por URL em `falhas` (vai para a web).
 - Catálogo (planilha de 23/10): 35 grupos, 26 fontes de grupo, 62 fontes individuais (24 Governadores, 2 delas provisórias por notícia, PE e DF; 38 Ministros de Estado), 25 grupos com fonte, **10 sem fonte** (entre eles Governadores Eleitos, que existe para não herdar as páginas dos governadores atuais) (todo contato deles sai vermelho, ver semântica abaixo). PGR e Ex-Presidentes do Senado ganharam fonte. "Senadores fora de exercício" existe no catálogo, mas só aparece no retrato quando a base de contatos trouxer esse rótulo de grupo.
 - Auditoria de Tratamento e Endereçamento (spec de 2026-08-13) e Camada C (regras de nome, spec de 2026-09-18) estão em `main` desde setembro de 2026 (`lib/tratamento.ts`, `data/regras-nome.ts`).
 - **Dívidas conhecidas** (não corrigir de passagem; abrir tarefa própria):

@@ -44,8 +44,19 @@ describe("catálogo real (data/catalogo.ts)", () => {
       expect(fontes.filter((f) => f.marcador)).toHaveLength(2);
       expect(fontes.filter((f) => f.nomesDoContatos)).toHaveLength(1);
       const alternativas = CATALOGO.flatMap((g) => [...g.fontes, ...(g.fontesIndividuais ?? [])]).flatMap((f) => (f.urlAlternativa ? [f.urlAlternativa] : []));
-      expect(alternativas).toHaveLength(5);
-      expect(alternativas.every((u) => u.startsWith("https://www.gov.br/"))).toBe(true);
+      expect(alternativas).toHaveLength(6);
+      expect(alternativas.every((u) => /^https:\/\/[a-z0-9.-]+\.gov\.br\//.test(u))).toBe(true);
+    });
+
+    test("ajuste de 26/10: link da planilha de 23/10 é a principal nos quatro ministérios; AC lê a página da governadora", () => {
+      const ind = CATALOGO.flatMap((g) => g.fontesIndividuais ?? []);
+      const principalDe = (nome: string) => ind.find((f) => "nome" in f.chave && f.chave.nome === nome);
+      expect(principalDe("Miriam Belchior")?.url).toBe("https://www.gov.br/casacivil/pt-br/composicao/gabinete-do-ministro/quem-e-quem-1");
+      expect(principalDe("Margareth Menezes")?.url).toBe("https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra/margareth-menezes-1");
+      expect(principalDe("José Mucio")?.url).toBe("https://www.gov.br/defesa/pt-br/composicao/gabinete-do-ministro/jose-mucio-monteiro-filho");
+      expect(principalDe("Rachel Barros")?.url).toBe("https://www.gov.br/igualdaderacial/pt-br/composicao/gabinete-da-ministra/rachel-barros-de-oliveira");
+      const ac = ind.find((f) => "uf" in f.chave && f.chave.uf === "AC");
+      expect(ac).toMatchObject({ url: "https://agencia.ac.gov.br/governadora/", urlAlternativa: "https://estado.ac.gov.br/orgao-entidades/" });
     });
   });
 

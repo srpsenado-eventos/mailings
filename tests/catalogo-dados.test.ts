@@ -84,8 +84,28 @@ describe("catálogo real (data/catalogo.ts)", () => {
     const DOMINIO_OFICIAL = /^https:\/\/[a-z0-9.-]+\.(gov|jus|leg|mp|def)\.br(\/|$)/i;
     const comIndividuais = CATALOGO.filter((g) => (g.fontesIndividuais ?? []).length > 0);
 
-    test("só Governadores e Ministros de Estado têm fontes individuais", () => {
-      expect(comIndividuais.map((g) => g.nome).sort()).toEqual(["Governadores", "Ministros de Estado"]);
+    test("só Governadores, Governadores Eleitos e Ministros de Estado têm fontes individuais", () => {
+      expect(comIndividuais.map((g) => g.nome).sort()).toEqual(["Governadores", "Governadores Eleitos", "Ministros de Estado"]);
+    });
+
+    test("Governadores Eleitos: 3 sites de campanha (ES, RN, TO), provisórios, só nome, válidos até 5/1/2027 (spec 2026-10-26)", () => {
+      const g = CATALOGO.find((x) => x.nome === "Governadores Eleitos")!;
+      expect(g.fontes).toEqual([]);
+      expect(g.fontesIndividuais).toEqual([
+        { url: "https://lorenzopazolini10.com.br/", ativo: true, chave: { uf: "ES" }, campos: ["nome"], provisoria: "campanha", validaAte: "2027-01-05" },
+        { url: "https://cadudelula.com.br/", ativo: true, chave: { uf: "RN" }, campos: ["nome"], provisoria: "campanha", validaAte: "2027-01-05" },
+        { url: "https://vicentinho45.com.br/", ativo: true, chave: { uf: "TO" }, campos: ["nome"], provisoria: "campanha", validaAte: "2027-01-05" },
+      ]);
+    });
+
+    test("site de campanha (domínio não oficial) só nas três individuais de Governadores Eleitos", () => {
+      const todas = CATALOGO.flatMap((g) => [...g.fontes.map((f) => ({ grupo: g.nome, url: f.url, provisoria: undefined as unknown })), ...(g.fontesIndividuais ?? []).map((f) => ({ grupo: g.nome, url: f.url, provisoria: f.provisoria as unknown }))]);
+      const campanha = todas.filter((f) => f.provisoria === "campanha");
+      expect(campanha.map((f) => f.grupo)).toEqual(["Governadores Eleitos", "Governadores Eleitos", "Governadores Eleitos"]);
+      const individuais = CATALOGO.flatMap((g) => g.fontesIndividuais ?? []);
+      const naoOficiais = individuais.filter((f) => !DOMINIO_OFICIAL.test(f.url));
+      expect(naoOficiais.map((f) => f.url)).toEqual(campanha.map((f) => f.url));
+      expect(individuais.filter((f) => f.validaAte).map((f) => f.url)).toEqual(campanha.map((f) => f.url));
     });
 
     test("Governadores: 24 individuais ativas, por UF, nome e cargo, sem fonte de grupo", () => {
@@ -98,9 +118,11 @@ describe("catálogo real (data/catalogo.ts)", () => {
       expect(ufs).toEqual(["AC","AL","AM","AP","BA","CE","DF","ES","GO","MA","MS","PA","PB","PE","PI","PR","RJ","RN","RO","RR","RS","SE","SP","TO"]);
     });
 
-    test("Governadores: provisórias (notícia) só em PE e DF, com nome e cargo", () => {
+    test("Governadores: provisórias (notícia) só em PE e DF, com nome e cargo, sem validade", () => {
       const ind = CATALOGO.find((x) => x.nome === "Governadores")!.fontesIndividuais ?? [];
-      const provisorias = ind.filter((f) => f.provisoria === true);
+      expect(ind.filter((f) => f.provisoria && f.provisoria !== "noticia")).toEqual([]);
+      expect(ind.filter((f) => f.validaAte)).toEqual([]);
+      const provisorias = ind.filter((f) => f.provisoria === "noticia");
       expect(provisorias.map((f) => ("uf" in f.chave ? f.chave.uf : "")).sort()).toEqual(["DF", "PE"]);
       expect(provisorias.every((f) => f.campos.join(",") === "nome,cargo")).toBe(true);
     });
@@ -119,10 +141,10 @@ describe("catálogo real (data/catalogo.ts)", () => {
       ]);
     });
 
-    test("toda individual é de domínio oficial, tem campos com 'nome' e chave única no grupo", () => {
+    test("toda individual é de domínio oficial (salvo o site de campanha), tem campos com 'nome' e chave única no grupo", () => {
       for (const g of comIndividuais) {
         const ind = g.fontesIndividuais ?? [];
-        expect(ind.filter((f) => !DOMINIO_OFICIAL.test(f.url)).map((f) => f.url)).toEqual([]);
+        expect(ind.filter((f) => f.provisoria !== "campanha" && !DOMINIO_OFICIAL.test(f.url)).map((f) => f.url)).toEqual([]);
         expect(ind.filter((f) => f.campos.length === 0 || !f.campos.includes("nome")).map((f) => f.url)).toEqual([]);
         const chaves = ind.map((f) => ("uf" in f.chave ? `uf:${f.chave.uf}` : `nome:${normalizarNome(f.chave.nome)}`));
         expect(new Set(chaves).size).toBe(chaves.length);

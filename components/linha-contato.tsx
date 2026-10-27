@@ -14,6 +14,7 @@ import {
   situacaoDoContato,
   textoDataHora,
   textoEnderecoParaCopiar,
+  textoProvisoriaNaProcedencia,
   type CampoEndereco,
   type Etiqueta as EtiquetaPainel,
 } from "@/lib/painel";
@@ -182,7 +183,7 @@ function Detalhe({ c, g, retrato, eleicaoLigada }: { c: ResultadoContato; g: Res
       <h3 className="text-xs font-semibold uppercase tracking-wide text-cinza-claro">De onde veio cada resposta</h3>
       <ul className="mt-1 text-xs leading-relaxed text-cinza">
         {procedencia.map((p) => (
-          <li key={p.rotulo}>{p.rotulo}: {p.url ? <a href={p.url} target="_blank" rel="noreferrer" className="text-acao underline">{p.texto}</a> : p.texto}{p.leituraDe ? `, leitura de ${diaMes(p.leituraDe)} reaproveitada` : p.lida ? `, lido em ${textoDataHora(retrato.geradoEm)}` : ", não lida nesta varredura"}{p.alternativa && ", pela URL alternativa"}{p.provisoria && ", fonte provisória: notícia"}{p.caida && `, ${p.caida}`}</li>
+          <li key={p.rotulo}>{p.rotulo}: {p.url ? <a href={p.url} target="_blank" rel="noreferrer" className="text-acao underline">{p.texto}</a> : p.texto}{p.leituraDe ? `, leitura de ${diaMes(p.leituraDe)} reaproveitada` : p.lida ? `, lido em ${textoDataHora(retrato.geradoEm)}` : ", não lida nesta varredura"}{p.alternativa && ", pela URL alternativa"}{p.provisoria && `, ${textoProvisoriaNaProcedencia(p.provisoria)}`}{p.caida && `, ${p.caida}`}</li>
         ))}
         <li>Tratamento e endereçamento: tabela de protocolo (Posse2027_TabelaTratamentos.xlsx)</li>
         {retrato.planilhaEnderecos && <li>Endereço: {retrato.planilhaEnderecos.nome}</li>}

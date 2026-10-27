@@ -168,8 +168,11 @@ export interface ResultadoContato {
   leituraDe?: string;
   /** A página individual do contato foi lida pela URL alternativa (spec 2026-10-23 §3.3). */
   alternativa?: LeituraAlternativa;
-  /** A fonte individual do contato é provisória (notícia) (spec 2026-10-23 §5). */
-  provisoria?: true;
+  /**
+   * A fonte individual do contato é provisória, e de que tipo (spec 2026-10-23 §5; 2026-10-26 §3.1).
+   * Retrato anterior a 26/10 traz `true`, lido como `"noticia"`.
+   */
+  provisoria?: TipoFonteProvisoria | true;
   /**
    * Auditoria de endereço (Camada D). **Não** entra em `camposDivergentes` nem muda
    * `semaforo`: ver docs/superpowers/specs/2026-10-01-auditoria-de-endereco-camada-d.md
@@ -379,9 +382,20 @@ export interface FonteIndividual {
   campos: readonly CampoFonte[];
   navegador?: true | "janela";
   urlAlternativa?: string;
-  /** Notícia de órgão oficial no lugar de página institucional, até a posse de 2027 (spec 2026-10-23 §5). */
-  provisoria?: true;
+  /**
+   * Fonte provisória e de que tipo: notícia de órgão oficial no lugar de página institucional
+   * (spec 2026-10-23 §5), ou site de campanha de governador eleito (spec 2026-10-26).
+   */
+  provisoria?: TipoFonteProvisoria;
+  /**
+   * Último dia em que a fonte é lida, `AAAA-MM-DD`, inclusive, no fuso de Brasília (spec 2026-10-26
+   * §3.3). Depois dele a fonte é ignorada, como se estivesse inativa.
+   */
+  validaAte?: string;
 }
+
+/** Tipo da fonte individual provisória (spec 2026-10-26 §3.1). */
+export type TipoFonteProvisoria = "noticia" | "campanha";
 
 /** Uma fonte que o raspador sabe ler: o que `FonteCatalogo` e `FonteIndividual` têm em comum. */
 export type FonteLegivel = Pick<FonteCatalogo, "url" | "tabela" | "navegador" | "urlAlternativa" | "tipo" | "marcador">;

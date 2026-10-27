@@ -310,10 +310,65 @@ describe("alternativa e falhas nas páginas individuais (spec 2026-10-23 §3.3, 
 });
 
 test("fonte individual provisória marca o contato e conta no grupo (spec 2026-10-23 §5)", async () => {
-  const provisoria: FonteIndividual = { ...individuaisGov[0], provisoria: true };
+  const provisoria: FonteIndividual = { ...individuaisGov[0], provisoria: "noticia" };
   const r = await analisar("c.xlsx", [govGo, govRs], { resolverFonte: resolver(RESOLVIDA_MIN, { ...RESOLVIDA_GOV, fontesIndividuais: [provisoria, individuaisGov[1]] }), raspar: rasparDe({ [URL_GO]: paginaGo, [URL_RS]: paginaRs }), extrairComposicao: async () => [] });
   const g = r.grupos[0];
-  expect(g.contatos.find((c) => c.contato.nome === govGo.nome)?.provisoria).toBe(true);
+  expect(g.contatos.find((c) => c.contato.nome === govGo.nome)?.provisoria).toBe("noticia");
   expect(g.contatos.find((c) => c.contato.nome === govRs.nome)?.provisoria).toBeUndefined();
   expect(g.individuais).toEqual({ lidas: 2, caidas: 0, provisorias: 1 });
+});
+
+describe("Governadores Eleitos: site de campanha com validade (spec 2026-10-26)", () => {
+  const URL_ES = "https://campanha-es.com.br/";
+  const campanhaEs: FonteIndividual = { url: URL_ES, ativo: true, chave: { uf: "ES" }, campos: ["nome"], provisoria: "campanha", validaAte: "2027-01-05" };
+  const RESOLVIDA_ELEITOS: FonteResolvida = { grupoCanonico: "Governadores Eleitos", fontes: [], fontesIndividuais: [campanhaEs], sugestoes: [] };
+  // Mesmo nome da página de Goiás (fixture), com a UF do Espírito Santo no Departamento.
+  const eleitoEs: ContatoPlanilha = { nome: govGo.nome, cargo: "Governador Eleito do Estado do Espírito Santo", departamento: "ES", grupo: "Governadores Eleitos", ...PROTOCOLO_M };
+  const paginaEs: ConteudoFonte = { ...paginaGo, url: URL_ES };
+
+  function depsEleitos(agora: string, pedidas: string[]): Dependencias {
+    const raspar = rasparDe({ [URL_ES]: paginaEs });
+    return {
+      resolverFonte: () => RESOLVIDA_ELEITOS,
+      raspar: (f) => { pedidas.push(f.url); return raspar(f); },
+      extrairComposicao: async () => [],
+      agora: () => new Date(agora),
+    };
+  }
+
+  test("fonte vigente é lida e o contato leva provisoria 'campanha'", async () => {
+    const pedidas: string[] = [];
+    const r = await analisar("c.xlsx", [eleitoEs], depsEleitos("2026-10-27T15:00:00.000Z", pedidas));
+    const g = r.grupos[0];
+    const c = g.contatos[0];
+    expect(pedidas).toEqual([URL_ES]);
+    expect(c.provisoria).toBe("campanha");
+    expect(c.fonteUrl).toBe(URL_ES);
+    expect(c.comparacoes.find((x) => x.campo === "nome")?.situacao).toBe("confere");
+    expect(c.possivelSaida).toBeUndefined();
+    expect(g.individuais).toEqual({ lidas: 1, caidas: 0, provisorias: 1 });
+  });
+
+  test("no último dia (5/1/2027 em Brasília, já 6/1 em UTC) a fonte ainda é lida", async () => {
+    const pedidas: string[] = [];
+    const r = await analisar("c.xlsx", [eleitoEs], depsEleitos("2027-01-06T02:30:00.000Z", pedidas));
+    expect(pedidas).toEqual([URL_ES]);
+    expect(r.grupos[0].contatos[0].provisoria).toBe("campanha");
+  });
+
+  test("validade vencida: a fonte não é lida e o contato sai sem fonte individual, vermelho 'cadastrar fonte', nunca possível saída", async () => {
+    const pedidas: string[] = [];
+    const r = await analisar("c.xlsx", [eleitoEs], depsEleitos("2027-01-06T03:00:00.000Z", pedidas));
+    const g = r.grupos[0];
+    const c = g.contatos[0];
+    expect(pedidas).toEqual([]);
+    expect(c.semaforo).toBe("vermelho");
+    expect(c.possivelSaida).toBeUndefined();
+    expect(c.camposDivergentes[0].campo).toBe("fonte");
+    expect(c.observacao).toBe("Sem fonte individual para a UF ES");
+    expect(c.provisoria).toBeUndefined();
+    expect(g.fonteInacessivel).toBeUndefined();
+    expect(g.individuais).toEqual({ lidas: 0, caidas: 0 });
+    expect(r.falhas?.[URL_ES]).toBeUndefined();
+  });
 });

@@ -194,7 +194,7 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     // Spec 2026-10-15 §3.2: uma página oficial por UF, transcrita da planilha de conferência
     // do GT (Referencia 2/Conferencia contatos 06_10.xlsx, aba "Sites Governo Estados").
     // Planilha de 23/10 (spec 2026-10-23 §5): PE e DF entram por notícia de órgão oficial, só
-    // como `provisoria: true` (até a posse de 2027), conferidas com fetch em 23/10. MT, MG e SC
+    // como `provisoria: "noticia"` (até a posse de 2027), conferidas com fetch em 23/10. MT, MG e SC
     // continuam sem individual (conferência manual pelo Diário Oficial: IOMAT, Jornal Minas
     // Gerais, DOE/SC) e saem "cadastrar fonte". RO, TO e ES mantêm a URL atual, a rever após 25/10.
     // MS: a URL tem fragmento "#/QuemEQuem" e a página é montada por JavaScript: o fetch
@@ -221,13 +221,13 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       { url: "https://egma.ma.gov.br/integrantes-do-governo", ativo: true, chave: { uf: "MA" }, campos: ["nome", "cargo"] },
       { url: "https://paraiba.pb.gov.br/governadoria/governador-1", ativo: true, chave: { uf: "PB" }, campos: ["nome", "cargo"] },
       // Provisória (notícia do TSE), planilha de 23/10.
-      { url: "https://www.tse.jus.br/comunicacao/noticias/2026/Outubro/raquel-lyra-psd-e-reeleita-governadora-de-pernambuco", ativo: true, chave: { uf: "PE" }, campos: ["nome", "cargo"], provisoria: true },
+      { url: "https://www.tse.jus.br/comunicacao/noticias/2026/Outubro/raquel-lyra-psd-e-reeleita-governadora-de-pernambuco", ativo: true, chave: { uf: "PE" }, campos: ["nome", "cargo"], provisoria: "noticia" },
       { url: "https://www.pi.gov.br/governador/", ativo: true, chave: { uf: "PI" }, campos: ["nome", "cargo"] },
       { url: "https://www.rn.gov.br/postagem/governadora/", ativo: true, chave: { uf: "RN" }, campos: ["nome", "cargo"] },
       { url: "https://www.se.gov.br/agencia/governo", ativo: true, chave: { uf: "SE" }, campos: ["nome", "cargo"] },
       { url: "https://goias.gov.br/administracao-direta/", ativo: true, chave: { uf: "GO" }, campos: ["nome", "cargo"] },
       // Provisória (notícia da Câmara Legislativa do DF), planilha de 23/10.
-      { url: "https://www.cl.df.gov.br/-/celina-leao-toma-posse-como-governadora-do-distrito-federal", ativo: true, chave: { uf: "DF" }, campos: ["nome", "cargo"], provisoria: true },
+      { url: "https://www.cl.df.gov.br/-/celina-leao-toma-posse-como-governadora-do-distrito-federal", ativo: true, chave: { uf: "DF" }, campos: ["nome", "cargo"], provisoria: "noticia" },
       { url: "https://www.transparencia.ms.gov.br/#/QuemEQuem", ativo: true, chave: { uf: "MS" }, campos: ["nome", "cargo"], navegador: true },
       { url: "https://www.es.gov.br/governo/governador", ativo: true, chave: { uf: "ES" }, campos: ["nome", "cargo"] },
       { url: "https://www.rj.gov.br/pagina/sobre-o-governo9806", ativo: true, chave: { uf: "RJ" }, campos: ["nome", "cargo"], navegador: "janela" },
@@ -241,6 +241,16 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     // mandato novo não serem ligados às páginas dos governadores atuais.
     nome: "Governadores Eleitos",
     fontes: [],
+    // Spec 2026-10-26: os eleitos de mandato novo no 2º turno (ES, RN e TO) não têm página
+    // oficial até a posse. Sites de campanha fornecidos pelo Clovis em 26/10, conferidos com
+    // fetch em 26/10 (200, nome do eleito no texto). Única exceção de domínio não oficial do
+    // catálogo: só aqui, `provisoria: "campanha"`, só o nome (o site não diz o cargo de eleito)
+    // e `validaAte` no dia anterior à posse dos governadores (6/1/2027, EC 111/2021).
+    fontesIndividuais: [
+      { url: "https://lorenzopazolini10.com.br/", ativo: true, chave: { uf: "ES" }, campos: ["nome"], provisoria: "campanha", validaAte: "2027-01-05" },
+      { url: "https://cadudelula.com.br/", ativo: true, chave: { uf: "RN" }, campos: ["nome"], provisoria: "campanha", validaAte: "2027-01-05" },
+      { url: "https://vicentinho45.com.br/", ativo: true, chave: { uf: "TO" }, campos: ["nome"], provisoria: "campanha", validaAte: "2027-01-05" },
+    ],
   },
   {
     nome: "Ministros de Estado",

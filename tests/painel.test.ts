@@ -22,7 +22,10 @@ import {
   textoNumeroNaBase,
   textoReaproveitada,
   textoSituacaoDosGrupos,
-  TEXTO_FONTE_PROVISORIA,
+  TEXTO_FONTE_PROVISORIA_CAMPANHA,
+  TEXTO_FONTE_PROVISORIA_NOTICIA,
+  textoProvisoriaNaProcedencia,
+  textosProvisorias,
   textoAlternativa,
   textoMudanca,
   textoUrlCaida,
@@ -825,7 +828,21 @@ describe("textos da leitura resiliente (spec 2026-10-23 §6)", () => {
     expect(textoAlternativa({ url: "https://x", urlPrincipal: "https://p", motivoPrincipal: "HTTP 404" })).toBe("Lida pela URL alternativa; a principal não respondeu (HTTP 404)");
     expect(textoUrlCaida({ desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" })).toBe("Fonte caída há 2 coletas, desde 19/10: conferir se o endereço mudou");
     expect(textoMudanca({ lidaEm: "2026-10-16T12:00:00.000Z", trocados: 7, total: 10 })).toBe("Composição mudou: 7 de 10 nomes não estavam na leitura de 16/10; confira");
-    expect(TEXTO_FONTE_PROVISORIA).toBe("Fonte provisória: notícia");
+    expect(TEXTO_FONTE_PROVISORIA_NOTICIA).toBe("Fonte provisória: notícia");
+    expect(TEXTO_FONTE_PROVISORIA_CAMPANHA).toBe("Fonte provisória: site de campanha");
+  });
+
+  test("textosProvisorias: um texto por tipo presente entre os contatos; true de retrato antigo é notícia (spec 2026-10-26)", () => {
+    const g = (provs: ResultadoContato["provisoria"][]): ResultadoGrupo => ({ grupo: "G", semFonte: false, novos: [], contatos: provs.map((p) => contato(p ? { provisoria: p } : {})) });
+    expect(textosProvisorias(g([undefined, undefined]))).toEqual([]);
+    expect(textosProvisorias(g(["campanha", undefined, "campanha"]))).toEqual(["Fonte provisória: site de campanha"]);
+    expect(textosProvisorias(g([true, "noticia"]))).toEqual(["Fonte provisória: notícia"]);
+    expect(textosProvisorias(g(["campanha", true]))).toEqual(["Fonte provisória: notícia", "Fonte provisória: site de campanha"]);
+  });
+
+  test("textoProvisoriaNaProcedencia", () => {
+    expect(textoProvisoriaNaProcedencia("noticia")).toBe("fonte provisória: notícia");
+    expect(textoProvisoriaNaProcedencia("campanha")).toBe("fonte provisória: site de campanha");
   });
 
   test("avisoUrlCaida só com coletas >= 2 e URL presente", () => {
@@ -859,7 +876,9 @@ describe("textos da leitura resiliente (spec 2026-10-23 §6)", () => {
     // Quem entra em `falhas` é a principal: a alternativa respondeu.
     const falhas = { [PRINCIPAL]: { desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" } };
     const linhas = procedenciaDoContato(c, g, falhas);
-    expect(linhas[0]).toMatchObject({ rotulo: "Nome", alternativa: true, provisoria: true, caida: expect.stringMatching(/^Fonte caída há 2 coletas/) });
+    // `provisoria: true` de retrato antigo é lido como notícia.
+    expect(linhas[0]).toMatchObject({ rotulo: "Nome", alternativa: true, provisoria: "noticia", caida: expect.stringMatching(/^Fonte caída há 2 coletas/) });
+    expect(procedenciaDoContato({ ...c, provisoria: "campanha" }, g)[0].provisoria).toBe("campanha");
     // Sem `falhas` (retrato antigo) não há aviso; sem alternativa nem provisória, nada a mais.
     expect(procedenciaDoContato(c, g)[0].caida).toBeUndefined();
     expect(procedenciaDoContato(contato({ fonteUrl: PRINCIPAL, comparacoes: [{ ...confere("nome", "pagina", "Ana"), fonteUrl: PRINCIPAL }] }), g, { [PRINCIPAL]: { ...falhas[PRINCIPAL], coletas: 1 } })).toEqual([

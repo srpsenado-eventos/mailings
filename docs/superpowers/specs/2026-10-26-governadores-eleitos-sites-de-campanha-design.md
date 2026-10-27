@@ -39,7 +39,7 @@ A regra 1 do checklist do catálogo ganha a segunda exceção: **site de campanh
 
 ### 3.3 Validade
 
-`FonteIndividual.validaAte?: string` (data `AAAA-MM-DD`, inclusive, no fuso de Brasília). Fonte com `validaAte` anterior ao dia da varredura é ignorada, como se estivesse inativa: o contato volta a "Sem fonte individual cadastrada" (vermelho, "cadastrar fonte"), nunca possível saída. O filtro fica em `lib/analise.ts`, que já tem o relógio (`deps.agora`). Os três sites levam `validaAte: "2027-01-05"`. PE e DF continuam sem `validaAte` (saem à mão, como decidido em 23/10).
+`FonteIndividual.validaAte?: string` (data `AAAA-MM-DD`, inclusive, no fuso de Brasília). Fonte com `validaAte` anterior ao dia da varredura é ignorada, como se estivesse inativa: o contato volta a "Sem fonte individual para a UF X" (vermelho, campo `fonte`, "cadastrar fonte", como o MT hoje), nunca possível saída. O filtro fica em `lib/analise.ts`, que já tem o relógio (`deps.agora`). Os três sites levam `validaAte: "2027-01-05"`. PE e DF continuam sem `validaAte` (saem à mão, como decidido em 23/10).
 
 ### 3.4 O que não muda
 

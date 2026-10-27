@@ -94,7 +94,7 @@ Conferido com `fetch` simples e com o extrator do app em 23/10.
 | Ministros de Estado | `urlAlternativa` em Casa Civil (`…/composicao/gabinete-do-ministro/quem-e-quem-1`), Cultura (`…/gabinete-da-ministra/margareth-menezes-1`), Defesa (`…/gabinete-do-ministro/jose-mucio-monteiro-filho`), Igualdade Racial (`…/gabinete-da-ministra/rachel-barros-de-oliveira`) e Secom (`…/composicao/ministro-e-assistencia-direta/sidonio-cardoso-palmeira`). As principais confirmaram o nome em 20/10. O PDF de currículo do MMA fica fora | as cinco: 200 |
 | Presidente da Câmara | Mantém a Mesa Diretora | 200, 13 pessoas |
 
-`FonteIndividual.provisoria?: true`: fonte que não é página institucional estável (notícia). Cabeçalho do grupo e procedência do contato dizem "fonte provisória: notícia". A regra 1 do checklist do catálogo ganha a exceção, registrada: notícia de órgão oficial (`.jus.br`, `.leg.br`) entra só como provisória, até a posse de 2027.
+`FonteIndividual.provisoria?: true`: fonte que não é página institucional estável (notícia). Cabeçalho do grupo e procedência do contato dizem "fonte provisória: notícia". A regra 1 do checklist do catálogo ganha a exceção, registrada: notícia de órgão oficial (`.jus.br`, `.leg.br`, `.gov.br`; o DF é `cl.df.gov.br`) entra só como provisória, até a posse de 2027.
 
 Tipos novos em `lib/types.ts`: `FonteCatalogo.urlAlternativa?`, `FonteCatalogo.nomesDoContatos?`, `FonteCatalogo.tipo?: "html" | "pdf"` (ausente = html), `FonteCatalogo.marcador?: { texto: string }` (extração por marcador do §5, TST), `FonteIndividual.urlAlternativa?`, `FonteIndividual.provisoria?`.
 
@@ -161,5 +161,10 @@ O plano `docs/superpowers/plans/2026-10-26-leitura-resiliente-e-revisao-do-catal
 10. Títulos (`h1` a `h3`) entram em `destaques` de `extrairConteudo`, filtrados por `ehNome` como os `strong`, para o nome mais curto "em título" chegar a `nomeNaPagina`.
 11. A leitura feita pela alternativa é guardada na memória sob a URL da alternativa (`l.alternativa?.url ?? l.fonte.url`); a procura da guardada tenta a principal e depois a alternativa.
 12. O grupo novo fica sem responsáveis: a planilha de 23/10 não os traz; o Clovis preenche quando o GT definir.
+13. (Revisão final, decisão A) A chave da memória de leitura leva a forma de extração quando ela não é a padrão (`chaveDaLeitura`, `lib/memoria-leitura.ts`): URL pura na fonte padrão; `#tabela:…`, `#marcador:…` e `#pdf` nessa ordem nas demais. A mesma URL lida como texto (Presidente do Senado) e como tabela (Senadores) guarda duas leituras, e uma nunca é reaproveitada no lugar da outra. `LeituraGuardada.url` continua a URL real; `reconstruirLeituras` e `falhas` seguem pela URL pura.
+14. (Decisão B) Fonte com `marcador` ou `tipo: "pdf"` não vai ao Chrome com janela no 403/401 (§3.1): a janela só aplica a extração por tabela e traria a página inteira; vale o erro do `fetch`.
+15. (Decisão C) Na extração por marcador, inicial abreviada ("B." em "João B. Silva") é palavra do nome, mas não conta entre as duas partes significativas exigidas.
+16. (Decisão D) O nome mais curto do §4.1 é procurado só nos destaques (`h1` a `h3` e negrito), nunca nas pessoas do texto inteiro (a página "quem é quem" lista o gabinete); dois destaques distintos que reconhecem são ambíguos e não reconhecem; a pessoa estruturada com o mesmo nome do destaque traz o cargo.
+17. (Decisão E) O resumo `urlsCaidasRepetidas` conta só as URLs tentadas nesta varredura com 2 ou mais coletas; o mapa `falhas` continua guardando as não visitadas (ajuste 4).
 
 Decisão da revisão de 26/10: página de hoje com "pessoas" que não casam nenhum contato, mesmo com leitura guardada válida, agora cai em **leitura suspeita** (grupo inacessível, que segura a publicação) em vez de ser reaproveitada como no passo 4 do §5.1 da spec de 2026-10-20.

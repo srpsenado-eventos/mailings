@@ -1,6 +1,6 @@
 # Autoridades repetidas: incluir as listas de fora do Contatos
 
-Data: 2026-10-27. Situação: aprovada pelo Clovis em 27/10, com as duas propostas do §7 (eleito só com cargo de "ex-" fica em "Conferir"; seção própria para os eleitos em `/repetidos`). Complementa a spec de 2026-10-14 (autoridades em mais de um grupo) e substitui o item 5 do §2 dela ("Fora: os reeleitos").
+Data: 2026-10-27. Situação: aprovada pelo Clovis em 27/10, com as duas propostas do §7 (eleito só com cargo de "ex-" fica em "Conferir"; seção própria para os eleitos em `/repetidos`). Adendo de 28/10 (§8): os eleitos entram pela ligação do eixo da Eleição 2026, não pelo nome. Complementa a spec de 2026-10-14 (autoridades em mais de um grupo) e substitui o item 5 do §2 dela ("Fora: os reeleitos").
 
 ## 1. Problema
 
@@ -120,3 +120,24 @@ No Contatos, Hugo Motta está cadastrado como "Deputado Federal Hugo Motta", com
 
 1. Eleito em 2026 que no Contatos só tem cargo de "ex-": fica "Conferir" (proposta), ou já sai decidido pelo grupo de eleitos?
 2. Seção própria para os eleitos em `/repetidos` (proposta), ou misturados na lista com a marca "Eleição 2026"?
+
+## 8. Adendo de 2026-10-28: eleitos pela ligação do eixo da Eleição 2026
+
+Decisão do Clovis em 28/10, depois de medir a primeira versão no retrato de 27/10. Substitui, **só para os eleitos**, o casamento por nome do §3.3 e da tabela do §4.2.
+
+**Problema medido.** Com o casamento por nome, o nome de urna ou completo do eleito contido no nome do Contatos (ou o contrário) virava parcial e mandava o caso para "Conferir":
+- três reeleitos de verdade, que o eixo da Eleição já liga ao contato certo (Senadores × Senadores Eleitos, e dois Governadores × Governadores Eleitos);
+- duas pessoas diferentes com nome parecido (pai e filho; dois Bolsonaro);
+- um governador eleito com casamento exato que caiu inteiro em "Conferir" por um parcial com um deputado de outro nome (27 casos de eleito na tela, não os 28 do §2).
+
+**Regra nova.**
+1. O eleito entra no cálculo **só pela ligação que o eixo da Eleição 2026 já fez**: `eleicao.eleitos[].contatos` e `eleicao.governadores.eleitos[].contatos` (grupo e nome da linha do Contatos, casados por `lib/eleitos.ts` e `lib/eleitos-governo.ts` com a UF como guarda). A ocorrência do eleito junta-se à ocorrência do Contatos daquele grupo e daquele nome.
+2. O eleito **nunca casa por nome** com o Contatos no cálculo de repetidos, nem exato nem parcial. Eleito sem ligação não entra.
+3. Ligação a uma linha que não é ocorrência do cálculo (grupo de eleitos do próprio Contatos, PILOTO, grupo fora da Nominata que o cálculo descarta) não conta.
+4. O destino do eixo manda:
+   - `reeleito`, `outra_casa` e `outro_cargo`: vale o §4.3 (convite pelo grupo atual, Ata 14; só cargo de "ex-" vai para "Conferir").
+   - `conferir`: a autoridade sai na seção dos eleitos, em "Conferir", com o motivo do eixo precedido de "Eleição 2026: ". O app não decide o que o eixo da Eleição deixou para o GT.
+   - `novo`: normalmente não tem ligação; se tiver, vale como `conferir`, com o motivo "Eleição 2026: mandato novo de quem já está no Contatos".
+5. Os deputados atuais da planilha da Câmara continuam pelo casamento por nome do §4.2 (exato e parcial), sem mudança.
+
+**Fora da mudança.** O eixo da Eleição 2026, o painel e o export da eleição ficam como estão. Os eleitos marcados "Planilha pede verificação: provável deputado estadual ou distrital" não têm ligação e por isso não entram, o que resolve o ponto levantado na revisão.

@@ -3,7 +3,9 @@ import { casaSegmento, segmentarGrupo } from "@/lib/catalogo";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import type { Etiqueta } from "@/lib/painel";
 import { NOME_GRUPO_DEPUTADOS, temGrupoDeputados } from "@/lib/painel-deputados";
-import type { ContatoDoEleito, ResultadoContato, ResultadoEleicao, ResultadoGrupo } from "@/lib/types";
+import type {
+  ContatoDoEleito, DestinoEleito, DestinoGoverno, ResultadoContato, ResultadoEleicao, ResultadoGrupo,
+} from "@/lib/types";
 
 /** Grupos fora deste eixo: os de eleitos (Eleição 2026, Ata 14) e o piloto de eventos. */
 const GRUPO_FORA = /\beleit[oa]s?\b|piloto/;
@@ -159,7 +161,7 @@ function escolherComEleito(ocorrencias: readonly OcorrenciaRepetida[]): Escolha 
 interface Entrada {
   nome: string;
   ocorrencia: OcorrenciaRepetida;
-  /** Nomes da pessoa de fora (parlamentar e civil; urna e completo), já normalizados. */
+  /** Nomes da pessoa da Câmara (parlamentar e civil), já normalizados. */
   nomes?: readonly string[];
 }
 
@@ -205,8 +207,8 @@ export function ocorrenciasDeFora(eleicao: ResultadoEleicao | undefined): Pessoa
 export interface EleitoLigado {
   ocorrencia: OcorrenciaRepetida;
   contatos: readonly ContatoDoEleito[];
-  /** Destino do eixo: "reeleito", "outra_casa", "outro_cargo", "novo" ou "conferir". */
-  destino: string;
+  /** Destino que o eixo da Eleição deu ao eleito. */
+  destino: DestinoEleito | DestinoGoverno;
   motivo?: string;
 }
 
@@ -214,7 +216,7 @@ const MOTIVO_ELEICAO_SEM_MOTIVO = "Eleição 2026: conferir no eixo da eleição
 export const MOTIVO_ELEICAO_NOVO = "Eleição 2026: mandato novo de quem já está no Contatos";
 
 function eleitoLigado(
-  nomes: readonly string[], contatos: readonly ContatoDoEleito[], destino: string, motivo: string | undefined,
+  nomes: readonly string[], contatos: readonly ContatoDoEleito[], destino: DestinoEleito | DestinoGoverno, motivo: string | undefined,
   grupoDaLista: string, cargo: string, nivel: NivelPrecedencia | undefined,
 ): EleitoLigado[] {
   if (contatos.length === 0) return [];
@@ -367,46 +369,41 @@ function autoridadeDoComponente(c: Componente, porChave: ReadonlyMap<string, Ent
   const nome = doCadastro.nome;
   if (c.eleitos.length === 0) return [{ nome, ocorrencias, ...escolherGrupo(ocorrencias, c.parcial) }];
   const doEixo = motivoDoEixo(c.eleitos);
-  if (doEixo) return [{ nome, ocorrencias, situacao: "conferir", motivo: doEixo, eleicao: true }];
+  if (doEixo) {
+    const motivo = c.parcial ? `${doEixo} · ${MOTIVO_PARCIAL}` : doEixo;
+    return [{ nome, ocorrencias, situacao: "conferir", motivo, eleicao: true }];
+  }
   const escolha = c.parcial ? escolherGrupo(ocorrencias, true) : escolherComEleito(ocorrencias);
   return [{ nome, ocorrencias, ...escolha, eleicao: true }];
 }
 
 /**
- * Liga cada eleito (pela ligação do eixo da Eleição 2026, nunca pelo nome) ao caso das linhas do Contatos
- * que ele aponta; casos que o mesmo eleito liga viram um só. Ligação a linha que não é ocorrência do
- * cálculo (grupo de eleitos, PILOTO, grupo fora da Nominata) não conta; sem nenhuma ligação, o eleito não entra.
+ * Liga cada eleito (pela ligação do eixo da Eleição 2026, nunca pelo nome) ao caso da pessoa do Contatos
+ * que ele aponta. Várias linhas com o mesmo nome (Senadores e Presidente do Senado) ficam no mesmo caso.
+ * Eleito ligado a nomes distintos é ambíguo (o painel da Eleição já mostra) e não entra; ligação a linha
+ * que não é ocorrência do cálculo (grupo de eleitos, PILOTO, grupo fora da Nominata) não conta, e sem
+ * nenhuma ligação o eleito também não entra.
  */
 function ligarEleitos(
   componentes: readonly string[][], eleitos: readonly EleitoLigado[], porChave: ReadonlyMap<string, Entrada[]>,
 ): Componente[] {
   const indiceDaChave = new Map(componentes.flatMap((chaves, i) => chaves.map((k) => [k, i] as const)));
-  const pai = componentes.map((_, i) => i);
-  const raiz = (i: number): number => (pai[i] === i ? i : raiz(pai[i]));
+  const casoDoEleito = (e: EleitoLigado): number | undefined => {
+    const chaves = new Set(e.contatos.map((l) => normalizarNome(l.nome)));
+    if (chaves.size !== 1) return undefined;
+    const [chave] = chaves;
+    const naLinha = e.contatos.some((l) => (porChave.get(chave) ?? [])
+      .some((x) => x.ocorrencia.origem === "contatos" && x.ocorrencia.grupo === l.grupo));
+    return naLinha ? indiceDaChave.get(chave) : undefined;
+  };
   const eleitosDoCaso = new Map<number, EleitoLigado[]>();
-  const indicesLigados = (e: EleitoLigado): number[] => [...new Set(e.contatos.flatMap((l) => {
-    const chave = normalizarNome(l.nome);
-    const naLinha = (porChave.get(chave) ?? []).some((x) => x.ocorrencia.origem === "contatos" && x.ocorrencia.grupo === l.grupo);
-    const indice = indiceDaChave.get(chave);
-    return naLinha && indice !== undefined ? [indice] : [];
-  }))];
-  const ligados = eleitos.map((e) => ({ e, indices: indicesLigados(e) })).filter((x) => x.indices.length > 0);
-  for (const { indices } of ligados) for (const i of indices.slice(1)) pai[raiz(i)] = raiz(indices[0]);
-  for (const { e, indices } of ligados) {
-    const r = raiz(indices[0]);
-    eleitosDoCaso.set(r, [...(eleitosDoCaso.get(r) ?? []), e]);
+  for (const e of eleitos) {
+    const caso = casoDoEleito(e);
+    if (caso !== undefined) eleitosDoCaso.set(caso, [...(eleitosDoCaso.get(caso) ?? []), e]);
   }
-  const porRaiz = new Map<number, Componente>();
-  componentes.forEach((chaves, i) => {
-    const r = raiz(i);
-    const atual = porRaiz.get(r);
-    porRaiz.set(r, {
-      chaves: [...(atual?.chaves ?? []), ...chaves],
-      parcial: (atual?.parcial ?? false) || chaves.length > 1,
-      eleitos: eleitosDoCaso.get(r) ?? [],
-    });
-  });
-  return [...porRaiz.values()];
+  return componentes.map((chaves, i) => ({
+    chaves: [...chaves], parcial: chaves.length > 1, eleitos: eleitosDoCaso.get(i) ?? [],
+  }));
 }
 
 /**

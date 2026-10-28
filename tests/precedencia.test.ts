@@ -3,6 +3,7 @@ import { CATALOGO } from "@/data/catalogo";
 import { PRECEDENCIA } from "@/data/precedencia";
 import { casaSegmento } from "@/lib/catalogo";
 import { normalizarTexto } from "@/lib/normalize";
+import { NOME_GRUPO_DEPUTADOS } from "@/lib/painel-deputados";
 import { compararNivel, nivelDoCargo, regraDoSegmento } from "@/lib/repetidos";
 
 const regra = (grupo: string) => {
@@ -27,8 +28,9 @@ describe("dados da precedência", () => {
     expect(new Set(nomes).size).toBe(nomes.length);
   });
 
-  test("todo grupo da tabela existe no catálogo", () => {
-    for (const r of PRECEDENCIA) {
+  test("todo grupo da tabela existe no catálogo, salvo o da planilha da Câmara", () => {
+    // "Deputados Federais" ainda não está no Contatos nem no catálogo: vem da planilha da Câmara (spec 2026-10-27).
+    for (const r of PRECEDENCIA.filter((x) => x.grupo !== NOME_GRUPO_DEPUTADOS)) {
       const seg = normalizarTexto(r.grupo);
       expect(CATALOGO.some((g) => casaSegmento(normalizarTexto(g.nome), seg)), r.grupo).toBe(true);
     }

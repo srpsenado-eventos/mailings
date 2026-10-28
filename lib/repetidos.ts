@@ -1,8 +1,11 @@
-import { PRECEDENCIA, type NivelPrecedencia, type RegraPrecedencia } from "@/data/precedencia";
+import { NIVEIS_ELEITOS, PRECEDENCIA, type NivelPrecedencia, type RegraPrecedencia } from "@/data/precedencia";
 import { casaSegmento, segmentarGrupo } from "@/lib/catalogo";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import type { Etiqueta } from "@/lib/painel";
-import type { ResultadoContato, ResultadoGrupo } from "@/lib/types";
+import { NOME_GRUPO_DEPUTADOS, temGrupoDeputados } from "@/lib/painel-deputados";
+import type {
+  ContatoDoEleito, DestinoEleito, DestinoGoverno, ResultadoContato, ResultadoEleicao, ResultadoGrupo,
+} from "@/lib/types";
 
 /** Grupos fora deste eixo: os de eleitos (Eleição 2026, Ata 14) e o piloto de eventos. */
 const GRUPO_FORA = /\beleit[oa]s?\b|piloto/;
@@ -42,8 +45,11 @@ export function compararNivel(a: string, b: string): number {
   return 0;
 }
 
+/** De onde veio a ocorrência: o Contatos, a planilha da Câmara ou as listas de eleitos de 2026. */
+export type OrigemOcorrencia = "contatos" | "camara" | "eleicao";
+
 export interface OcorrenciaRepetida {
-  /** Grupo do retrato (`ResultadoGrupo.grupo`), como aparece no painel. */
+  /** Grupo do retrato (`ResultadoGrupo.grupo`), como aparece no painel; nas de fora, o grupo da lista. */
   grupo: string;
   /** Grupo da tabela de precedência que o rótulo casou. */
   grupoRegra: string;
@@ -53,6 +59,18 @@ export interface OcorrenciaRepetida {
   nivel?: NivelPrecedencia;
   ex: boolean;
   possivelSaida: boolean;
+  origem: OrigemOcorrencia;
+}
+
+const ROTULO_ORIGEM: Record<OrigemOcorrencia, string> = {
+  contatos: "Contatos",
+  camara: "Planilha da Câmara",
+  eleicao: "Eleição 2026",
+};
+
+/** Nome da lista de origem da ocorrência, como aparece na tela e no export. */
+export function rotuloOrigem(origem: OrigemOcorrencia): string {
+  return ROTULO_ORIGEM[origem];
 }
 
 export type SituacaoRepetida = "decidido" | "conferir";
@@ -64,6 +82,8 @@ export interface AutoridadeRepetida {
   /** Só quando decidido. */
   convidaPor?: OcorrenciaRepetida;
   motivo: string;
+  /** Há eleito de 2026 ligado pelo eixo da Eleição: pela Ata 14, convida o grupo atual (salvo o que o eixo deixou para conferir). */
+  eleicao?: true;
 }
 
 export interface Escolha {
@@ -74,6 +94,8 @@ export interface Escolha {
 
 export const MOTIVO_PARCIAL = "Nome parecido em grupos diferentes: conferir se é a mesma pessoa";
 export const MOTIVO_SEM_NIVEL = "Nenhum dos cargos está na Nominata: decidir à mão";
+export const MOTIVO_ELEITO_SEM_CARGO_ATUAL = "Eleita em 2026 sem cargo atual no Contatos: conferir o grupo";
+export const MOTIVO_ELEICAO = "Eleição 2026: convidar pelo grupo atual (Ata 14)";
 
 const rotulo = (o: OcorrenciaRepetida): string => `${o.grupoRegra} (${o.nivel ? o.nivel.nivel : "fora da Nominata"})`;
 
@@ -125,7 +147,100 @@ export function escolherGrupo(ocorrencias: readonly OcorrenciaRepetida[], parcia
   return { situacao: "decidido", convidaPor: vencedor, motivo };
 }
 
-interface Entrada { nome: string; ocorrencia: OcorrenciaRepetida }
+/**
+ * Spec 2026-10-27 §4.3: o eleito sai da disputa (Ata 14); entre os cargos atuais (do Contatos ou
+ * da Câmara) vale `escolherGrupo`. Só cargo de ex- fica para conferir.
+ */
+function escolherComEleito(ocorrencias: readonly OcorrenciaRepetida[]): Escolha {
+  const atuais = ocorrencias.filter((o) => o.origem !== "eleicao" && !o.ex);
+  if (atuais.length === 0) return { situacao: "conferir", motivo: MOTIVO_ELEITO_SEM_CARGO_ATUAL };
+  const escolha = escolherGrupo(atuais, false);
+  return escolha.situacao === "decidido" ? { ...escolha, motivo: MOTIVO_ELEICAO } : escolha;
+}
+
+interface Entrada {
+  nome: string;
+  ocorrencia: OcorrenciaRepetida;
+  /** Nomes da pessoa da Câmara (parlamentar e civil), já normalizados. */
+  nomes?: readonly string[];
+}
+
+/** Uma pessoa das listas de fora do Contatos, com os dois nomes dela. */
+export interface PessoaDeFora {
+  nomes: string[];
+  /** `nomes` normalizados, sem repetição nem vazios (calculados uma vez só). */
+  nomesNormalizados: string[];
+  ocorrencia: OcorrenciaRepetida;
+}
+
+const NIVEL_DEPUTADOS = PRECEDENCIA.find((r) => r.grupo === NOME_GRUPO_DEPUTADOS)?.nivel;
+
+function pessoaDeFora(
+  nomes: readonly string[], grupoDaLista: string, cargo: string, origem: OrigemOcorrencia, nivel: NivelPrecedencia | undefined,
+): PessoaDeFora[] {
+  const normalizados = nomes.map(normalizarNome);
+  const chave = normalizados.find(Boolean);
+  if (!chave) return [];
+  const nomesNormalizados = [...new Set(normalizados.filter(Boolean))];
+  return [{
+    nomes: [...nomes],
+    nomesNormalizados,
+    ocorrencia: {
+      grupo: grupoDaLista, grupoRegra: grupoDaLista, chave, cargo,
+      ...(nivel ? { nivel } : {}),
+      ex: false, possivelSaida: false, origem,
+    },
+  }];
+}
+
+/**
+ * Deputados atuais da planilha da Câmara (spec 2026-10-27 §4.2), só enquanto o grupo não existe
+ * no Contatos. Casam com o Contatos pelo nome, exato ou parcial.
+ */
+export function ocorrenciasDeFora(eleicao: ResultadoEleicao | undefined): PessoaDeFora[] {
+  if (!eleicao || !temGrupoDeputados(eleicao)) return [];
+  return (eleicao.deputadosAtuais ?? []).flatMap((d) =>
+    pessoaDeFora([d.nomeParlamentar, d.nomeCivil], NOME_GRUPO_DEPUTADOS, "Deputado Federal", "camara", NIVEL_DEPUTADOS));
+}
+
+/** Eleito de 2026 já ligado pelo eixo da Eleição a linhas do Contatos (spec 2026-10-28 §8). */
+export interface EleitoLigado {
+  ocorrencia: OcorrenciaRepetida;
+  contatos: readonly ContatoDoEleito[];
+  /** Destino que o eixo da Eleição deu ao eleito. */
+  destino: DestinoEleito | DestinoGoverno;
+  motivo?: string;
+}
+
+const MOTIVO_ELEICAO_SEM_MOTIVO = "Eleição 2026: conferir no eixo da eleição";
+export const MOTIVO_ELEICAO_NOVO = "Eleição 2026: mandato novo de quem já está no Contatos";
+
+function eleitoLigado(
+  nomes: readonly string[], contatos: readonly ContatoDoEleito[], destino: DestinoEleito | DestinoGoverno, motivo: string | undefined,
+  grupoDaLista: string, cargo: string, nivel: NivelPrecedencia | undefined,
+): EleitoLigado[] {
+  if (contatos.length === 0) return [];
+  const [pessoa] = pessoaDeFora(nomes, grupoDaLista, cargo, "eleicao", nivel);
+  return pessoa ? [{ ocorrencia: pessoa.ocorrencia, contatos, destino, ...(motivo ? { motivo } : {}) }] : [];
+}
+
+/**
+ * Eleitos de 2026 (Senado, Câmara, governos) com ligação a linhas do Contatos. O eleito nunca casa por
+ * nome: sem ligação, não entra.
+ */
+export function eleitosLigados(eleicao: ResultadoEleicao | undefined): EleitoLigado[] {
+  if (!eleicao) return [];
+  const parlamentares = eleicao.eleitos.flatMap(({ eleito, contatos, destino, motivo }) =>
+    eleito.casa === "senado"
+      ? eleitoLigado([eleito.nomeUrna, eleito.nomeCompleto], contatos, destino, motivo, "Senadores Eleitos", "Senador eleito", NIVEIS_ELEITOS.senado)
+      : eleitoLigado([eleito.nomeUrna, eleito.nomeCompleto], contatos, destino, motivo, "Deputados Federais Eleitos", "Deputado federal eleito", NIVEIS_ELEITOS.camara));
+  const governadores = (eleicao.governadores?.eleitos ?? []).flatMap(({ eleito, contatos, destino, motivo }) =>
+    eleitoLigado(
+      [eleito.nomeUrna, eleito.nomeCompleto], contatos, destino, motivo, "Governadores Eleitos", "Governador eleito",
+      eleito.uf.trim().toUpperCase() === "DF" ? NIVEIS_ELEITOS.governadorDistritoFederal : NIVEIS_ELEITOS.governador,
+    ));
+  return [...parlamentares, ...governadores];
+}
 
 const LIGACOES = new Set(["de", "da", "do", "das", "dos", "e"]);
 const MIN_PALAVRAS_PARCIAL = 2;
@@ -151,7 +266,7 @@ function entradasDoGrupo(g: ResultadoGrupo): Entrada[] {
         ocorrencia: {
           grupo: g.grupo, grupoRegra: regra.grupo, chave, cargo,
           ...(nivel ? { nivel } : {}),
-          ex: regra.ex, possivelSaida: Boolean(c.possivelSaida),
+          ex: regra.ex, possivelSaida: Boolean(c.possivelSaida), origem: "contatos" as const,
         },
       };
     });
@@ -162,40 +277,152 @@ function contido(a: readonly string[], b: readonly string[]): boolean {
   return a.length >= MIN_PALAVRAS_PARCIAL && a.every((p) => b.includes(p));
 }
 
-/** Junta as chaves de nome parcial (uma contida na outra) que estão em grupos diferentes. */
-function componentesDeNome(porChave: ReadonlyMap<string, Entrada[]>): string[][] {
+/**
+ * Junta as chaves de nome parcial (uma contida na outra) que estão em grupos diferentes.
+ * Chave só de fora do Contatos se liga apenas a chaves do Contatos, por qualquer dos nomes
+ * da pessoa; duas chaves de fora nunca se ligam entre si.
+ */
+function componentesDeNome(porChave: ReadonlyMap<string, Entrada[]>, doContatos: ReadonlySet<string>): string[][] {
   const chaves = [...porChave.keys()];
   const pai = new Map(chaves.map((k) => [k, k]));
   const raiz = (k: string): string => (pai.get(k) === k ? k : raiz(pai.get(k) as string));
-  const grupos = (k: string) => new Set((porChave.get(k) ?? []).map((e) => e.ocorrencia.grupoRegra));
-  for (let i = 0; i < chaves.length; i++) {
-    for (let j = i + 1; j < chaves.length; j++) {
-      const [a, b] = [chaves[i], chaves[j]];
-      const [pa, pb] = [palavrasDoNome(a), palavrasDoNome(b)];
-      if (!contido(pa, pb) && !contido(pb, pa)) continue;
-      if (new Set([...grupos(a), ...grupos(b)]).size < 2) continue;
+  // Pré-cálculo por chave (uma vez só): palavras de cada nome e grupos. Na chave do Contatos só contam
+  // os grupos do Contatos: a pessoa da Câmara casada exata não liga dois nomes do mesmo grupo.
+  const perfil = new Map(chaves.map((k) => {
+    const entradas = porChave.get(k) ?? [];
+    const nomes = doContatos.has(k) ? [k] : [...new Set(entradas.flatMap((e) => e.nomes ?? [k]))];
+    const grupos = new Set(entradas
+      .filter((e) => !doContatos.has(k) || e.ocorrencia.origem === "contatos")
+      .map((e) => e.ocorrencia.grupoRegra));
+    return [k, { palavras: nomes.map(palavrasDoNome), grupos }] as const;
+  }));
+  const gruposDistintos = (x: ReadonlySet<string>, y: ReadonlySet<string>): boolean => {
+    const juntos = new Set(x);
+    for (const g of y) juntos.add(g);
+    return juntos.size >= 2;
+  };
+  const parcialEntrePerfis = (x: readonly string[][], y: readonly string[][]): boolean =>
+    x.some((pa) => y.some((pb) => contido(pa, pb) || contido(pb, pa)));
+  // Nome parcial exige palavra em comum: só as chaves que dividem alguma palavra são comparadas.
+  const porPalavra = new Map<string, number[]>();
+  chaves.forEach((k, i) => {
+    for (const palavra of new Set((perfil.get(k)?.palavras ?? []).flat())) {
+      const indices = porPalavra.get(palavra);
+      if (indices) indices.push(i); else porPalavra.set(palavra, [i]);
+    }
+  });
+  chaves.forEach((a, i) => {
+    const pa = perfil.get(a);
+    if (!pa) return;
+    const candidatas = new Set(pa.palavras.flat().flatMap((palavra) => porPalavra.get(palavra) ?? []));
+    for (const j of candidatas) {
+      const [b, pb] = [chaves[j], perfil.get(chaves[j])];
+      if (j <= i || !pb) continue;
+      if (!doContatos.has(a) && !doContatos.has(b)) continue;
+      if (!parcialEntrePerfis(pa.palavras, pb.palavras)) continue;
+      if (!gruposDistintos(pa.grupos, pb.grupos)) continue;
       pai.set(raiz(a), raiz(b));
     }
-  }
+  });
   const porRaiz = new Map<string, string[]>();
-  for (const k of chaves) porRaiz.set(raiz(k), [...(porRaiz.get(raiz(k)) ?? []), k]);
+  for (const k of chaves) {
+    const membros = porRaiz.get(raiz(k));
+    if (membros) membros.push(k); else porRaiz.set(raiz(k), [k]);
+  }
   return [...porRaiz.values()];
 }
 
-/** Autoridades em dois ou mais grupos do retrato, com o grupo do convite. "Conferir" primeiro. */
-export function autoridadesRepetidas(grupos: readonly ResultadoGrupo[]): AutoridadeRepetida[] {
-  const entradas = grupos.flatMap(entradasDoGrupo);
-  const porChave = new Map<string, Entrada[]>();
-  for (const e of entradas) porChave.set(e.ocorrencia.chave, [...(porChave.get(e.ocorrencia.chave) ?? []), e]);
+/**
+ * Entrada da pessoa de fora. Casa exata com o Contatos quando qualquer dos nomes é igual a uma
+ * chave do Contatos (fica sob essa chave); senão, fica sob a própria chave e só se liga por nome parcial.
+ */
+function entradaDeFora(p: PessoaDeFora, doContatos: ReadonlySet<string>): { chave: string; entrada: Entrada } | undefined {
+  const nomes = p.nomesNormalizados;
+  if (nomes.length === 0) return undefined;
+  const exata = nomes.find((n) => doContatos.has(n));
+  return { chave: exata ?? p.ocorrencia.chave, entrada: { nome: p.nomes.find((n) => n.trim()) ?? p.nomes[0], ocorrencia: p.ocorrencia, nomes } };
+}
 
-  const lista = componentesDeNome(porChave).flatMap((chaves): AutoridadeRepetida[] => {
-    const doComponente = chaves.flatMap((k) => porChave.get(k) ?? []);
-    const ocorrencias = doComponente
-      .map((e) => e.ocorrencia)
-      .filter((o, i, todas) => todas.findIndex((x) => x.grupo === o.grupo && x.grupoRegra === o.grupoRegra && x.chave === o.chave) === i);
-    if (new Set(ocorrencias.map((o) => o.grupoRegra)).size < 2) return [];
-    return [{ nome: doComponente[0].nome, ocorrencias, ...escolherGrupo(ocorrencias, chaves.length > 1) }];
-  });
+/** Um caso em formação: chaves de nome ligadas, se há nome parcial entre elas, e os eleitos ligados pelo eixo. */
+interface Componente {
+  chaves: string[];
+  parcial: boolean;
+  eleitos: EleitoLigado[];
+}
+
+/** Eleito cujo destino o eixo da Eleição deixou para o GT decidir: o app não decide no lugar dele. */
+function motivoDoEixo(eleitos: readonly EleitoLigado[]): string | undefined {
+  const pendente = eleitos.find((e) => e.destino === "conferir" || e.destino === "novo");
+  if (!pendente) return undefined;
+  if (pendente.destino === "novo") return MOTIVO_ELEICAO_NOVO;
+  return pendente.motivo ? `Eleição 2026: ${pendente.motivo}` : MOTIVO_ELEICAO_SEM_MOTIVO;
+}
+
+function autoridadeDoComponente(c: Componente, porChave: ReadonlyMap<string, Entrada[]>): AutoridadeRepetida[] {
+  const doComponente = c.chaves.flatMap((k) => porChave.get(k) ?? []);
+  const doCadastro = doComponente.find((e) => e.ocorrencia.origem === "contatos");
+  if (!doCadastro) return [];
+  const ocorrencias = [...doComponente.map((e) => e.ocorrencia), ...c.eleitos.map((e) => e.ocorrencia)]
+    .filter((o, i, todas) => todas.findIndex((x) =>
+      x.grupo === o.grupo && x.grupoRegra === o.grupoRegra && x.chave === o.chave && x.origem === o.origem) === i);
+  if (new Set(ocorrencias.map((o) => o.grupoRegra)).size < 2) return [];
+  const nome = doCadastro.nome;
+  if (c.eleitos.length === 0) return [{ nome, ocorrencias, ...escolherGrupo(ocorrencias, c.parcial) }];
+  const doEixo = motivoDoEixo(c.eleitos);
+  if (doEixo) {
+    const motivo = c.parcial ? `${doEixo} · ${MOTIVO_PARCIAL}` : doEixo;
+    return [{ nome, ocorrencias, situacao: "conferir", motivo, eleicao: true }];
+  }
+  const escolha = c.parcial ? escolherGrupo(ocorrencias, true) : escolherComEleito(ocorrencias);
+  return [{ nome, ocorrencias, ...escolha, eleicao: true }];
+}
+
+/**
+ * Liga cada eleito (pela ligação do eixo da Eleição 2026, nunca pelo nome) ao caso da pessoa do Contatos
+ * que ele aponta. Várias linhas com o mesmo nome (Senadores e Presidente do Senado) ficam no mesmo caso.
+ * Eleito ligado a nomes distintos é ambíguo (o painel da Eleição já mostra) e não entra; ligação a linha
+ * que não é ocorrência do cálculo (grupo de eleitos, PILOTO, grupo fora da Nominata) não conta, e sem
+ * nenhuma ligação o eleito também não entra.
+ */
+function ligarEleitos(
+  componentes: readonly string[][], eleitos: readonly EleitoLigado[], porChave: ReadonlyMap<string, Entrada[]>,
+): Componente[] {
+  const indiceDaChave = new Map(componentes.flatMap((chaves, i) => chaves.map((k) => [k, i] as const)));
+  const casoDoEleito = (e: EleitoLigado): number | undefined => {
+    const chaves = new Set(e.contatos.map((l) => normalizarNome(l.nome)));
+    if (chaves.size !== 1) return undefined;
+    const [chave] = chaves;
+    const naLinha = e.contatos.some((l) => (porChave.get(chave) ?? [])
+      .some((x) => x.ocorrencia.origem === "contatos" && x.ocorrencia.grupo === l.grupo));
+    return naLinha ? indiceDaChave.get(chave) : undefined;
+  };
+  const eleitosDoCaso = new Map<number, EleitoLigado[]>();
+  for (const e of eleitos) {
+    const caso = casoDoEleito(e);
+    if (caso !== undefined) eleitosDoCaso.set(caso, [...(eleitosDoCaso.get(caso) ?? []), e]);
+  }
+  return componentes.map((chaves, i) => ({
+    chaves: [...chaves], parcial: chaves.length > 1, eleitos: eleitosDoCaso.get(i) ?? [],
+  }));
+}
+
+/**
+ * Autoridades em dois ou mais grupos do retrato, com o grupo do convite. "Conferir" primeiro.
+ * Com `eleicao`, entram também os deputados atuais da planilha da Câmara (pelo nome) e os eleitos de
+ * 2026 (pela ligação do eixo da Eleição, spec 2026-10-28 §8); só conta quem tem ocorrência no Contatos.
+ */
+export function autoridadesRepetidas(grupos: readonly ResultadoGrupo[], eleicao?: ResultadoEleicao): AutoridadeRepetida[] {
+  const porChave = new Map<string, Entrada[]>();
+  const juntar = (chave: string, e: Entrada) => porChave.set(chave, [...(porChave.get(chave) ?? []), e]);
+  for (const e of grupos.flatMap(entradasDoGrupo)) juntar(e.ocorrencia.chave, e);
+  const doContatos = new Set(porChave.keys());
+  for (const p of ocorrenciasDeFora(eleicao)) {
+    const fora = entradaDeFora(p, doContatos);
+    if (fora) juntar(fora.chave, fora.entrada);
+  }
+
+  const casos = ligarEleitos(componentesDeNome(porChave, doContatos), eleitosLigados(eleicao), porChave);
+  const lista = casos.flatMap((c) => autoridadeDoComponente(c, porChave));
 
   return lista.sort((a, b) =>
     a.situacao !== b.situacao ? (a.situacao === "conferir" ? -1 : 1) : a.nome.localeCompare(b.nome, "pt-BR"),
@@ -209,13 +436,15 @@ export function etiquetaDeRepeticao(
   grupo: string,
 ): Etiqueta | undefined {
   const chave = normalizarNome(c.contato.nome);
-  const a = repetidas.find((r) => r.ocorrencias.some((o) => o.grupo === grupo && o.chave === chave));
+  const a = repetidas.find((r) => r.ocorrencias.some((o) => o.origem === "contatos" && o.grupo === grupo && o.chave === chave));
   if (!a) return undefined;
   const convidaPor = a.convidaPor;
   if (a.situacao === "conferir" || !convidaPor) {
     return { campo: "grupo", tom: "atencao", texto: "Em mais de um grupo: conferir", explicacao: a.motivo };
   }
-  if (convidaPor.grupo === grupo) {
+  // Eleito decidido: a linha do grupo que convida já tem a etiqueta da Eleição 2026; as outras seguem a regra normal.
+  if (a.eleicao && convidaPor.origem === "contatos" && convidaPor.grupo === grupo) return undefined;
+  if (convidaPor.origem === "contatos" && convidaPor.grupo === grupo) {
     const outros = [...new Set(a.ocorrencias.filter((o) => o.grupoRegra !== convidaPor.grupoRegra).map((o) => o.grupoRegra))].join(", ");
     return { campo: "grupo", tom: "neutro", texto: `Convidada por este grupo; também em ${outros}`, explicacao: a.motivo };
   }
@@ -229,6 +458,27 @@ export function filtrarRepetidas(lista: readonly AutoridadeRepetida[], busca: st
   return lista.filter((a) => (filtro === "todas" || a.situacao === filtro) && (!termo || normalizarTexto(a.nome).includes(termo)));
 }
 
+/** Texto do link; `n` conta só as autoridades sem `eleicao` (as de eleito vão em `textoEleitosRepetidos`). */
 export function textoRepetidas(n: number): string {
   return n === 1 ? "1 autoridade em mais de um grupo" : `${n} autoridades em mais de um grupo`;
+}
+
+export function textoEleitosRepetidos(n: number): string {
+  return n === 1 ? "1 eleito já no Contatos" : `${n} eleitos já no Contatos`;
+}
+
+/** Divide a lista em eleitos de 2026 (seção própria da tela) e demais, mantendo a ordem. */
+export function separarRepetidas(lista: readonly AutoridadeRepetida[]): { demais: AutoridadeRepetida[]; eleitos: AutoridadeRepetida[] } {
+  return {
+    demais: lista.filter((a) => !a.eleicao),
+    eleitos: lista.filter((a) => a.eleicao),
+  };
+}
+
+/** Texto do link do painel: as demais e, quando há, o contador de eleitos já no Contatos. */
+export function textoLinkRepetidas(lista: readonly AutoridadeRepetida[]): string {
+  const { demais, eleitos } = separarRepetidas(lista);
+  if (eleitos.length === 0) return textoRepetidas(demais.length);
+  if (demais.length === 0) return textoEleitosRepetidos(eleitos.length);
+  return `${textoRepetidas(demais.length)} · ${textoEleitosRepetidos(eleitos.length)}`;
 }

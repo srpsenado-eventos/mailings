@@ -85,6 +85,14 @@ describe("export das autoridades em mais de um grupo", () => {
       expect(descricoes.filter((d) => d.includes("["))).toHaveLength(1);
     });
 
+    test("ocorrência da planilha da Câmara mostra a origem na descrição", () => {
+      const o: OcorrenciaRepetida = {
+        grupo: "Deputados Federais", grupoRegra: "Deputados Federais", chave: "ciro ficticio", cargo: "Deputado Federal",
+        ex: false, possivelSaida: false, origem: "camara",
+      };
+      expect(descreverOcorrencia(o)).toBe("Deputados Federais: Deputado Federal (fora da Nominata) [Planilha da Câmara]");
+    });
+
     test("eleito sai com Eleição 2026 = Sim e a origem do grupo do convite", () => {
       const [l] = linhasRepetidas(deFora);
       expect(l["Eleição 2026"]).toBe("Sim");

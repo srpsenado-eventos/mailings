@@ -166,6 +166,8 @@ interface Entrada {
 /** Uma pessoa das listas de fora do Contatos, com os dois nomes dela. */
 export interface PessoaDeFora {
   nomes: string[];
+  /** `nomes` normalizados, sem repetição nem vazios (calculados uma vez só). */
+  nomesNormalizados: string[];
   ocorrencia: OcorrenciaRepetida;
 }
 
@@ -174,10 +176,13 @@ const NIVEL_DEPUTADOS = PRECEDENCIA.find((r) => r.grupo === NOME_GRUPO_DEPUTADOS
 function pessoaDeFora(
   nomes: readonly string[], grupoDaLista: string, cargo: string, origem: OrigemOcorrencia, nivel: NivelPrecedencia | undefined,
 ): PessoaDeFora[] {
-  const chave = normalizarNome(nomes[0] ?? "");
+  const normalizados = nomes.map(normalizarNome);
+  const chave = normalizados.find(Boolean);
   if (!chave) return [];
+  const nomesNormalizados = [...new Set(normalizados.filter(Boolean))];
   return [{
     nomes: [...nomes],
+    nomesNormalizados,
     ocorrencia: {
       grupo: grupoDaLista, grupoRegra: grupoDaLista, chave, cargo,
       ...(nivel ? { nivel } : {}),
@@ -243,11 +248,6 @@ function contido(a: readonly string[], b: readonly string[]): boolean {
   return a.length >= MIN_PALAVRAS_PARCIAL && a.every((p) => b.includes(p));
 }
 
-const parcialEntre = (a: string, b: string): boolean => {
-  const [pa, pb] = [palavrasDoNome(a), palavrasDoNome(b)];
-  return contido(pa, pb) || contido(pb, pa);
-};
-
 /**
  * Junta as chaves de nome parcial (uma contida na outra) que estão em grupos diferentes.
  * Chave só de fora do Contatos se liga apenas a chaves do Contatos, por qualquer dos nomes
@@ -257,23 +257,49 @@ function componentesDeNome(porChave: ReadonlyMap<string, Entrada[]>, doContatos:
   const chaves = [...porChave.keys()];
   const pai = new Map(chaves.map((k) => [k, k]));
   const raiz = (k: string): string => (pai.get(k) === k ? k : raiz(pai.get(k) as string));
-  // Na chave do Contatos só contam os grupos do Contatos: o eleito casado exato não liga dois nomes do mesmo grupo.
-  const grupos = (k: string) => new Set((porChave.get(k) ?? [])
-    .filter((e) => !doContatos.has(k) || e.ocorrencia.origem === "contatos")
-    .map((e) => e.ocorrencia.grupoRegra));
-  const nomesDaChave = (k: string): string[] =>
-    doContatos.has(k) ? [k] : [...new Set((porChave.get(k) ?? []).flatMap((e) => e.nomes ?? [k]))];
-  for (let i = 0; i < chaves.length; i++) {
-    for (let j = i + 1; j < chaves.length; j++) {
-      const [a, b] = [chaves[i], chaves[j]];
+  // Pré-cálculo por chave (uma vez só): palavras de cada nome e grupos. Na chave do Contatos só contam
+  // os grupos do Contatos: o eleito casado exato não liga dois nomes do mesmo grupo.
+  const perfil = new Map(chaves.map((k) => {
+    const entradas = porChave.get(k) ?? [];
+    const nomes = doContatos.has(k) ? [k] : [...new Set(entradas.flatMap((e) => e.nomes ?? [k]))];
+    const grupos = new Set(entradas
+      .filter((e) => !doContatos.has(k) || e.ocorrencia.origem === "contatos")
+      .map((e) => e.ocorrencia.grupoRegra));
+    return [k, { palavras: nomes.map(palavrasDoNome), grupos }] as const;
+  }));
+  const gruposDistintos = (x: ReadonlySet<string>, y: ReadonlySet<string>): boolean => {
+    const juntos = new Set(x);
+    for (const g of y) juntos.add(g);
+    return juntos.size >= 2;
+  };
+  const parcialEntrePerfis = (x: readonly string[][], y: readonly string[][]): boolean =>
+    x.some((pa) => y.some((pb) => contido(pa, pb) || contido(pb, pa)));
+  // Nome parcial exige palavra em comum: só as chaves que dividem alguma palavra são comparadas.
+  const porPalavra = new Map<string, number[]>();
+  chaves.forEach((k, i) => {
+    for (const palavra of new Set((perfil.get(k)?.palavras ?? []).flat())) {
+      const indices = porPalavra.get(palavra);
+      if (indices) indices.push(i); else porPalavra.set(palavra, [i]);
+    }
+  });
+  chaves.forEach((a, i) => {
+    const pa = perfil.get(a);
+    if (!pa) return;
+    const candidatas = new Set(pa.palavras.flat().flatMap((palavra) => porPalavra.get(palavra) ?? []));
+    for (const j of candidatas) {
+      const [b, pb] = [chaves[j], perfil.get(chaves[j])];
+      if (j <= i || !pb) continue;
       if (!doContatos.has(a) && !doContatos.has(b)) continue;
-      if (!nomesDaChave(a).some((na) => nomesDaChave(b).some((nb) => parcialEntre(na, nb)))) continue;
-      if (new Set([...grupos(a), ...grupos(b)]).size < 2) continue;
+      if (!parcialEntrePerfis(pa.palavras, pb.palavras)) continue;
+      if (!gruposDistintos(pa.grupos, pb.grupos)) continue;
       pai.set(raiz(a), raiz(b));
     }
-  }
+  });
   const porRaiz = new Map<string, string[]>();
-  for (const k of chaves) porRaiz.set(raiz(k), [...(porRaiz.get(raiz(k)) ?? []), k]);
+  for (const k of chaves) {
+    const membros = porRaiz.get(raiz(k));
+    if (membros) membros.push(k); else porRaiz.set(raiz(k), [k]);
+  }
   return [...porRaiz.values()];
 }
 
@@ -282,10 +308,10 @@ function componentesDeNome(porChave: ReadonlyMap<string, Entrada[]>, doContatos:
  * chave do Contatos (fica sob essa chave); senão, fica sob a própria chave e só se liga por nome parcial.
  */
 function entradaDeFora(p: PessoaDeFora, doContatos: ReadonlySet<string>): { chave: string; entrada: Entrada } | undefined {
-  const nomes = [...new Set(p.nomes.map(normalizarNome).filter(Boolean))];
+  const nomes = p.nomesNormalizados;
   if (nomes.length === 0) return undefined;
   const exata = nomes.find((n) => doContatos.has(n));
-  return { chave: exata ?? p.ocorrencia.chave, entrada: { nome: p.nomes[0], ocorrencia: p.ocorrencia, nomes } };
+  return { chave: exata ?? p.ocorrencia.chave, entrada: { nome: p.nomes.find((n) => n.trim()) ?? p.nomes[0], ocorrencia: p.ocorrencia, nomes } };
 }
 
 function autoridadeDoComponente(chaves: readonly string[], porChave: ReadonlyMap<string, Entrada[]>): AutoridadeRepetida[] {
@@ -339,8 +365,8 @@ export function etiquetaDeRepeticao(
   if (a.situacao === "conferir" || !convidaPor) {
     return { campo: "grupo", tom: "atencao", texto: "Em mais de um grupo: conferir", explicacao: a.motivo };
   }
-  // Eleito decidido: o grupo atual convida e a linha já tem a etiqueta da Eleição 2026.
-  if (a.eleicao) return undefined;
+  // Eleito decidido: a linha do grupo que convida já tem a etiqueta da Eleição 2026; as outras seguem a regra normal.
+  if (a.eleicao && convidaPor.origem === "contatos" && convidaPor.grupo === grupo) return undefined;
   if (convidaPor.origem === "contatos" && convidaPor.grupo === grupo) {
     const outros = [...new Set(a.ocorrencias.filter((o) => o.grupoRegra !== convidaPor.grupoRegra).map((o) => o.grupoRegra))].join(", ");
     return { campo: "grupo", tom: "neutro", texto: `Convidada por este grupo; também em ${outros}`, explicacao: a.motivo };

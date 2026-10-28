@@ -477,3 +477,51 @@ describe("tela das repetidas com as listas de fora", () => {
     expect(textoLinkRepetidas(so)).toBe("1 eleito já no Contatos");
   });
 });
+
+describe("etiqueta de repetição com eleito", () => {
+  const presidenteDoSenado = (nome: string) => grupo("Presidente do Senado", [linha(nome, "Presidente do Senado Federal")]);
+  const senadores = (nome: string) => grupo("Senadores", [linha(nome, "Senador")]);
+
+  test("deputado reeleito só em Ex-Presidentes do Senado: a linha do Contatos fica vermelha, convite pela Câmara", () => {
+    const repetidas = autoridadesRepetidas(
+      [exPresidenteSenado("Ciro Fictício")],
+      eleicao({
+        deputadosAtuais: [deputado("Ciro Fictício", "Ciro Fictício de Souza")],
+        eleitos: [eleito("camara", "Ciro Fictício", "Ciro Fictício de Souza", "CE")],
+      }),
+    );
+    expect(etiquetaDeRepeticao(repetidas, linha("Ciro Fictício", "Ex-Presidente do Senado Federal"), "Ex-Presidentes do Senado")).toEqual({
+      campo: "grupo", tom: "ruim", texto: "Autoridade a ser convidada pelo grupo Deputados Federais",
+      explicacao: "Eleição 2026: convidar pelo grupo atual (Ata 14)",
+    });
+  });
+
+  test("senador reeleito em Presidente do Senado e em Senadores: só a linha de Senadores fica vermelha", () => {
+    const repetidas = autoridadesRepetidas(
+      [presidenteDoSenado("Rui Fictício"), senadores("Rui Fictício")],
+      eleicao({ eleitos: [eleito("senado", "Rui Fictício", "Rui Fictício Lima")] }),
+    );
+    expect(etiquetaDeRepeticao(repetidas, linha("Rui Fictício", "Senador"), "Senadores")).toMatchObject({
+      tom: "ruim", texto: "Autoridade a ser convidada pelo grupo Presidente do Senado",
+    });
+    expect(etiquetaDeRepeticao(repetidas, linha("Rui Fictício", "Presidente do Senado Federal"), "Presidente do Senado")).toBeUndefined();
+  });
+
+  test("reeleito só em Senadores continua sem etiqueta de repetição", () => {
+    const repetidas = autoridadesRepetidas(
+      [senadores("Rui Fictício")],
+      eleicao({ eleitos: [eleito("senado", "Rui Fictício", "Rui Fictício Lima")] }),
+    );
+    expect(etiquetaDeRepeticao(repetidas, linha("Rui Fictício", "Senador"), "Senadores")).toBeUndefined();
+  });
+
+  test("deputado sem nome parlamentar entra pelo nome civil", () => {
+    const fora = ocorrenciasDeFora(eleicao({ deputadosAtuais: [deputado("", "Ciro Fictício de Souza")] }));
+    expect(fora).toHaveLength(1);
+    expect(fora[0].ocorrencia.chave).toBe("ciro ficticio de souza");
+  });
+
+  test("deputado sem nenhum nome é descartado", () => {
+    expect(ocorrenciasDeFora(eleicao({ deputadosAtuais: [deputado("", "  ")] }))).toEqual([]);
+  });
+});

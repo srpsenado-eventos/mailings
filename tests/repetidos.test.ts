@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 import {
   autoridadesRepetidas, escolherGrupo, etiquetaDeRepeticao, filtrarRepetidas, MOTIVO_ELEITO_SEM_CARGO_ATUAL, MOTIVO_PARCIAL,
-  MOTIVO_SEM_NIVEL, ocorrenciasDeFora, textoEleitosRepetidos, textoRepetidas, type OcorrenciaRepetida,
+  MOTIVO_SEM_NIVEL, ocorrenciasDeFora, rotuloOrigem, separarRepetidas, textoEleitosRepetidos, textoLinkRepetidas, textoRepetidas,
+  type OcorrenciaRepetida,
 } from "@/lib/repetidos";
 import { situacaoDoContato } from "@/lib/painel";
 import type {
@@ -436,5 +437,43 @@ describe("autoridadesRepetidas com as listas de fora do Contatos", () => {
   test("contadores: eleitos à parte das demais", () => {
     expect(textoEleitosRepetidos(1)).toBe("1 eleito já no Contatos");
     expect(textoEleitosRepetidos(14)).toBe("14 eleitos já no Contatos");
+  });
+});
+
+describe("tela das repetidas com as listas de fora", () => {
+  const comEleito = () => autoridadesRepetidas(
+    [grupo("Senadores", [linha("Rui Fictício", "Senador")]), stf(), tse()],
+    eleicao({ eleitos: [eleito("senado", "Rui Fictício", "Rui Fictício Lima")] }),
+  );
+
+  test("rótulo da origem: Contatos, Planilha da Câmara e Eleição 2026", () => {
+    expect(rotuloOrigem("contatos")).toBe("Contatos");
+    expect(rotuloOrigem("camara")).toBe("Planilha da Câmara");
+    expect(rotuloOrigem("eleicao")).toBe("Eleição 2026");
+  });
+
+  test("separa as de eleito das demais, mantendo a ordem", () => {
+    const { demais, eleitos } = separarRepetidas(comEleito());
+    expect(demais.map((a) => a.nome)).toEqual(["Ana Fictícia"]);
+    expect(eleitos.map((a) => a.nome)).toEqual(["Rui Fictício"]);
+  });
+
+  test("sem eleitos, a seção de eleitos fica vazia", () => {
+    const { demais, eleitos } = separarRepetidas(autoridadesRepetidas([stf(), tse()]));
+    expect(demais).toHaveLength(1);
+    expect(eleitos).toEqual([]);
+  });
+
+  test("texto do link conta as demais e acrescenta os eleitos só quando há", () => {
+    expect(textoLinkRepetidas(comEleito())).toBe("1 autoridade em mais de um grupo · 1 eleito já no Contatos");
+    expect(textoLinkRepetidas(autoridadesRepetidas([stf(), tse()]))).toBe("1 autoridade em mais de um grupo");
+  });
+
+  test("texto do link só de eleitos mostra apenas o contador dos eleitos", () => {
+    const so = autoridadesRepetidas(
+      [grupo("Senadores", [linha("Rui Fictício", "Senador")]), grupo("Ex-Presidentes do Senado", [linha("Rui Fictício", "Ex-Presidente do Senado Federal")])],
+      eleicao({ eleitos: [eleito("senado", "Rui Fictício", "Rui Fictício Lima")] }),
+    );
+    expect(textoLinkRepetidas(so)).toBe("1 eleito já no Contatos");
   });
 });

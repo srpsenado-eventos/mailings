@@ -60,6 +60,17 @@ export interface OcorrenciaRepetida {
   origem: OrigemOcorrencia;
 }
 
+const ROTULO_ORIGEM: Record<OrigemOcorrencia, string> = {
+  contatos: "Contatos",
+  camara: "Planilha da Câmara",
+  eleicao: "Eleição 2026",
+};
+
+/** Nome da lista de origem da ocorrência, como aparece na tela e no export. */
+export function rotuloOrigem(origem: OrigemOcorrencia): string {
+  return ROTULO_ORIGEM[origem];
+}
+
 export type SituacaoRepetida = "decidido" | "conferir";
 
 export interface AutoridadeRepetida {
@@ -351,4 +362,20 @@ export function textoRepetidas(n: number): string {
 
 export function textoEleitosRepetidos(n: number): string {
   return n === 1 ? "1 eleito já no Contatos" : `${n} eleitos já no Contatos`;
+}
+
+/** Divide a lista em eleitos de 2026 (seção própria da tela) e demais, mantendo a ordem. */
+export function separarRepetidas(lista: readonly AutoridadeRepetida[]): { demais: AutoridadeRepetida[]; eleitos: AutoridadeRepetida[] } {
+  return {
+    demais: lista.filter((a) => !a.eleicao),
+    eleitos: lista.filter((a) => a.eleicao),
+  };
+}
+
+/** Texto do link do painel: as demais e, quando há, o contador de eleitos já no Contatos. */
+export function textoLinkRepetidas(lista: readonly AutoridadeRepetida[]): string {
+  const { demais, eleitos } = separarRepetidas(lista);
+  if (eleitos.length === 0) return textoRepetidas(demais.length);
+  if (demais.length === 0) return textoEleitosRepetidos(eleitos.length);
+  return `${textoRepetidas(demais.length)} · ${textoEleitosRepetidos(eleitos.length)}`;
 }

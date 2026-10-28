@@ -1,15 +1,16 @@
 import * as XLSX from "xlsx";
-import type { AutoridadeRepetida, OcorrenciaRepetida } from "@/lib/repetidos";
+import { rotuloOrigem, type AutoridadeRepetida, type OcorrenciaRepetida } from "@/lib/repetidos";
 
 export const CABECALHO_REPETIDAS = [
-  "Nome", "Situação", "Convidar pelo grupo", "Cargo do convite", "Nível na Nominata", "Motivo", "Grupos em que está",
+  "Nome", "Situação", "Convidar pelo grupo", "Cargo do convite", "Nível na Nominata", "Motivo", "Grupos em que está", "Origem", "Eleição 2026",
 ] as const;
 
 const ABA = "Em mais de um grupo";
 
 export function descreverOcorrencia(o: OcorrenciaRepetida): string {
   const nivel = o.nivel ? o.nivel.nivel : "fora da Nominata";
-  return `${o.grupoRegra}: ${o.cargo || "cargo vazio"} (${nivel}${o.ex ? ", ex-" : ""})`;
+  const origem = o.origem === "contatos" ? "" : ` [${rotuloOrigem(o.origem)}]`;
+  return `${o.grupoRegra}: ${o.cargo || "cargo vazio"} (${nivel}${o.ex ? ", ex-" : ""})${origem}`;
 }
 
 export function linhasRepetidas(lista: readonly AutoridadeRepetida[]): Record<string, string>[] {
@@ -21,6 +22,8 @@ export function linhasRepetidas(lista: readonly AutoridadeRepetida[]): Record<st
     "Nível na Nominata": a.convidaPor?.nivel ? `${a.convidaPor.nivel.nivel} ${a.convidaPor.nivel.nominata}` : "",
     Motivo: a.motivo,
     "Grupos em que está": a.ocorrencias.map(descreverOcorrencia).join("; "),
+    Origem: a.convidaPor ? rotuloOrigem(a.convidaPor.origem) : "",
+    "Eleição 2026": a.eleicao ? "Sim" : "",
   }));
 }
 

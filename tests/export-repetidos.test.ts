@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import * as XLSX from "xlsx";
 import { CABECALHO_REPETIDAS, descreverOcorrencia, gerarXlsxRepetidas, linhasRepetidas } from "@/lib/export-repetidos";
 import { autoridadesRepetidas, type OcorrenciaRepetida } from "@/lib/repetidos";
-import type { ResultadoContato, ResultadoGrupo } from "@/lib/types";
+import type { EleitoClassificado, ResultadoContato, ResultadoEleicao, ResultadoGrupo } from "@/lib/types";
 
 const linha = (nome: string, cargo: string): ResultadoContato => ({
   contato: { nome, cargo, grupo: "x" }, semaforo: "verde", score: 1, comparacoes: [], camposDivergentes: [], origem: "oficial",
@@ -35,6 +35,8 @@ describe("export das autoridades em mais de um grupo", () => {
       "Nível na Nominata": "4.9 Ministros do Supremo Tribunal Federal",
       Motivo: "Ministros do STF (4.9) antes de Ministros do TSE (5.9)",
       "Grupos em que está": "Ministros do STF: Ministra do Supremo Tribunal Federal (4.9); Ministros do TSE: Ministra do Tribunal Superior Eleitoral (5.9)",
+      Origem: "Contatos",
+      "Eleição 2026": "",
     });
   });
 
@@ -63,5 +65,43 @@ describe("export das autoridades em mais de um grupo", () => {
       const [cab] = XLSX.utils.sheet_to_json<string[]>(wb.Sheets["Em mais de um grupo"], { header: 1 });
       expect(cab).toEqual([...CABECALHO_REPETIDAS]);
     }
+  });
+
+  describe("com as listas de fora do Contatos", () => {
+    const eleitoSenado: EleitoClassificado = {
+      eleito: { casa: "senado", uf: "SP", nomeUrna: "Rui Fictício", nomeCompleto: "Rui Fictício Lima", situacaoTse: "Eleito", statusMandato: "x" },
+      destino: "reeleito", projecao: false, contatos: [],
+    };
+    const eleicao: ResultadoEleicao = { arquivos: [], eleitos: [eleitoSenado], camaraNoContatos: false };
+    const deFora = autoridadesRepetidas(
+      [grupo("Senadores", [linha("Rui Fictício", "Senador")]), grupo("Ex-Presidentes do Senado", [linha("Rui Fictício", "Ex-Presidente do Senado Federal")])],
+      eleicao,
+    );
+
+    test("ocorrência de fora mostra a origem na descrição", () => {
+      const rui = deFora.find((a) => a.nome === "Rui Fictício");
+      const descricoes = rui?.ocorrencias.map(descreverOcorrencia) ?? [];
+      expect(descricoes).toContain("Senadores Eleitos: Senador eleito (4.13.1) [Eleição 2026]");
+      expect(descricoes.filter((d) => d.includes("["))).toHaveLength(1);
+    });
+
+    test("eleito sai com Eleição 2026 = Sim e a origem do grupo do convite", () => {
+      const [l] = linhasRepetidas(deFora);
+      expect(l["Eleição 2026"]).toBe("Sim");
+      expect(l.Origem).toBe("Contatos");
+      expect(l["Convidar pelo grupo"]).toBe("Senadores");
+    });
+
+    test("origem vazia quando o caso é para conferir", () => {
+      const conferir = autoridadesRepetidas([
+        grupo("Conselho Nacional de Justiça (CNJ)", [linha("Ana Fictícia", "Conselheira")]),
+        grupo("Conselho Nacional do Ministério Público (CNMP)", [linha("Ana Fictícia", "Conselheira")]),
+      ]);
+      expect(linhasRepetidas(conferir)[0].Origem).toBe("");
+    });
+
+    test("cabeçalho termina em Origem e Eleição 2026", () => {
+      expect(CABECALHO_REPETIDAS.slice(-2)).toEqual(["Origem", "Eleição 2026"]);
+    });
   });
 });

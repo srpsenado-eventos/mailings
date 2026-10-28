@@ -70,7 +70,7 @@ describe("export das autoridades em mais de um grupo", () => {
   describe("com as listas de fora do Contatos", () => {
     const eleitoSenado: EleitoClassificado = {
       eleito: { casa: "senado", uf: "SP", nomeUrna: "Rui Fictício", nomeCompleto: "Rui Fictício Lima", situacaoTse: "Eleito", statusMandato: "x" },
-      destino: "reeleito", projecao: false, contatos: [],
+      destino: "reeleito", projecao: false, contatos: [{ grupo: "Senadores", nome: "Rui Fictício" }],
     };
     const eleicao: ResultadoEleicao = { arquivos: [], eleitos: [eleitoSenado], camaraNoContatos: false };
     const deFora = autoridadesRepetidas(

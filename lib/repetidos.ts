@@ -3,7 +3,7 @@ import { casaSegmento, segmentarGrupo } from "@/lib/catalogo";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import type { Etiqueta } from "@/lib/painel";
 import { NOME_GRUPO_DEPUTADOS, temGrupoDeputados } from "@/lib/painel-deputados";
-import type { ResultadoContato, ResultadoEleicao, ResultadoGrupo } from "@/lib/types";
+import type { ContatoDoEleito, ResultadoContato, ResultadoEleicao, ResultadoGrupo } from "@/lib/types";
 
 /** Grupos fora deste eixo: os de eleitos (Eleição 2026, Ata 14) e o piloto de eventos. */
 const GRUPO_FORA = /\beleit[oa]s?\b|piloto/;
@@ -80,7 +80,7 @@ export interface AutoridadeRepetida {
   /** Só quando decidido. */
   convidaPor?: OcorrenciaRepetida;
   motivo: string;
-  /** Há ocorrência de eleito de 2026 (nome exato): pela Ata 14, convida o grupo atual. */
+  /** Há eleito de 2026 ligado pelo eixo da Eleição: pela Ata 14, convida o grupo atual (salvo o que o eixo deixou para conferir). */
   eleicao?: true;
 }
 
@@ -192,25 +192,52 @@ function pessoaDeFora(
 }
 
 /**
- * Pessoas das listas de fora do Contatos (spec 2026-10-27 §4.2): deputados atuais da planilha da
- * Câmara (só enquanto o grupo não existe no Contatos) e eleitos de 2026 (Senado, Câmara, governos).
+ * Deputados atuais da planilha da Câmara (spec 2026-10-27 §4.2), só enquanto o grupo não existe
+ * no Contatos. Casam com o Contatos pelo nome, exato ou parcial.
  */
 export function ocorrenciasDeFora(eleicao: ResultadoEleicao | undefined): PessoaDeFora[] {
+  if (!eleicao || !temGrupoDeputados(eleicao)) return [];
+  return (eleicao.deputadosAtuais ?? []).flatMap((d) =>
+    pessoaDeFora([d.nomeParlamentar, d.nomeCivil], NOME_GRUPO_DEPUTADOS, "Deputado Federal", "camara", NIVEL_DEPUTADOS));
+}
+
+/** Eleito de 2026 já ligado pelo eixo da Eleição a linhas do Contatos (spec 2026-10-28 §8). */
+export interface EleitoLigado {
+  ocorrencia: OcorrenciaRepetida;
+  contatos: readonly ContatoDoEleito[];
+  /** Destino do eixo: "reeleito", "outra_casa", "outro_cargo", "novo" ou "conferir". */
+  destino: string;
+  motivo?: string;
+}
+
+const MOTIVO_ELEICAO_SEM_MOTIVO = "Eleição 2026: conferir no eixo da eleição";
+export const MOTIVO_ELEICAO_NOVO = "Eleição 2026: mandato novo de quem já está no Contatos";
+
+function eleitoLigado(
+  nomes: readonly string[], contatos: readonly ContatoDoEleito[], destino: string, motivo: string | undefined,
+  grupoDaLista: string, cargo: string, nivel: NivelPrecedencia | undefined,
+): EleitoLigado[] {
+  if (contatos.length === 0) return [];
+  const [pessoa] = pessoaDeFora(nomes, grupoDaLista, cargo, "eleicao", nivel);
+  return pessoa ? [{ ocorrencia: pessoa.ocorrencia, contatos, destino, ...(motivo ? { motivo } : {}) }] : [];
+}
+
+/**
+ * Eleitos de 2026 (Senado, Câmara, governos) com ligação a linhas do Contatos. O eleito nunca casa por
+ * nome: sem ligação, não entra.
+ */
+export function eleitosLigados(eleicao: ResultadoEleicao | undefined): EleitoLigado[] {
   if (!eleicao) return [];
-  const deputados = temGrupoDeputados(eleicao)
-    ? (eleicao.deputadosAtuais ?? []).flatMap((d) =>
-        pessoaDeFora([d.nomeParlamentar, d.nomeCivil], NOME_GRUPO_DEPUTADOS, "Deputado Federal", "camara", NIVEL_DEPUTADOS))
-    : [];
-  const parlamentares = eleicao.eleitos.flatMap(({ eleito }) =>
+  const parlamentares = eleicao.eleitos.flatMap(({ eleito, contatos, destino, motivo }) =>
     eleito.casa === "senado"
-      ? pessoaDeFora([eleito.nomeUrna, eleito.nomeCompleto], "Senadores Eleitos", "Senador eleito", "eleicao", NIVEIS_ELEITOS.senado)
-      : pessoaDeFora([eleito.nomeUrna, eleito.nomeCompleto], "Deputados Federais Eleitos", "Deputado federal eleito", "eleicao", NIVEIS_ELEITOS.camara));
-  const governadores = (eleicao.governadores?.eleitos ?? []).flatMap(({ eleito }) =>
-    pessoaDeFora(
-      [eleito.nomeUrna, eleito.nomeCompleto], "Governadores Eleitos", "Governador eleito", "eleicao",
+      ? eleitoLigado([eleito.nomeUrna, eleito.nomeCompleto], contatos, destino, motivo, "Senadores Eleitos", "Senador eleito", NIVEIS_ELEITOS.senado)
+      : eleitoLigado([eleito.nomeUrna, eleito.nomeCompleto], contatos, destino, motivo, "Deputados Federais Eleitos", "Deputado federal eleito", NIVEIS_ELEITOS.camara));
+  const governadores = (eleicao.governadores?.eleitos ?? []).flatMap(({ eleito, contatos, destino, motivo }) =>
+    eleitoLigado(
+      [eleito.nomeUrna, eleito.nomeCompleto], contatos, destino, motivo, "Governadores Eleitos", "Governador eleito",
       eleito.uf.trim().toUpperCase() === "DF" ? NIVEIS_ELEITOS.governadorDistritoFederal : NIVEIS_ELEITOS.governador,
     ));
-  return [...deputados, ...parlamentares, ...governadores];
+  return [...parlamentares, ...governadores];
 }
 
 const LIGACOES = new Set(["de", "da", "do", "das", "dos", "e"]);
@@ -258,7 +285,7 @@ function componentesDeNome(porChave: ReadonlyMap<string, Entrada[]>, doContatos:
   const pai = new Map(chaves.map((k) => [k, k]));
   const raiz = (k: string): string => (pai.get(k) === k ? k : raiz(pai.get(k) as string));
   // Pré-cálculo por chave (uma vez só): palavras de cada nome e grupos. Na chave do Contatos só contam
-  // os grupos do Contatos: o eleito casado exato não liga dois nomes do mesmo grupo.
+  // os grupos do Contatos: a pessoa da Câmara casada exata não liga dois nomes do mesmo grupo.
   const perfil = new Map(chaves.map((k) => {
     const entradas = porChave.get(k) ?? [];
     const nomes = doContatos.has(k) ? [k] : [...new Set(entradas.flatMap((e) => e.nomes ?? [k]))];
@@ -314,26 +341,78 @@ function entradaDeFora(p: PessoaDeFora, doContatos: ReadonlySet<string>): { chav
   return { chave: exata ?? p.ocorrencia.chave, entrada: { nome: p.nomes.find((n) => n.trim()) ?? p.nomes[0], ocorrencia: p.ocorrencia, nomes } };
 }
 
-function autoridadeDoComponente(chaves: readonly string[], porChave: ReadonlyMap<string, Entrada[]>): AutoridadeRepetida[] {
-  const doComponente = chaves.flatMap((k) => porChave.get(k) ?? []);
+/** Um caso em formação: chaves de nome ligadas, se há nome parcial entre elas, e os eleitos ligados pelo eixo. */
+interface Componente {
+  chaves: string[];
+  parcial: boolean;
+  eleitos: EleitoLigado[];
+}
+
+/** Eleito cujo destino o eixo da Eleição deixou para o GT decidir: o app não decide no lugar dele. */
+function motivoDoEixo(eleitos: readonly EleitoLigado[]): string | undefined {
+  const pendente = eleitos.find((e) => e.destino === "conferir" || e.destino === "novo");
+  if (!pendente) return undefined;
+  if (pendente.destino === "novo") return MOTIVO_ELEICAO_NOVO;
+  return pendente.motivo ? `Eleição 2026: ${pendente.motivo}` : MOTIVO_ELEICAO_SEM_MOTIVO;
+}
+
+function autoridadeDoComponente(c: Componente, porChave: ReadonlyMap<string, Entrada[]>): AutoridadeRepetida[] {
+  const doComponente = c.chaves.flatMap((k) => porChave.get(k) ?? []);
   const doCadastro = doComponente.find((e) => e.ocorrencia.origem === "contatos");
   if (!doCadastro) return [];
-  const ocorrencias = doComponente
-    .map((e) => e.ocorrencia)
+  const ocorrencias = [...doComponente.map((e) => e.ocorrencia), ...c.eleitos.map((e) => e.ocorrencia)]
     .filter((o, i, todas) => todas.findIndex((x) =>
       x.grupo === o.grupo && x.grupoRegra === o.grupoRegra && x.chave === o.chave && x.origem === o.origem) === i);
   if (new Set(ocorrencias.map((o) => o.grupoRegra)).size < 2) return [];
-  const parcial = chaves.length > 1;
-  if (!parcial && ocorrencias.some((o) => o.origem === "eleicao")) {
-    return [{ nome: doCadastro.nome, ocorrencias, ...escolherComEleito(ocorrencias), eleicao: true }];
+  const nome = doCadastro.nome;
+  if (c.eleitos.length === 0) return [{ nome, ocorrencias, ...escolherGrupo(ocorrencias, c.parcial) }];
+  const doEixo = motivoDoEixo(c.eleitos);
+  if (doEixo) return [{ nome, ocorrencias, situacao: "conferir", motivo: doEixo, eleicao: true }];
+  const escolha = c.parcial ? escolherGrupo(ocorrencias, true) : escolherComEleito(ocorrencias);
+  return [{ nome, ocorrencias, ...escolha, eleicao: true }];
+}
+
+/**
+ * Liga cada eleito (pela ligação do eixo da Eleição 2026, nunca pelo nome) ao caso das linhas do Contatos
+ * que ele aponta; casos que o mesmo eleito liga viram um só. Ligação a linha que não é ocorrência do
+ * cálculo (grupo de eleitos, PILOTO, grupo fora da Nominata) não conta; sem nenhuma ligação, o eleito não entra.
+ */
+function ligarEleitos(
+  componentes: readonly string[][], eleitos: readonly EleitoLigado[], porChave: ReadonlyMap<string, Entrada[]>,
+): Componente[] {
+  const indiceDaChave = new Map(componentes.flatMap((chaves, i) => chaves.map((k) => [k, i] as const)));
+  const pai = componentes.map((_, i) => i);
+  const raiz = (i: number): number => (pai[i] === i ? i : raiz(pai[i]));
+  const eleitosDoCaso = new Map<number, EleitoLigado[]>();
+  const indicesLigados = (e: EleitoLigado): number[] => [...new Set(e.contatos.flatMap((l) => {
+    const chave = normalizarNome(l.nome);
+    const naLinha = (porChave.get(chave) ?? []).some((x) => x.ocorrencia.origem === "contatos" && x.ocorrencia.grupo === l.grupo);
+    const indice = indiceDaChave.get(chave);
+    return naLinha && indice !== undefined ? [indice] : [];
+  }))];
+  const ligados = eleitos.map((e) => ({ e, indices: indicesLigados(e) })).filter((x) => x.indices.length > 0);
+  for (const { indices } of ligados) for (const i of indices.slice(1)) pai[raiz(i)] = raiz(indices[0]);
+  for (const { e, indices } of ligados) {
+    const r = raiz(indices[0]);
+    eleitosDoCaso.set(r, [...(eleitosDoCaso.get(r) ?? []), e]);
   }
-  return [{ nome: doCadastro.nome, ocorrencias, ...escolherGrupo(ocorrencias, parcial) }];
+  const porRaiz = new Map<number, Componente>();
+  componentes.forEach((chaves, i) => {
+    const r = raiz(i);
+    const atual = porRaiz.get(r);
+    porRaiz.set(r, {
+      chaves: [...(atual?.chaves ?? []), ...chaves],
+      parcial: (atual?.parcial ?? false) || chaves.length > 1,
+      eleitos: eleitosDoCaso.get(r) ?? [],
+    });
+  });
+  return [...porRaiz.values()];
 }
 
 /**
  * Autoridades em dois ou mais grupos do retrato, com o grupo do convite. "Conferir" primeiro.
- * Com `eleicao`, entram também a planilha da Câmara e os eleitos de 2026 (spec 2026-10-27);
- * só conta quem tem pelo menos uma ocorrência no Contatos.
+ * Com `eleicao`, entram também os deputados atuais da planilha da Câmara (pelo nome) e os eleitos de
+ * 2026 (pela ligação do eixo da Eleição, spec 2026-10-28 §8); só conta quem tem ocorrência no Contatos.
  */
 export function autoridadesRepetidas(grupos: readonly ResultadoGrupo[], eleicao?: ResultadoEleicao): AutoridadeRepetida[] {
   const porChave = new Map<string, Entrada[]>();
@@ -345,7 +424,8 @@ export function autoridadesRepetidas(grupos: readonly ResultadoGrupo[], eleicao?
     if (fora) juntar(fora.chave, fora.entrada);
   }
 
-  const lista = componentesDeNome(porChave, doContatos).flatMap((chaves) => autoridadeDoComponente(chaves, porChave));
+  const casos = ligarEleitos(componentesDeNome(porChave, doContatos), eleitosLigados(eleicao), porChave);
+  const lista = casos.flatMap((c) => autoridadeDoComponente(c, porChave));
 
   return lista.sort((a, b) =>
     a.situacao !== b.situacao ? (a.situacao === "conferir" ? -1 : 1) : a.nome.localeCompare(b.nome, "pt-BR"),

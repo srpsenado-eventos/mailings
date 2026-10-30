@@ -61,6 +61,9 @@ export function etiquetasDeGoverno(e: EleicaoGovernoContato | undefined): Etique
   }
 }
 
+/** O motivo de quem não está a conferir é o da decisão do GT ("Decisão do GT de DD/MM"). */
+const rotuloDoMotivo = (destino: string): string => (destino === "conferir" ? "A conferir" : "Classificação");
+
 export function detalheDoGoverno(e: EleicaoGovernoContato): { linhas: { rotulo: string; valor: string }[]; orientacao?: string } {
   const linhas = [
     { rotulo: "Eleito para", valor: "Governo do Estado" },
@@ -69,7 +72,7 @@ export function detalheDoGoverno(e: EleicaoGovernoContato): { linhas: { rotulo: 
     { rotulo: "Situação no TSE", valor: e.situacaoTse },
     { rotulo: "Status do mandato", valor: e.statusMandato },
     ...(e.baseStatus ? [{ rotulo: "Base do status", valor: e.baseStatus }] : []),
-    ...(e.motivo ? [{ rotulo: "A conferir", valor: e.motivo }] : []),
+    ...(e.motivo ? [{ rotulo: rotuloDoMotivo(e.destino), valor: e.motivo }] : []),
   ];
   return { linhas, ...(e.destino === "outro_cargo" ? { orientacao: ORIENTACAO_OUTRA_CASA } : {}) };
 }
@@ -87,7 +90,7 @@ export function detalheDaEleicao(e: EleicaoContato): { linhas: { rotulo: string;
     { rotulo: "Situação no TSE", valor: e.situacaoTse },
     { rotulo: "Status do mandato", valor: e.statusMandato },
     ...(e.baseStatus ? [{ rotulo: "Base do status", valor: e.baseStatus }] : []),
-    ...(e.motivo ? [{ rotulo: "A conferir", valor: e.motivo }] : []),
+    ...(e.motivo ? [{ rotulo: rotuloDoMotivo(e.destino), valor: e.motivo }] : []),
   ];
   return { linhas, ...(e.destino === "outra_casa" ? { orientacao: ORIENTACAO_OUTRA_CASA } : {}) };
 }
@@ -151,6 +154,8 @@ interface RegraDoGrupo {
   aConferir: (x: EleitoClassificado) => boolean;
   governoACadastrar: (g: GovernadorClassificado) => boolean;
   governoAConferir: (g: GovernadorClassificado) => boolean;
+  /** Total "pela lista" do título quando não é a contagem dos classificados com este grupo de destino. */
+  pelaLista?: (eleicao: ResultadoEleicao) => number | undefined;
 }
 
 const nenhum = () => false;
@@ -167,11 +172,16 @@ const REGRAS_DOS_ELEITOS: readonly RegraDoGrupo[] = [
   },
 ];
 
-/** Com "Deputados Federais" no Contatos, os reeleitos que ainda não estão nele (spec §4.4). */
+/**
+ * Com "Deputados Federais" no Contatos, quem é convidado por ele e ainda não está nele (spec §4.4):
+ * os reeleitos e os eleitos para a outra Casa que ficam no cargo atual (Ata 14). Pela lista, os
+ * deputados em exercício da planilha da Câmara; sem ela, os classificados com este destino.
+ */
 const REGRA_DEPUTADOS_FEDERAIS: RegraDoGrupo = {
   grupo: GRUPO_DEPUTADOS_FEDERAIS,
-  aCadastrar: (x) => x.destino === "reeleito" && naoCadastradoEm(GRUPO_DEPUTADOS_FEDERAIS)(x),
+  aCadastrar: naoCadastradoEm(GRUPO_DEPUTADOS_FEDERAIS),
   aConferir: nenhum, governoACadastrar: nenhum, governoAConferir: nenhum,
+  pelaLista: (eleicao) => eleicao.deputadosAtuais?.length,
 };
 
 const SUBSECOES_POR_FILTRO: Record<string, { aCadastrar: boolean; aConferir: boolean }> = {
@@ -204,8 +214,8 @@ export function secoesDeEleicao(
   const governadores = eleicao.governadores?.eleitos ?? [];
   const regras = eleicao.camaraNoContatos ? [...REGRAS_DOS_ELEITOS, REGRA_DEPUTADOS_FEDERAIS] : REGRAS_DOS_ELEITOS;
   return regras.flatMap((r): SecaoGrupoEleito[] => {
-    const pelaLista = eleitos.filter((x) => grupoDoEleito(x) === r.grupo).length
-      + governadores.filter((g) => grupoDoGovernador(g) === r.grupo).length;
+    const pelaLista = r.pelaLista?.(eleicao)
+      ?? eleitos.filter((x) => grupoDoEleito(x) === r.grupo).length + governadores.filter((g) => grupoDoGovernador(g) === r.grupo).length;
     const totalACadastrar = eleitos.filter(r.aCadastrar).length + governadores.filter(r.governoACadastrar).length;
     const noContatos = contatosNoGrupo(grupos, r.grupo);
     const secao: SecaoGrupoEleito = {

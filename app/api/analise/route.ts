@@ -4,6 +4,7 @@ import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload
 import { armazemPadrao, type Armazem } from "@/lib/armazem";
 import { armazemDecisoesPadrao, atualizarDecisoes } from "@/lib/armazem-decisoes";
 import { AVISO_DECISOES_NAO_ATUALIZADAS, registrarColetasDoRetrato } from "@/lib/decisoes-coleta";
+import type { HistoricoDecisoes } from "@/lib/decisoes";
 import { aplicarEleicao } from "@/lib/eleitos";
 import { resolverGrupoEFonte } from "@/lib/catalogo";
 import { aplicarListas } from "@/lib/grupos-lista";
@@ -31,6 +32,20 @@ async function registrarColetaNasDecisoes(retrato: Retrato): Promise<string | un
     // Só o motivo técnico: nada de nomes no log.
     console.error("[/api/analise] decisões não atualizadas:", err instanceof Error ? err.message : "erro desconhecido");
     return AVISO_DECISOES_NAO_ATUALIZADAS;
+  }
+}
+
+/**
+ * Decisões do GT para a classificação dos eleitos (spec 2026-10-30 §4.1.1), lidas antes de gravar o
+ * retrato. Ilegível vira "sem decisões": os eleitos seguem a regra e a coleta, depois, avisa.
+ */
+async function lerDecisoesParaEleicao(): Promise<HistoricoDecisoes | undefined> {
+  try {
+    return await armazemDecisoesPadrao().ler();
+  } catch (err) {
+    // Só o motivo técnico: nada de nomes no log.
+    console.error("[/api/analise] decisões ilegíveis, eleitos classificados sem elas:", err instanceof Error ? err.message : "erro desconhecido");
+    return undefined;
   }
 }
 
@@ -95,8 +110,9 @@ export async function POST(req: NextRequest) {
       await sessao.fechar();
     }
     // Eleição 2026: passada posterior, eixo próprio (spec 2026-10-05 §4.3).
+    // A decisão do GT vence a regra na classificação dos eleitos (spec 2026-10-30 §4.1.1).
     const comEleicao = eleitos || deputadosAtuais || governadores
-      ? aplicarEleicao(analisado, eleitos ?? [], arquivosEleicao ?? [], deputadosAtuais, governadores)
+      ? aplicarEleicao(analisado, eleitos ?? [], arquivosEleicao ?? [], deputadosAtuais, governadores, await lerDecisoesParaEleicao())
       : analisado;
     // Grupos de modo `lista` comparados com as planilhas desta varredura (spec 2026-10-30 §4.6).
     const resultado = aplicarListas(comEleicao, diaMes(agora.toISOString()));

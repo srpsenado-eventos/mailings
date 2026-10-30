@@ -1,3 +1,5 @@
+import type { RegistroManual } from "@/lib/decisoes";
+
 /** Uma linha da planilha do Sistema Contatos (campos opcionais exceto nome/grupo). */
 export interface ContatoPlanilha {
   /**
@@ -576,6 +578,8 @@ export interface EleitoClassificado {
    * Para "Senadores", vale qualquer grupo de senador atual (inclusive os titulares fora de exercício).
    */
   jaCadastrado?: boolean;
+  /** Decisão do GT que se aplicou à pessoa (spec 2026-10-30 §4.1.1), para a tela mostrar o histórico. */
+  decisao?: RegistroManual;
 }
 
 /** O que o painel mostra na linha de um contato que é eleito. Não pinta o semáforo. */
@@ -606,10 +610,15 @@ export interface GovernadorClassificado {
    * Ausente em `conferir` e em retrato gravado antes de 30/10/2026.
    */
   grupoDestino?: string;
-  /** Mandato novo já cadastrado em "Governadores Eleitos". */
+  /**
+   * Já está no grupo do Contatos cujo rótulo do agrupador é `grupoDestino` (desde 30/10/2026; o
+   * rótulo antigo "Governadores Eleitos" não conta mais).
+   */
   jaCadastrado?: boolean;
   /** Deputado em exercício (planilha da Câmara) eleito governador, quando o grupo não está no Contatos. */
   deputadoAtual?: { uf: string; nomeParlamentar: string };
+  /** Decisão do GT que se aplicou à pessoa (spec 2026-10-30 §4.1.1), para a tela mostrar o histórico. */
+  decisao?: RegistroManual;
 }
 
 export interface UfSegundoTurno {

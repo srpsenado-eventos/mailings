@@ -3,6 +3,10 @@ import { grupoDoAgrupador } from "@/lib/agrupador";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import { casaDoGrupo, casaPessoa, chavePessoa, deputadosEmExercicio, MOTIVO_AMBIGUO, MOTIVO_HOMONIMO_EM_EXERCICIO, referencia } from "@/lib/eleitos-casamento";
 import { agruparSegundoTurno, classificarGovernadores, paraContatoGoverno } from "@/lib/eleitos-governo";
+import {
+  decisaoDoEleito, ehOutraPessoa, GRUPOS_DA_ELEICAO_DA_CASA, MOTIVO_DUAS_DECISOES, motivoDaDecisaoDoEleito, type DecisaoDoEleito,
+} from "@/lib/eleitos-decisoes";
+import type { HistoricoDecisoes } from "@/lib/decisoes";
 import type {
   CasaLegislativa,
   ContatoPlanilha,
@@ -176,27 +180,66 @@ function classificarSenador(base: Base, achados: readonly Candidato[], atuais: r
   return primeiroMandato(base, achados);
 }
 
+function classificarPelaRegra(
+  base: Base,
+  achados: readonly Candidato[],
+  camaraNoContatos: boolean,
+  atuais?: readonly DeputadoAtual[],
+): EleitoClassificado {
+  if (new Set(achados.map((a) => chavePessoa(a.contato))).size > 1) return conferir(base, MOTIVO_AMBIGUO, achados);
+  if (!atuais) return classificarPeloStatus(base, achados, camaraNoContatos);
+  return base.eleito.casa === "camara" ? classificarDeputado(base, achados, atuais) : classificarSenador(base, achados, atuais);
+}
+
+/**
+ * Destino de quem o GT decidiu pelo grupo do convite X: grupo de eleitos é mandato novo; o grupo
+ * atual da própria Casa é reeleito; outro grupo de cargo atual (a outra Casa, um ministério...) é o
+ * convite pelo cargo atual, como a regra faria (Ata 14).
+ */
+function destinoPelaDecisao(casa: CasaLegislativa, convite: string): Exclude<DestinoEleito, "conferir"> {
+  if (convite === GRUPO_SENADORES_ELEITOS || convite === GRUPO_DEPUTADOS_ELEITOS) return "novo";
+  return convite === GRUPO_DA_CASA[casa] ? "reeleito" : "outra_casa";
+}
+
+/** A decisão do GT vence a regra (spec 2026-10-30 §4.1.1): conflito vai para conferir; o convite decide o grupo. */
+function comDecisao(pelaRegra: EleitoClassificado, d: DecisaoDoEleito, base: Base, achados: readonly Candidato[]): EleitoClassificado {
+  if (d.conflito) return { ...conferir(base, MOTIVO_DUAS_DECISOES, achados), decisao: d.registro };
+  if (!d.convidaPor) return { ...pelaRegra, decisao: d.registro };
+  const destino = destinoPelaDecisao(base.eleito.casa, d.convidaPor);
+  return { ...destinado(base, destino, d.convidaPor, achados), motivo: motivoDaDecisaoDoEleito(d.registro), decisao: d.registro };
+}
+
 function classificarUm(
   e: EleitoPlanilha,
   cands: readonly Candidato[],
   camaraNoContatos: boolean,
   atuais?: readonly DeputadoAtual[],
+  decisoes?: HistoricoDecisoes,
 ): EleitoClassificado {
   const base: Base = { eleito: e, projecao: normalizarTexto(e.situacaoTse).startsWith("projecao") };
-  const achados = cands.filter((c) => casaPessoa(c.contato, e));
-  if (new Set(achados.map((a) => chavePessoa(a.contato))).size > 1) return conferir(base, MOTIVO_AMBIGUO, achados);
-  if (!atuais) return classificarPeloStatus(base, achados, camaraNoContatos);
-  return e.casa === "camara" ? classificarDeputado(base, achados, atuais) : classificarSenador(base, achados, atuais);
+  const d = decisaoDoEleito(e, decisoes, GRUPOS_DA_ELEICAO_DA_CASA);
+  // Ligação por nome que o GT marcou como outra pessoa sai antes da regra (Contatos e lista da Câmara).
+  const achados = cands.filter((c) => casaPessoa(c.contato, e) && !ehOutraPessoa(d, c.grupo));
+  const listaDaCamara = atuais && ehOutraPessoa(d, GRUPO_DEPUTADOS_FEDERAIS)
+    ? atuais.filter((a) => deputadosEmExercicio(e, [a]).length === 0)
+    : atuais;
+  const pelaRegra = classificarPelaRegra(base, achados, camaraNoContatos, listaDaCamara);
+  return d ? comDecisao(pelaRegra, d, base, achados) : pelaRegra;
 }
 
+/**
+ * Classifica os eleitos contra o Contatos. Com `decisoes`, a decisão do GT sobre a pessoa vence a
+ * regra (`lib/eleitos-decisoes.ts`).
+ */
 export function classificarEleitos(
   eleitos: readonly EleitoPlanilha[],
   grupos: readonly ResultadoGrupo[],
   deputadosAtuais?: readonly DeputadoAtual[],
+  decisoes?: HistoricoDecisoes,
 ): EleitoClassificado[] {
   const cands = candidatos(grupos);
   const camaraNoContatos = cands.some((c) => c.casa === "camara" && !c.eleitos);
-  return eleitos.map((e) => classificarUm(e, cands, camaraNoContatos, deputadosAtuais));
+  return eleitos.map((e) => classificarUm(e, cands, camaraNoContatos, deputadosAtuais, decisoes));
 }
 
 /**
@@ -228,19 +271,23 @@ function paraContato(x: EleitoClassificado): EleicaoContato {
 
 const chaveLinha = (grupo: string, c: { nome: string; id?: string }): string => `${grupo}|${c.id ?? normalizarNome(c.nome)}`;
 
-/** Classifica e anexa a eleição às linhas do Contatos. Não muta a entrada; não mexe no resumo. */
+/**
+ * Classifica e anexa a eleição às linhas do Contatos. Não muta a entrada; não mexe no resumo.
+ * `decisoes`: as decisões do GT, que vencem a regra (spec 2026-10-30 §4.1.1).
+ */
 export function aplicarEleicao(
   resultado: ResultadoAnalise,
   eleitos: readonly EleitoPlanilha[],
   arquivos: readonly string[],
   deputadosAtuais?: readonly DeputadoAtual[],
   governadores?: PlanilhaGovernadores,
+  decisoes?: HistoricoDecisoes,
 ): ResultadoAnalise {
-  const classificados = classificarEleitos(eleitos, resultado.grupos, deputadosAtuais);
+  const classificados = classificarEleitos(eleitos, resultado.grupos, deputadosAtuais, decisoes);
   const porLinha = new Map<string, EleicaoContato>();
   for (const x of classificados) for (const c of x.contatos) porLinha.set(chaveLinha(c.grupo, c), paraContato(x));
   const camaraNoContatos = candidatos(resultado.grupos).some((c) => c.casa === "camara" && !c.eleitos);
-  const gov = governadores ? classificarGovernadores(governadores.eleitos, resultado.grupos, deputadosAtuais) : undefined;
+  const gov = governadores ? classificarGovernadores(governadores.eleitos, resultado.grupos, deputadosAtuais, decisoes) : undefined;
   const govPorLinha = new Map<string, EleicaoGovernoContato>();
   for (const x of gov ?? []) for (const c of x.contatos) govPorLinha.set(chaveLinha(c.grupo, c), paraContatoGoverno(x));
   return {

@@ -76,6 +76,14 @@ describe("detalheDaEleicao", () => {
     expect(d.orientacao).toBeUndefined();
     expect(detalheDaEleicao(ec({ destino: "outra_casa", casa: "camara" })).orientacao).toContain("Ata 14");
   });
+
+  test("motivo de quem não está a conferir (decisão do GT) não aparece como A conferir", () => {
+    const decidido = detalheDaEleicao(ec({ motivo: "Decisão do GT de 26/10" })).linhas.at(-1);
+    const aConferir = detalheDaEleicao(ec({ destino: "conferir", motivo: "Homônimo" })).linhas.at(-1);
+    expect(decidido).toEqual({ rotulo: "Classificação", valor: "Decisão do GT de 26/10" });
+    expect(aConferir).toEqual({ rotulo: "A conferir", valor: "Homônimo" });
+    expect(detalheDoGoverno(eg({ motivo: "Decisão do GT de 29/10" })).linhas.at(-1)).toEqual({ rotulo: "Classificação", valor: "Decisão do GT de 29/10" });
+  });
 });
 
 describe("filtros da eleição", () => {
@@ -158,17 +166,34 @@ describe("secoesDeEleicao: uma seção por grupo de eleitos do Contatos", () => 
     ]);
   });
 
-  test("com Deputados Federais no Contatos, a seção do grupo lista os reeleitos ainda não cadastrados", () => {
+  test("com Deputados Federais no Contatos, A cadastrar traz reeleitos e eleitos para outra Casa ainda não cadastrados", () => {
+    // Arrange
     const comCamara = eleicao([
       classificado({ nome: "Rui Reeleito", casa: "camara", destino: "reeleito", grupoDestino: GRUPO_DEPUTADOS_FEDERAIS }),
       classificado({ nome: "Ivo Cadastrado", casa: "camara", destino: "reeleito", grupoDestino: GRUPO_DEPUTADOS_FEDERAIS, jaCadastrado: true }),
       classificado({ nome: "Sol Senadora", destino: "outra_casa", grupoDestino: GRUPO_DEPUTADOS_FEDERAIS }),
     ], true);
+    // Act
     const s = secoesDeEleicao(comCamara, [grupo("Deputados Federais", 2)], "tudo", "");
+    // Assert
     expect(s.map((x) => x.grupo)).toEqual([GRUPO_DEPUTADOS_FEDERAIS]);
-    expect(nomes(s[0].aCadastrar)).toEqual(["Rui Reeleito"]);
-    expect(s[0].titulo).toBe("Deputados Federais — 3 pela lista · 2 no Contatos · 1 a cadastrar");
+    expect(nomes(s[0].aCadastrar)).toEqual(["Rui Reeleito", "Sol Senadora"]);
+    expect(s[0].titulo).toBe("Deputados Federais — 3 pela lista · 2 no Contatos · 2 a cadastrar");
     expect(secoesDeEleicao({ ...comCamara, camaraNoContatos: false }, [], "tudo", "")).toEqual([]);
+  });
+
+  test("com a planilha da Câmara, Deputados Federais conta pela lista os deputados em exercício", () => {
+    // Arrange
+    const atuais = Array.from({ length: 513 }, (_, i) => ({ uf: "SP", nomeParlamentar: `Dep ${i}`, nomeCivil: `Deputado ${i}` }));
+    const comCamara: ResultadoEleicao = {
+      ...eleicao([classificado({ nome: "Rui Reeleito", casa: "camara", destino: "reeleito", grupoDestino: GRUPO_DEPUTADOS_FEDERAIS })], true),
+      deputadosAtuais: atuais,
+    };
+    // Act
+    const [s] = secoesDeEleicao(comCamara, [grupo("Deputados Federais", 500)], "tudo", "");
+    // Assert
+    expect(s).toMatchObject({ grupo: GRUPO_DEPUTADOS_FEDERAIS, pelaLista: 513 });
+    expect(s.titulo).toBe("Deputados Federais — 513 pela lista · 500 no Contatos · 1 a cadastrar");
   });
 
   test("retrato sem eleição não tem seção nem aviso", () => {
@@ -238,7 +263,7 @@ describe("etiquetasDeGoverno", () => {
 
 describe("detalheDoGoverno", () => {
   test("lista cargo, UF, partido, situação, status, base e a conferir; orientação só em outro cargo", () => {
-    const d = detalheDoGoverno(eg({ partido: "PXX", baseStatus: "Eleito em 2022", motivo: "Conferir" }));
+    const d = detalheDoGoverno(eg({ destino: "conferir", partido: "PXX", baseStatus: "Eleito em 2022", motivo: "Conferir" }));
     expect(d.linhas).toEqual([
       { rotulo: "Eleito para", valor: "Governo do Estado" },
       { rotulo: "UF", valor: "MA" },

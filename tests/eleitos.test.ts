@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { aplicarEleicao, classificarEleitos, ORIENTACAO_OUTRA_CASA, RESUMO_NAO_ELEITO, resumoEleicaoDoDeputado } from "@/lib/eleitos";
 import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
+import { HISTORICO_VAZIO, registrar, type RegistroManual } from "@/lib/decisoes";
 import type { ContatoPlanilha, DeputadoAtual, EleitoPlanilha, GovernadorPlanilha, ResultadoAnalise, ResultadoContato, ResultadoGrupo } from "@/lib/types";
 
 const eleito = (over: Partial<EleitoPlanilha> = {}): EleitoPlanilha => ({
@@ -463,5 +464,128 @@ describe("aplicarEleicao: resumo da eleição do deputado do .xls", () => {
     const r = aplicarEleicao(resultado, [eleito({ casa: "camara" })], [], [doXls, semEleicao, daPlanilha]);
     expect(r.eleicao?.deputadosAtuais?.map((x) => x.eleicao2026)).toEqual(["Reeleito deputado federal", RESUMO_NAO_ELEITO, "Não concorreu em 2026"]);
     expect(doXls.eleicao2026).toBeUndefined();
+  });
+});
+
+describe("classificarEleitos: a decisão do GT vence a regra (spec 2026-10-30 §4.1.1 e §4.3.1)", () => {
+  const foraDaLista: DeputadoAtual[] = [{ uf: "SP", nomeParlamentar: "Outro Deputado", nomeCivil: "OUTRO DEPUTADO DA SILVA" }];
+  const camara = (over: Partial<EleitoPlanilha>) => eleito({ casa: "camara", ...over });
+  const manual = (over: Partial<RegistroManual>): RegistroManual => ({
+    tipo: "mesma_pessoa", data: "2026-10-29", quem: "GT (planilha de 29/10)", observacao: "", validacao: "validado", grupos: [], ...over,
+  });
+  const jaderSenador: ContatoPlanilha = { id: "42", nome: "Jader Barbalho", grupo: "Senadores", departamento: "PARÁ" };
+  const jaderFilho = camara({ uf: "PA", nomeUrna: "Jader Filho", nomeCompleto: "Jader Fontenelle Barbalho Filho", statusMandato: "Mandato novo" });
+  const decisaoDoJader = (r: Partial<RegistroManual>) =>
+    registrar(HISTORICO_VAZIO, "Jader Filho", ["Jader Fontenelle Barbalho Filho"], manual({ grupos: ["Senadores", GRUPO_DEPUTADOS_ELEITOS], ...r }));
+
+  test("Jader Filho, sem decisão, continua a conferir", () => {
+    // Arrange / Act
+    const [r] = classificarEleitos([jaderFilho], [senadores(jaderSenador)], foraDaLista, HISTORICO_VAZIO);
+    // Assert
+    expect(r.destino).toBe("conferir");
+    expect(r.decisao).toBeUndefined();
+  });
+
+  test("Jader Filho com pessoas diferentes perde a ligação com o senador e vai para os deputados eleitos", () => {
+    // Arrange
+    const h = decisaoDoJader({ tipo: "pessoas_diferentes" });
+    // Act
+    const [r] = classificarEleitos([jaderFilho], [senadores(jaderSenador)], foraDaLista, h);
+    // Assert
+    expect(r).toMatchObject({ destino: "novo", grupoDestino: GRUPO_DEPUTADOS_ELEITOS, contatos: [] });
+    expect(r.decisao?.tipo).toBe("pessoas_diferentes");
+  });
+
+  test("pessoas diferentes com outraPessoa tira só as ligações dos grupos marcados", () => {
+    // Arrange: o mesmo nome casa um contato dos Senadores (outra pessoa) e um dos deputados eleitos (a pessoa)
+    const h = decisaoDoJader({ tipo: "pessoas_diferentes", outraPessoa: ["Senadores"] });
+    const cadastrado: ContatoPlanilha = { id: "60", nome: "Jader Filho", grupo: GRUPO_DEPUTADOS_ELEITOS, departamento: "PARÁ" };
+    // Act
+    const [r] = classificarEleitos([jaderFilho], [senadores(jaderSenador), grupo(GRUPO_DEPUTADOS_ELEITOS, [cadastrado])], foraDaLista, h);
+    // Assert
+    expect(r).toMatchObject({ destino: "novo", grupoDestino: GRUPO_DEPUTADOS_ELEITOS, jaCadastrado: true });
+    expect(r.contatos).toEqual([{ grupo: GRUPO_DEPUTADOS_ELEITOS, nome: "Jader Filho", id: "60" }]);
+  });
+
+  test("eleito a conferir por homônimo na Câmara, com mesma pessoa para Deputados Federais, fica reeleito", () => {
+    // Arrange
+    const e = camara({ uf: "MA", statusMandato: "Mandato novo" });
+    const homonimos: DeputadoAtual[] = [
+      { uf: "MA", nomeParlamentar: "Joana Fictícia", nomeCivil: "Outra Civil" },
+      { uf: "MA", nomeParlamentar: "Joana Fictícia", nomeCivil: "Outra Civil Dois" },
+    ];
+    const h = registrar(HISTORICO_VAZIO, "Joana Fictícia", [], manual({ convidaPor: "Deputados Federais", grupos: ["Deputados Federais"], data: "2026-10-26" }));
+    // Act
+    const [semDecisao] = classificarEleitos([e], [], homonimos);
+    const [r] = classificarEleitos([e], [], homonimos, h);
+    // Assert
+    expect(semDecisao.destino).toBe("conferir");
+    expect(r).toMatchObject({ destino: "reeleito", grupoDestino: "Deputados Federais", motivo: "Decisão do GT de 26/10" });
+    expect(r.decisao).toMatchObject({ tipo: "mesma_pessoa", convidaPor: "Deputados Federais" });
+    expect(r.jaCadastrado).toBeUndefined();
+  });
+
+  test("mesma pessoa para o grupo de eleitos leva o eleito a novo, já cadastrado quando está lá", () => {
+    // Arrange: senador eleito que a regra mandaria para Deputados Federais (está na lista da Câmara)
+    const lista: DeputadoAtual[] = [{ uf: "MA", nomeParlamentar: "Joana Fictícia", nomeCivil: "JOANA MARIA FICTICIA SOUZA" }];
+    const noGrupo: ContatoPlanilha = { id: "70", nome: "Joana Fictícia", grupo: GRUPO_SENADORES_ELEITOS, departamento: "MARANHÃO" };
+    const h = registrar(HISTORICO_VAZIO, "Joana Fictícia", [], manual({ convidaPor: GRUPO_SENADORES_ELEITOS, grupos: [GRUPO_SENADORES_ELEITOS, "Deputados Federais"] }));
+    // Act
+    const [r] = classificarEleitos([eleito({ statusMandato: "Mandato novo" })], [grupo(GRUPO_SENADORES_ELEITOS, [noGrupo])], lista, h);
+    // Assert
+    expect(r).toMatchObject({ destino: "novo", grupoDestino: GRUPO_SENADORES_ELEITOS, jaCadastrado: true, motivo: "Decisão do GT de 29/10" });
+  });
+
+  test("senador eleito com mesma pessoa para Deputados Federais fica como outra_casa, como a regra faria", () => {
+    const h = registrar(HISTORICO_VAZIO, "Joana Fictícia", [], manual({ convidaPor: "Deputados Federais", grupos: ["Deputados Federais", GRUPO_SENADORES_ELEITOS] }));
+    const [r] = classificarEleitos([eleito({ statusMandato: "Mandato novo" })], [senadores()], foraDaLista, h);
+    expect(r).toMatchObject({ destino: "outra_casa", grupoDestino: "Deputados Federais" });
+  });
+
+  test("Duarte Júnior: pessoas diferentes tira a ligação com o homônimo da lista da Câmara e ele vai para os deputados eleitos", () => {
+    // Arrange: nome civil igual em outra UF casa o deputado em exercício pela regra
+    const duarte = camara({ uf: "MG", nomeUrna: "Duarte Junior", nomeCompleto: "Duarte Fictício Junior", statusMandato: "Mandato novo" });
+    const lista: DeputadoAtual[] = [{ uf: "MA", nomeParlamentar: "Duarte Jr.", nomeCivil: "DUARTE FICTICIO JUNIOR" }];
+    const h = registrar(HISTORICO_VAZIO, "Duarte Junior", ["Duarte Fictício Junior"], manual({ tipo: "pessoas_diferentes", grupos: ["Deputados Federais"] }));
+    // Act
+    const [semDecisao] = classificarEleitos([duarte], [], lista);
+    const [r] = classificarEleitos([duarte], [], lista, h);
+    // Assert
+    expect(semDecisao).toMatchObject({ destino: "reeleito", grupoDestino: "Deputados Federais" });
+    expect(r).toMatchObject({ destino: "novo", grupoDestino: GRUPO_DEPUTADOS_ELEITOS });
+  });
+
+  test("decisão de mesmo nome em grupos que não tocam os da eleição não vale", () => {
+    const h = registrar(HISTORICO_VAZIO, "Joana Fictícia", [], manual({ convidaPor: "Ministros do STF", grupos: ["Ministros do STF", "Ministros do TSE"] }));
+    const [r] = classificarEleitos([eleito()], [senadores(joana)], foraDaLista, h);
+    expect(r).toMatchObject({ destino: "reeleito", grupoDestino: "Senadores" });
+    expect(r.decisao).toBeUndefined();
+  });
+
+  test("duas decisões que decidem para a mesma pessoa deixam o eleito a conferir", () => {
+    // Arrange
+    const h1 = registrar(HISTORICO_VAZIO, "Joana Fictícia", [], manual({ convidaPor: "Senadores", grupos: ["Senadores", "Ex-Presidentes do Senado"] }));
+    const h2 = registrar(h1, "Joana Fictícia", [], manual({ convidaPor: GRUPO_SENADORES_ELEITOS, grupos: [GRUPO_SENADORES_ELEITOS], data: "2026-10-30" }));
+    // Act
+    const [r] = classificarEleitos([eleito()], [senadores(joana)], foraDaLista, h2);
+    // Assert
+    expect(r).toMatchObject({ destino: "conferir", motivo: "Duas decisões do GT para a mesma pessoa: conferir" });
+    expect(r.grupoDestino).toBeUndefined();
+    expect(r.decisao?.data).toBe("2026-10-30");
+  });
+
+  test("aplicarEleicao passa as decisões e a linha do Contatos deixa de ser ligada ao eleito que é outra pessoa", () => {
+    // Arrange
+    const resultado: ResultadoAnalise = {
+      arquivoNome: "base.xlsx", grupos: [senadores(jaderSenador)],
+      resumo: { total: 1, verde: 1, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0, gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0 },
+    };
+    // Act
+    const semDecisao = aplicarEleicao(resultado, [jaderFilho], [], foraDaLista);
+    const comDecisao = aplicarEleicao(resultado, [jaderFilho], [], foraDaLista, undefined, decisaoDoJader({ tipo: "pessoas_diferentes" }));
+    // Assert
+    expect(semDecisao.grupos[0].contatos[0].eleicao?.destino).toBe("conferir");
+    expect(comDecisao.grupos[0].contatos[0].eleicao).toBeUndefined();
+    expect(comDecisao.eleicao?.eleitos[0]).toMatchObject({ destino: "novo", grupoDestino: GRUPO_DEPUTADOS_ELEITOS });
   });
 });

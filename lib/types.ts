@@ -24,10 +24,11 @@ export interface ContatoPlanilha {
 
 /**
  * Procedência do valor esperado: página oficial, conhecimento da IA, tabela de protocolo,
- * ou `coerencia` — a Camada A, que confronta campos do próprio contato entre si e por isso
- * não tem valor esperado externo nenhum.
+ * `coerencia` — a Camada A, que confronta campos do próprio contato entre si e por isso
+ * não tem valor esperado externo nenhum — ou `pares`: a maioria dos contatos do mesmo grupo
+ * com o mesmo núcleo de cargo, quando a tabela de protocolo não tem regra (spec 2026-10-30 §3.4).
  */
-export type OrigemDado = "pagina" | "conhecimento" | "protocolo" | "coerencia";
+export type OrigemDado = "pagina" | "conhecimento" | "protocolo" | "coerencia" | "pares";
 
 /**
  * Achado da Camada A (coerência interna de `Tratamento`, `Endereçamento` e `Cargo`) ou

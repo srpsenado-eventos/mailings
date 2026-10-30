@@ -3,6 +3,7 @@ import { coerenciasVisiveis, textoCoerencia, ROTULOS_CAMPO_TRATAMENTO } from "@/
 import { rotuloAchadoEndereco } from "@/lib/endereco";
 import { anotacaoReaproveitada, diaMes } from "@/lib/memoria-leitura";
 import { avisoUrlCaida, textoAlternativa, textoFonteProvisoria, textoMudanca, tipoProvisoria } from "@/lib/painel";
+import { contagemDosPares } from "@/lib/tratamento-pares";
 import type {
   AuditoriaEndereco,
   ComparacaoCampo,
@@ -79,6 +80,10 @@ function valorEsperadoDe(c: ResultadoContato, campo: string): string {
   if (comp.situacao === "sem_regra") return "sem regra de protocolo";
   if (comp.situacao === "nao_verificado") return "não verificado";
   const v = comp.valorEsperado ?? "";
+  if (v && comp.origemValor === "pares") {
+    const contagem = contagemDosPares(comp.observacao);
+    return contagem ? `${v} (maioria dos pares: ${contagem.n} de ${contagem.m})` : `${v} (maioria dos pares)`;
+  }
   return v && comp.origemValor === "conhecimento" ? `${v} (via IA — confira)` : v;
 }
 

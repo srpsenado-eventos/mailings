@@ -223,16 +223,19 @@ function candidatosDe(regra: RegraTratamento): readonly Candidato[] {
   return candidatos;
 }
 
-/** Nome do cargo da regra de Ministro de Estado na tabela, já normalizado. */
-const CARGO_MINISTRO_DE_ESTADO = "ministro de estado";
-
 /**
- * Cargo (normalizado, gênero neutralizado) que usa a regra de Ministro de Estado sem passar
- * pela similaridade: começa com "ministro de estado", ou é o Advogado-Geral da União.
+ * Regras da tabela achadas pelo prefixo do cargo (normalizado, gênero neutralizado), sem a
+ * similaridade, que cai abaixo do limiar quando o complemento é longo: Ministro de Estado e o
+ * Advogado-Geral da União (decisão do Clovis, 2026-10-27; "…da Justiça e Segurança Pública"
+ * ficava a 0,54); Governador e Vice-Governador "do Estado de …" ou "do Distrito Federal"
+ * (spec 2026-10-30 §3.4; "Governador do Estado de São Paulo" ficava a 0,45). `qualificacao`
+ * é a que o cargo tem de ter (`QUALIFICADORES`): substituto, interino e ex não herdam a regra.
  */
-function ehMinistroDeEstado(alvo: string): boolean {
-  return /^ministro de estado\b/.test(alvo) || /^advogad[oa]-geral da uniao$/.test(alvo);
-}
+const REGRAS_POR_PREFIXO: readonly { cargo: string; qualificacao: string; casa: RegExp }[] = [
+  { cargo: "ministro de estado", qualificacao: "", casa: /^(ministro de estado\b|advogad[oa]-geral da uniao$)/ },
+  { cargo: "governador", qualificacao: "", casa: /^governador\b/ },
+  { cargo: "vice-governador", qualificacao: "vice", casa: /^vice[- ]governador\b/ },
+];
 
 /**
  * Resolve o `Cargo` livre da planilha para uma entrada da tabela de protocolo.
@@ -265,15 +268,9 @@ export function resolverRegra(
 
   const qualificacaoAlvo = qualificadoresDe(alvo);
 
-  // Ministro de Estado pelo prefixo (decisão do Clovis, 2026-10-27): a similaridade com
-  // "Ministro de Estado" cai abaixo do limiar quando o nome da pasta é longo ("…da Justiça e
-  // Segurança Pública", 0,54), e metade dos ministros saía "sem regra". O Advogado-Geral da
-  // União tem status de ministro (a tabela manda incluí-lo na regra). Substituto e interino
-  // não herdam a regra do titular por aqui (ver `QUALIFICADORES`).
-  if (qualificacaoAlvo === "" && ehMinistroDeEstado(alvo)) {
-    const regraMinistro = regras.find((r) => candidatosDe(r).some((c) => c.nome === CARGO_MINISTRO_DE_ESTADO));
-    if (regraMinistro) return regraMinistro;
-  }
+  const porPrefixo = REGRAS_POR_PREFIXO.find((p) => p.qualificacao === qualificacaoAlvo && p.casa.test(alvo));
+  const regraDoPrefixo = porPrefixo && regras.find((r) => candidatosDe(r).some((c) => c.nome === porPrefixo.cargo));
+  if (regraDoPrefixo) return regraDoPrefixo;
   const pontuadas = regras
     .flatMap((r) => {
       const nomes = candidatosDe(r).filter((c) => c.qualificacao === qualificacaoAlvo);
@@ -532,7 +529,7 @@ export function textoCoerencia(c: ComparacaoCampo): string {
 
 /**
  * Achados da Camada A que chegam ao usuário, depois do colapso da dupla acusação sobre a
- * mesma célula (Decisão 1 da T6, Clovis 2026-09-16): quando a Camada B tem valor esperado
+ * mesma célula (Decisão 1 da T6, Clovis 2026-09-16): quando a Camada B (ou a maioria dos pares) tem valor esperado
  * para o campo, a linha `campo_vazio` some, porque a linha do protocolo já mostra a célula
  * vazia e o texto que deveria estar nela. Sem regra aplicável (`sem_regra`) ela permanece,
  * senão a célula vazia passaria batida.
@@ -549,7 +546,7 @@ export function coerenciasVisiveis(
     comparacoes.some(
       (c) =>
         c.campo === campo &&
-        c.origemValor === "protocolo" &&
+        (c.origemValor === "protocolo" || c.origemValor === "pares") &&
         c.situacao === "divergente" &&
         (c.valorEsperado ?? "").trim().length > 0,
     );

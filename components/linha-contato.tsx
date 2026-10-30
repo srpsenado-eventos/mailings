@@ -169,6 +169,7 @@ function Detalhe({ c, g, retrato, eleicaoLigada }: { c: ResultadoContato; g: Res
               <div className="text-sm">{d.valorPlanilha || "(vazio)"}</div>
               <div className="mt-2 text-xs text-cinza-claro">{d.origem}</div>
               <div className="text-sm font-medium">{d.valorReferencia || "—"}</div>
+              {d.observacao && <div className="mt-1 text-xs text-cinza-claro">{d.observacao}</div>}
               {d.copiavel && <BotaoCopiar texto={d.copiavel} />}
               {d.url && <a href={d.url} target="_blank" rel="noreferrer" className="mt-1 block text-[11px] text-acao underline break-all">abrir a página desta referência</a>}
               {d.coerencias.map((t) => <div key={t} className="mt-1.5 text-xs text-atencao">{t}</div>)}

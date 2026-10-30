@@ -941,3 +941,36 @@ describe("textos da leitura resiliente (spec 2026-10-23 §6)", () => {
     expect(procedenciaDoContato(contato({}), g, falhas)[0]).toMatchObject({ rotulo: "Nome e cargo", alternativa: true, caida: "Fonte caída há 3 coletas, desde 19/10: conferir se o endereço mudou" });
   });
 });
+
+describe("tratamento e endereçamento pela maioria dos pares (spec 2026-10-30 §3.4)", () => {
+  const OBSERVACAO = "Pela maioria dos pares: 6 de 7 no grupo usam Senhor";
+  const pares = (situacao: "confere" | "divergente", planilha: string): ComparacaoCampo => ({
+    campo: "tratamento", valorPlanilha: planilha, valorEsperado: "Senhor", situacao, origemValor: "pares", observacao: OBSERVACAO,
+  });
+
+  test("divergente dos pares: etiqueta 'Tratamento diverge' explicada pela observação; cartão com a maioria e o valor a copiar", () => {
+    // Arrange
+    const c = contato({ semaforo: "amarelo", comparacoes: [pares("divergente", "Doutor")] });
+
+    // Act
+    const etiqueta = etiquetasDoContato(c, grupoComFonte).find((e) => e.campo === "tratamento");
+    const d = cartao(c, "tratamento");
+
+    // Assert
+    expect(etiqueta).toMatchObject({ texto: "Tratamento diverge", tom: "atencao", explicacao: OBSERVACAO });
+    expect(d).toMatchObject({ origem: "Maioria dos pares diz", valorReferencia: "Senhor", copiavel: "Senhor", observacao: OBSERVACAO });
+  });
+
+  test("confere pelos pares: etiqueta 'Tratamento confere' explicada pela observação, sem valor a copiar", () => {
+    const c = contato({ comparacoes: [pares("confere", "Senhor")] });
+    const etiqueta = etiquetasDoContato(c, grupoComFonte).find((e) => e.campo === "tratamento");
+    expect(etiqueta).toMatchObject({ texto: "Tratamento confere", tom: "ok", explicacao: OBSERVACAO });
+    expect(cartao(c, "tratamento").copiavel).toBeUndefined();
+  });
+
+  test("comparação da tabela de protocolo não ganha observação no cartão", () => {
+    const c = contato({ comparacoes: [diverge("tratamento", "protocolo", "Doutor", "Senhor")] });
+    expect(cartao(c, "tratamento")).toMatchObject({ origem: "Tabela de protocolo diz" });
+    expect(cartao(c, "tratamento").observacao).toBeUndefined();
+  });
+});

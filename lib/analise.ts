@@ -54,6 +54,7 @@ import { ScrapeError } from "@/lib/scrape";
 import { fonteIndividualDe, type FonteResolvida } from "@/lib/catalogo";
 import { ufDoContato } from "@/lib/uf";
 import { auditarEndereco, indexarEnderecos, type IndiceEnderecos } from "@/lib/endereco";
+import { aplicarPares } from "@/lib/tratamento-pares";
 
 function motivoDaFalha(err: unknown): string {
   if (err instanceof ScrapeError) return err.motivo;
@@ -746,7 +747,9 @@ export async function analisar(
   const analisados = await Promise.all(
     [...porGrupo.entries()].map(([grupo, lista]) => analisarGrupo(grupo, lista, deps, agora)),
   );
-  const grupos = analisados.map((a) => anexarEnderecos(a.grupo, indice));
+  // Tratamento e endereçamento sem regra na tabela, decididos pela maioria dos pares (spec
+  // 2026-10-30 §3.4), antes do resumo, para que ele conte o amarelo que os pares acusam.
+  const grupos = analisados.map((a) => aplicarPares(anexarEnderecos(a.grupo, indice)));
   // A memória que sai desta varredura (spec 2026-10-20 §6, passo 3): a anterior podada,
   // sobreposta pelas leituras boas de hoje e pelas reaproveitadas, com a data original.
   const leituras = mesclarLeituras(deps.leiturasAnteriores ?? {}, analisados.flatMap((a) => a.leituras), agora);

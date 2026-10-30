@@ -17,6 +17,7 @@ import {
 } from "@/lib/match";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import { UF_POR_EXTENSO } from "@/lib/uf";
+import { aplicarPares } from "@/lib/tratamento-pares";
 import type {
   CasaLegislativa,
   ComparacaoCampo,
@@ -242,10 +243,12 @@ function compararGrupoComLista(g: ResultadoGrupo, eleicao: ResultadoEleicao, dat
   const rotulo = grupoDoAgrupador(g.grupo)?.rotulo;
   const lista = composicaoDaLista(g.grupo, eleicao);
   if (!rotulo || !lista) return g;
-  return {
+  // A comparação com a lista refaz as comparações do contato; os pares voltam a julgar o
+  // tratamento e o endereçamento que a tabela deixa sem regra (spec 2026-10-30 §3.4).
+  return aplicarPares({
     ...g,
     contatos: g.contatos.map((c) => compararContatoComLista(c, lista, rotulo, dataDaLista)),
-  };
+  });
 }
 
 /** O resumo troca só a contagem de semáforo dos contatos que mudaram; o resto é o mesmo de `resumir`. */

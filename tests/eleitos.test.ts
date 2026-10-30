@@ -546,7 +546,7 @@ describe("classificarEleitos: a decisão do GT vence a regra (spec 2026-10-30 §
     // Arrange: nome civil igual em outra UF casa o deputado em exercício pela regra
     const duarte = camara({ uf: "MG", nomeUrna: "Duarte Junior", nomeCompleto: "Duarte Fictício Junior", statusMandato: "Mandato novo" });
     const lista: DeputadoAtual[] = [{ uf: "MA", nomeParlamentar: "Duarte Jr.", nomeCivil: "DUARTE FICTICIO JUNIOR" }];
-    const h = registrar(HISTORICO_VAZIO, "Duarte Junior", ["Duarte Fictício Junior"], manual({ tipo: "pessoas_diferentes", grupos: ["Deputados Federais"] }));
+    const h = registrar(HISTORICO_VAZIO, "Duarte Junior", ["Duarte Fictício Junior"], manual({ tipo: "pessoas_diferentes", grupos: ["Deputados Federais", GRUPO_DEPUTADOS_ELEITOS] }));
     // Act
     const [semDecisao] = classificarEleitos([duarte], [], lista);
     const [r] = classificarEleitos([duarte], [], lista, h);
@@ -572,6 +572,54 @@ describe("classificarEleitos: a decisão do GT vence a regra (spec 2026-10-30 §
     expect(r).toMatchObject({ destino: "conferir", motivo: "Duas decisões do GT para a mesma pessoa: conferir" });
     expect(r.grupoDestino).toBeUndefined();
     expect(r.decisao?.data).toBe("2026-10-30");
+  });
+
+  test("pessoas diferentes de uma duplicidade do Contatos, sem grupo de eleitos, não corta a ligação do eleito", () => {
+    // Arrange: caso Ex-Presidentes do Senado × Deputados Federais (sem outraPessoa); o eleito é deputado reeleito
+    const lista: DeputadoAtual[] = [{ uf: "MA", nomeParlamentar: "Joana Fictícia", nomeCivil: "JOANA MARIA FICTICIA SOUZA" }];
+    const h = registrar(HISTORICO_VAZIO, "Joana Fictícia", [], manual({ tipo: "pessoas_diferentes", grupos: ["Ex-Presidentes do Senado", "Deputados Federais"] }));
+    // Act
+    const [r] = classificarEleitos([camara({ statusMandato: "Mandato novo" })], [], lista, h);
+    // Assert
+    expect(r).toMatchObject({ destino: "reeleito", grupoDestino: "Deputados Federais" });
+    expect(r.motivo).toBeUndefined();
+    expect(r.decisao?.tipo).toBe("pessoas_diferentes");
+  });
+
+  test("duas decisões com o mesmo grupo do convite não são conflito", () => {
+    // Arrange
+    const h1 = registrar(HISTORICO_VAZIO, "Joana Fictícia", [], manual({ convidaPor: "Senadores", grupos: ["Senadores", "Ex-Presidentes do Senado"] }));
+    const h2 = registrar(h1, "Joana Fictícia", [], manual({ tipo: "ajustar_contatos", convidaPor: "Senadores", grupos: ["Senadores", GRUPO_SENADORES_ELEITOS], data: "2026-10-30" }));
+    // Act
+    const [r] = classificarEleitos([eleito()], [senadores(joana)], foraDaLista, h2);
+    // Assert
+    expect(h2.casos).toHaveLength(2);
+    expect(r).toMatchObject({ destino: "reeleito", grupoDestino: "Senadores", motivo: "Decisão do GT de 30/10" });
+    expect(r.decisao?.data).toBe("2026-10-30");
+  });
+
+  test("convite para um grupo fora do eixo da eleição deixa o eleito a conferir, com a decisão", () => {
+    const h = registrar(HISTORICO_VAZIO, "Joana Fictícia", [], manual({ convidaPor: "Ministros de Estado", grupos: ["Ministros de Estado", "Senadores"] }));
+    const [r] = classificarEleitos([eleito()], [senadores(joana)], foraDaLista, h);
+    expect(r).toMatchObject({ destino: "conferir", motivo: "Decisão do GT de 29/10: grupo Ministros de Estado fora do eixo da eleição" });
+    expect(r.grupoDestino).toBeUndefined();
+    expect(r.decisao?.convidaPor).toBe("Ministros de Estado");
+  });
+
+  test("os senadores titulares fora de exercício contam como Senado na decisão", () => {
+    // Arrange
+    const rotulo = "Senadores titulares fora de exercício - Posse 2027";
+    const foraDeExercicio = grupo(rotulo, [{ id: "43", nome: "Joana Fictícia", grupo: rotulo, departamento: "MARANHÃO" }]);
+    const outra = registrar(HISTORICO_VAZIO, "Joana Fictícia", [], manual({ tipo: "pessoas_diferentes", outraPessoa: ["Senadores"], grupos: ["Senadores", GRUPO_SENADORES_ELEITOS] }));
+    const convite = registrar(HISTORICO_VAZIO, "Joana Fictícia", [], manual({ convidaPor: rotulo, grupos: [rotulo] }));
+    // Act
+    const [semDecisao] = classificarEleitos([eleito()], [foraDeExercicio], foraDaLista);
+    const [cortado] = classificarEleitos([eleito()], [foraDeExercicio], foraDaLista, outra);
+    const [convidado] = classificarEleitos([eleito({ statusMandato: "Mandato novo" })], [foraDeExercicio], foraDaLista, convite);
+    // Assert
+    expect(semDecisao).toMatchObject({ destino: "reeleito", jaCadastrado: true });
+    expect(cortado).toMatchObject({ destino: "conferir", contatos: [] });
+    expect(convidado).toMatchObject({ destino: "reeleito", grupoDestino: "Senadores", jaCadastrado: true });
   });
 
   test("aplicarEleicao passa as decisões e a linha do Contatos deixa de ser ligada ao eleito que é outra pessoa", () => {

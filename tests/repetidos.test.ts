@@ -1018,6 +1018,18 @@ describe("decisões do GT nos repetidos (spec 2026-10-30 §4.1.3)", () => {
     expect(etiquetaDeRepeticao([a], linha(CUEVA, "x"), "Ministros do STJ")?.etiqueta.tom).toBe("atencao");
   });
 
+  test("duas decisões com o mesmo grupo do convite não são conflito: vale a mais recente", () => {
+    // Arrange
+    const h = decidir(decisaoCueva, CUEVA, manual({ tipo: "mesma_pessoa", convidaPor: "Ministros do TSE", data: "2026-10-28", grupos: ["Ministros do STJ"] }));
+    // Act
+    const [a] = autoridadesRepetidas([stj(CUEVA), tseM(CUEVA)], undefined, h);
+    // Assert
+    expect(h.casos).toHaveLength(2);
+    expect(a.situacao).toBe("decidido_gt");
+    expect(a.convidaPor?.grupo).toBe("Ministros do TSE");
+    expect(a.decisao?.data).toBe("2026-10-28");
+  });
+
   test("ajustar no Contatos fora do cálculo segue a situação no Contatos", () => {
     // Arrange
     const h = decidir(

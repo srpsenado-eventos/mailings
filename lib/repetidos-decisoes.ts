@@ -1,5 +1,5 @@
 import {
-  casosDaPessoa, grupoEquivalente, gruposAtuaisParaOCaso, situacaoDoCaso, vigente,
+  casosDaPessoa, chaveDoQueDecide, grupoEquivalente, gruposAtuaisParaOCaso, situacaoDoCaso, vigente,
   type CasoDecidido, type HistoricoDecisoes, type RegistroManual, type SituacaoNoContatos, type TipoDecisao,
 } from "@/lib/decisoes";
 import { gruposAtuaisDoCaso } from "@/lib/decisoes-coleta";
@@ -136,7 +136,8 @@ function semAsOutrasPessoas(a: AutoridadeRepetida, outras: ReadonlySet<string>):
  * Todos os casos da pessoa valem (spec §4.1.3):
  * 1. caso reaberto volta para conferir;
  * 2. as ocorrências marcadas como outra pessoa saem do cálculo;
- * 3. uma decisão que não seja `pessoas_diferentes` decide; duas ou mais ficam para conferir;
+ * 3. uma decisão que não seja `pessoas_diferentes` decide; duas ou mais só ficam para conferir quando
+ *    decidem coisas diferentes (`chaveDoQueDecide`); com o mesmo convite, vale a mais recente;
  * 4. só `pessoas_diferentes`: sem `outraPessoa` silencia o caso; com ela, vale a regra sobre o que restou.
  */
 function aplicarCasos(a: AutoridadeRepetida, aplicados: readonly Aplicado[], ctx: Contexto): AutoridadeRepetida {
@@ -148,12 +149,15 @@ function aplicarCasos(a: AutoridadeRepetida, aplicados: readonly Aplicado[], ctx
   const outras = conjunto(aplicados.flatMap((x) => (x.decisao.outraPessoa ?? []).map((g) => grupoEquivalente(g, "contatos"))));
   const { autoridade, repetida } = semAsOutrasPessoas(a, outras);
   const decisivos = aplicados.filter((x) => x.decisao.tipo !== "pessoas_diferentes");
-  if (decisivos.length > 1) {
+  if (new Set(decisivos.map((x) => chaveDoQueDecide(x.decisao))).size > 1) {
     const recente = maisRecente(decisivos);
     const { convidaPor: _semConvite, ...resto } = autoridade;
     return { ...resto, situacao: "conferir", motivo: MOTIVO_DUAS_DECISOES, caso: recente.caso, decisao: recente.decisao, noContatos: noContatos(recente) };
   }
-  if (decisivos.length === 1) return comDecisao(autoridade, decisivos[0], noContatos(decisivos[0]));
+  if (decisivos.length > 0) {
+    const decide = maisRecente(decisivos);
+    return comDecisao(autoridade, decide, noContatos(decide));
+  }
 
   const recente = maisRecente(aplicados);
   const silenciador = aplicados.find((x) => (x.decisao.outraPessoa ?? []).length === 0);

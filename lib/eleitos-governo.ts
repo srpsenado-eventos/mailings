@@ -2,7 +2,7 @@ import { GRUPO_DEPUTADOS_FEDERAIS, GRUPO_GOVERNADORES, GRUPO_GOVERNADORES_ELEITO
 import { grupoDoAgrupador } from "@/lib/agrupador";
 import type { HistoricoDecisoes } from "@/lib/decisoes";
 import {
-  decisaoDoEleito, ehOutraPessoa, GRUPOS_DA_ELEICAO_DO_GOVERNO, MOTIVO_DUAS_DECISOES, motivoDaDecisaoDoEleito, type DecisaoDoEleito,
+  decisaoDoEleito, ehOutraPessoa, GRUPOS_DA_ELEICAO_DO_GOVERNO, MOTIVO_DUAS_DECISOES, motivoDaDecisaoDoEleito, motivoForaDoEixo, type DecisaoDoEleito,
 } from "@/lib/eleitos-decisoes";
 import { normalizarTexto } from "@/lib/normalize";
 import { siglaDaUf, ufNoTexto } from "@/lib/uf";
@@ -69,7 +69,7 @@ function destinado(
   return { eleito: e, destino, grupoDestino, contatos: contatos.map(referencia), ...(ja ? { jaCadastrado: true } : {}) };
 }
 
-/** Pela decisão do GT: Governadores é reeleito; o grupo dos eleitos, mandato novo; outro grupo, o cargo atual (Ata 14). */
+/** Pela decisão do GT (no eixo): Governadores é reeleito; o grupo dos eleitos, mandato novo; Senadores ou Deputados Federais, o cargo atual (Ata 14). */
 function destinoPelaDecisao(convite: string): Exclude<DestinoGoverno, "conferir"> {
   if (convite === GRUPO_GOVERNADORES) return "reeleito";
   return convite === GRUPO_GOVERNADORES_ELEITOS ? "novo" : "outro_cargo";
@@ -77,6 +77,7 @@ function destinoPelaDecisao(convite: string): Exclude<DestinoGoverno, "conferir"
 
 function comDecisao(e: GovernadorPlanilha, pelaRegra: GovernadorClassificado, d: DecisaoDoEleito, achados: readonly Candidato[]): GovernadorClassificado {
   if (d.conflito) return { ...conferir(e, MOTIVO_DUAS_DECISOES, achados), decisao: d.registro };
+  if (d.foraDoEixo) return { ...conferir(e, motivoForaDoEixo(d.registro, d.foraDoEixo), achados), decisao: d.registro };
   if (!d.convidaPor) return { ...pelaRegra, decisao: d.registro };
   return { ...destinado(e, destinoPelaDecisao(d.convidaPor), d.convidaPor, achados), motivo: motivoDaDecisaoDoEleito(d.registro), decisao: d.registro };
 }

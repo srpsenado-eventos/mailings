@@ -4,7 +4,7 @@ import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import { casaDoGrupo, casaPessoa, chavePessoa, deputadosEmExercicio, MOTIVO_AMBIGUO, MOTIVO_HOMONIMO_EM_EXERCICIO, referencia } from "@/lib/eleitos-casamento";
 import { agruparSegundoTurno, classificarGovernadores, paraContatoGoverno } from "@/lib/eleitos-governo";
 import {
-  decisaoDoEleito, ehOutraPessoa, GRUPOS_DA_ELEICAO_DA_CASA, MOTIVO_DUAS_DECISOES, motivoDaDecisaoDoEleito, type DecisaoDoEleito,
+  decisaoDoEleito, ehOutraPessoa, GRUPOS_DA_ELEICAO_DA_CASA, MOTIVO_DUAS_DECISOES, motivoDaDecisaoDoEleito, motivoForaDoEixo, type DecisaoDoEleito,
 } from "@/lib/eleitos-decisoes";
 import type { HistoricoDecisoes } from "@/lib/decisoes";
 import type {
@@ -192,9 +192,9 @@ function classificarPelaRegra(
 }
 
 /**
- * Destino de quem o GT decidiu pelo grupo do convite X: grupo de eleitos é mandato novo; o grupo
- * atual da própria Casa é reeleito; outro grupo de cargo atual (a outra Casa, um ministério...) é o
- * convite pelo cargo atual, como a regra faria (Ata 14).
+ * Destino de quem o GT decidiu pelo grupo do convite X (sempre no eixo da eleição; fora dele o eleito
+ * fica a conferir): grupo de eleitos é mandato novo; o grupo atual da própria Casa é reeleito; o da
+ * outra Casa é o convite pelo cargo atual, como a regra faria (Ata 14).
  */
 function destinoPelaDecisao(casa: CasaLegislativa, convite: string): Exclude<DestinoEleito, "conferir"> {
   if (convite === GRUPO_SENADORES_ELEITOS || convite === GRUPO_DEPUTADOS_ELEITOS) return "novo";
@@ -204,6 +204,7 @@ function destinoPelaDecisao(casa: CasaLegislativa, convite: string): Exclude<Des
 /** A decisão do GT vence a regra (spec 2026-10-30 §4.1.1): conflito vai para conferir; o convite decide o grupo. */
 function comDecisao(pelaRegra: EleitoClassificado, d: DecisaoDoEleito, base: Base, achados: readonly Candidato[]): EleitoClassificado {
   if (d.conflito) return { ...conferir(base, MOTIVO_DUAS_DECISOES, achados), decisao: d.registro };
+  if (d.foraDoEixo) return { ...conferir(base, motivoForaDoEixo(d.registro, d.foraDoEixo), achados), decisao: d.registro };
   if (!d.convidaPor) return { ...pelaRegra, decisao: d.registro };
   const destino = destinoPelaDecisao(base.eleito.casa, d.convidaPor);
   return { ...destinado(base, destino, d.convidaPor, achados), motivo: motivoDaDecisaoDoEleito(d.registro), decisao: d.registro };

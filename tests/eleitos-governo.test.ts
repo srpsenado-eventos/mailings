@@ -252,8 +252,21 @@ describe("classificarGovernadores: a decisão do GT vence a regra (spec 2026-10-
     expect(r.jaCadastrado).toBeUndefined();
   });
 
+  test("pessoas diferentes de Governadores × Deputados Federais, sem grupo de eleitos, mantém o reeleito", () => {
+    const h = registrar(HISTORICO_VAZIO, "Marta Fictícia", [], manual({ tipo: "pessoas_diferentes", grupos: [GRUPO_GOVERNADORES, "Deputados Federais"] }));
+    const [r] = classificarGovernadores([gov()], [grupo("Governadores", [marta("Governadores")])], undefined, h);
+    expect(r).toMatchObject({ destino: "reeleito", grupoDestino: GRUPO_GOVERNADORES, jaCadastrado: true });
+    expect(r.decisao?.tipo).toBe("pessoas_diferentes");
+  });
+
+  test("convite fora do eixo da eleição deixa o governador a conferir", () => {
+    const h = registrar(HISTORICO_VAZIO, "Marta Fictícia", [], manual({ convidaPor: "Ministros de Estado", grupos: ["Ministros de Estado", GRUPO_GOVERNADORES] }));
+    const [r] = classificarGovernadores([gov()], [grupo("Governadores", [marta("Governadores")])], undefined, h);
+    expect(r).toMatchObject({ destino: "conferir", motivo: "Decisão do GT de 29/10: grupo Ministros de Estado fora do eixo da eleição" });
+  });
+
   test("pessoas diferentes reclassifica pela regra sem a ligação com o Contatos", () => {
-    const h = registrar(HISTORICO_VAZIO, "Marta Fictícia", [], manual({ tipo: "pessoas_diferentes", grupos: [GRUPO_GOVERNADORES] }));
+    const h = registrar(HISTORICO_VAZIO, "Marta Fictícia", [], manual({ tipo: "pessoas_diferentes", grupos: [GRUPO_GOVERNADORES, GRUPO_GOVERNADORES_ELEITOS] }));
     const [r] = classificarGovernadores([gov({ statusMandato: "Mandato novo" })], [grupo("Governadores", [marta("Governadores")])], undefined, h);
     expect(r).toMatchObject({ destino: "novo", grupoDestino: GRUPO_GOVERNADORES_ELEITOS, contatos: [] });
     expect(r.decisao?.tipo).toBe("pessoas_diferentes");

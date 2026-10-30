@@ -73,6 +73,15 @@ export function grupoEquivalente(
   return grupoDoAgrupador(rotulo)?.rotulo ?? rotulo.trim();
 }
 
+/**
+ * O que a decisão decide, para comparar duas decisões da mesma pessoa: o grupo do convite (forma
+ * equivalente) quando há; senão o tipo. Duas decisões com a mesma chave não são conflito.
+ */
+export function chaveDoQueDecide(r: RegistroManual): string {
+  const convite = r.convidaPor?.trim();
+  return convite ? `convite:${normalizarTexto(grupoEquivalente(convite, "contatos"))}` : `tipo:${r.tipo}`;
+}
+
 function chavesDe(nomes: readonly string[]): string[] {
   return [...new Set(nomes.map(normalizarNome).filter((c) => c.length > 0))];
 }

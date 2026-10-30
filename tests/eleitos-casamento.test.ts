@@ -67,6 +67,16 @@ describe("deputadosEmExercicio: regra de pessoa contra a lista da Câmara (spec 
     expect(deputadosEmExercicio(e, atuais)).toHaveLength(2);
   });
 
+  test("dois deputados com o mesmo nome civil em UFs diferentes são homônimos pela regra do civil", () => {
+    const e = eleito({ uf: "PR", nomeUrna: "Ninguém Fictício", nomeCompleto: "Maria Joana Fictícia Souza" });
+    const atuais = [
+      dep({ uf: "SP", nomeParlamentar: "Maria A", nomeCivil: "MARIA JOANA FICTICIA SOUZA" }),
+      dep({ uf: "RJ", nomeParlamentar: "Maria B", nomeCivil: "MARIA JOANA FICTICIA SOUZA" }),
+    ];
+
+    expect(deputadosEmExercicio(e, atuais)).toHaveLength(2);
+  });
+
   test("um deputado que satisfaz mais de uma regra é contado uma vez só", () => {
     const e = eleito({ uf: "SP", nomeUrna: "Fulano Fictício", nomeCompleto: "Fulano de Tal Ficticio" });
 

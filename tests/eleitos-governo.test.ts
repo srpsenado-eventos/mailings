@@ -93,6 +93,11 @@ describe("classificarGovernadores", () => {
       expect(r).toMatchObject({ destino: "conferir", motivo: "Planilha de deputados atuais não enviada: conferir se é deputado federal em exercício" });
     });
 
+    test("com dois deputados homônimos na lista vai para conferir com o motivo do homônimo", () => {
+      const [r] = classificarGovernadores([e], [], [atual, { ...atual, nomeCivil: "Marta Aparecida Fictícia Lima" }]);
+      expect(r).toMatchObject({ destino: "conferir", motivo: "Mais de um deputado em exercício casa este nome: conferir" });
+    });
+
     test("com a lista enviada e a pessoa fora dela mantém o motivo de não estar em exercício", () => {
       const [r] = classificarGovernadores([e], [], []);
       expect(r.motivo).toBe("Planilha diz deputado federal atual, mas a pessoa não está na lista de deputados em exercício");

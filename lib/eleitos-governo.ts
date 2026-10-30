@@ -1,6 +1,6 @@
 import { normalizarTexto } from "@/lib/normalize";
 import { siglaDaUf, ufNoTexto } from "@/lib/uf";
-import { casaDoGrupo, casaPessoa, chavePessoa, constaEntreAtuaisPor, MOTIVO_AMBIGUO, referencia } from "@/lib/eleitos-casamento";
+import { casaDoGrupo, casaPessoa, chavePessoa, deputadosEmExercicio, MOTIVO_AMBIGUO, MOTIVO_HOMONIMO_EM_EXERCICIO, referencia } from "@/lib/eleitos-casamento";
 import type {
   ContatoPlanilha,
   DeputadoAtual,
@@ -80,7 +80,9 @@ function classificarUm(
           : conferir(e, "Planilha diz deputado federal atual, mas a pessoa não está no grupo de deputados federais do Contatos");
       }
       if (!atuais) return conferir(e, MOTIVO_SEM_LISTA_DEPUTADOS);
-      const d = constaEntreAtuaisPor(e.uf, e.nomeCompleto, e.nomeUrna, atuais);
+      const achados = deputadosEmExercicio(e, atuais);
+      if (achados.length > 1) return conferir(e, MOTIVO_HOMONIMO_EM_EXERCICIO);
+      const [d] = achados;
       return d
         ? { eleito: e, destino: "outro_cargo", contatos: [], deputadoAtual: { uf: d.uf, nomeParlamentar: d.nomeParlamentar } }
         : conferir(e, "Planilha diz deputado federal atual, mas a pessoa não está na lista de deputados em exercício");

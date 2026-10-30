@@ -121,6 +121,20 @@ describe("classificarEleitos: contradições viram conferir", () => {
     expect(r.motivo).toBe("Planilha diz mandato novo, mas a pessoa está na lista de deputados em exercício");
   });
 
+  test("mandato novo com dois deputados homônimos em exercício vai para conferir, nunca para novo", () => {
+    const joanaDep: DeputadoAtual = { uf: "MA", nomeParlamentar: "Joana Fictícia", nomeCivil: "Outra Civil" };
+    const [r] = classificarEleitos([eleito({ casa: "camara", statusMandato: "Mandato novo" })], [], [joanaDep, { ...joanaDep, nomeCivil: "Outra Civil Dois" }]);
+    expect(r.destino).toBe("conferir");
+    expect(r.motivo).toBe("Mais de um deputado em exercício casa este nome: conferir");
+  });
+
+  test("deputado atual na planilha com dois homônimos na lista vai para conferir com o motivo do homônimo", () => {
+    const joanaDep: DeputadoAtual = { uf: "MA", nomeParlamentar: "Joana Fictícia", nomeCivil: "Outra Civil" };
+    const [r] = classificarEleitos([eleito({ statusMandato: "Mandato novo (atual deputado federal)" })], [], [joanaDep, { ...joanaDep, nomeCivil: "Outra Civil Dois" }]);
+    expect(r.destino).toBe("conferir");
+    expect(r.motivo).toBe("Mais de um deputado em exercício casa este nome: conferir");
+  });
+
   test("mandato novo fora da lista de deputados em exercício continua novo", () => {
     const atuais: DeputadoAtual[] = [{ uf: "MA", nomeParlamentar: "Outro Nome", nomeCivil: "Outra Pessoa" }];
     const [r] = classificarEleitos([eleito({ casa: "camara", statusMandato: "Mandato novo" })], [], atuais);

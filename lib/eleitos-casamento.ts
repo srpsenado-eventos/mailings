@@ -6,6 +6,7 @@ import type { CasaLegislativa, ContatoDoEleito, ContatoPlanilha, DeputadoAtual, 
 /** Casamento de pessoa e de grupo compartilhado pelos eixos de eleitos e de governadores. Módulo-folha: não importa os dois. */
 
 export const MOTIVO_AMBIGUO = "Nome casa mais de um contato do Contatos";
+export const MOTIVO_HOMONIMO_EM_EXERCICIO = "Mais de um deputado em exercício casa este nome: conferir";
 
 export function casaDoGrupo(grupo: string): { casa: CasaLegislativa; eleitos: boolean } | undefined {
   const g = normalizarTexto(grupo);

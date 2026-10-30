@@ -1,5 +1,5 @@
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
-import { casaDoGrupo, casaPessoa, chavePessoa, constaEntreAtuais, MOTIVO_AMBIGUO, referencia } from "@/lib/eleitos-casamento";
+import { casaDoGrupo, casaPessoa, chavePessoa, deputadosEmExercicio, MOTIVO_AMBIGUO, MOTIVO_HOMONIMO_EM_EXERCICIO, referencia } from "@/lib/eleitos-casamento";
 import { agruparSegundoTurno, classificarGovernadores, paraContatoGoverno } from "@/lib/eleitos-governo";
 import type {
   CasaLegislativa,
@@ -93,8 +93,10 @@ function classificarUm(
   }
 
   if (regra.destino === "novo") {
-    if (atuais && constaEntreAtuais(e, atuais)) {
-      return { ...base, destino: "conferir", motivo: MOTIVO_NOVO_EM_EXERCICIO, contatos: [] };
+    const emExercicio = atuais ? deputadosEmExercicio(e, atuais).length : 0;
+    if (emExercicio > 0) {
+      const motivo = emExercicio > 1 ? MOTIVO_HOMONIMO_EM_EXERCICIO : MOTIVO_NOVO_EM_EXERCICIO;
+      return { ...base, destino: "conferir", motivo, contatos: [] };
     }
     const atual = achados.find((a) => !a.eleitos);
     if (atual) {
@@ -104,8 +106,12 @@ function classificarUm(
     return { ...base, destino: "novo", contatos: noGrupoNovo.map(referencia), ...(noGrupoNovo.length > 0 ? { jaCadastrado: true } : {}) };
   }
 
-  if (regra.casaAtual === "camara" && atuais && !constaEntreAtuais(e, atuais)) {
-    return { ...base, destino: "conferir", motivo: "Planilha diz deputado federal atual, mas a pessoa não está na lista de deputados em exercício", contatos: [] };
+  const naLista = regra.casaAtual === "camara" && atuais ? deputadosEmExercicio(e, atuais).length : undefined;
+  if (naLista !== undefined && naLista !== 1) {
+    const motivo = naLista > 1
+      ? MOTIVO_HOMONIMO_EM_EXERCICIO
+      : "Planilha diz deputado federal atual, mas a pessoa não está na lista de deputados em exercício";
+    return { ...base, destino: "conferir", motivo, contatos: [] };
   }
   const noGrupo = achados.filter((a) => !a.eleitos && a.casa === regra.casaAtual);
   const confereContatos = regra.casaAtual === "senado" || camaraNoContatos;

@@ -66,6 +66,7 @@ Camada B hoje: regra da tabela de protocolo por cargo; cargo sem regra sai `sem_
 
 Vale para os grupos "Ex-Presidentes do Senado" e "Ex-Presidentes da República" (segmentos do catálogo).
 
+- **Adendo de 30/10 (decisão do Clovis, depois da revisão da implementação):** nesses dois grupos, **todo cargo que não esteja exatamente no formato** "<cargo> de AAAA a AAAA" (um ou mais períodos válidos) diverge, não só o que começa com "Ex-": "Presidente do Senado Federal" sem período, "Presidente do Senado de 2019 a 2021" (sem "Federal") e "Senador" também são acusados. Cargo vazio fica com o achado "Cargo vazio" de sempre. Fora desses grupos nada muda.
 - Cargo do Contatos que começa com "Ex-" (ou "Ex " / "Ex-Presidente") **diverge** sempre. O esperado é "Presidente do Senado Federal de AAAA a AAAA" / "Presidente da República Federativa do Brasil de AAAA a AAAA": quando a página (ou a composição) traz o período da pessoa, o app preenche os anos; senão, deixa "AAAA" e a observação "Informar o período da presidência".
 - Cargo já no formato "Presidente do … de AAAA a AAAA" confere com a página que diz "Presidente do Senado Federal" (compara o papel; o período só precisa ter dois anos de quatro dígitos, o segundo maior ou igual ao primeiro; "1º Vice-Presidente" na página continua divergência).
 - **Mais de um mandato** (Sarney, Renan): **ainda a definir pelo Clovis** (30/10). Até lá o app aceita um ou mais períodos no formato "de AAAA a AAAA", separados por vírgula ou "e", e não propõe qual período escrever quando há mais de um (deixa "AAAA" e a observação).

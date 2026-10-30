@@ -18,9 +18,11 @@ import type {
   TentativaDeUrl,
 } from "@/lib/types";
 import { agruparPorGrupo } from "@/lib/planilha";
+import { modoDoGrupo } from "@/lib/agrupador";
 import {
   aplicarNomesDoContatos,
   compararContatoIndividual,
+  compararContatoSemFonteOficial,
   compararContatoSemIndividual,
   compararGrupo,
   contarContatosCasados,
@@ -359,6 +361,24 @@ async function analisarGrupo(
   deps: Dependencias,
   agora: Date,
 ): Promise<AnaliseDoGrupo> {
+  // Grupos de modo `lista` e `neutro` do agrupador da Posse 2027 não têm página oficial: nada é
+  // resolvido, raspado nem enviado à IA, e nunca viram "sem fonte" nem "possível saída" (spec §4.5).
+  const modo = modoDoGrupo(grupo);
+  if (modo !== "fonte") {
+    // Sem `resolverFonte` não há responsável do catálogo (esses grupos não estão nele).
+    return {
+      grupo: {
+        grupo,
+        semFonte: false,
+        fiscalizacao: modo,
+        contatos: contatos.map((c) => compararContatoSemFonteOficial(c, modo)),
+        novos: [],
+      },
+      leituras: SEM_LEITURAS,
+      tentadas: SEM_TENTADAS,
+    };
+  }
+
   const resolvida = await deps.resolverFonte(grupo);
   // Grupo desconhecido (nenhum cadastro casa) → sem fonte; orienta com sugestões.
   if (!resolvida.grupoCanonico) {

@@ -190,6 +190,12 @@ export interface ResultadoGrupo {
   /** Não há URL oficial cadastrada para o grupo. */
   semFonte: boolean;
   /**
+   * Modo de fiscalização do agrupador da Posse 2027 quando não é a página oficial (spec 2026-10-30
+   * §4.5): `lista` (comparado com as planilhas) ou `neutro` (convidados, sem fonte oficial).
+   * Ausente nos grupos lidos por fonte.
+   */
+  fiscalizacao?: "lista" | "neutro";
+  /**
    * Há URL cadastrada, mas o scrape falhou (TLS, WAF, timeout, bloqueio de IP).
    * Distinto de `semFonte`: a fonte existe, só não foi possível lê-la agora.
    */

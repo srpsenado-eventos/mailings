@@ -106,9 +106,12 @@ function comDecisao(a: AutoridadeRepetida, x: Aplicado, noContatos: SituacaoNoCo
   };
 }
 
-/** Ocorrência que convida, quando o grupo decidido está entre as da autoridade; a do Contatos primeiro. */
+/**
+ * Ocorrência que convida: só a do Contatos ou a da planilha da Câmara, no grupo decidido (a do
+ * Contatos primeiro). O eleito ligado pelo eixo não está cadastrado no grupo do convite e nunca vale.
+ */
 function ocorrenciaDoConvite(ocorrencias: readonly OcorrenciaRepetida[], convite: string): OcorrenciaRepetida | undefined {
-  const casam = ocorrencias.filter((o) => mesmoGrupo(equivalenteDaOcorrencia(o), convite));
+  const casam = ocorrencias.filter((o) => o.origem !== "eleicao" && mesmoGrupo(equivalenteDaOcorrencia(o), convite));
   return casam.find((o) => o.origem === "contatos") ?? casam[0];
 }
 

@@ -13,7 +13,7 @@ import { PublicarButton } from "@/components/publicar-button";
 import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-contato";
 import { avisoUrlCaida, cartoesDoResumo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoAlternativa, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoMudanca, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, textosProvisorias, type Filtro } from "@/lib/painel";
 import type { HistoricoDecisoes } from "@/lib/decisoes";
-import { autoridadesRepetidas, etiquetaDeRepeticao, textoLinkRepetidas } from "@/lib/repetidos";
+import { autoridadesRepetidas, etiquetaDeRepeticao, textoDoLinkDoPainel } from "@/lib/repetidos";
 import type { FalhasPorUrl, ResultadoGrupo, Retrato } from "@/lib/types";
 
 function EstadoDaFonte({ g, falhas }: { g: ResultadoGrupo; falhas?: FalhasPorUrl }) {
@@ -66,6 +66,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
   const avisoEleicao = eleicaoLigada ? avisoDaEleicao(retrato.eleicao) : undefined;
   const grupos = useMemo(() => filtrarGrupos(retrato.grupos, filtro, busca, grupo), [retrato, filtro, busca, grupo]);
   const repetidas = useMemo(() => autoridadesRepetidas(retrato.grupos, retrato.eleicao, decisoes), [retrato, decisoes]);
+  const linkRepetidas = textoDoLinkDoPainel(repetidas);
   const deputados = useMemo(() => grupoDeputados(retrato.eleicao, { busca, filtro, grupo }), [retrato, busca, filtro, grupo]);
   const total = retrato.resumo.total;
   const visiveis = contarContatos(grupos);
@@ -102,7 +103,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
         </div>
         <div className="flex items-center gap-2">
           <Link href="/grupos" className="text-sm text-acao underline">Grupos cadastrados</Link>
-          {repetidas.length > 0 && <Link href="/repetidos" className="text-sm text-acao underline">{textoLinkRepetidas(repetidas)}</Link>}
+          {linkRepetidas && <Link href="/repetidos" className="text-sm text-acao underline">{linkRepetidas}</Link>}
           {modo !== "web" && (onNovaVarredura ? (
             <button type="button" onClick={onNovaVarredura} className="rounded-md border border-borda-forte bg-cartao px-3 py-1.5 text-sm">Nova varredura</button>
           ) : (

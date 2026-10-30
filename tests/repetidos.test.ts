@@ -1,10 +1,10 @@
 import { describe, expect, test } from "vitest";
 import {
   autoridadesRepetidas, escolherGrupo, etiquetaDeRepeticao, filtrarRepetidas, MOTIVO_ELEITO_SEM_CARGO_ATUAL, MOTIVO_PARCIAL,
-  MOTIVO_SEM_NIVEL, eleitosLigados, MOTIVO_ELEICAO_NOVO, ocorrenciasDeFora, rotuloOrigem, separarRepetidas, textoEleitosRepetidos, textoLinkRepetidas, textoRepetidas,
+  MOTIVO_SEM_NIVEL, eleitosLigados, MOTIVO_ELEICAO_NOVO, ocorrenciasDeFora, rotuloOrigem, separarRepetidas, textoDoLinkDoPainel, textoEleitosRepetidos, textoLinkRepetidas, textoRepetidas,
   type OcorrenciaRepetida,
 } from "@/lib/repetidos";
-import { GRUPO_DEPUTADOS_ELEITOS } from "@/data/grupos-posse";
+import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
 import { HISTORICO_VAZIO, registrar, type HistoricoDecisoes, type RegistroManual } from "@/lib/decisoes";
 import { resumoDoGrupo, situacaoDoContato } from "@/lib/painel";
 import type {
@@ -857,21 +857,87 @@ describe("decisões do GT nos repetidos (spec 2026-10-30 §4.1.3)", () => {
     expect(bia?.situacao).toBe("tratado");
   });
 
-  test("eleito ligado: o grupo de destino vale como grupo do convite", () => {
-    const h = decidir(HISTORICO_VAZIO, "Ciro Fictício", manual({
+  describe("eleito ligado e o grupo do convite", () => {
+    const decisaoCiro = decidir(HISTORICO_VAZIO, "Ciro Fictício", manual({
       tipo: "mesma_pessoa", convidaPor: "Deputados Federais", grupos: ["Ex-Presidentes do Senado", "Deputados Federais"],
     }));
-    const repetidas = autoridadesRepetidas(
-      [exPresidenteSenado("Ciro Fictício")],
-      eleicao({ eleitos: [eleito("camara", "Ciro Fictício", "Ciro Fictício de Souza", "CE", [lig("Ex-Presidentes do Senado", "Ciro Fictício")], { grupoDestino: "Deputados Federais" })] }),
-      h,
-    );
-    expect(repetidas[0].situacao).toBe("decidido_gt");
-    expect(repetidas[0].convidaPor?.origem).toBe("eleicao");
-    expect(repetidas[0].convidaPor?.grupoEquivalente).toBe("Deputados Federais");
-    expect(etiquetaDeRepeticao(repetidas, linha("Ciro Fictício", "x"), "Ex-Presidentes do Senado")).toMatchObject({
-      fosca: true, etiqueta: { texto: "Será convidada pelo grupo Deputados Federais (decisão do GT de 26/10)" },
+    const ciroEleito = eleito("camara", "Ciro Fictício", "Ciro Fictício de Souza", "CE", [lig("Ex-Presidentes do Senado", "Ciro Fictício")], { grupoDestino: "Deputados Federais" });
+
+    test("o grupo de destino do eleito identifica o caso, mas não vale como grupo do convite", () => {
+      // Arrange / Act
+      const repetidas = autoridadesRepetidas([exPresidenteSenado("Ciro Fictício")], eleicao({ eleitos: [ciroEleito] }), decisaoCiro);
+      // Assert
+      expect(repetidas[0].situacao).toBe("decidido_gt");
+      expect(repetidas[0].ocorrencias.find((o) => o.origem === "eleicao")?.grupoEquivalente).toBe("Deputados Federais");
+      expect(repetidas[0].convidaPor).toBeUndefined();
+      expect(etiquetaDeRepeticao(repetidas, linha("Ciro Fictício", "x"), "Ex-Presidentes do Senado")).toEqual({
+        etiqueta: expect.objectContaining({ tom: "atencao", texto: "Grupo do convite Deputados Federais sem a pessoa no Contatos" }),
+        fosca: false,
+      });
     });
+
+    test("com a planilha da Câmara, a ocorrência da Câmara vale como grupo do convite", () => {
+      // Arrange / Act
+      const repetidas = autoridadesRepetidas(
+        [exPresidenteSenado("Ciro Fictício")],
+        eleicao({ eleitos: [ciroEleito], deputadosAtuais: [deputado("Ciro Fictício", "Ciro Fictício de Souza")] }),
+        decisaoCiro,
+      );
+      // Assert
+      expect(repetidas[0].convidaPor?.origem).toBe("camara");
+      expect(etiquetaDeRepeticao(repetidas, linha("Ciro Fictício", "x"), "Ex-Presidentes do Senado")).toMatchObject({
+        fosca: true, etiqueta: { texto: "Será convidada pelo grupo Deputados Federais (decisão do GT de 26/10)" },
+      });
+    });
+
+    test("Deltan decidido para Senadores eleitos, só ligado pelo eixo: a linha do Contatos fica em atenção, sem fosco", () => {
+      // Arrange
+      const h = decidir(HISTORICO_VAZIO, "Deltan Dallagnol", manual({
+        tipo: "mesma_pessoa", convidaPor: GRUPO_SENADORES_ELEITOS, grupos: ["Ex-Senadores", GRUPO_SENADORES_ELEITOS],
+      }));
+      const deltan = eleito("senado", "Deltan Dallagnol", "Deltan Martinazzo Dallagnol", "PR", [lig("Ex-Senadores", "Deltan Dallagnol")], {
+        destino: "novo", grupoDestino: GRUPO_SENADORES_ELEITOS,
+      });
+      // Act
+      const repetidas = autoridadesRepetidas([grupo("Ex-Senadores", [linha("Deltan Dallagnol", "Ex-Senador")])], eleicao({ eleitos: [deltan] }), h);
+      const marca = etiquetaDeRepeticao(repetidas, linha("Deltan Dallagnol", "x"), "Ex-Senadores");
+      // Assert
+      expect(repetidas[0].situacao).toBe("decidido_gt");
+      expect(repetidas[0].convidaPor).toBeUndefined();
+      expect(marca?.fosca).toBe(false);
+      expect(marca?.etiqueta.tom).toBe("atencao");
+    });
+  });
+
+  test("Cueva saiu do STJ e entrou no STF: o caso reabre, nunca decide pela regra", () => {
+    // Arrange / Act
+    const [a, ...resto] = autoridadesRepetidas([tseM(CUEVA), stf(CUEVA)], undefined, decisaoCueva);
+    // Assert
+    expect(resto).toEqual([]);
+    expect(a.situacao).toBe("conferir");
+    expect(a.motivo).toBe("grupo novo desde a decisão de 26/10");
+    expect(a.caso?.nome).toBe(CUEVA);
+  });
+
+  test("decisão em três grupos, pessoa hoje em dois deles: vale a decisão, linha do outro grupo fosca", () => {
+    // Arrange
+    const h = decidir(HISTORICO_VAZIO, CUEVA, manual({
+      tipo: "mesma_pessoa", convidaPor: "Ministros do TSE", grupos: ["Ministros do TSE", "Ministros do STJ", "Ministros do STF"],
+    }));
+    // Act
+    const repetidas = autoridadesRepetidas([stj(CUEVA), tseM(CUEVA)], undefined, h);
+    // Assert
+    expect(repetidas[0].situacao).toBe("decidido_gt");
+    expect(etiquetaDeRepeticao(repetidas, linha(CUEVA, "x"), "Ministros do STJ")?.fosca).toBe(true);
+  });
+
+  test("link do painel: sem ninguém em dois ou mais grupos, só as decisões do GT", () => {
+    // Arrange
+    const h = decidir(HISTORICO_VAZIO, "Nunes Marques", manual({ tipo: "mesma_pessoa", convidaPor: "Ministros do TSE", grupos: ["Ministros do STF", "Ministros do TSE"] }));
+    // Act / Assert
+    expect(textoDoLinkDoPainel(autoridadesRepetidas([tseM("Nunes Marques")], undefined, h))).toBe("Decisões do GT");
+    expect(textoDoLinkDoPainel(autoridadesRepetidas([stf(), tse()], undefined, h))).toBe("1 autoridade em mais de um grupo");
+    expect(textoDoLinkDoPainel([])).toBeUndefined();
   });
 
   test("filtros pelas situações novas", () => {

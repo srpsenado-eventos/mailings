@@ -122,9 +122,10 @@ export function acharCaso(
 }
 
 /**
- * Todos os casos com decisão da pessoa, para a tela e o painel: alguma chave de nome em comum e os
- * grupos do registro vigente contidos em `gruposEquivalentes`. `acharCaso` continua escolhendo um só
- * caso, para registrar.
+ * Todos os casos com decisão da pessoa, para a tela e o painel: alguma chave de nome em comum e ao
+ * menos um grupo do registro vigente em `gruposEquivalentes`. A pessoa que saiu de um grupo do caso
+ * continua com o caso (que pode reabrir); o nome já identifica a pessoa. `acharCaso` continua
+ * escolhendo um só caso, para registrar.
  */
 export function casosDaPessoa(
   h: HistoricoDecisoes,
@@ -134,7 +135,7 @@ export function casosDaPessoa(
   const procuradas = new Set(chavesDe(nomes));
   const alvo = conjuntoDeGrupos(gruposEquivalentes);
   return h.casos.filter((c) =>
-    c.chaves.some((ch) => procuradas.has(ch)) && vigente(c) !== undefined && contem(alvo, gruposDoCaso(c)));
+    c.chaves.some((ch) => procuradas.has(ch)) && vigente(c) !== undefined && intersecao(gruposDoCaso(c), alvo) > 0);
 }
 
 /**

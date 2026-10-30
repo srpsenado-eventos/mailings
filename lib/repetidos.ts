@@ -328,6 +328,15 @@ export function emMaisDeUmGrupo(a: AutoridadeRepetida): boolean {
   return new Set(a.ocorrencias.map((o) => o.grupoRegra)).size >= 2;
 }
 
+/**
+ * Texto do link do painel para /repetidos: a contagem de quem está em 2 ou mais grupos; sem ninguém
+ * assim, mas com decisões do GT na lista, "Decisões do GT"; lista vazia, sem link.
+ */
+export function textoDoLinkDoPainel(lista: readonly AutoridadeRepetida[]): string | undefined {
+  if (lista.some(emMaisDeUmGrupo)) return textoLinkRepetidas(lista);
+  return lista.length > 0 ? "Decisões do GT" : undefined;
+}
+
 /** Texto do link do painel: as demais e, quando há, o contador de eleitos já no Contatos; só quem está em 2+ grupos. */
 export function textoLinkRepetidas(lista: readonly AutoridadeRepetida[]): string {
   const { demais, eleitos } = separarRepetidas(lista.filter(emMaisDeUmGrupo));

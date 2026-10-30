@@ -4,11 +4,12 @@ import { useRouter } from "next/navigation";
 import { lerPlanilha, ColunaFaltanteError } from "@/lib/planilha";
 import { lerBaseEnderecos, lerPlanilhaEnderecos } from "@/lib/planilha-enderecos";
 import { juntarArquivosEleicao, lerPlanilhaEleicao, PlanilhaEleicaoDesconhecidaError, resumoArquivoEleicao, separarColisoesDeTipo, substituirPorTipo, type ArquivoEleicaoLido } from "@/lib/planilha-eleitos";
-import { triarArquivosSoltos } from "@/lib/arquivos-soltos";
+import { extensoesDoPasso, triarArquivosSoltos } from "@/lib/arquivos-soltos";
 import { juntarMensagens } from "@/lib/texto";
+import { rotaDepoisDaVarredura } from "@/lib/decisoes-coleta";
 import type { BaseEnderecos, ContatoPlanilha, EnderecoEstruturado, Retrato } from "@/lib/types";
 
-type Resposta = { ok: true; retrato: Retrato; aviso?: string } | { ok: false; message?: string };
+type Resposta = { ok: true; retrato: Retrato; aviso?: string; avisoDecisoes?: string } | { ok: false; message?: string };
 
 interface ArquivoContatos { nome: string; contatos: ContatoPlanilha[]; grupos: number }
 interface ArquivoEnderecos { nome: string; enderecos: EnderecoEstruturado[]; base: BaseEnderecos }
@@ -101,7 +102,7 @@ function SeletorDeArquivo({ id, rotulo, desabilitado, multiplo = false, onEntreg
       <input
         id={id}
         type="file"
-        accept=".xlsx,.csv"
+        accept={extensoesDoPasso(multiplo).join(",")}
         className="sr-only"
         disabled={desabilitado}
         multiple={multiplo}
@@ -223,7 +224,8 @@ export function NovaVarreduraForm({ onRetratoNaoGuardado }: { onRetratoNaoGuarda
         onRetratoNaoGuardado(json.retrato, json.aviso);
         return;
       }
-      router.push("/");
+      // Retrato guardado; se as decisões não foram atualizadas, o painel mostra o aviso.
+      router.push(rotaDepoisDaVarredura(json.avisoDecisoes));
       router.refresh();
     } catch (err) {
       setErroVarredura(err instanceof Error ? `Falha na varredura: ${err.message}` : "Falha na varredura.");

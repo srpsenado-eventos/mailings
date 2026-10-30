@@ -10,6 +10,8 @@ import type { Retrato } from "@/lib/types";
  * só em modo local.
  */
 export const CAMINHO_RETRATO_BLOB = "retratos/retrato.json";
+/** Decisões do GT (spec 2026-10-30 §4.1.2): objeto separado do retrato, publicado junto com ele. */
+export const CAMINHO_DECISOES_BLOB = "retratos/decisoes.json";
 
 export interface ClienteBlob {
   /** Texto do objeto, ou `undefined` se não existe. */

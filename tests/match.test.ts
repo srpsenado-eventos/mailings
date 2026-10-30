@@ -2,10 +2,13 @@ import { describe, expect, test } from "vitest";
 import {
   aplicarNomesDoContatos,
   compararContato,
+  compararContatoSemFonteOficial,
   compararGrupo,
   contarContatosCasados,
   marcarFonteInacessivel,
   mesclarComposicao,
+  MOTIVO_SEM_LISTA,
+  OBSERVACAO_SEM_FONTE_OFICIAL,
   pontuarPessoa,
   sugerirGrupos,
   unirFontes,
@@ -514,5 +517,40 @@ describe("aplicarNomesDoContatos (spec 2026-10-23 §4.2)", () => {
   test("lista vazia devolve o grupo igual", () => {
     const antes = compararGrupo("G", contatos, fonte);
     expect(aplicarNomesDoContatos(antes, [])).toEqual(antes);
+  });
+});
+
+describe("compararContatoSemFonteOficial (spec 2026-10-30 §4.5)", () => {
+  const OK: ContatoPlanilha = {
+    nome: "Fulano de Tal",
+    grupo: "Convidados do presidente eleito - Posse 2027",
+    tratamento: "Senhor",
+    enderecamento: "A Sua Excelência o Senhor",
+    telefone: "(61) 1111-1111",
+  };
+
+  test("neutro com tratamento coerente sai verde, com a observação de sem fonte oficial", () => {
+    const r = compararContatoSemFonteOficial(OK, "neutro");
+    expect(r.semaforo).toBe("verde");
+    expect(r.observacao).toBe(OBSERVACAO_SEM_FONTE_OFICIAL);
+    expect(r.possivelSaida).toBeUndefined();
+    expect(r.camposDivergentes.some((d) => d.campo === "fonte")).toBe(false);
+    expect(r.comparacoes.filter((c) => c.campo === "nome" || c.campo === "cargo").every((c) => c.situacao === "fonte_nao_informa")).toBe(true);
+    expect(r.comparacoes.some((c) => c.campo === "telefone" && c.situacao === "fonte_nao_informa")).toBe(true);
+  });
+
+  test("neutro com tratamento divergente do gênero do cargo sai amarelo, nunca saída", () => {
+    const r = compararContatoSemFonteOficial({ ...OK, tratamento: "Senhora", cargo: "Ministro de Estado" }, "neutro");
+    expect(r.semaforo).toBe("amarelo");
+    expect(r.camposDivergentes.length).toBeGreaterThan(0);
+    expect(r.possivelSaida).toBeUndefined();
+  });
+
+  test("lista sai indeterminado com o motivo de sem a lista, nunca saída", () => {
+    const r = compararContatoSemFonteOficial(OK, "lista");
+    expect(r.semaforo).toBe("indeterminado");
+    expect(r.observacao).toBe(MOTIVO_SEM_LISTA);
+    expect(r.possivelSaida).toBeUndefined();
+    expect(r.camposDivergentes.some((d) => d.campo === "fonte")).toBe(false);
   });
 });

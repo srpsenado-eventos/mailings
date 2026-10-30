@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { analisar, type Dependencias } from "@/lib/analise";
 import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload";
 import { armazemPadrao, type Armazem } from "@/lib/armazem";
+import { armazemDecisoesPadrao, atualizarDecisoes } from "@/lib/armazem-decisoes";
+import { AVISO_DECISOES_NAO_ATUALIZADAS, registrarColetasDoRetrato } from "@/lib/decisoes-coleta";
+import type { HistoricoDecisoes } from "@/lib/decisoes";
 import { aplicarEleicao } from "@/lib/eleitos";
 import { resolverGrupoEFonte } from "@/lib/catalogo";
-import { falhasDoRetrato, memoriaDoRetrato } from "@/lib/memoria-leitura";
+import { aplicarListas } from "@/lib/grupos-lista";
+import { diaMes, falhasDoRetrato, memoriaDoRetrato } from "@/lib/memoria-leitura";
 import { modoDoApp } from "@/lib/modo";
 import { origemPermitida } from "@/lib/origem";
 import { montarRetrato } from "@/lib/painel";
@@ -14,6 +18,36 @@ import { extrairComposicao, diagnosticarIa } from "@/lib/gemini";
 import type { Retrato } from "@/lib/types";
 
 const AVISO_NAO_GUARDADO = "A varredura terminou, mas o retrato não pôde ser guardado: na próxima abertura o app não a terá.";
+
+/**
+ * Situação no Contatos de cada caso decidido (spec 2026-10-30 §4.1.4), só com o retrato guardado.
+ * Falha vira `avisoDecisoes` (campo próprio: `aviso` quer dizer "retrato não guardado" para a tela)
+ * e não derruba a varredura; o arquivo de decisões ilegível não é sobrescrito.
+ */
+async function registrarColetaNasDecisoes(retrato: Retrato): Promise<string | undefined> {
+  try {
+    await atualizarDecisoes(armazemDecisoesPadrao(), (h) => registrarColetasDoRetrato(h, retrato));
+    return undefined;
+  } catch (err) {
+    // Só o motivo técnico: nada de nomes no log.
+    console.error("[/api/analise] decisões não atualizadas:", err instanceof Error ? err.message : "erro desconhecido");
+    return AVISO_DECISOES_NAO_ATUALIZADAS;
+  }
+}
+
+/**
+ * Decisões do GT para a classificação dos eleitos (spec 2026-10-30 §4.1.1), lidas antes de gravar o
+ * retrato. Ilegível vira "sem decisões": os eleitos seguem a regra e a coleta, depois, avisa.
+ */
+async function lerDecisoesParaEleicao(): Promise<HistoricoDecisoes | undefined> {
+  try {
+    return await armazemDecisoesPadrao().ler();
+  } catch (err) {
+    // Só o motivo técnico: nada de nomes no log.
+    console.error("[/api/analise] decisões ilegíveis, eleitos classificados sem elas:", err instanceof Error ? err.message : "erro desconhecido");
+    return undefined;
+  }
+}
 
 /** Retrato anterior, só para a memória de leitura e as falhas por URL: ausente ou ilegível vale como "sem memória" (spec 2026-10-20 §10). */
 async function lerRetratoAnterior(armazem: Armazem): Promise<Retrato | undefined> {
@@ -76,9 +110,12 @@ export async function POST(req: NextRequest) {
       await sessao.fechar();
     }
     // Eleição 2026: passada posterior, eixo próprio (spec 2026-10-05 §4.3).
-    const resultado = eleitos || deputadosAtuais || governadores
-      ? aplicarEleicao(analisado, eleitos ?? [], arquivosEleicao ?? [], deputadosAtuais, governadores)
+    // A decisão do GT vence a regra na classificação dos eleitos (spec 2026-10-30 §4.1.1).
+    const comEleicao = eleitos || deputadosAtuais || governadores
+      ? aplicarEleicao(analisado, eleitos ?? [], arquivosEleicao ?? [], deputadosAtuais, governadores, await lerDecisoesParaEleicao())
       : analisado;
+    // Grupos de modo `lista` comparados com as planilhas desta varredura (spec 2026-10-30 §4.6).
+    const resultado = aplicarListas(comEleicao, diaMes(agora.toISOString()));
     const retrato = montarRetrato(
       resultado,
       {
@@ -99,12 +136,13 @@ export async function POST(req: NextRequest) {
       console.error("[/api/analise] retrato não guardado:", err instanceof Error ? err.message : "erro desconhecido");
       aviso = AVISO_NAO_GUARDADO;
     }
+    const avisoDecisoes = aviso ? undefined : await registrarColetaNasDecisoes(retrato);
 
     // Diagnóstico temporário (não-PII): só roda com ?diag=1 (custo zero no fluxo normal).
     const diag = req.nextUrl.searchParams.get("diag") === "1" ? await diagnosticarIa() : undefined;
     // A base inteira tem PII e a memória só interessa à máquina: ambas já estão no arquivo local.
     const { baseEnderecos: _baseGuardada, leituras: _memoria, ...retratoDaResposta } = retrato;
-    return NextResponse.json({ ok: true, retrato: retratoDaResposta, ...(aviso ? { aviso } : {}), ...(diag ? { diag } : {}) });
+    return NextResponse.json({ ok: true, retrato: retratoDaResposta, ...(aviso ? { aviso } : {}), ...(avisoDecisoes ? { avisoDecisoes } : {}), ...(diag ? { diag } : {}) });
   } catch (err) {
     if (err instanceof PayloadInvalidoError) {
       return NextResponse.json({ ok: false, message: err.message }, { status: 422 });

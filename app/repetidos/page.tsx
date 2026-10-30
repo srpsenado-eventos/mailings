@@ -9,5 +9,5 @@ export default async function Repetidos() {
   const carga = await carregarRetrato("/repetidos");
   if ("aviso" in carga) return carga.aviso;
   const { grupos, eleicao, geradoEm } = carga.retrato;
-  return <TelaRepetidos repetidas={autoridadesRepetidas(grupos, eleicao)} geradoEm={geradoEm} />;
+  return <TelaRepetidos repetidas={autoridadesRepetidas(grupos, eleicao, carga.decisoes)} geradoEm={geradoEm} aviso={carga.avisoDecisoes} modo={carga.modo} />;
 }

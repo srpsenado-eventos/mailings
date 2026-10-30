@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { armazemPadrao, RetratoIlegivelError } from "@/lib/armazem";
 import { armazemEmBlob, clienteBlobPadrao } from "@/lib/armazem-blob";
+import { armazemDecisoesEmBlob, armazemDecisoesPadrao, DecisoesIlegiveisError } from "@/lib/armazem-decisoes";
 import { modoDoApp } from "@/lib/modo";
 import { origemPermitida } from "@/lib/origem";
 import { enxugarParaPublicar } from "@/lib/publicar";
@@ -8,6 +9,7 @@ import { enxugarParaPublicar } from "@/lib/publicar";
 /**
  * Publica o último retrato desta máquina no Blob, sem telefone, e-mail e rede social
  * (spec 2026-10-02 §6.3). Só em modo local; na Vercel não existe. O retrato local não muda.
+ * As decisões do GT vão junto, num objeto próprio (spec 2026-10-30 §4.1.2); sem arquivo, vão vazias.
  */
 export async function POST(req: NextRequest) {
   if (!origemPermitida(req.headers)) return NextResponse.json({ ok: false, message: "Origem não permitida." }, { status: 403 });
@@ -17,11 +19,18 @@ export async function POST(req: NextRequest) {
   try {
     const retrato = await armazemPadrao().lerRetrato();
     if (!retrato) return NextResponse.json({ ok: false, message: "Não há varredura para publicar." }, { status: 400 });
+    // Lidas antes de gravar qualquer coisa: arquivo ilegível não publica nada (nem apaga as decisões da web).
+    const decisoes = await armazemDecisoesPadrao().ler();
     const publicadoEm = new Date().toISOString();
-    await armazemEmBlob(clienteBlobPadrao(token)).gravarRetrato(enxugarParaPublicar(retrato, publicadoEm));
+    const cliente = clienteBlobPadrao(token);
+    // O retrato primeiro: é o que a web mostra. Se as decisões falharem depois, a web fica com o
+    // retrato novo e as decisões da publicação anterior, e publicar de novo acerta as duas.
+    await armazemEmBlob(cliente).gravarRetrato(enxugarParaPublicar(retrato, publicadoEm));
+    await armazemDecisoesEmBlob(cliente).gravar(decisoes);
     return NextResponse.json({ ok: true, publicadoEm });
   } catch (err) {
     if (err instanceof RetratoIlegivelError) return NextResponse.json({ ok: false, message: "O retrato local não pôde ser lido." }, { status: 422 });
+    if (err instanceof DecisoesIlegiveisError) return NextResponse.json({ ok: false, message: "O arquivo .fiscal/decisoes.json não pôde ser lido; nada foi publicado. Restaure o arquivo .fiscal/decisoes.json ou renomeie-o para começar vazio." }, { status: 422 });
     // Só o motivo técnico: nunca o retrato.
     console.error("[/api/publicar] falha:", err instanceof Error ? err.message : "erro desconhecido");
     return NextResponse.json({ ok: false, message: "Não foi possível publicar. Tente de novo." }, { status: 500 });

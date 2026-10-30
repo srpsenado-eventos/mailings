@@ -7,6 +7,8 @@ import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { MOTIVO_NAVEGADOR_AUSENTE } from "@/lib/navegador";
 import { CATALOGO } from "@/data/catalogo";
 import { chaveDaLeitura, MOTIVO_SEM_NINGUEM } from "@/lib/memoria-leitura";
+import { MOTIVO_SEM_LISTA } from "@/lib/match";
+import { GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
 import type { ContatoPlanilha, ConteudoFonte, FonteCatalogo, LeituraGuardada, LeiturasGuardadas } from "@/lib/types";
 
 /**
@@ -1151,4 +1153,54 @@ test("nomesDoContatos da fonte do grupo faz o nome conferir (spec 2026-10-23 §4
     raspar: async () => ({ ...fonte, pessoas: [{ nome: "Garibaldi Alves" }] }),
   });
   expect(r.grupos[0].contatos[0].semaforo).toBe("verde");
+});
+
+describe("analisar: grupos de modo lista e neutro (spec 2026-10-30 §4.5 e §4.6)", () => {
+  const GRUPO_NEUTRO = "Convidados do presidente eleito - Posse 2027";
+
+  const depsEspioes = () => {
+    const resolverFonte = vi.fn(() => {
+      throw new Error("resolverFonte não deveria ser chamado");
+    });
+    const raspar = vi.fn(async () => {
+      throw new Error("raspar não deveria ser chamado");
+    });
+    const extrairComposicao = vi.fn(async () => {
+      throw new Error("extrairComposicao não deveria ser chamado");
+    });
+    const d: Dependencias = { resolverFonte, raspar, extrairComposicao };
+    return { d, resolverFonte, raspar, extrairComposicao };
+  };
+
+  test("não lê página, não chama a IA e não cria possível saída nem sem fonte", async () => {
+    // Arrange
+    const { d, resolverFonte, raspar, extrairComposicao } = depsEspioes();
+    const lote: ContatoPlanilha[] = [
+      { nome: "Senador Eleito Um", grupo: GRUPO_SENADORES_ELEITOS, ...CADASTRO_OK },
+      { nome: "Governador Eleito Dois", grupo: GRUPO_GOVERNADORES_ELEITOS, ...CADASTRO_OK },
+      { nome: "Convidado Três", grupo: GRUPO_NEUTRO, ...CADASTRO_OK },
+    ];
+
+    // Act
+    const r = await analisar("c.xlsx", lote, d);
+
+    // Assert
+    expect(resolverFonte).not.toHaveBeenCalled();
+    expect(raspar).not.toHaveBeenCalled();
+    expect(extrairComposicao).not.toHaveBeenCalled();
+    const todos = r.grupos.flatMap((g) => g.contatos);
+    expect(todos.some((c) => c.possivelSaida)).toBe(false);
+    const doGrupo = (nome: string) => r.grupos.find((g) => g.grupo === nome)!;
+    for (const nome of [GRUPO_SENADORES_ELEITOS, GRUPO_GOVERNADORES_ELEITOS]) {
+      const g = doGrupo(nome);
+      expect(g.fiscalizacao).toBe("lista");
+      expect(g.contatos[0].semaforo).toBe("indeterminado");
+      expect(g.contatos[0].observacao).toBe(MOTIVO_SEM_LISTA);
+    }
+    const neutro = doGrupo(GRUPO_NEUTRO);
+    expect(neutro.fiscalizacao).toBe("neutro");
+    expect(neutro.contatos[0].semaforo).toBe("verde");
+    expect(r.resumo.gruposSemFonte).toBe(0);
+    expect(r.resumo.contatosSemFonte).toBe(0);
+  });
 });

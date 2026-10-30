@@ -1,3 +1,5 @@
+import type { RegistroManual } from "@/lib/decisoes";
+
 /** Uma linha da planilha do Sistema Contatos (campos opcionais exceto nome/grupo). */
 export interface ContatoPlanilha {
   /**
@@ -189,6 +191,12 @@ export interface ResultadoGrupo {
   fonteUrl?: string;
   /** Não há URL oficial cadastrada para o grupo. */
   semFonte: boolean;
+  /**
+   * Modo de fiscalização do agrupador da Posse 2027 quando não é a página oficial (spec 2026-10-30
+   * §4.5): `lista` (comparado com as planilhas) ou `neutro` (convidados, sem fonte oficial).
+   * Ausente nos grupos lidos por fonte.
+   */
+  fiscalizacao?: "lista" | "neutro";
   /**
    * Há URL cadastrada, mas o scrape falhou (TLS, WAF, timeout, bloqueio de IP).
    * Distinto de `semFonte`: a fonte existe, só não foi possível lê-la agora.
@@ -559,8 +567,19 @@ export interface EleitoClassificado {
   motivo?: string;
   /** Linhas do Contatos da pessoa (pode estar em mais de um grupo). Vazio = não está no Contatos. */
   contatos: ContatoDoEleito[];
-  /** Mandato novo que já está cadastrado no grupo novo ("Senadores Eleitos" etc.). */
+  /**
+   * Rótulo do grupo do Contatos que convida a pessoa (Ata 14; spec 2026-10-30 §3.6): "Senadores",
+   * "Deputados Federais" ou um dos grupos de eleitos de `data/grupos-posse.ts`.
+   * Ausente em `conferir` e em retrato gravado antes de 30/10/2026.
+   */
+  grupoDestino?: string;
+  /**
+   * Já está no grupo do Contatos cujo rótulo é `grupoDestino` (comparação por `normalizarTexto`).
+   * Para "Senadores", vale qualquer grupo de senador atual (inclusive os titulares fora de exercício).
+   */
   jaCadastrado?: boolean;
+  /** Decisão do GT que se aplicou à pessoa (spec 2026-10-30 §4.1.1), para a tela mostrar o histórico. */
+  decisao?: RegistroManual;
 }
 
 /** O que o painel mostra na linha de um contato que é eleito. Não pinta o semáforo. */
@@ -585,10 +604,21 @@ export interface GovernadorClassificado {
   motivo?: string;
   /** Linhas do Contatos casadas (Governadores, Senadores ou Deputados Federais). */
   contatos: ContatoDoEleito[];
-  /** Mandato novo já cadastrado em "Governadores Eleitos". */
+  /**
+   * Grupo do Contatos que convida a pessoa: "Governadores", o grupo de governadores eleitos, ou
+   * "Senadores"/"Deputados Federais" para quem vai para outro cargo (Ata 14).
+   * Ausente em `conferir` e em retrato gravado antes de 30/10/2026.
+   */
+  grupoDestino?: string;
+  /**
+   * Já está no grupo do Contatos cujo rótulo do agrupador é `grupoDestino` (desde 30/10/2026; o
+   * rótulo antigo "Governadores Eleitos" não conta mais).
+   */
   jaCadastrado?: boolean;
   /** Deputado em exercício (planilha da Câmara) eleito governador, quando o grupo não está no Contatos. */
   deputadoAtual?: { uf: string; nomeParlamentar: string };
+  /** Decisão do GT que se aplicou à pessoa (spec 2026-10-30 §4.1.1), para a tela mostrar o histórico. */
+  decisao?: RegistroManual;
 }
 
 export interface UfSegundoTurno {

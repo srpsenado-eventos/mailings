@@ -23,13 +23,13 @@ describe("triarArquivosSoltos", () => {
   test("arquivo de outro tipo é recusado com aviso que o nomeia; o resto entra", () => {
     const r = triarArquivosSoltos([arquivo("foto.png"), arquivo("lista.xlsx")], true);
     expect(r.aceitos).toEqual([arquivo("lista.xlsx")]);
-    expect(r.aviso).toBe('Só planilhas .xlsx ou .csv: "foto.png" foi ignorado.');
+    expect(r.aviso).toBe('Só planilhas .xlsx, .xls ou .csv: "foto.png" foi ignorado.');
   });
 
   test("vários recusados: o aviso lista todos, no plural", () => {
-    const r = triarArquivosSoltos([arquivo("a.pdf"), arquivo("b.docx"), arquivo("c.xls")], true);
+    const r = triarArquivosSoltos([arquivo("a.pdf"), arquivo("b.docx"), arquivo("c.txt")], true);
     expect(r.aceitos).toEqual([]);
-    expect(r.aviso).toBe('Só planilhas .xlsx ou .csv: "a.pdf", "b.docx" e "c.xls" foram ignorados.');
+    expect(r.aviso).toBe('Só planilhas .xlsx, .xls ou .csv: "a.pdf", "b.docx" e "c.txt" foram ignorados.');
   });
 
   test("passo de um arquivo com mais de uma planilha: nada entra e o aviso pede uma por vez", () => {
@@ -42,6 +42,18 @@ describe("triarArquivosSoltos", () => {
     const r = triarArquivosSoltos([arquivo("a.xlsx"), arquivo("b.xlsx"), arquivo("c.txt")], false);
     expect(r.aceitos).toEqual([]);
     expect(r.aviso).toBe('Só planilhas .xlsx ou .csv: "c.txt" foi ignorado. Este passo aceita um arquivo só: solte uma planilha por vez.');
+  });
+
+  test("passo múltiplo (eleição): o deputado.xls da Câmara é aceito", () => {
+    const r = triarArquivosSoltos([arquivo("deputado (3).xls")], true);
+    expect(r.aceitos).toEqual([arquivo("deputado (3).xls")]);
+    expect(r.aviso).toBeNull();
+  });
+
+  test("passos de um arquivo só (contatos e endereços) continuam recusando .xls", () => {
+    const r = triarArquivosSoltos([arquivo("base.xls")], false);
+    expect(r.aceitos).toEqual([]);
+    expect(r.aviso).toBe('Só planilhas .xlsx ou .csv: "base.xls" foi ignorado.');
   });
 
   test("nada solto: aviso de nenhum arquivo", () => {

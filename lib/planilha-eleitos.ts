@@ -8,7 +8,8 @@ import type { CasaLegislativa, DeputadoAtual, EleitoPlanilha, GovernadorPlanilha
  * Leitura, no navegador, das planilhas de `GT Posse/Eleitos 2026` (spec 2026-10-05 §2).
  * Mesmo padrão de `lib/planilha-enderecos.ts`: cabeçalho casado normalizado e coluna
  * ausente como erro claro. O tipo é reconhecido pela aba e pelas colunas, não pelo nome do arquivo:
- * - aba "Em exercício" → deputados atuais;
+ * - colunas "Nome Parlamentar", "Titular/Suplente/Efetivado" e "Nome Civil", em qualquer aba (o `deputado.xls` do site
+ *   da Câmara, spec 2026-10-30 §4.2; a aba muda de nome a cada download) ou aba "Em exercício" → deputados atuais;
  * - aba "Eleitos 1º turno" (layout antigo do gerador) ou aba "Eleitos" com a coluna "Turno"
  *   (layout desde 24/10/2026) → governadores, com a aba "2º turno" opcional;
  * - aba "Eleitos" sem "Turno" → senadores (com "1º suplente") ou deputados federais eleitos.
@@ -26,7 +27,7 @@ export interface ArquivoEleicaoLido {
 
 export class PlanilhaEleicaoDesconhecidaError extends Error {
   constructor() {
-    super("Planilha não reconhecida: esperada a aba \"Eleitos\" (senadores ou deputados eleitos; governadores, quando tem a coluna \"Turno\"), \"Em exercício\" (deputados atuais) ou \"Eleitos 1º turno\" (governadores, layout antigo).");
+    super("Planilha não reconhecida: esperada a aba \"Eleitos\" (senadores ou deputados eleitos; governadores, quando tem a coluna \"Turno\"), \"Em exercício\" (deputados atuais), \"Eleitos 1º turno\" (governadores, layout antigo) ou a planilha de deputados do site da Câmara (colunas \"Nome Parlamentar\", \"Titular/Suplente/Efetivado\" e \"Nome Civil\").");
     this.name = "PlanilhaEleicaoDesconhecidaError";
   }
 }
@@ -51,6 +52,19 @@ const COLUNAS_ATUAIS = {
   sala: "sala", telefone: "telefone", idCamara: "id camara",
 } as const;
 const OBRIGATORIAS_ATUAIS = ["uf", "nomeParlamentar", "nomeCivil"] as const;
+
+/**
+ * `deputado.xls` do site da Câmara (spec 2026-10-30 §4.2). Reconhecido pelas três colunas de `MARCAS_CAMARA`;
+ * fax e aniversário não são lidos. A planilha não traz a eleição de 2026 (`eleicao2026` fica ausente).
+ */
+const COLUNAS_CAMARA = {
+  uf: "uf", nomeParlamentar: "nome parlamentar", nomeCivil: "nome civil", partido: "partido",
+  condicao: "titular/suplente/efetivado", tratamento: "tratamento", email: "correio eletronico",
+  telefone: "telefone", predio: "anexo", sala: "gabinete",
+} as const;
+const OBRIGATORIAS_CAMARA = ["uf", "nomeParlamentar", "nomeCivil"] as const;
+const MARCAS_CAMARA = [COLUNAS_CAMARA.nomeParlamentar, COLUNAS_CAMARA.condicao, COLUNAS_CAMARA.nomeCivil] as const;
+const CONDICAO_CAMARA: Readonly<Record<string, string>> = { t: "Titular", s: "Suplente", e: "Efetivado" };
 
 const COLUNAS_GOVERNO = {
   uf: "uf", nomeUrna: "nome de urna", nomeCompleto: "nome completo", partido: "partido",
@@ -147,8 +161,35 @@ function lerArquivoGoverno(eleitosAba: XLSX.WorkSheet, segunda: XLSX.WorkSheet |
   };
 }
 
+function ehPlanilhaDaCamara(ws: XLSX.WorkSheet): boolean {
+  const idx = cabecalhos(ws);
+  return MARCAS_CAMARA.every((c) => idx.has(c));
+}
+
+/** "Exma. Senhora Deputada" é feminino; "Exmo. Senhor Deputado", masculino; outro texto não decide o sexo. */
+function sexoPeloTratamento(tratamento: string): string | undefined {
+  const t = normalizarTexto(tratamento);
+  if (/\bsenhora\b/.test(t)) return "Feminino";
+  if (/\bsenhor\b/.test(t)) return "Masculino";
+  return undefined;
+}
+
+function lerDeputadosDaCamara(ws: XLSX.WorkSheet): DeputadoAtual[] {
+  return lerTabela(ws, COLUNAS_CAMARA, OBRIGATORIAS_CAMARA)
+    .filter((l) => l.nomeParlamentar || l.nomeCivil)
+    .map((l): DeputadoAtual => ({
+      uf: l.uf.toUpperCase(), nomeParlamentar: l.nomeParlamentar, nomeCivil: l.nomeCivil,
+      partido: opcional(l.partido), sexo: sexoPeloTratamento(l.tratamento),
+      condicao: opcional(CONDICAO_CAMARA[l.condicao.toLowerCase()] ?? l.condicao),
+      email: opcional(l.email), predio: opcional(l.predio), sala: opcional(l.sala), telefone: opcional(l.telefone),
+    }));
+}
+
 export function lerPlanilhaEleicao(buffer: ArrayBuffer): ArquivoEleicao {
   const wb = XLSX.read(buffer, { type: "array" });
+
+  const nomeDaCamara = wb.SheetNames.find((n) => ehPlanilhaDaCamara(wb.Sheets[n]));
+  if (nomeDaCamara) return { tipo: "atuais", deputados: lerDeputadosDaCamara(wb.Sheets[nomeDaCamara]) };
 
   const atuais = aba(wb, "em exercicio");
   if (atuais) {

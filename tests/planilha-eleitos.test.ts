@@ -70,7 +70,7 @@ describe("lerPlanilhaEleicao", () => {
 
   test("planilha sem as abas esperadas é recusada", () => {
     expect(() => lerPlanilhaEleicao(montar({ Folha1: [{ a: "1" }] }))).toThrow(PlanilhaEleicaoDesconhecidaError);
-    expect(() => lerPlanilhaEleicao(montar({ Folha1: [{ a: "1" }] }))).toThrow('Planilha não reconhecida: esperada a aba "Eleitos" (senadores ou deputados eleitos; governadores, quando tem a coluna "Turno"), "Em exercício" (deputados atuais) ou "Eleitos 1º turno" (governadores, layout antigo).');
+    expect(() => lerPlanilhaEleicao(montar({ Folha1: [{ a: "1" }] }))).toThrow(/Planilha não reconhecida: esperada a aba "Eleitos"/);
   });
 });
 
@@ -354,5 +354,65 @@ describe("resumoArquivoEleicao", () => {
     const segundoTurno = [g("SP"), g("SP"), g("RJ")];
     expect(resumoArquivoEleicao({ tipo: "governo", governadores: { eleitos, segundoTurno } })).toBe("20 governadores eleitos · 2 UFs no 2º turno");
     expect(resumoArquivoEleicao({ tipo: "governo", governadores: { eleitos, segundoTurno: [] } })).toBe("20 governadores eleitos");
+  });
+});
+
+describe("lerPlanilhaEleicao: deputado.xls do site da Câmara", () => {
+  const CABECALHO_CAMARA = [
+    "Nome Parlamentar", "Partido", "UF", "Titular/Suplente/Efetivado", "Endereço", "Anexo", "Endereço (continuação)", "Gabinete",
+    "Endereço (complemento)", "Telefone", "Fax", "Mês Aniversário", "Dia Aniversário", "Correio Eletrônico", "Nome sem Acento",
+    "Tratamento", "Nome Civil",
+  ];
+  const linhaCamara = (nome: string, partido: string, uf: string, condicao: string, gabinete: number | string, tratamento: string, civil: string, email: string) => [
+    nome, partido, uf, condicao, "Câmara dos Deputados, Edifício Anexo", "4", ", gabinete nº", gabinete, "Brasília - DF - CEP 70160-900",
+    "3215-5414", "3215-2414", "09", "28", email, nome, tratamento, civil,
+  ];
+
+  function montarCamara(aba = "Atualização - 29-10-2026 15-55"): ArrayBuffer {
+    const wb = XLSX.utils.book_new();
+    const linhas = [
+      CABECALHO_CAMARA,
+      linhaCamara("Leo Prates", "PDT", "BA", "T", 646, "Exmo. Senhor Deputado", "LEONARDO SILVA PRATES", "dep.leoprates@camara.leg.br"),
+      linhaCamara("Professora Luciene Cavalcante", "PSOL", "SP", "S", 312, "Exma. Senhora Deputada", "LUCIENE CAVALCANTE", "dep.lucienecavalcante@camara.leg.br"),
+      linhaCamara("Zé Adriano", "PP", "AC", "E", 101, "Exmo. Senhor Deputado", "JOSE ADRIANO", "dep.zeadriano@camara.leg.br"),
+    ];
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), aba);
+    return XLSX.write(wb, { bookType: "biff8", type: "array" }) as ArrayBuffer;
+  }
+
+  test("o .xls da Câmara é reconhecido pelas colunas, qualquer que seja o nome da aba", () => {
+    const r = lerPlanilhaEleicao(montarCamara());
+    expect(r.tipo).toBe("atuais");
+    if (r.tipo !== "atuais") throw new Error("tipo");
+    expect(r.deputados).toHaveLength(3);
+    expect(r.deputados.map((d) => d.condicao)).toEqual(["Titular", "Suplente", "Efetivado"]);
+  });
+
+  test("mapeia nome, UF, partido, sexo pelo tratamento, e-mail, telefone, prédio e sala (gabinete em texto)", () => {
+    const r = lerPlanilhaEleicao(montarCamara());
+    if (r.tipo !== "atuais") throw new Error("tipo");
+    const [leo, luciene] = r.deputados;
+    expect(leo).toEqual({
+      uf: "BA", nomeParlamentar: "Leo Prates", nomeCivil: "LEONARDO SILVA PRATES", partido: "PDT", sexo: "Masculino",
+      condicao: "Titular", email: "dep.leoprates@camara.leg.br", telefone: "3215-5414", predio: "4", sala: "646",
+    });
+    expect(luciene.sexo).toBe("Feminino");
+    expect(r.deputados.every((d) => d.eleicao2026 === undefined)).toBe(true);
+  });
+
+  test("o reconhecimento pelas colunas vale mesmo com uma aba chamada 'Eleitos'", () => {
+    const r = lerPlanilhaEleicao(montarCamara("Eleitos"));
+    expect(r.tipo).toBe("atuais");
+  });
+
+  test("a planilha antiga 'Em exercício' continua sendo lida", () => {
+    const r = lerPlanilhaEleicao(montar({ "Em exercício": [{ UF: "AC", "Nome parlamentar": "Fulano", "Nome civil": "Fulano de Tal", "Condição eleitoral": "Reeleito" }] }));
+    expect(r.tipo).toBe("atuais");
+    if (r.tipo !== "atuais") throw new Error("tipo");
+    expect(r.deputados[0].condicao).toBe("Reeleito");
+  });
+
+  test("a mensagem de planilha não reconhecida cita também a planilha da Câmara", () => {
+    expect(() => lerPlanilhaEleicao(montar({ Folha1: [{ a: "1" }] }))).toThrow(/Nome Parlamentar.*Titular\/Suplente\/Efetivado.*Nome Civil/);
   });
 });

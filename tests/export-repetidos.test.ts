@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import * as XLSX from "xlsx";
 import { CABECALHO_REPETIDAS, descreverOcorrencia, gerarXlsxRepetidas, linhasRepetidas } from "@/lib/export-repetidos";
+import { HISTORICO_VAZIO, registrar, type RegistroManual } from "@/lib/decisoes";
 import { autoridadesRepetidas, type OcorrenciaRepetida } from "@/lib/repetidos";
 import type { EleitoClassificado, ResultadoContato, ResultadoEleicao, ResultadoGrupo } from "@/lib/types";
 
@@ -29,7 +30,7 @@ describe("export das autoridades em mais de um grupo", () => {
     const linhas = linhasRepetidas(lista);
     expect(linhas[0]).toEqual({
       Nome: "Ana Fictícia",
-      "Situação": "Decidido",
+      "Situação": "Decidido pela regra",
       "Convidar pelo grupo": "Ministros do STF",
       "Cargo do convite": "Ministra do Supremo Tribunal Federal",
       "Nível na Nominata": "4.9 Ministros do Supremo Tribunal Federal",
@@ -37,6 +38,9 @@ describe("export das autoridades em mais de um grupo", () => {
       "Grupos em que está": "Ministros do STF: Ministra do Supremo Tribunal Federal (4.9); Ministros do TSE: Ministra do Tribunal Superior Eleitoral (5.9)",
       Origem: "Contatos",
       "Eleição 2026": "",
+      "Decisão do GT": "",
+      "Data da decisão": "",
+      "Situação no Contatos": "",
     });
   });
 
@@ -70,7 +74,7 @@ describe("export das autoridades em mais de um grupo", () => {
   describe("com as listas de fora do Contatos", () => {
     const eleitoSenado: EleitoClassificado = {
       eleito: { casa: "senado", uf: "SP", nomeUrna: "Rui Fictício", nomeCompleto: "Rui Fictício Lima", situacaoTse: "Eleito", statusMandato: "x" },
-      destino: "reeleito", projecao: false, contatos: [{ grupo: "Senadores", nome: "Rui Fictício" }],
+      destino: "reeleito", projecao: false, grupoDestino: "Senadores", contatos: [{ grupo: "Senadores", nome: "Rui Fictício" }],
     };
     const eleicao: ResultadoEleicao = { arquivos: [], eleitos: [eleitoSenado], camaraNoContatos: false };
     const deFora = autoridadesRepetidas(
@@ -108,8 +112,49 @@ describe("export das autoridades em mais de um grupo", () => {
       expect(linhasRepetidas(conferir)[0].Origem).toBe("");
     });
 
-    test("cabeçalho termina em Origem e Eleição 2026", () => {
-      expect(CABECALHO_REPETIDAS.slice(-2)).toEqual(["Origem", "Eleição 2026"]);
+    test("cabeçalho: Origem e Eleição 2026, depois as colunas da decisão do GT", () => {
+      expect(CABECALHO_REPETIDAS.slice(-5)).toEqual(["Origem", "Eleição 2026", "Decisão do GT", "Data da decisão", "Situação no Contatos"]);
+    });
+  });
+
+  describe("com as decisões do GT", () => {
+    const manual = (extra: Partial<RegistroManual> & Pick<RegistroManual, "tipo" | "grupos">): RegistroManual => ({
+      data: "2026-10-26", quem: "Marina e Clóvis", observacao: "", validacao: "validado", ...extra,
+    });
+    const CUEVA = "Ricardo Villas Bôas Cueva";
+    const cueva = [
+      grupo("Ministros do STJ", [linha(CUEVA, "Ministro do Superior Tribunal de Justiça")]),
+      grupo("Ministros do TSE", [linha(CUEVA, "Ministro do Tribunal Superior Eleitoral")]),
+    ];
+    const decisaoCueva = registrar(HISTORICO_VAZIO, CUEVA, [], manual({
+      tipo: "mesma_pessoa", convidaPor: "Ministros do TSE", grupos: ["Ministros do STJ", "Ministros do TSE"],
+    }));
+
+    test("mesma pessoa pendente: decisão, data e Pendente no Contatos", () => {
+      const [l] = linhasRepetidas(autoridadesRepetidas(cueva, undefined, decisaoCueva));
+      expect(l["Situação"]).toBe("Decidido pelo GT");
+      expect(l["Convidar pelo grupo"]).toBe("Ministros do TSE");
+      expect(l["Decisão do GT"]).toBe("Mesma pessoa: convidar pelo grupo Ministros do TSE (Marina e Clóvis)");
+      expect(l["Data da decisão"]).toBe("26/10/2026");
+      expect(l["Situação no Contatos"]).toBe("Pendente no Contatos");
+    });
+
+    test("caso tratado e caso reaberto", () => {
+      const tratado = linhasRepetidas(autoridadesRepetidas([cueva[1]], undefined, decisaoCueva));
+      expect(tratado[0]["Situação"]).toBe("Tratado no Contatos");
+      expect(tratado[0]["Situação no Contatos"]).toBe("Tratado no Contatos");
+      const reaberto = linhasRepetidas(autoridadesRepetidas(
+        [...cueva, grupo("Ministros do STF", [linha(CUEVA, "Ministro")])], undefined, decisaoCueva,
+      ));
+      expect(reaberto[0]["Situação"]).toBe("Conferir");
+      expect(reaberto[0]["Situação no Contatos"]).toBe("Reaberto");
+    });
+
+    test("pessoas diferentes fica sem situação no Contatos", () => {
+      const h = registrar(HISTORICO_VAZIO, CUEVA, [], manual({ tipo: "pessoas_diferentes", grupos: ["Ministros do STJ", "Ministros do TSE"] }));
+      const [l] = linhasRepetidas(autoridadesRepetidas(cueva, undefined, h));
+      expect(l["Decisão do GT"]).toBe("Pessoas diferentes (Marina e Clóvis)");
+      expect(l["Situação no Contatos"]).toBe("");
     });
   });
 });

@@ -170,7 +170,7 @@ function rolesDe(valor: string): string[] {
  * (Presidente≠Vice-Presidente, Senador≠Ex-Senador). Sem palavra-chave de cargo,
  * cai na comparação por tokens.
  */
-function situacaoCampo(valorPlanilha: string, valorEsperado?: string): SituacaoCampo {
+export function situacaoCampo(valorPlanilha: string, valorEsperado?: string): SituacaoCampo {
   if (valorEsperado === undefined) return "fonte_nao_informa";
   const tp = tokensSignificativos(valorPlanilha);
   const ts = tokensSignificativos(valorEsperado);
@@ -213,7 +213,7 @@ function situacaoNome(planilha: string, site: string): SituacaoCampo {
  * Ver docs/superpowers/specs/2026-09-15-auditoria-tratamento-correcao-de-alvo.md e
  * docs/superpowers/specs/2026-09-18-regras-de-escrita-do-cadastro.md.
  */
-function comparacoesTratamento(
+export function comparacoesTratamento(
   contato: ContatoPlanilha,
   grupoCanonico: string | undefined,
 ): ComparacaoCampo[] {
@@ -229,7 +229,7 @@ function comparacoesTratamento(
  * de fora de propósito: são limites da fonte e do cadastro de regras, não defeitos do
  * contato, e por contrato não pintam amarelo.
  */
-function divergenciasDe(comparacoes: readonly ComparacaoCampo[]): CampoDivergente[] {
+export function divergenciasDe(comparacoes: readonly ComparacaoCampo[]): CampoDivergente[] {
   return comparacoes
     .filter((c) => c.situacao === "divergente")
     .map((c) => ({ campo: c.campo, valorPlanilha: c.valorPlanilha, valorEncontrado: c.valorEsperado }));
@@ -680,13 +680,43 @@ function comparacaoCargoPelaLista(cargo: string, lista: ListaCargos | undefined)
   return compararCargoNaLista(cargo, lista.cargos, lista.url);
 }
 
-function comparacoesSemSite(contato: ContatoPlanilha): ComparacaoCampo[] {
+export function comparacoesSemSite(contato: ContatoPlanilha): ComparacaoCampo[] {
   const lista: ComparacaoCampo[] = [];
   for (const campo of ["telefone", "email"] as const) {
     const v = contato[campo];
     if (v) lista.push({ campo, valorPlanilha: v, valorEsperado: undefined, situacao: "fonte_nao_informa" });
   }
   return lista;
+}
+
+export const OBSERVACAO_SEM_FONTE_OFICIAL = "Sem fonte oficial (grupo de convidados)";
+export const MOTIVO_SEM_LISTA = "Sem a lista nesta varredura";
+
+/**
+ * Contato de grupo de modo `neutro` ou `lista` (spec 2026-10-30 §4.5 e §4.6): nenhuma página é lida,
+ * então nome e cargo ficam `fonte_nao_informa`; a auditoria de tratamento (Camadas A, B e C) vale.
+ * `neutro`: amarelo se o tratamento diverge, senão verde. `lista`: indeterminado até a comparação
+ * com a planilha (substituída na comparação com as listas). Nunca `possivelSaida` nem o campo "fonte".
+ */
+export function compararContatoSemFonteOficial(
+  contato: ContatoPlanilha,
+  modo: "lista" | "neutro",
+  grupoCanonico?: string,
+): ResultadoContato {
+  const comparacoes: ComparacaoCampo[] = [
+    { campo: "nome", valorPlanilha: contato.nome, situacao: "fonte_nao_informa" },
+    { campo: "cargo", valorPlanilha: contato.cargo ?? "", situacao: "fonte_nao_informa" },
+    ...comparacoesSemSite(contato),
+    ...comparacoesTratamento(contato, grupoCanonico),
+  ];
+  const camposDivergentes = divergenciasDe(comparacoes);
+  const base = { contato, score: 0, comparacoes, camposDivergentes, origem: "oficial" as const };
+  if (modo === "lista") return { ...base, semaforo: "indeterminado", observacao: MOTIVO_SEM_LISTA };
+  return {
+    ...base,
+    semaforo: camposDivergentes.length > 0 ? "amarelo" : "verde",
+    observacao: OBSERVACAO_SEM_FONTE_OFICIAL,
+  };
 }
 
 export interface EntradaIndividual {

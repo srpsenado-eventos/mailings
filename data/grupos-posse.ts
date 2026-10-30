@@ -18,7 +18,9 @@ export const GRUPO_DEPUTADOS_ELEITOS = "Deputado Federal eleitos - Posse Preside
 export const GRUPO_GOVERNADORES_ELEITOS = "Governadores eleitos - Posse Presidencial 2027";
 
 /** Igual a `NOME_GRUPO_DEPUTADOS` de `lib/painel-deputados.ts` (um teste confere). */
-const GRUPO_DEPUTADOS_FEDERAIS = "Deputados Federais";
+export const GRUPO_DEPUTADOS_FEDERAIS = "Deputados Federais";
+export const GRUPO_SENADORES = "Senadores";
+export const GRUPO_GOVERNADORES = "Governadores";
 
 const fonte = (rotulo: string): GrupoPosse => ({ rotulo, fiscalizacao: "fonte" });
 const lista = (rotulo: string): GrupoPosse => ({ rotulo, fiscalizacao: "lista" });
@@ -30,7 +32,7 @@ export const GRUPOS_POSSE: readonly GrupoPosse[] = [
   fonte("Ministros do TSE"),
   fonte("Ministros do STJ"),
   fonte("Ex-Presidentes do Senado"),
-  fonte("Governadores"),
+  fonte(GRUPO_GOVERNADORES),
   fonte("Ministros do STM"),
   fonte("Ministros do TST"),
   fonte("Ministros do TCU"),
@@ -39,7 +41,7 @@ export const GRUPOS_POSSE: readonly GrupoPosse[] = [
   fonte("Embaixadores"),
   fonte("Procurador-Geral da República"),
   fonte("Presidente da Câmara dos Deputados"),
-  fonte("Senadores"),
+  fonte(GRUPO_SENADORES),
   fonte("Ex-Presidentes da República"),
   fonte("Senadores titulares fora de exercício - Posse 2027"),
   lista(GRUPO_GOVERNADORES_ELEITOS),

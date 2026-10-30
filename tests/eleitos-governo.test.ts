@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { agruparSegundoTurno, classificarGovernadores, paraContatoGoverno } from "@/lib/eleitos-governo";
 import { MOTIVO_AMBIGUO } from "@/lib/eleitos";
+import { GRUPO_GOVERNADORES_ELEITOS } from "@/data/grupos-posse";
 import type { ContatoPlanilha, DeputadoAtual, GovernadorPlanilha, ResultadoContato, ResultadoGrupo } from "@/lib/types";
 
 const gov = (over: Partial<GovernadorPlanilha> = {}): GovernadorPlanilha => ({
@@ -185,5 +186,28 @@ describe("paraContatoGoverno", () => {
     const c = paraContatoGoverno(x);
     expect(c).toMatchObject({ destino: "conferir", uf: "GO", nomeUrna: "Marta Fictícia", statusMandato: "Reeleição" });
     expect("partido" in c).toBe(false);
+  });
+});
+
+describe("grupo de destino dos governadores (spec 2026-10-30 §4.3.1)", () => {
+  const atual: DeputadoAtual = { uf: "GO", nomeParlamentar: "Marta F.", nomeCivil: "Marta Aparecida Fictícia Lima" };
+
+  test("reeleito vai para Governadores e mandato novo para os governadores eleitos", () => {
+    const [reeleito] = classificarGovernadores([gov()], [grupo("Governadores", [marta("Governadores")])]);
+    const [novo] = classificarGovernadores([gov({ statusMandato: "Mandato novo" })], []);
+    expect(reeleito.grupoDestino).toBe("Governadores");
+    expect(novo.grupoDestino).toBe(GRUPO_GOVERNADORES_ELEITOS);
+  });
+
+  test("senador ou deputado atual eleito governador fica no grupo da sua Casa", () => {
+    const [sen] = classificarGovernadores([gov({ statusMandato: "Mandato novo (atual senador)" })], [grupo("Senadores", [marta("Senadores")])]);
+    const [dep] = classificarGovernadores([gov({ statusMandato: "Mandato novo (atual deputado federal)" })], [], [atual]);
+    const [depContatos] = classificarGovernadores([gov({ statusMandato: "Mandato novo (atual deputado federal)" })], [grupo("Deputados Federais", [marta("Deputados Federais")])]);
+    expect([sen.grupoDestino, dep.grupoDestino, depContatos.grupoDestino]).toEqual(["Senadores", "Deputados Federais", "Deputados Federais"]);
+  });
+
+  test("conferir fica sem grupo de destino", () => {
+    const [r] = classificarGovernadores([gov()], []);
+    expect(r).toMatchObject({ destino: "conferir", grupoDestino: "" });
   });
 });

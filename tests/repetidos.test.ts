@@ -217,13 +217,13 @@ const eleito = (
   casa: CasaLegislativa, nomeUrna: string, nomeCompleto: string, uf = "SP", contatos: ContatoDoEleito[] = [], extra: Partial<EleitoClassificado> = {},
 ): EleitoClassificado => ({
   eleito: { casa, uf, nomeUrna, nomeCompleto, situacaoTse: "Eleito", statusMandato: "x" },
-  destino: "reeleito", projecao: false, contatos, ...extra,
+  destino: "reeleito", projecao: false, grupoDestino: "", contatos, ...extra,
 });
 const governadorEleito = (
   nomeUrna: string, nomeCompleto: string, uf = "SP", contatos: ContatoDoEleito[] = [], extra: Partial<GovernadorClassificado> = {},
 ): GovernadorClassificado => ({
   eleito: { uf, nomeUrna, nomeCompleto, situacaoTse: "Eleito", statusMandato: "x" },
-  destino: "outro_cargo", contatos, ...extra,
+  destino: "outro_cargo", grupoDestino: "", contatos, ...extra,
 });
 const eleicao = (extra: Partial<ResultadoEleicao> = {}): ResultadoEleicao => ({
   arquivos: [], eleitos: [], camaraNoContatos: false, ...extra,

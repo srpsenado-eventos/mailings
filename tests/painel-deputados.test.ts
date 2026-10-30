@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { RESUMO_NAO_ELEITO } from "@/lib/eleitos";
 import { etiquetasDoDeputado, grupoDeputados, resumoGrupoDeputados, temGrupoDeputados } from "@/lib/painel-deputados";
 import type { DeputadoAtual, EleitoClassificado, GovernadorClassificado, ResultadoEleicao } from "@/lib/types";
 
 const dep = (p: Partial<DeputadoAtual>): DeputadoAtual => ({ uf: "AC", nomeParlamentar: "Fulano Teste", nomeCivil: "Fulano de Tal Teste", ...p });
 const novo = (nome: string, uf = "AC"): EleitoClassificado => ({
   eleito: { casa: "camara", uf, nomeUrna: nome, nomeCompleto: `${nome} Completo`, situacaoTse: "Eleito", statusMandato: "Mandato novo" },
-  destino: "novo", projecao: false, contatos: [],
+  destino: "novo", projecao: false, grupoDestino: "Deputado Federal eleitos - Posse Presidencial 2027", contatos: [],
 });
 const eleicao = (p: Partial<ResultadoEleicao> = {}): ResultadoEleicao => ({
   arquivos: [], eleitos: [], camaraNoContatos: false,
@@ -22,6 +23,8 @@ describe("etiquetasDoDeputado", () => {
     ["Concorreu e não se elegeu / aguarda definição", ["Não reeleito / aguarda definição"]],
     ["Não concorreu em 2026", ["Não concorreu"]],
     ["Algo novo", ["Algo novo"]],
+    ["Não eleito em 2026", ["Não eleito em 2026"]],
+    ["Eleito governador", ["Eleito governador — atenção"]],
     [undefined, []],
     ["", []],
   ])("resumo %s vira %j", (resumo, textos) => {
@@ -101,7 +104,7 @@ describe("grupo virtual com deputadosAtuais vazio", () => {
 describe("governador eleito que é deputado atual", () => {
   const governador = (deputadoAtual?: { uf: string; nomeParlamentar: string }): GovernadorClassificado => ({
     eleito: { uf: "AC", nomeUrna: "Fulano Gov", nomeCompleto: "Fulano de Tal Teste", situacaoTse: "Eleito", statusMandato: "Mandato novo" },
-    destino: "outro_cargo", contatos: [], ...(deputadoAtual ? { deputadoAtual } : {}),
+    destino: "outro_cargo", grupoDestino: "Deputados Federais", contatos: [], ...(deputadoAtual ? { deputadoAtual } : {}),
   });
   const comGov = (g: GovernadorClassificado) => eleicao({ governadores: { eleitos: [g], segundoTurno: [] } });
 
@@ -126,5 +129,23 @@ describe("governador eleito que é deputado atual", () => {
   });
   it("retrato sem governadores não quebra", () => {
     expect(grupoDeputados(eleicao({ governadores: undefined }), tudo)!.atuais).toHaveLength(2);
+  });
+});
+
+describe("resumo calculado para o deputado do .xls", () => {
+  it("'Não eleito em 2026' é etiqueta neutra que não cita a coluna da planilha", () => {
+    const [e] = etiquetasDoDeputado(RESUMO_NAO_ELEITO);
+    expect(e).toMatchObject({ campo: "eleicao", texto: "Não eleito em 2026", tom: "neutro" });
+    expect(e.explicacao).not.toContain("Coluna");
+  });
+  it("'Eleito governador' não repete a etiqueta quando o governador também vem do eixo de governadores", () => {
+    const e = eleicao({
+      deputadosAtuais: [dep({ nomeParlamentar: "Fulano Teste", eleicao2026: "Eleito governador" })],
+      governadores: { eleitos: [{
+        eleito: { uf: "AC", nomeUrna: "Fulano Gov", nomeCompleto: "Fulano de Tal Teste", situacaoTse: "Eleito", statusMandato: "Mandato novo (atual deputado federal)" },
+        destino: "outro_cargo", grupoDestino: "Deputados Federais", contatos: [], deputadoAtual: { uf: "AC", nomeParlamentar: "Fulano Teste" },
+      }], segundoTurno: [] },
+    });
+    expect(grupoDeputados(e, tudo)!.atuais[0].etiquetas.map((x) => x.texto)).toEqual(["Eleito governador — atenção"]);
   });
 });

@@ -565,7 +565,13 @@ export interface EleitoClassificado {
   motivo?: string;
   /** Linhas do Contatos da pessoa (pode estar em mais de um grupo). Vazio = não está no Contatos. */
   contatos: ContatoDoEleito[];
-  /** Mandato novo que já está cadastrado no grupo novo ("Senadores Eleitos" etc.). */
+  /**
+   * Rótulo do grupo do Contatos que convida a pessoa (Ata 14; spec 2026-10-30 §3.6): "Senadores",
+   * "Deputados Federais" ou um dos grupos de eleitos de `data/grupos-posse.ts`. Vazio em `conferir`.
+   * Retrato gravado antes de 30/10/2026 não traz o campo.
+   */
+  grupoDestino: string;
+  /** Já está no grupo do Contatos cujo rótulo é `grupoDestino` (comparação por `normalizarTexto`). */
   jaCadastrado?: boolean;
 }
 
@@ -591,6 +597,11 @@ export interface GovernadorClassificado {
   motivo?: string;
   /** Linhas do Contatos casadas (Governadores, Senadores ou Deputados Federais). */
   contatos: ContatoDoEleito[];
+  /**
+   * Grupo do Contatos que convida a pessoa: "Governadores", o grupo de governadores eleitos, ou
+   * "Senadores"/"Deputados Federais" para quem vai para outro cargo (Ata 14). Vazio em `conferir`.
+   */
+  grupoDestino: string;
   /** Mandato novo já cadastrado em "Governadores Eleitos". */
   jaCadastrado?: boolean;
   /** Deputado em exercício (planilha da Câmara) eleito governador, quando o grupo não está no Contatos. */

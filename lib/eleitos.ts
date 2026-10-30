@@ -1,9 +1,12 @@
+import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_DEPUTADOS_FEDERAIS, GRUPO_SENADORES, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
+import { grupoDoAgrupador } from "@/lib/agrupador";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import { casaDoGrupo, casaPessoa, chavePessoa, deputadosEmExercicio, MOTIVO_AMBIGUO, MOTIVO_HOMONIMO_EM_EXERCICIO, referencia } from "@/lib/eleitos-casamento";
 import { agruparSegundoTurno, classificarGovernadores, paraContatoGoverno } from "@/lib/eleitos-governo";
 import type {
   CasaLegislativa,
   ContatoPlanilha,
+  DestinoEleito,
   DeputadoAtual,
   EleicaoContato,
   EleicaoGovernoContato,
@@ -15,18 +18,26 @@ import type {
 } from "@/lib/types";
 
 /**
- * Classificação dos eleitos de 04/10/2026 contra o Contatos. Spec 2026-10-05 §4.
- * O `Status do mandato` (TSE cruzado por CPF) decide o destino; o Contatos acha a linha
- * da pessoa e pega contradições, que nunca viram decisão automática: vão para `conferir`.
+ * Classificação dos eleitos de 04/10/2026 contra o Contatos. Spec 2026-10-05 §4, revista pela spec
+ * 2026-10-30 §4.3.1: com a lista de exercício da Câmara, é ela que separa deputado atual de primeiro
+ * mandato, e o `Status do mandato` só decide os casos da tabela (senador atual eleito deputado,
+ * senador reeleito). Sem a lista, vale o status, como antes. Cada classificado leva o grupo do
+ * Contatos que convida a pessoa (`grupoDestino`, Ata 14).
  * Eixo próprio: não toca semáforo, comparações nem possível saída.
  */
 
 export { MOTIVO_AMBIGUO };
 export const OBSERVACAO_NOME_URNA = "Nome de urna (TSE): aguarda aprovação do nome político";
 export const ORIENTACAO_OUTRA_CASA = "Convidado pelo cargo atual (Ata 14 do GT Cerimonial, 09/06/2026)";
+/** Resumo da Eleição 2026 do deputado em exercício que não está em nenhuma planilha de eleitos (spec 2026-10-30 §4.2). */
+export const RESUMO_NAO_ELEITO = "Não eleito em 2026";
 
-const MOTIVO_NOVO_EM_EXERCICIO = "Planilha diz mandato novo, mas a pessoa está na lista de deputados em exercício";
 const MOTIVO_VERIFICAR = "Planilha pede verificação: provável deputado estadual ou distrital";
+
+/** Grupo do Contatos de quem continua no cargo atual, por Casa. */
+const GRUPO_DA_CASA: Record<CasaLegislativa, string> = { senado: GRUPO_SENADORES, camara: GRUPO_DEPUTADOS_FEDERAIS };
+/** Grupo do Contatos do mandato novo, por Casa. */
+const GRUPO_ELEITOS_DA_CASA: Record<CasaLegislativa, string> = { senado: GRUPO_SENADORES_ELEITOS, camara: GRUPO_DEPUTADOS_ELEITOS };
 
 type Regra =
   | { destino: "reeleito" | "outra_casa"; casaAtual: CasaLegislativa }
@@ -38,6 +49,10 @@ const naoPrevisto = (e: EleitoPlanilha): Regra => ({
   motivo: `Status do mandato não previsto: "${e.statusMandato.trim()}"`,
 });
 
+/**
+ * Destino pelo `Status do mandato`. Sem a lista de exercício da Câmara, decide tudo; com ela, só
+ * o "reeleito" do Senado é lido daqui.
+ */
 function regraDoStatus(e: EleitoPlanilha): Regra {
   const s = normalizarTexto(e.statusMandato);
   switch (s) {
@@ -64,7 +79,7 @@ interface Candidato {
   contato: ContatoPlanilha;
   grupo: string;
   casa: CasaLegislativa;
-  /** Grupo novo ("Senadores Eleitos", "Deputados Federais Eleitos"). */
+  /** Grupo de eleitos ("Senadores eleitos - Posse Presidencial 2027" etc.). */
   eleitos: boolean;
 }
 
@@ -77,53 +92,91 @@ function candidatos(grupos: readonly ResultadoGrupo[]): Candidato[] {
 
 const ROTULO_CASA_GRUPO: Record<CasaLegislativa, string> = { senado: "senadores", camara: "deputados federais" };
 
+type Base = Pick<EleitoClassificado, "eleito" | "projecao">;
+
+const conferir = (base: Base, motivo: string, achados: readonly Candidato[] = []): EleitoClassificado =>
+  ({ ...base, destino: "conferir", grupoDestino: "", motivo, contatos: achados.map(referencia) });
+
+/** Classificado com destino; `jaCadastrado` quando alguma linha casada está no grupo do Contatos de rótulo `grupoDestino`. */
+function destinado(
+  base: Base,
+  destino: Exclude<DestinoEleito, "conferir">,
+  grupoDestino: string,
+  contatos: readonly Candidato[],
+): EleitoClassificado {
+  const ja = contatos.some((c) => grupoDoAgrupador(c.grupo)?.rotulo === grupoDestino);
+  return { ...base, destino, grupoDestino, contatos: contatos.map(referencia), ...(ja ? { jaCadastrado: true } : {}) };
+}
+
+const daCasa = (achados: readonly Candidato[], casa: CasaLegislativa, eleitos: boolean): Candidato[] =>
+  achados.filter((a) => a.casa === casa && a.eleitos === eleitos);
+
+/** Primeiro mandato: grupo de eleitos da Casa, salvo se a pessoa já está num grupo de parlamentar atual. */
+function primeiroMandato(base: Base, achados: readonly Candidato[]): EleitoClassificado {
+  const atual = achados.find((a) => !a.eleitos);
+  if (atual) return conferir(base, `Planilha diz mandato novo, mas a pessoa já está em "${atual.grupo}"`, [atual]);
+  const casa = base.eleito.casa;
+  return destinado(base, "novo", GRUPO_ELEITOS_DA_CASA[casa], daCasa(achados, casa, true));
+}
+
+/** Sem a lista de exercício da Câmara: o status decide e o Contatos pega contradições (comportamento anterior). */
+function classificarPeloStatus(base: Base, achados: readonly Candidato[], camaraNoContatos: boolean): EleitoClassificado {
+  const regra = regraDoStatus(base.eleito);
+  if (regra.destino === "conferir") return conferir(base, regra.motivo);
+  if (regra.destino === "novo") return primeiroMandato(base, achados);
+  const noGrupo = daCasa(achados, regra.casaAtual, false);
+  const confereContatos = regra.casaAtual === "senado" || camaraNoContatos;
+  if (confereContatos && noGrupo.length === 0) {
+    const diz = regra.destino === "reeleito" ? "reeleito" : "parlamentar da outra Casa";
+    return conferir(base, `Planilha diz ${diz}, mas a pessoa não está no grupo de ${ROTULO_CASA_GRUPO[regra.casaAtual]} do Contatos`);
+  }
+  return destinado(base, regra.destino, GRUPO_DA_CASA[regra.casaAtual], noGrupo);
+}
+
+/**
+ * Deputado eleito com a lista de exercício da Câmara (spec 2026-10-30 §4.3.1). O senador atual vem
+ * antes da lista: o status "atual senador" fica em Senadores; o nome que casa contato do Senado com
+ * outro status é homônimo a conferir (Jader Filho × Jader Barbalho).
+ */
+function classificarDeputado(base: Base, achados: readonly Candidato[], atuais: readonly DeputadoAtual[]): EleitoClassificado {
+  const doSenado = daCasa(achados, "senado", false);
+  if (normalizarTexto(base.eleito.statusMandato) === "mandato novo (atual senador)") {
+    return destinado(base, "outra_casa", GRUPO_SENADORES, doSenado);
+  }
+  if (doSenado.length > 0) {
+    return conferir(base, `Nome casa contato de "${doSenado[0].grupo}", mas a planilha não diz senador atual: conferir se é a mesma pessoa`, doSenado);
+  }
+  const naLista = deputadosEmExercicio(base.eleito, atuais).length;
+  if (naLista > 1) return conferir(base, MOTIVO_HOMONIMO_EM_EXERCICIO);
+  if (naLista === 1) return destinado(base, "reeleito", GRUPO_DEPUTADOS_FEDERAIS, daCasa(achados, "camara", false));
+  return primeiroMandato(base, achados);
+}
+
+/** Senador eleito com a lista de exercício da Câmara (spec 2026-10-30 §4.3.1). */
+function classificarSenador(base: Base, achados: readonly Candidato[], atuais: readonly DeputadoAtual[]): EleitoClassificado {
+  const naLista = deputadosEmExercicio(base.eleito, atuais).length;
+  if (naLista > 1) return conferir(base, MOTIVO_HOMONIMO_EM_EXERCICIO);
+  if (naLista === 1) return destinado(base, "outra_casa", GRUPO_DEPUTADOS_FEDERAIS, daCasa(achados, "camara", false));
+  if (regraDoStatus(base.eleito).destino === "reeleito") {
+    const noSenado = daCasa(achados, "senado", false);
+    return noSenado.length > 0
+      ? destinado(base, "reeleito", GRUPO_SENADORES, noSenado)
+      : conferir(base, "Planilha diz reeleito, mas a pessoa não está no grupo de senadores do Contatos");
+  }
+  return primeiroMandato(base, achados);
+}
+
 function classificarUm(
   e: EleitoPlanilha,
   cands: readonly Candidato[],
   camaraNoContatos: boolean,
   atuais?: readonly DeputadoAtual[],
 ): EleitoClassificado {
-  const base = { eleito: e, projecao: normalizarTexto(e.situacaoTse).startsWith("projecao") };
-  const regra = regraDoStatus(e);
-  if (regra.destino === "conferir") return { ...base, destino: "conferir", motivo: regra.motivo, contatos: [] };
-
+  const base: Base = { eleito: e, projecao: normalizarTexto(e.situacaoTse).startsWith("projecao") };
   const achados = cands.filter((c) => casaPessoa(c.contato, e));
-  if (new Set(achados.map((a) => chavePessoa(a.contato))).size > 1) {
-    return { ...base, destino: "conferir", motivo: MOTIVO_AMBIGUO, contatos: achados.map(referencia) };
-  }
-
-  if (regra.destino === "novo") {
-    const emExercicio = atuais ? deputadosEmExercicio(e, atuais).length : 0;
-    if (emExercicio > 0) {
-      const motivo = emExercicio > 1 ? MOTIVO_HOMONIMO_EM_EXERCICIO : MOTIVO_NOVO_EM_EXERCICIO;
-      return { ...base, destino: "conferir", motivo, contatos: [] };
-    }
-    const atual = achados.find((a) => !a.eleitos);
-    if (atual) {
-      return { ...base, destino: "conferir", motivo: `Planilha diz mandato novo, mas a pessoa já está em "${atual.grupo}"`, contatos: [referencia(atual)] };
-    }
-    const noGrupoNovo = achados.filter((a) => a.eleitos && a.casa === e.casa);
-    return { ...base, destino: "novo", contatos: noGrupoNovo.map(referencia), ...(noGrupoNovo.length > 0 ? { jaCadastrado: true } : {}) };
-  }
-
-  const naLista = regra.casaAtual === "camara" && atuais ? deputadosEmExercicio(e, atuais).length : undefined;
-  if (naLista !== undefined && naLista !== 1) {
-    const motivo = naLista > 1
-      ? MOTIVO_HOMONIMO_EM_EXERCICIO
-      : "Planilha diz deputado federal atual, mas a pessoa não está na lista de deputados em exercício";
-    return { ...base, destino: "conferir", motivo, contatos: [] };
-  }
-  const noGrupo = achados.filter((a) => !a.eleitos && a.casa === regra.casaAtual);
-  const confereContatos = regra.casaAtual === "senado" || camaraNoContatos;
-  if (confereContatos && noGrupo.length === 0) {
-    return {
-      ...base,
-      destino: "conferir",
-      motivo: `Planilha diz ${regra.destino === "reeleito" ? "reeleito" : "parlamentar da outra Casa"}, mas a pessoa não está no grupo de ${ROTULO_CASA_GRUPO[regra.casaAtual]} do Contatos`,
-      contatos: [],
-    };
-  }
-  return { ...base, destino: regra.destino, contatos: noGrupo.map(referencia) };
+  if (new Set(achados.map((a) => chavePessoa(a.contato))).size > 1) return conferir(base, MOTIVO_AMBIGUO, achados);
+  if (!atuais) return classificarPeloStatus(base, achados, camaraNoContatos);
+  return e.casa === "camara" ? classificarDeputado(base, achados, atuais) : classificarSenador(base, achados, atuais);
 }
 
 export function classificarEleitos(
@@ -134,6 +187,22 @@ export function classificarEleitos(
   const cands = candidatos(grupos);
   const camaraNoContatos = cands.some((c) => c.casa === "camara" && !c.eleitos);
   return eleitos.map((e) => classificarUm(e, cands, camaraNoContatos, deputadosAtuais));
+}
+
+/**
+ * Resumo da Eleição 2026 do deputado em exercício, para o `deputado.xls` da Câmara, que não traz a
+ * coluna (spec 2026-10-30 §4.2). Regra de pessoa do §4.3.2; a Câmara vence o Senado, que vence o governo.
+ */
+export function resumoEleicaoDoDeputado(
+  d: DeputadoAtual,
+  eleitos: readonly EleitoPlanilha[],
+  governadores?: PlanilhaGovernadores,
+): string {
+  const ehEle = (e: { uf: string; nomeUrna: string; nomeCompleto: string }) => deputadosEmExercicio(e, [d]).length > 0;
+  if (eleitos.some((x) => x.casa === "camara" && ehEle(x))) return "Reeleito deputado federal";
+  if (eleitos.some((x) => x.casa === "senado" && ehEle(x))) return "Eleito senador";
+  if ((governadores?.eleitos ?? []).some(ehEle)) return "Eleito governador";
+  return RESUMO_NAO_ELEITO;
 }
 
 function paraContato(x: EleitoClassificado): EleicaoContato {
@@ -180,7 +249,9 @@ export function aplicarEleicao(
     eleicao: {
       arquivos: [...arquivos],
       eleitos: classificados,
-      ...(deputadosAtuais ? { deputadosAtuais: [...deputadosAtuais] } : {}),
+      ...(deputadosAtuais
+        ? { deputadosAtuais: deputadosAtuais.map((d) => (d.eleicao2026 ? d : { ...d, eleicao2026: resumoEleicaoDoDeputado(d, eleitos, governadores) })) }
+        : {}),
       camaraNoContatos,
       ...(gov && governadores ? { governadores: { eleitos: gov, segundoTurno: agruparSegundoTurno(governadores.segundoTurno) } } : {}),
     },

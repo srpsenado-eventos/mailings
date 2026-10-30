@@ -5,7 +5,7 @@ import type { EleitoClassificado, GovernadorClassificado, ResultadoEleicao } fro
 
 const x = (nome: string, destino: EleitoClassificado["destino"], casa: "senado" | "camara", uf = "MA", over: Partial<EleitoClassificado> = {}): EleitoClassificado => ({
   eleito: { casa, uf, nomeUrna: nome, nomeCompleto: `${nome} Completo`, partido: "PXX", situacaoTse: "Eleito", statusMandato: "Mandato novo" },
-  destino, projecao: false, contatos: [], ...over,
+  destino, projecao: false, grupoDestino: "", contatos: [], ...over,
 });
 
 describe("linhasEleitos", () => {
@@ -36,7 +36,7 @@ describe("gerarXlsxEleitos", () => {
 
 const g = (nome: string, uf: string, destino: GovernadorClassificado["destino"], over: Partial<GovernadorClassificado> = {}): GovernadorClassificado => ({
   eleito: { uf, nomeUrna: nome, nomeCompleto: `${nome} Completo`, partido: "PXX", situacaoTse: "Eleito", statusMandato: "Mandato novo" },
-  destino, contatos: [], ...over,
+  destino, grupoDestino: "", contatos: [], ...over,
 });
 const lerAba = (e: ResultadoEleicao, aba: string) => {
   const wb = XLSX.read(gerarXlsxEleitos(e), { type: "array" });

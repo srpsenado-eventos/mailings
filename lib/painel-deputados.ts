@@ -1,4 +1,4 @@
-import { ORIENTACAO_OUTRA_CASA } from "@/lib/eleitos";
+import { ORIENTACAO_OUTRA_CASA, RESUMO_NAO_ELEITO } from "@/lib/eleitos";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import type { Etiqueta } from "@/lib/painel";
 import type { DeputadoAtual, EleitoClassificado, ResultadoEleicao } from "@/lib/types";
@@ -16,6 +16,12 @@ export interface GrupoDeputados { titulo: string; aviso: string; atuais: LinhaDe
 
 const EXPLICACAO_COLUNA = "Coluna Eleição 2026 da planilha da Câmara";
 const reeleito: Etiqueta = { campo: "eleicao", texto: "Reeleito", tom: "ok", explicacao: "Reeleito em 04/10/2026: fica neste grupo" };
+const ETIQUETA_GOVERNADOR: Etiqueta = { campo: "eleicao", texto: "Eleito governador — atenção", tom: "atencao", explicacao: ORIENTACAO_OUTRA_CASA };
+/** Resumo calculado pelo app para o `deputado.xls` (spec 2026-10-30 §4.2): "não reeleito" e "não concorreu" juntos. */
+const NAO_ELEITO: Etiqueta = {
+  campo: "eleicao", texto: RESUMO_NAO_ELEITO, tom: "neutro",
+  explicacao: "Não está nas planilhas de eleitos de 2026 (não reeleito ou não concorreu)",
+};
 
 export function etiquetasDoDeputado(resumo: string | undefined): Etiqueta[] {
   const bruto = (resumo ?? "").trim();
@@ -24,6 +30,8 @@ export function etiquetasDoDeputado(resumo: string | undefined): Etiqueta[] {
   if (r === "reeleito deputado federal") return [reeleito];
   if (r === "reeleito deputado federal (projecao)") return [reeleito, PROJECAO];
   if (r === "eleito senador") return [{ campo: "eleicao", texto: "Eleito senador — atenção", tom: "atencao", explicacao: ORIENTACAO_OUTRA_CASA }];
+  if (r === "eleito governador") return [ETIQUETA_GOVERNADOR];
+  if (r === normalizarTexto(RESUMO_NAO_ELEITO)) return [NAO_ELEITO];
   if (r.startsWith("concorreu e nao se elegeu")) return [{ campo: "eleicao", texto: "Não reeleito / aguarda definição", tom: "neutro", explicacao: EXPLICACAO_COLUNA }];
   if (r === "nao concorreu em 2026") return [{ campo: "eleicao", texto: "Não concorreu", tom: "neutro", explicacao: EXPLICACAO_COLUNA }];
   return [{ campo: "eleicao", texto: bruto, tom: "neutro", explicacao: EXPLICACAO_COLUNA }];
@@ -37,12 +45,19 @@ const casaBusca = (valores: readonly (string | undefined)[], b: string) =>
   b === "" || valores.some((v) => v !== undefined && normalizarTexto(v).includes(b));
 
 const chaveGovernador = (uf: string, nome: string) => `${uf}|${normalizarNome(nome)}`;
-const ETIQUETA_GOVERNADOR: Etiqueta = { campo: "eleicao", texto: "Eleito governador — atenção", tom: "atencao", explicacao: ORIENTACAO_OUTRA_CASA };
+
+/** O eixo de governadores e o resumo da eleição podem apontar o mesmo governador: a etiqueta sai uma vez. */
+function etiquetasDaLinha(d: DeputadoAtual, eleitosGovernador: ReadonlySet<string>): Etiqueta[] {
+  const doResumo = etiquetasDoDeputado(d.eleicao2026);
+  const governador = eleitosGovernador.has(chaveGovernador(d.uf, d.nomeParlamentar))
+    && !doResumo.some((e) => e.texto === ETIQUETA_GOVERNADOR.texto);
+  return governador ? [...doResumo, ETIQUETA_GOVERNADOR] : doResumo;
+}
 
 const linha = (d: DeputadoAtual, eleitosGovernador: ReadonlySet<string>): LinhaDeputado => ({
   nome: d.nomeParlamentar, nomeCivil: d.nomeCivil, uf: d.uf,
   ...(d.partido ? { partido: d.partido } : {}), ...(d.condicao ? { condicao: d.condicao } : {}),
-  etiquetas: [...etiquetasDoDeputado(d.eleicao2026), ...(eleitosGovernador.has(chaveGovernador(d.uf, d.nomeParlamentar)) ? [ETIQUETA_GOVERNADOR] : [])],
+  etiquetas: etiquetasDaLinha(d, eleitosGovernador),
 });
 
 /** Quais linhas cada filtro deixa passar. Filtro fora desta tabela (situação do Contatos) esconde o grupo. */

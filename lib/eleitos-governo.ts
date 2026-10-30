@@ -37,7 +37,7 @@ function candidatos(grupos: readonly ResultadoGrupo[]): Candidato[] {
 }
 
 /** Departamento vem vazio nos governadores: a UF está no Cargo e no Órgão. Sem UF, não há guarda. */
-const ufDoContatoGoverno = (c: ContatoPlanilha): string | undefined =>
+export const ufDoContatoGoverno = (c: ContatoPlanilha): string | undefined =>
   siglaDaUf(c.departamento) ?? ufNoTexto(c.cargo) ?? ufNoTexto(c.orgao);
 
 const MOTIVO_SEM_LISTA_DEPUTADOS = "Planilha de deputados atuais não enviada: conferir se é deputado federal em exercício";

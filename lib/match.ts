@@ -170,7 +170,7 @@ function rolesDe(valor: string): string[] {
  * (Presidente≠Vice-Presidente, Senador≠Ex-Senador). Sem palavra-chave de cargo,
  * cai na comparação por tokens.
  */
-function situacaoCampo(valorPlanilha: string, valorEsperado?: string): SituacaoCampo {
+export function situacaoCampo(valorPlanilha: string, valorEsperado?: string): SituacaoCampo {
   if (valorEsperado === undefined) return "fonte_nao_informa";
   const tp = tokensSignificativos(valorPlanilha);
   const ts = tokensSignificativos(valorEsperado);
@@ -213,7 +213,7 @@ function situacaoNome(planilha: string, site: string): SituacaoCampo {
  * Ver docs/superpowers/specs/2026-09-15-auditoria-tratamento-correcao-de-alvo.md e
  * docs/superpowers/specs/2026-09-18-regras-de-escrita-do-cadastro.md.
  */
-function comparacoesTratamento(
+export function comparacoesTratamento(
   contato: ContatoPlanilha,
   grupoCanonico: string | undefined,
 ): ComparacaoCampo[] {
@@ -229,7 +229,7 @@ function comparacoesTratamento(
  * de fora de propósito: são limites da fonte e do cadastro de regras, não defeitos do
  * contato, e por contrato não pintam amarelo.
  */
-function divergenciasDe(comparacoes: readonly ComparacaoCampo[]): CampoDivergente[] {
+export function divergenciasDe(comparacoes: readonly ComparacaoCampo[]): CampoDivergente[] {
   return comparacoes
     .filter((c) => c.situacao === "divergente")
     .map((c) => ({ campo: c.campo, valorPlanilha: c.valorPlanilha, valorEncontrado: c.valorEsperado }));
@@ -680,7 +680,7 @@ function comparacaoCargoPelaLista(cargo: string, lista: ListaCargos | undefined)
   return compararCargoNaLista(cargo, lista.cargos, lista.url);
 }
 
-function comparacoesSemSite(contato: ContatoPlanilha): ComparacaoCampo[] {
+export function comparacoesSemSite(contato: ContatoPlanilha): ComparacaoCampo[] {
   const lista: ComparacaoCampo[] = [];
   for (const campo of ["telefone", "email"] as const) {
     const v = contato[campo];

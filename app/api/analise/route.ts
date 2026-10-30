@@ -4,7 +4,8 @@ import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload
 import { armazemPadrao, type Armazem } from "@/lib/armazem";
 import { aplicarEleicao } from "@/lib/eleitos";
 import { resolverGrupoEFonte } from "@/lib/catalogo";
-import { falhasDoRetrato, memoriaDoRetrato } from "@/lib/memoria-leitura";
+import { aplicarListas } from "@/lib/grupos-lista";
+import { diaMes, falhasDoRetrato, memoriaDoRetrato } from "@/lib/memoria-leitura";
 import { modoDoApp } from "@/lib/modo";
 import { origemPermitida } from "@/lib/origem";
 import { montarRetrato } from "@/lib/painel";
@@ -76,9 +77,11 @@ export async function POST(req: NextRequest) {
       await sessao.fechar();
     }
     // Eleição 2026: passada posterior, eixo próprio (spec 2026-10-05 §4.3).
-    const resultado = eleitos || deputadosAtuais || governadores
+    const comEleicao = eleitos || deputadosAtuais || governadores
       ? aplicarEleicao(analisado, eleitos ?? [], arquivosEleicao ?? [], deputadosAtuais, governadores)
       : analisado;
+    // Grupos de modo `lista` comparados com as planilhas desta varredura (spec 2026-10-30 §4.6).
+    const resultado = aplicarListas(comEleicao, diaMes(agora.toISOString()));
     const retrato = montarRetrato(
       resultado,
       {

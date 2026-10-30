@@ -548,6 +548,25 @@ describe("nome em destaque (spec 2026-10-30 §3.1, STJ)", () => {
     expect(nomeDe(r)?.valorEsperado).toBe("Ana Eva");
     expect(contarContatosCasados([c], [pessoa])).toBe(1);
   });
+
+  test("destaque de uma palavra só não vale para o casamento, mas continua o nome esperado", () => {
+    // Arrange — "Moura" sozinho casaria "Moura Ribeiro" com a pessoa errada
+    const errada: PessoaSite = { nome: "Maria Thereza Rocha de Assis Moura", nomeDestaque: "Moura" };
+    const certa: PessoaSite = { nome: "Paulo Dias de Moura Ribeiro", nomeDestaque: "Moura Ribeiro" };
+    const c = contato({ nome: "Moura Ribeiro" });
+
+    // Act
+    const r = compararContato(c, { ...STJ, pessoas: [errada, certa] });
+    const soErrada = compararContato(c, { ...STJ, pessoas: [errada] });
+
+    // Assert
+    expect(nomeDe(r)?.valorEsperado).toBe("Moura Ribeiro");
+    expect(nomeDe(r)?.situacao).toBe("confere");
+    expect(soErrada.possivelSaida).toBe(true);
+    expect(contarContatosCasados([c], [errada])).toBe(0);
+    const pelaPessoa = compararContato(contato({ nome: "Maria Thereza Rocha de Assis Moura" }), { ...STJ, pessoas: [errada] });
+    expect(nomeDe(pelaPessoa)?.valorEsperado).toBe("Moura");
+  });
 });
 
 describe("aplicarNomesDoContatos (spec 2026-10-23 §4.2)", () => {

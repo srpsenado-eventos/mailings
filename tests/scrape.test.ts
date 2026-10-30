@@ -398,6 +398,20 @@ describe("extrairConteudo (nome partido pelo negrito, caso STJ)", () => {
 describe("raspar", () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  test("repassa nomeEmDestaque à extração (spec 2026-10-30 §3.1)", async () => {
+    // Arrange
+    const htmlStj = decodificarCorpo(readFileSync(resolve(__dirname, "fixtures/stj-ministros.html")), "text/html;charset=ISO-8859-1");
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(respostaOk(htmlStj))));
+
+    // Act
+    const com = await raspar("https://www.stj.jus.br/web/verMinistrosSTJ?parametro=1", { nomeEmDestaque: true });
+    const sem = await raspar("https://www.stj.jus.br/web/verMinistrosSTJ?parametro=1");
+
+    // Assert
+    expect(com.pessoas.find((p) => p.nome === "Sérgio Luíz Kukina")?.nomeDestaque).toBe("Sérgio Kukina");
+    expect(sem.pessoas.some((p) => p.nomeDestaque !== undefined)).toBe(false);
+  });
+
   test("envia headers de navegador (passa por WAF que bloqueia bot)", async () => {
     const fetchMock = vi.fn((_url: string, _opcoes?: RequestInit) =>
       Promise.resolve(respostaOk("<html><body>ok</body></html>")),

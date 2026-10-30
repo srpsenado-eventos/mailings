@@ -40,6 +40,12 @@ describe("rasparFonte escolhe o caminho pela fonte do catálogo", () => {
     expect(opcoes).not.toHaveProperty("tipo");
   });
 
+  test("nomeEmDestaque chega ao fetch em `opcoes` (spec 2026-10-30 §3.1)", async () => {
+    const r = raspadoresFalsos();
+    await rasparFonte({ url: "https://www.stj.jus.br/web/verMinistrosSTJ?parametro=1", nomeEmDestaque: true }, r);
+    expect(r.porFetch).toHaveBeenLastCalledWith("https://www.stj.jus.br/web/verMinistrosSTJ?parametro=1", { nomeEmDestaque: true });
+  });
+
   test("fonte com navegador vai pelo Chrome e nunca pelo fetch", async () => {
     const r = raspadoresFalsos();
     await rasparFonte({ url: "https://portal.tcu.gov.br/autoridades", navegador: true }, r);
@@ -83,6 +89,14 @@ describe("HTTP 403 ao fetch vai para a janela (spec 2026-10-23 §3.1)", () => {
     const c = await rasparFonte({ url: "https://portal.stf.jus.br/x", tabela: { colunas: { nome: 0 } } }, r);
     expect(c.pessoas).toHaveLength(1);
     expect(r.porJanela).toHaveBeenCalledWith("https://portal.stf.jus.br/x", { tabela: { colunas: { nome: 0 } } });
+  });
+  test("fetch 403 de fonte com nome em destaque: a janela recebe a marca", async () => {
+    const r = raspadoresFalsos();
+    const url = "https://www.stj.jus.br/web/verMinistrosSTJ?parametro=1";
+    r.porFetch.mockRejectedValue(new ScrapeError(url, "HTTP 403"));
+    r.porJanela.mockResolvedValue(comConteudo(url));
+    await rasparFonte({ url, nomeEmDestaque: true }, r);
+    expect(r.porJanela).toHaveBeenCalledWith(url, { nomeEmDestaque: true });
   });
   test("fetch 401 também vai para a janela; 404 e 500 não", async () => {
     for (const [motivo, vaiParaJanela] of [["HTTP 401", true], ["HTTP 404", false], ["HTTP 500", false]] as const) {

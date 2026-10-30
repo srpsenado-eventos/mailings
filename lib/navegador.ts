@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import puppeteer from "puppeteer-core";
-import { extrairConteudo, extrairTabela, ScrapeError } from "@/lib/scrape";
+import { extrairConteudo, extrairTabela, ScrapeError, type OpcoesRaspagem } from "@/lib/scrape";
 import { paginaComConteudo } from "@/lib/match";
 import type { ConteudoFonte, ExtracaoTabela } from "@/lib/types";
 
@@ -53,9 +53,19 @@ export interface ModoLancamento {
 
 export type Lancador = (caminhoChrome: string, modo?: ModoLancamento) => Promise<PaginaNavegador>;
 
+/** O que a leitura pelo Chrome aplica da fonte: a tabela e o nome em destaque (spec 2026-10-30 §3.1). */
+export type OpcoesExtracaoNavegador = Pick<OpcoesRaspagem, "tabela" | "nomeEmDestaque">;
+
+/** O HTML montado pelo Chrome passa pelo MESMO extrator das outras fontes. */
+function extrairDoNavegador(html: string, url: string, opcoes: OpcoesExtracaoNavegador): ConteudoFonte {
+  if (opcoes.tabela) return extrairTabela(html, url, opcoes.tabela);
+  return extrairConteudo(html, url, opcoes.nomeEmDestaque ? { nomeEmDestaque: true } : {});
+}
+
 export interface OpcoesNavegador {
   timeoutMs?: number;
   tabela?: ExtracaoTabela;
+  nomeEmDestaque?: boolean;
   env?: NodeJS.ProcessEnv;
   existe?: (caminho: string) => boolean;
   lancar?: Lancador;
@@ -138,7 +148,7 @@ export async function rasparComNavegador(url: string, opcoes: OpcoesNavegador = 
       timeoutMs,
     );
     if (!html.trim()) throw new ScrapeError(url, "HTML vazio");
-    return opcoes.tabela ? extrairTabela(html, url, opcoes.tabela) : extrairConteudo(html, url);
+    return extrairDoNavegador(html, url, opcoes);
   } catch (err) {
     if (err instanceof ScrapeError) throw err;
     if (err instanceof TempoEsgotadoError) throw new ScrapeError(url, MOTIVO_NAVEGADOR_TEMPO);
@@ -152,7 +162,7 @@ export async function rasparComNavegador(url: string, opcoes: OpcoesNavegador = 
 
 export interface SessaoNavegador {
   /** Lê UMA URL do catálogo na janela. As chamadas são enfileiradas: uma página por vez. */
-  raspar(url: string, opcoes?: { tabela?: ExtracaoTabela }): Promise<ConteudoFonte>;
+  raspar(url: string, opcoes?: OpcoesExtracaoNavegador): Promise<ConteudoFonte>;
   /** Fecha o Chrome, se chegou a abrir. Nunca lança. */
   fechar(): Promise<void>;
 }
@@ -196,12 +206,12 @@ export function abrirSessao(opcoes: OpcoesSessao = {}): SessaoNavegador {
     return lancamento;
   };
 
-  const lerUma = async (url: string, tabela?: ExtracaoTabela): Promise<ConteudoFonte> => {
+  const lerUma = async (url: string, extracao: OpcoesExtracaoNavegador): Promise<ConteudoFonte> => {
     try {
       const p = await pagina(url);
       const html = await comTeto(p.conteudo(url, timeoutMs), timeoutMs);
       if (!html.trim()) throw new ScrapeError(url, "HTML vazio");
-      return tabela ? extrairTabela(html, url, tabela) : extrairConteudo(html, url);
+      return extrairDoNavegador(html, url, extracao);
     } catch (err) {
       if (err instanceof ScrapeError) throw err;
       if (err instanceof TempoEsgotadoError) throw new ScrapeError(url, MOTIVO_NAVEGADOR_TEMPO);
@@ -209,21 +219,21 @@ export function abrirSessao(opcoes: OpcoesSessao = {}): SessaoNavegador {
     }
   };
 
-  const lerComRitmo = async (url: string, tabela?: ExtracaoTabela): Promise<ConteudoFonte> => {
+  const lerComRitmo = async (url: string, extracao: OpcoesExtracaoNavegador): Promise<ConteudoFonte> => {
     if (paginasPedidas++ > 0) await esperar(PAUSA_ENTRE_PAGINAS_MS);
     try {
-      const conteudo = await lerUma(url, tabela);
+      const conteudo = await lerUma(url, extracao);
       if (paginaComConteudo(conteudo)) return conteudo;
     } catch (err) {
       if (!(err instanceof ScrapeError && err.motivo === MOTIVO_MUITOS_PEDIDOS)) throw err;
     }
     await esperar(ESPERA_ANTES_DE_REPETIR_MS);
-    return lerUma(url, tabela);
+    return lerUma(url, extracao);
   };
 
   return {
     raspar(url, o = {}) {
-      const leitura = fila.then(() => lerComRitmo(url, o.tabela));
+      const leitura = fila.then(() => lerComRitmo(url, o));
       fila = leitura.catch(() => undefined);
       return leitura;
     },

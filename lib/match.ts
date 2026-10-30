@@ -75,15 +75,20 @@ export function pontuarPessoa(nomePlanilha: string, nomeSite: string): number {
   return fortes / Math.min(a.length, b.length);
 }
 
+/** Partes significativas que o destaque precisa ter para valer no casamento. */
+const MIN_TOKENS_DESTAQUE = 2;
+
 /**
  * Escore do contato contra uma pessoa da composição: o maior entre o nome completo e o nome
  * em destaque, quando a fonte o marca (spec 2026-10-30 §3.1). Qualquer um dos dois casa.
+ * Destaque de uma parte só ("Moura") não entra no escore: casaria quem tem a mesma palavra
+ * no nome ("Moura Ribeiro") com a pessoa errada. Ele continua sendo o nome esperado.
  */
 function pontuarContraPessoa(nomePlanilha: string, pessoa: PessoaSite): number {
   const pelaPessoa = pontuarPessoa(nomePlanilha, pessoa.nome);
-  return pessoa.nomeDestaque === undefined
-    ? pelaPessoa
-    : Math.max(pelaPessoa, pontuarPessoa(nomePlanilha, pessoa.nomeDestaque));
+  const destaque = pessoa.nomeDestaque;
+  if (destaque === undefined || tokensNome(destaque).length < MIN_TOKENS_DESTAQUE) return pelaPessoa;
+  return Math.max(pelaPessoa, pontuarPessoa(nomePlanilha, destaque));
 }
 
 /** O nome que o Contatos deve ter: o destaque da página, quando há; senão, o nome completo. */

@@ -12,7 +12,8 @@ import {
   type ModoLancamento,
   type PaginaNavegador,
 } from "@/lib/navegador";
-import { ScrapeError } from "@/lib/scrape";
+import { decodificarCorpo, ScrapeError } from "@/lib/scrape";
+import { readFileSync } from "node:fs";
 
 const HTML = `<html><body><main>
   <ul>
@@ -167,6 +168,34 @@ function lancadorDeSessao(htmlPorUrl: Record<string, string | (() => Promise<str
   };
   return { lancar, estado };
 }
+
+describe("nome em destaque pelo navegador (spec 2026-10-30 §3.1)", () => {
+  const URL_STJ = "https://www.stj.jus.br/web/verMinistrosSTJ?parametro=1";
+  const HTML_STJ = decodificarCorpo(readFileSync(path.resolve(__dirname, "fixtures/stj-ministros.html")), "text/html;charset=ISO-8859-1");
+  const destaqueDeKukina = (pessoas: { nome: string; nomeDestaque?: string }[]) =>
+    pessoas.find((p) => p.nome === "Sérgio Luíz Kukina")?.nomeDestaque;
+
+  test("a sessão com janela aplica a marca: a pessoa sai com nomeDestaque", async () => {
+    // Arrange
+    const { lancar } = lancadorDeSessao({ [URL_STJ]: HTML_STJ });
+    const sessao = abrirSessao({ esperar: semEspera, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+
+    // Act
+    const com = await sessao.raspar(URL_STJ, { nomeEmDestaque: true });
+    const sem = await sessao.raspar(URL_STJ);
+    await sessao.fechar();
+
+    // Assert
+    expect(destaqueDeKukina(com.pessoas)).toBe("Sérgio Kukina");
+    expect(sem.pessoas.some((p) => p.nomeDestaque !== undefined)).toBe(false);
+  });
+
+  test("o Chrome sem janela também repassa a marca", async () => {
+    const { lancar } = lancadorFalso(HTML_STJ);
+    const c = await rasparComNavegador(URL_STJ, { lancar, existe: existeSempre, env: ENV_VAZIO, nomeEmDestaque: true });
+    expect(destaqueDeKukina(c.pessoas)).toBe("Sérgio Kukina");
+  });
+});
 
 describe("abrirSessao (Chrome com janela, spec 2026-10-15 §4.2)", () => {
   test("lança o Chrome uma vez, com janela, só no primeiro raspar, e lê as páginas uma por vez na ordem", async () => {

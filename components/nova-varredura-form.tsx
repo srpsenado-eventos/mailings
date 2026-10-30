@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { lerPlanilha, ColunaFaltanteError } from "@/lib/planilha";
 import { lerBaseEnderecos, lerPlanilhaEnderecos } from "@/lib/planilha-enderecos";
 import { juntarArquivosEleicao, lerPlanilhaEleicao, PlanilhaEleicaoDesconhecidaError, resumoArquivoEleicao, separarColisoesDeTipo, substituirPorTipo, type ArquivoEleicaoLido } from "@/lib/planilha-eleitos";
-import { triarArquivosSoltos } from "@/lib/arquivos-soltos";
+import { extensoesDoPasso, triarArquivosSoltos } from "@/lib/arquivos-soltos";
 import { juntarMensagens } from "@/lib/texto";
 import type { BaseEnderecos, ContatoPlanilha, EnderecoEstruturado, Retrato } from "@/lib/types";
 
@@ -101,7 +101,7 @@ function SeletorDeArquivo({ id, rotulo, desabilitado, multiplo = false, onEntreg
       <input
         id={id}
         type="file"
-        accept=".xlsx,.csv"
+        accept={extensoesDoPasso(multiplo).join(",")}
         className="sr-only"
         disabled={desabilitado}
         multiple={multiplo}

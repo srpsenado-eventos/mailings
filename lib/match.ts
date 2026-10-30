@@ -23,7 +23,13 @@ import {
   temGeneroNeutro,
   type ContextoCargo,
 } from "@/lib/cargo-tribunal";
-import { comparacaoPrefixoNome, comparacaoRegraNome, comparacoesCoerencia, comparacoesProtocolo } from "@/lib/tratamento";
+import {
+  comparacaoPrefixoNome,
+  comparacaoRegraNome,
+  comparacoesCoerencia,
+  comparacoesProtocolo,
+  nomeEsperadoComPrefixo,
+} from "@/lib/tratamento";
 
 const LIMIAR_PESSOA = 0.6;
 const LIMIAR_TOKEN = 0.85;
@@ -327,7 +333,8 @@ function montarResultado(
     {
       campo: "nome",
       valorPlanilha: contato.nome,
-      valorEsperado: nomeEsperado(pessoa),
+      // Com a regra do prefixo (spec 2026-10-30 §3.3), o copiável leva o prefixo: nunca propõe tirá-lo.
+      valorEsperado: nomeEsperadoComPrefixo(contato, grupoCanonico, nomeEsperado(pessoa)),
       origemValor: ov,
       situacao: situacaoNome(contato.nome, pessoa),
     },
@@ -877,8 +884,8 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
     // Nome mais longo na página (R9): a pessoa está lá, mas o GT quer o nome como o site o
     // escreve; sai "divergente" (amarelo) com o nome da página para copiar.
     achado.exato
-      ? { campo: "nome", valorPlanilha: contato.nome, valorEsperado: achado.pessoa?.nome ?? contato.nome, origemValor: "pagina", situacao: "confere", fonteUrl: url }
-      : { campo: "nome", valorPlanilha: contato.nome, valorEsperado: achado.nomeNaPagina, origemValor: "pagina", situacao: "divergente", fonteUrl: url },
+      ? { campo: "nome", valorPlanilha: contato.nome, valorEsperado: nomeEsperadoComPrefixo(contato, grupoCanonico, achado.pessoa?.nome ?? contato.nome), origemValor: "pagina", situacao: "confere", fonteUrl: url }
+      : { campo: "nome", valorPlanilha: contato.nome, valorEsperado: achado.nomeNaPagina && nomeEsperadoComPrefixo(contato, grupoCanonico, achado.nomeNaPagina), origemValor: "pagina", situacao: "divergente", fonteUrl: url },
     ...cargoDe(cargo),
     ...comparacoesSemSite(contato),
     ...protocolo,

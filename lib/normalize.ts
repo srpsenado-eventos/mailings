@@ -35,7 +35,7 @@ const PATENTES = [
  * Forma comparável de um token de prefixo: sem acento, sem caixa, sem pontuação
  * e sem a flexão de gênero entre parênteses ("Ministro(a)" → "ministro").
  */
-function chaveToken(token: string): string {
+export function chaveToken(token: string): string {
   return normalizarTexto(token)
     .replace(/\((?:a|o|as|os)\)$/, "")
     .replace(/[.,;:]/g, "");

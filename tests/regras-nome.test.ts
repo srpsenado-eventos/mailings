@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { comparacaoPrefixoNome, comparacaoRegraNome, contatoEhFeminino, rotuloAchado, textoCoerencia } from "@/lib/tratamento";
+import { comparacaoPrefixoNome, comparacaoRegraNome, contatoEhFeminino, nomeEsperadoComPrefixo, rotuloAchado, textoCoerencia } from "@/lib/tratamento";
 import type { RegraNome } from "@/data/regras-nome";
 import type { ContatoPlanilha } from "@/lib/types";
 
@@ -413,5 +413,75 @@ describe("rotuloAchado e textoCoerencia — nome_sem_prefixo", () => {
     // Assert
     expect(texto).toContain("(Ministro Edson Fachin)");
     expect(texto).toContain('O Presidente de tribunal leva "Ministro(a)" antes do nome; o Presidente da República leva "Presidente" (regra do GT, 2026-10-30)');
+  });
+});
+
+describe("comparacaoPrefixoNome — limpeza de tratamentos antes do prefixo", () => {
+  test("\"Exmo. Ministro Fulano\" conta como nome com o prefixo", () => {
+    // Arrange
+    const c = contato({ nome: "Exmo. Ministro Joaquim Bezerra Vilaça", cargo: "Presidente do STF" });
+
+    // Act / Assert
+    expect(comparacaoPrefixoNome(c, "Ministros do STF")).toEqual([]);
+  });
+
+  test("\"Dr. Fulano\" no STF: o esperado é \"Ministro Fulano\", sem o Dr.", () => {
+    // Arrange
+    const c = contato({ nome: "Dr. Joaquim Bezerra Vilaça", cargo: "Presidente do STF" });
+
+    // Act / Assert
+    expect(comparacaoPrefixoNome(c, "Ministros do STF").map((r) => r.valorEsperado)).toEqual(["Ministro Joaquim Bezerra Vilaça"]);
+  });
+
+  test("\"Exma. Sra. Fulana\" no STF: o esperado é \"Ministra Fulana\"", () => {
+    // Arrange
+    const c = contato({ nome: "Exma. Sra. Luiza Meireles Prado", cargo: "Presidente do STF", tratamento: "Senhora" });
+
+    // Act / Assert
+    expect(comparacaoPrefixoNome(c, "Ministros do STF").map((r) => r.valorEsperado)).toEqual(["Ministra Luiza Meireles Prado"]);
+  });
+
+  test("patente não é tratamento: fica no esperado", () => {
+    // Arrange
+    const c = contato({ nome: "General Joaquim Vilaça", cargo: "Presidente do Superior Tribunal Militar" });
+
+    // Act / Assert
+    expect(comparacaoPrefixoNome(c, GRUPO_STM).map((r) => r.valorEsperado)).toEqual(["Ministro General Joaquim Vilaça"]);
+  });
+});
+
+describe("nomeEsperadoComPrefixo", () => {
+  test("com a regra, prefixo no gênero do contato + nome da página", () => {
+    // Arrange
+    const c = contato({ nome: "Ministro Joaquim Vilaça", cargo: "Presidente do STF" });
+
+    // Act / Assert
+    expect(nomeEsperadoComPrefixo(c, "Ministros do STF", "Joaquim Bezerra Vilaça")).toBe("Ministro Joaquim Bezerra Vilaça");
+  });
+
+  test("página com \"Ministro\" ou \"Exmo.\" não empilha o prefixo", () => {
+    // Arrange
+    const c = contato({ nome: "Ministro Joaquim Vilaça", cargo: "Presidente do STF" });
+
+    // Act / Assert
+    expect(nomeEsperadoComPrefixo(c, "Ministros do STF", "Exmo. Ministro Joaquim Bezerra Vilaça")).toBe("Ministro Joaquim Bezerra Vilaça");
+  });
+
+  test("Presidente da República: \"Presidente\" + nome da página", () => {
+    // Arrange
+    const c = contato({ nome: "Presidente Luís Inácio Lula da Silva" });
+
+    // Act / Assert
+    expect(nomeEsperadoComPrefixo(c, "Presidente da República", "Luiz Inácio Lula da Silva")).toBe("Presidente Luiz Inácio Lula da Silva");
+  });
+
+  test("sem a regra para o contato, devolve o nome da página como veio", () => {
+    // Arrange
+    const ministro = contato({ nome: "Joaquim Vilaça", cargo: "Ministro do STF" });
+
+    // Act / Assert
+    expect(nomeEsperadoComPrefixo(ministro, "Ministros do STF", "Joaquim Bezerra Vilaça")).toBe("Joaquim Bezerra Vilaça");
+    expect(nomeEsperadoComPrefixo(ministro, "Senadores", "Senador Joaquim Vilaça")).toBe("Senador Joaquim Vilaça");
+    expect(nomeEsperadoComPrefixo(ministro, undefined, "Joaquim Vilaça")).toBe("Joaquim Vilaça");
   });
 });

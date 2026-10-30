@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
-import { compararGrupo, marcarFonteInacessivel } from "@/lib/match";
-import type { ContatoPlanilha, ConteudoFonte } from "@/lib/types";
+import { compararContatoIndividual, compararGrupo, marcarFonteInacessivel } from "@/lib/match";
+import { extrairConteudo } from "@/lib/scrape";
+import type { ComparacaoCampo, ContatoPlanilha, ConteudoFonte, FonteIndividual } from "@/lib/types";
 
 const GRUPO_STM = "Ministros do STM";
 
@@ -215,5 +218,116 @@ describe("Prefixo do presidente (Camada C) nos caminhos de ResultadoContato", ()
 
     // Assert
     expect(achadosDe(g.contatos[0].comparacoes)).not.toContain("nome_sem_prefixo");
+  });
+});
+
+describe("Nome da página com o prefixo do presidente: o esperado copiável nunca tira o prefixo", () => {
+  const GRUPO_STF = "Ministros do STF";
+  const presidenteStf = (nome: string): ContatoPlanilha => ({
+    nome,
+    grupo: "STF",
+    cargo: "Presidente do Supremo Tribunal Federal",
+    ...CADASTRO_OK,
+  });
+  const pagina = (nome: string): ConteudoFonte => ({
+    url: "https://stf.jus.br",
+    textoLimpo: `${nome}, Ministro.`,
+    destaques: [],
+    pessoas: [{ nome, cargo: "Ministro", origem: "pagina" }],
+  });
+  const nomeDeValor = (comparacoes: readonly ComparacaoCampo[]): ComparacaoCampo | undefined =>
+    comparacoes.find((c) => c.campo === "nome" && c.origemValor !== "coerencia");
+
+  test("\"Ministro X Y\" × página \"X Z Y\": diverge e o copiável é \"Ministro X Z Y\"", () => {
+    // Act
+    const g = compararGrupo("STF", [presidenteStf("Ministro Joaquim Vilaça")], pagina("Joaquim Bezerra Vilaça"), GRUPO_STF);
+
+    // Assert
+    const nome = nomeDeValor(g.contatos[0].comparacoes);
+    expect(nome?.situacao).toBe("divergente");
+    expect(nome?.valorEsperado).toBe("Ministro Joaquim Bezerra Vilaça");
+    expect(achadosDe(g.contatos[0].comparacoes)).not.toContain("nome_sem_prefixo");
+  });
+
+  test("\"X Y\" sem prefixo × página \"X Y\": o nome de valor confere e a Camada C acusa com \"Ministro X Y\"", () => {
+    // Act
+    const g = compararGrupo("STF", [presidenteStf("Joaquim Bezerra Vilaça")], pagina("Joaquim Bezerra Vilaça"), GRUPO_STF);
+
+    // Assert
+    expect(nomeDeValor(g.contatos[0].comparacoes)?.situacao).toBe("confere");
+    const camadaC = g.contatos[0].comparacoes.find((c) => c.achado === "nome_sem_prefixo");
+    expect(camadaC?.valorEsperado).toBe("Ministro Joaquim Bezerra Vilaça");
+  });
+
+  test("página que já traz \"Ministro\" no nome não empilha o prefixo", () => {
+    // Act
+    const g = compararGrupo("STF", [presidenteStf("Ministro Joaquim Vilaça")], pagina("Ministro Joaquim Bezerra Vilaça"), GRUPO_STF);
+
+    // Assert
+    expect(nomeDeValor(g.contatos[0].comparacoes)?.valorEsperado).toBe("Ministro Joaquim Bezerra Vilaça");
+  });
+
+  test("contato feminino: o copiável leva \"Ministra\"", () => {
+    // Arrange
+    const c = { ...presidenteStf("Ministra Luiza Prado"), tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" };
+
+    // Act
+    const g = compararGrupo("STF", [c], pagina("Luiza Meireles Prado"), GRUPO_STF);
+
+    // Assert
+    expect(nomeDeValor(g.contatos[0].comparacoes)?.valorEsperado).toBe("Ministra Luiza Meireles Prado");
+  });
+
+  test("ministro que não é o presidente: o esperado continua o da página", () => {
+    // Arrange
+    const c = { ...presidenteStf("Joaquim Vilaça"), cargo: "Ministro do Supremo Tribunal Federal" };
+
+    // Act
+    const g = compararGrupo("STF", [c], pagina("Joaquim Bezerra Vilaça"), GRUPO_STF);
+
+    // Assert
+    expect(nomeDeValor(g.contatos[0].comparacoes)?.valorEsperado).toBe("Joaquim Bezerra Vilaça");
+  });
+
+  test("grupo sem regra de prefixo: o esperado continua o da página", () => {
+    // Arrange
+    const c: ContatoPlanilha = { nome: "Senador Joaquim Vilaça", grupo: "Senadores", cargo: "Senador", ...CADASTRO_OK };
+
+    // Act
+    const g = compararGrupo("Senadores", [c], pagina("Joaquim Bezerra Vilaça"), "Senadores");
+
+    // Assert
+    expect(nomeDeValor(g.contatos[0].comparacoes)?.valorEsperado).toBe("Joaquim Bezerra Vilaça");
+  });
+
+  test("página individual: nome mais curto no cadastro do Presidente da República sai com \"Presidente\" + nome da página", () => {
+    // Arrange
+    const estado = extrairConteudo(readFileSync(resolve(__dirname, "fixtures/governo-estadual.html"), "utf-8"), "https://www.exemplar.gov.br/governo");
+    const fonte: FonteIndividual = { url: estado.url, ativo: true, chave: { uf: "EX" }, campos: ["nome"] };
+    const c: ContatoPlanilha = { nome: "Presidente João Carlos Silva", grupo: "Presidente da República", ...CADASTRO_OK };
+
+    // Act
+    const v = compararContatoIndividual({ contato: c, fonte, lida: { conteudo: estado }, grupoCanonico: "Presidente da República" });
+
+    // Assert
+    const nome = nomeDeValor(v.resultado.comparacoes);
+    expect(nome?.situacao).toBe("divergente");
+    expect(nome?.valorEsperado).toBe("Presidente João Carlos Destaque Silva");
+  });
+
+  test("página individual: nome exato sem prefixo confere, e o esperado leva o prefixo", () => {
+    // Arrange
+    const estado = extrairConteudo(readFileSync(resolve(__dirname, "fixtures/governo-estadual.html"), "utf-8"), "https://www.exemplar.gov.br/governo");
+    const fonte: FonteIndividual = { url: estado.url, ativo: true, chave: { uf: "EX" }, campos: ["nome"] };
+    const c: ContatoPlanilha = { nome: "João Carlos Destaque Silva", grupo: "Presidente da República", ...CADASTRO_OK };
+
+    // Act
+    const v = compararContatoIndividual({ contato: c, fonte, lida: { conteudo: estado }, grupoCanonico: "Presidente da República" });
+
+    // Assert
+    const nome = nomeDeValor(v.resultado.comparacoes);
+    expect(nome?.situacao).toBe("confere");
+    expect(nome?.valorEsperado).toBe("Presidente João Carlos Destaque Silva");
+    expect(achadosDe(v.resultado.comparacoes)).toContain("nome_sem_prefixo");
   });
 });

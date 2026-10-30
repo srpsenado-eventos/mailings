@@ -741,7 +741,7 @@ export interface VereditoIndividual {
   nomeConfirmado: boolean;
   /** A página individual foi lida com conteúdo (independe de o nome estar nela). */
   lidaComConteudo: boolean;
-  /** Pessoas com cargo da página individual quando o contato não está nela (proposta de inclusão). */
+  /** Sempre vazio hoje: a página individual nunca propõe inclusão (spec 2026-10-30 §3.6). */
   novos: PessoaSite[];
 }
 
@@ -812,7 +812,8 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
       },
       nomeConfirmado: false,
       lidaComConteudo: true,
-      novos: conteudo.pessoas.filter((p) => Boolean(p.cargo)).map((p) => ({ ...p, origem: "pagina" as const, fonteUrl: url })),
+      // A página individual fala de uma pessoa: quem mais está nela não é candidato ao grupo (spec 2026-10-30 §3.6).
+      novos: [],
     };
   }
 

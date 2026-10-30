@@ -197,14 +197,32 @@ describe("compararContatoIndividual (tabela §5.2)", () => {
     expect(v2.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "confere", valorEsperado: "Governador do Estado Exemplar" });
   });
 
-  test("individual lida com conteúdo e nome ausente: vermelho, possível saída, pessoas com cargo viram novos com a URL", () => {
+  test("individual lida com conteúdo e nome ausente: vermelho, possível saída, e a página individual nunca propõe inclusão", () => {
     const v = compararContatoIndividual({ contato: { ...ministra, nome: "Outra Pessoa Qualquer" }, fonte: indNome, lida: { conteudo: ministerio }, listaCargos: LISTA });
     expect(v.resultado).toMatchObject({ semaforo: "vermelho", possivelSaida: true, observacao: OBSERVACAO_NAO_CONSTA_INDIVIDUAL, fonteUrl: ministerio.url });
     expect(v.resultado.camposDivergentes[0]).toEqual({ campo: "nome", valorPlanilha: "Outra Pessoa Qualquer" });
     expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toBeUndefined();
     expect(v.nomeConfirmado).toBe(false);
     expect(v.lidaComConteudo).toBe(true);
-    expect(v.novos.map((n) => [n.nome, n.fonteUrl])).toEqual([["Ana Maria Política Completa", ministerio.url]]);
+    expect(ministerio.pessoas.some((pe) => Boolean(pe.cargo))).toBe(true);
+    expect(v.novos).toEqual([]);
+  });
+
+  test("página individual com 3 pessoas com cargo e sem o contato: possível saída e nenhuma proposta de inclusão", () => {
+    const tabela: ConteudoFonte = {
+      url: estado.url,
+      textoLimpo: "Principais cargos do Estado. Fulano de Tal Primeiro, Vice-Governador. Beltrano de Tal Segundo, Secretário de Fazenda. Sicrano de Tal Terceiro, Secretário de Saúde." + " Texto de enchimento para a página contar como lida com conteúdo. ".repeat(6),
+      destaques: [],
+      pessoas: [
+        { nome: "Fulano de Tal Primeiro", cargo: "Vice-Governador" },
+        { nome: "Beltrano de Tal Segundo", cargo: "Secretário de Fazenda" },
+        { nome: "Sicrano de Tal Terceiro", cargo: "Secretário de Saúde" },
+      ],
+    };
+    const v = compararContatoIndividual({ contato: governador, fonte: indNomeCargo, lida: { conteudo: tabela } });
+    expect(v.resultado).toMatchObject({ semaforo: "vermelho", possivelSaida: true });
+    expect(v.lidaComConteudo).toBe(true);
+    expect(v.novos).toEqual([]);
   });
 
   test("individual caiu (erro): indeterminado, nome 'nao_verificado', cargo ainda pela lista, motivo na observação", () => {

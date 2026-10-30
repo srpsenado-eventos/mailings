@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import type { ReactElement } from "react";
 import { armazemPadrao, RetratoIlegivelError, type Armazem } from "@/lib/armazem";
 import { armazemEmBlob, clienteBlobPadrao } from "@/lib/armazem-blob";
+import { armazemDecisoesEmBlob, armazemDecisoesPadrao, type ArmazemDecisoes } from "@/lib/armazem-decisoes";
+import { HISTORICO_VAZIO, type HistoricoDecisoes } from "@/lib/decisoes";
 import { modoDoApp, type ModoApp } from "@/lib/modo";
 import { COOKIE_SESSAO, validarToken } from "@/lib/sessao";
 import type { Retrato } from "@/lib/types";
@@ -19,8 +21,27 @@ export function Aviso({ titulo, texto, acao }: { titulo: string; texto: string; 
 }
 
 export type CargaRetrato =
-  | { retrato: Retrato; modo: ModoApp; podePublicar: boolean }
+  | { retrato: Retrato; modo: ModoApp; podePublicar: boolean; decisoes: HistoricoDecisoes; avisoDecisoes?: string }
   | { aviso: ReactElement };
+
+const AVISO_DECISOES_LOCAL =
+  "O arquivo .fiscal/decisoes.json existe, mas não pôde ser lido: a página mostra a varredura sem as decisões do GT. Registrar uma decisão nova não vai funcionar até o arquivo ser corrigido.";
+const AVISO_DECISOES_WEB = "As decisões do GT publicadas não puderam ser lidas: a página mostra a varredura sem elas.";
+
+/**
+ * Decisões do GT (spec 2026-10-30 §4.1.2): ausentes valem como histórico vazio; ilegíveis também,
+ * com aviso na página e log técnico, para o painel e /repetidos abrirem do mesmo jeito.
+ */
+async function carregarDecisoes(
+  armazem: ArmazemDecisoes, modo: ModoApp, rota: string,
+): Promise<{ decisoes: HistoricoDecisoes; avisoDecisoes?: string }> {
+  try {
+    return { decisoes: await armazem.ler() };
+  } catch (err) {
+    console.error(`[${rota}] decisões não lidas:`, err instanceof Error ? err.message : "erro desconhecido");
+    return { decisoes: HISTORICO_VAZIO, avisoDecisoes: modo === "web" ? AVISO_DECISOES_WEB : AVISO_DECISOES_LOCAL };
+  }
+}
 
 /** Lê o último retrato (local ou publicado) para uma página; `rota` só identifica o log técnico. */
 export async function carregarRetrato(rota: string): Promise<CargaRetrato> {
@@ -59,5 +80,7 @@ export async function carregarRetrato(rota: string): Promise<CargaRetrato> {
     if (modo === "web") return { aviso: <Aviso titulo="Nenhuma varredura publicada ainda" texto="Quando a máquina do GT publicar uma varredura, ela aparece aqui." /> };
     redirect("/nova-varredura");
   }
-  return { retrato, modo, podePublicar: modo === "local" && Boolean(token) };
+  const armazemDecisoes = modo === "web" ? armazemDecisoesEmBlob(clienteBlobPadrao(token as string)) : armazemDecisoesPadrao();
+  const decisoes = await carregarDecisoes(armazemDecisoes, modo, rota);
+  return { retrato, modo, podePublicar: modo === "local" && Boolean(token), ...decisoes };
 }

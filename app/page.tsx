@@ -9,5 +9,5 @@ export default async function Home() {
   if ("aviso" in carga) return carga.aviso;
   // O painel não usa a base de endereços (só o /prodasen) nem a memória de leitura; não vão ao cliente.
   const { baseEnderecos: _base, leituras: _leituras, ...retratoDoPainel } = carga.retrato;
-  return <Painel retrato={retratoDoPainel} modo={carga.modo} podePublicar={carga.podePublicar} />;
+  return <Painel retrato={retratoDoPainel} modo={carga.modo} podePublicar={carga.podePublicar} aviso={carga.avisoDecisoes} />;
 }

@@ -53,8 +53,26 @@ export function validarRetrato(valor: unknown): Retrato {
   return valor as Retrato;
 }
 
-function ehArquivoAusente(err: unknown): boolean {
+/** Erro de leitura de arquivo que não existe (`ENOENT`). */
+export function ehArquivoAusente(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "ENOENT";
+}
+
+/**
+ * Escrita atômica: grava num temporário único ao lado e renomeia, para uma queda no
+ * meio não deixar um arquivo pela metade nem duas gravações disputarem o mesmo arquivo.
+ * `rename` substitui o destino, inclusive no Windows. Se falhar, o temporário é apagado.
+ */
+export async function gravarArquivoAtomico(caminho: string, texto: string): Promise<void> {
+  await mkdir(dirname(caminho), { recursive: true });
+  const temporario = `${caminho}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  try {
+    await writeFile(temporario, texto, "utf8");
+    await rename(temporario, caminho);
+  } catch (err) {
+    await rm(temporario, { force: true });
+    throw err;
+  }
 }
 
 export function armazemEmArquivo(caminho: string): Armazem {
@@ -76,18 +94,7 @@ export function armazemEmArquivo(caminho: string): Armazem {
       return validarRetrato(json);
     },
     async gravarRetrato(retrato) {
-      // Escrita atômica: grava num temporário único ao lado e renomeia, para uma queda no
-      // meio não deixar um retrato pela metade nem duas gravações disputarem o mesmo arquivo.
-      // `rename` substitui o destino, inclusive no Windows. Se falhar, o temporário é apagado.
-      await mkdir(dirname(caminho), { recursive: true });
-      const temporario = `${caminho}.${process.pid}.${Date.now()}.tmp`;
-      try {
-        await writeFile(temporario, JSON.stringify(retrato), "utf8");
-        await rename(temporario, caminho);
-      } catch (err) {
-        await rm(temporario, { force: true });
-        throw err;
-      }
+      await gravarArquivoAtomico(caminho, JSON.stringify(retrato));
     },
   };
 }

@@ -13,7 +13,7 @@ const FILTROS: readonly { id: FiltroRepetidas; rotulo: string }[] = [
   { id: "decidido", rotulo: "Decididas" },
 ];
 
-export function TelaRepetidos({ repetidas, geradoEm }: { repetidas: AutoridadeRepetida[]; geradoEm: string }) {
+export function TelaRepetidos({ repetidas, geradoEm, aviso }: { repetidas: AutoridadeRepetida[]; geradoEm: string; aviso?: string }) {
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState<FiltroRepetidas>("todas");
   const lista = useMemo(() => filtrarRepetidas(repetidas, busca, filtro), [repetidas, busca, filtro]);
@@ -38,6 +38,7 @@ export function TelaRepetidos({ repetidas, geradoEm }: { repetidas: AutoridadeRe
           Baixar planilha
         </button>
       </header>
+      {aviso && <p className="mt-4 rounded-lg border border-atencao-borda bg-atencao-fundo p-3 text-sm text-atencao">{aviso}</p>}
 
       <div className="mt-6 flex flex-wrap items-center gap-2">
         <input

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { analisar, type Dependencias } from "@/lib/analise";
 import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload";
 import { armazemPadrao, type Armazem } from "@/lib/armazem";
+import { armazemDecisoesPadrao, atualizarDecisoes } from "@/lib/armazem-decisoes";
+import { registrarColetasDoRetrato } from "@/lib/decisoes-coleta";
 import { aplicarEleicao } from "@/lib/eleitos";
 import { resolverGrupoEFonte } from "@/lib/catalogo";
 import { aplicarListas } from "@/lib/grupos-lista";
@@ -15,6 +17,22 @@ import { extrairComposicao, diagnosticarIa } from "@/lib/gemini";
 import type { Retrato } from "@/lib/types";
 
 const AVISO_NAO_GUARDADO = "A varredura terminou, mas o retrato não pôde ser guardado: na próxima abertura o app não a terá.";
+const AVISO_DECISOES = "A varredura terminou e o retrato foi guardado, mas o histórico das decisões do GT não foi atualizado com esta coleta.";
+
+/**
+ * Situação no Contatos de cada caso decidido (spec 2026-10-30 §4.1.4), só com o retrato guardado.
+ * Falha vira aviso e não derruba a varredura; o arquivo de decisões ilegível não é sobrescrito.
+ */
+async function registrarColetaNasDecisoes(retrato: Retrato): Promise<string | undefined> {
+  try {
+    await atualizarDecisoes(armazemDecisoesPadrao(), (h) => registrarColetasDoRetrato(h, retrato));
+    return undefined;
+  } catch (err) {
+    // Só o motivo técnico: nada de nomes no log.
+    console.error("[/api/analise] decisões não atualizadas:", err instanceof Error ? err.message : "erro desconhecido");
+    return AVISO_DECISOES;
+  }
+}
 
 /** Retrato anterior, só para a memória de leitura e as falhas por URL: ausente ou ilegível vale como "sem memória" (spec 2026-10-20 §10). */
 async function lerRetratoAnterior(armazem: Armazem): Promise<Retrato | undefined> {
@@ -102,6 +120,7 @@ export async function POST(req: NextRequest) {
       console.error("[/api/analise] retrato não guardado:", err instanceof Error ? err.message : "erro desconhecido");
       aviso = AVISO_NAO_GUARDADO;
     }
+    if (!aviso) aviso = await registrarColetaNasDecisoes(retrato);
 
     // Diagnóstico temporário (não-PII): só roda com ?diag=1 (custo zero no fluxo normal).
     const diag = req.nextUrl.searchParams.get("diag") === "1" ? await diagnosticarIa() : undefined;

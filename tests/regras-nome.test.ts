@@ -282,6 +282,27 @@ describe("comparacaoPrefixoNome — Presidente de tribunal leva \"Ministro(a)\" 
     expect(comparacaoRegraNome(c, GRUPO_STM).map((r) => r.achado)).toEqual(["nome_tratamento_academico"]);
   });
 
+  test("presidente do STM com \"Dr.\": as duas sugestões coincidem em \"Ministro Fulano\"", () => {
+    // Arrange
+    const c = contato({ nome: "Dr. Joaquim Bezerra Vilaça", cargo: "Presidente do Superior Tribunal Militar" });
+
+    // Act
+    const academico = comparacaoRegraNome(c, GRUPO_STM).map((r) => r.valorEsperado);
+    const prefixo = comparacaoPrefixoNome(c, GRUPO_STM).map((r) => r.valorEsperado);
+
+    // Assert
+    expect(academico).toEqual(["Ministro Joaquim Bezerra Vilaça"]);
+    expect(prefixo).toEqual(academico);
+  });
+
+  test("ministro do STM que não preside: o esperado do \"Dr.\" fica sem prefixo", () => {
+    // Arrange
+    const c = contato({ nome: "Dr. Joaquim Bezerra Vilaça", cargo: "Ministro do Superior Tribunal Militar" });
+
+    // Act / Assert
+    expect(comparacaoRegraNome(c, GRUPO_STM).map((r) => r.valorEsperado)).toEqual(["Joaquim Bezerra Vilaça"]);
+  });
+
   test("Presidente do Senado e da Câmara ficam fora da regra", () => {
     // Arrange
     const c = contato({ nome: "Davi Alcolumbre", cargo: "Presidente do Senado Federal" });

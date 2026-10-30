@@ -8,6 +8,7 @@ import {
   marcarFonteInacessivel,
   mesclarComposicao,
   MOTIVO_SEM_LISTA,
+  novosForaDaPlanilha,
   OBSERVACAO_SEM_FONTE_OFICIAL,
   pontuarPessoa,
   situacaoCampo,
@@ -567,6 +568,39 @@ describe("nome em destaque (spec 2026-10-30 §3.1, STJ)", () => {
     expect(contarContatosCasados([c], [errada])).toBe(0);
     const pelaPessoa = compararContato(contato({ nome: "Maria Thereza Rocha de Assis Moura" }), { ...STJ, pessoas: [errada] });
     expect(nomeDe(pelaPessoa)?.valorEsperado).toBe("Moura");
+  });
+
+  test("presidente do STJ com destaque: confere pelo destaque, com o prefixo \"Ministro\" e sem achado de prefixo", () => {
+    // Arrange
+    const pessoa: PessoaSite = { nome: "Antonio Herman de Vasconcellos e Benjamin", nomeDestaque: "Herman Benjamin", cargo: "Presidente" };
+    const c = contato({ nome: "Ministro Herman Benjamin", grupo: "STJ", cargo: "Presidente do Superior Tribunal de Justiça" });
+
+    // Act
+    const g = compararGrupo("STJ", [c], { ...STJ, pessoas: [pessoa] }, "Ministros do STJ");
+    const r = g.contatos[0];
+
+    // Assert
+    expect(nomeDe(r)?.situacao).toBe("confere");
+    expect(nomeDe(r)?.valorEsperado).toBe("Ministro Herman Benjamin");
+    expect(r.comparacoes.find((x) => x.campo === "cargo")?.situacao).toBe("confere");
+    expect(r.comparacoes.some((x) => x.achado === "nome_sem_prefixo")).toBe(false);
+  });
+
+  test("proposta de inclusão mostra o nome em destaque e guarda o completo no contexto", () => {
+    // Arrange
+    const nova: PessoaSite = { nome: "Maria Thereza Rocha de Assis Moura", nomeDestaque: "Maria Thereza Moura", cargo: "Ministra" };
+    const semDestaque: PessoaSite = { nome: "Paulo Dias Exemplo", cargo: "Ministro", contexto: "Convocado" };
+
+    // Act
+    const g = compararGrupo("STJ", [], { ...STJ, pessoas: [nova, semDestaque] });
+    const fora = novosForaDaPlanilha([nova, semDestaque], []);
+
+    // Assert
+    for (const novos of [g.novos, fora]) {
+      expect(novos[0].nome).toBe("Maria Thereza Moura");
+      expect(novos[0].contexto).toBe("Nome completo: Maria Thereza Rocha de Assis Moura");
+      expect(novos[1]).toEqual(semDestaque);
+    }
   });
 });
 

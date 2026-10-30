@@ -485,7 +485,7 @@ export function rotuloAchado(achado: AchadoCoerencia): string {
 }
 
 /** A regra do prefixo no nome do presidente, como o GT a fixou (spec 2026-10-30 §3.3). */
-export const EXPLICACAO_PREFIXO_NOME =
+const EXPLICACAO_PREFIXO_NOME =
   'O Presidente de tribunal leva "Ministro(a)" antes do nome; o Presidente da República leva "Presidente" (regra do GT, 2026-10-30)';
 
 /**
@@ -652,11 +652,14 @@ export function comparacaoRegraNome(
 ): ComparacaoCampo[] {
   const proibidos = (grupoCanonico ? regras[grupoCanonico] : undefined)?.tratamentosProibidos ?? [];
   if (!temTratamentoProibido(contato.nome, proibidos)) return [];
+  // Quando a regra do prefixo vale para o contato, o esperado já leva o prefixo: uma sugestão só,
+  // a mesma do achado `nome_sem_prefixo`.
+  const semTratamento = semTratamentosProibidos(contato.nome, proibidos);
   return [
     {
       campo: "nome",
       valorPlanilha: contato.nome,
-      valorEsperado: semTratamentosProibidos(contato.nome, proibidos),
+      valorEsperado: nomeEsperadoComPrefixo(contato, grupoCanonico, semTratamento, regras),
       situacao: "divergente",
       origemValor: "coerencia",
       achado: "nome_tratamento_academico",

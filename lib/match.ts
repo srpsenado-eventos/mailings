@@ -110,6 +110,15 @@ function nomeEsperado(pessoa: PessoaSite): string {
 }
 
 /**
+ * A pessoa como proposta de inclusão: com destaque, o nome que o Contatos deve ter é o
+ * destaque e o nome completo da página fica em `contexto` (sem contexto próprio).
+ */
+function comoProposta(pessoa: PessoaSite): PessoaSite {
+  if (pessoa.nomeDestaque === undefined) return pessoa;
+  return { ...pessoa, nome: pessoa.nomeDestaque, contexto: pessoa.contexto ?? `Nome completo: ${pessoa.nome}` };
+}
+
+/**
  * Compõe a lista final de pessoas a partir da Camada 1 (página) e da Camada 2 (IA):
  * - Página ilegível (sem pessoas) → usa a composição da IA (cobertura, ex.: TCU/JS).
  * - Página legível → base oficial + RESGATE: anexa só as pessoas da IA que casam algum
@@ -504,10 +513,12 @@ export function compararGrupo(
   // "novos": de fonte que propõe inclusão, só quem está na faixa de UF do grupo. Das
   // demais fontes, mantém a regra antiga — só pessoa com cargo, que corta item de menu
   // do texto achatado. Numa fonte tabular toda linha já é pessoa.
-  const novos = fonte.pessoas.filter((p, i) => {
-    if (usados.has(i)) return false;
-    return p.propoeInclusao ? naFaixaDeUf(p, ufsDoGrupo) : Boolean(p.cargo);
-  });
+  const novos = fonte.pessoas
+    .filter((p, i) => {
+      if (usados.has(i)) return false;
+      return p.propoeInclusao ? naFaixaDeUf(p, ufsDoGrupo) : Boolean(p.cargo);
+    })
+    .map(comoProposta);
   return { grupo, fonteUrl: fonte.url, semFonte: false, contatos: resultados, novos };
 }
 
@@ -793,8 +804,6 @@ export interface VereditoIndividual {
   nomeConfirmado: boolean;
   /** A página individual foi lida com conteúdo (independe de o nome estar nela). */
   lidaComConteudo: boolean;
-  /** Sempre vazio hoje: a página individual nunca propõe inclusão (spec 2026-10-30 §3.6). */
-  novos: PessoaSite[];
 }
 
 /** Veredito de um contato ligado a uma fonte individual: a tabela da spec 2026-10-15 §5.2. */
@@ -836,7 +845,6 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
       },
       nomeConfirmado: false,
       lidaComConteudo,
-      novos: [],
     };
   };
 
@@ -865,8 +873,6 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
       },
       nomeConfirmado: false,
       lidaComConteudo: true,
-      // A página individual fala de uma pessoa: quem mais está nela não é candidato ao grupo (spec 2026-10-30 §3.6).
-      novos: [],
     };
   }
 
@@ -906,7 +912,6 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
     },
     nomeConfirmado: true,
     lidaComConteudo: true,
-    novos: [],
   };
 }
 
@@ -954,7 +959,7 @@ export function compararContatoSemIndividual(
  * "pessoa"` num grupo que também tem individuais (spec §5.5).
  */
 export function novosForaDaPlanilha(pessoas: PessoaSite[], contatos: ContatoPlanilha[]): PessoaSite[] {
-  return pessoas.filter(
-    (p) => Boolean(p.cargo) && !contatos.some((c) => pontuarContraPessoa(c.nome, p) >= LIMIAR_PESSOA),
-  );
+  return pessoas
+    .filter((p) => Boolean(p.cargo) && !contatos.some((c) => pontuarContraPessoa(c.nome, p) >= LIMIAR_PESSOA))
+    .map(comoProposta);
 }

@@ -1,6 +1,6 @@
 # Regras fixas de nome, cargo e protocolo pelos pares; leitura de Roraima
 
-Data: 2026-10-30. Situação: desenho a aprovar pelo Clovis. Decisões tomadas por ele em 30/10, numa rodada de perguntas depois da coleta de 30/10 15h04. Complementa as specs de 2026-08-13 (tratamento e endereçamento), 2026-09-18 (Camada C, regras de nome), 2026-10-15 (fontes individuais) e 2026-10-23 (nome mais curto em destaque). Nada aqui muda a regra de ouro do "possível saída".
+Data: 2026-10-30. Situação: aprovada pelo Clovis em 30/10; implementada (plano de 2026-10-30). Decisões tomadas por ele em 30/10, numa rodada de perguntas depois da coleta de 30/10 15h04. Complementa as specs de 2026-08-13 (tratamento e endereçamento), 2026-09-18 (Camada C, regras de nome), 2026-10-15 (fontes individuais) e 2026-10-23 (nome mais curto em destaque). Nada aqui muda a regra de ouro do "possível saída".
 
 ## 1. Intenção
 

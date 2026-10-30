@@ -171,7 +171,6 @@ describe("compararContatoIndividual (tabela §5.2)", () => {
     expect(v.resultado.fonteUrl).toBe(ministerio.url);
     expect(v.resultado.comparacoes.find((c) => c.campo === "nome")).toMatchObject({ situacao: "confere", fonteUrl: ministerio.url });
     expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "confere", fonteUrl: LISTA.url });
-    expect(v.novos).toEqual([]);
   });
 
   test("cargo diverge da lista: amarelo com o texto oficial em valorEsperado", () => {
@@ -205,7 +204,6 @@ describe("compararContatoIndividual (tabela §5.2)", () => {
     expect(v.nomeConfirmado).toBe(false);
     expect(v.lidaComConteudo).toBe(true);
     expect(ministerio.pessoas.some((pe) => Boolean(pe.cargo))).toBe(true);
-    expect(v.novos).toEqual([]);
   });
 
   test("página individual com 3 pessoas com cargo e sem o contato: possível saída e nenhuma proposta de inclusão", () => {
@@ -222,7 +220,6 @@ describe("compararContatoIndividual (tabela §5.2)", () => {
     const v = compararContatoIndividual({ contato: governador, fonte: indNomeCargo, lida: { conteudo: tabela } });
     expect(v.resultado).toMatchObject({ semaforo: "vermelho", possivelSaida: true });
     expect(v.lidaComConteudo).toBe(true);
-    expect(v.novos).toEqual([]);
   });
 
   test("individual caiu (erro): indeterminado, nome 'nao_verificado', cargo ainda pela lista, motivo na observação", () => {
@@ -233,7 +230,6 @@ describe("compararContatoIndividual (tabela §5.2)", () => {
     expect(v.resultado.comparacoes.find((c) => c.campo === "nome")).toMatchObject({ situacao: "nao_verificado", fonteUrl: ministerio.url });
     expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "confere", fonteUrl: LISTA.url });
     expect(v.lidaComConteudo).toBe(false);
-    expect(v.novos).toEqual([]);
   });
 
   test("página com texto abaixo do mínimo (CAPTCHA, só menu) é inacessível, não ausência: nunca possível saída", () => {
@@ -255,7 +251,6 @@ describe("compararContatoIndividual (tabela §5.2)", () => {
     expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "nao_verificado", fonteUrl: estado.url });
     expect(v.nomeConfirmado).toBe(false);
     expect(v.lidaComConteudo).toBe(true);
-    expect(v.novos).toEqual([]);
   });
 
   test("contato com nome vazio e cargo pela lista: cargo continua conferido pela lista", () => {

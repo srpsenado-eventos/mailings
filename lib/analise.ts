@@ -601,7 +601,6 @@ async function analisarGrupoIndividual(
         resultado: compararContatoSemIndividual(l.contato, { grupoCanonico, listaCargos, uf: ufDoContato(l.contato) }),
         nomeConfirmado: false,
         lidaHoje: false,
-        novos: [] as PessoaSite[],
       };
     }
     const lida = porUrl.get(l.fonte.url)!;
@@ -668,7 +667,8 @@ async function analisarGrupoIndividual(
       ...(geral ? { fonteUrl: geral.url } : {}),
       semFonte: false,
       contatos: vereditos.map((v) => v.resultado),
-      novos: [...vereditos.flatMap((v) => v.novos), ...novosDaGeral],
+      // A página individual fala de uma pessoa: quem mais está nela não é candidato ao grupo (spec 2026-10-30 §3.6).
+      novos: novosDaGeral,
       ...(erros.length > 0 ? { erroFonte: erros.join(" · ") } : {}),
       // A geral é a `fonteUrl` do grupo: reaproveitada, o cabeçalho diz a data e o motivo.
       ...(geral && geralReaproveitada ? { reaproveitada: { url: geral.url, ...geralReaproveitada } } : {}),

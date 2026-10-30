@@ -49,6 +49,14 @@ export const HISTORICO_VAZIO: HistoricoDecisoes = Object.freeze({
   casos: Object.freeze([]) as unknown as CasoDecidido[],
 });
 
+/** Registro que não identifica a pessoa (nome vazio depois de `normalizarNome`). */
+export class DecisaoInvalidaError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DecisaoInvalidaError";
+  }
+}
+
 /**
  * Forma equivalente do grupo de uma ocorrência (spec §4.1.1): rótulo do Contatos vira o rótulo
  * oficial do agrupador quando casa; a planilha da Câmara vale como "Deputados Federais"; o eleito
@@ -60,7 +68,8 @@ export function grupoEquivalente(
   grupoDestino?: string,
 ): string {
   if (origem === "camara") return GRUPO_DEPUTADOS_FEDERAIS;
-  const rotulo = origem === "eleicao" ? (grupoDestino ?? grupo) : grupo;
+  const destino = grupoDestino?.trim() ? grupoDestino : undefined;
+  const rotulo = origem === "eleicao" ? (destino ?? grupo) : grupo;
   return grupoDoAgrupador(rotulo)?.rotulo ?? rotulo.trim();
 }
 
@@ -68,10 +77,52 @@ function chavesDe(nomes: readonly string[]): string[] {
   return [...new Set(nomes.map(normalizarNome).filter((c) => c.length > 0))];
 }
 
-/** Caso que tem alguma das chaves (`normalizarNome`) dos nomes informados. */
-export function acharCaso(h: HistoricoDecisoes, nomes: readonly string[]): CasoDecidido | undefined {
+function conjuntoDeGrupos(grupos: readonly string[]): Set<string> {
+  return new Set(grupos.map(normalizarTexto).filter((g) => g.length > 0));
+}
+
+/** Grupos do caso: os do registro manual vigente. */
+function gruposDoCaso(c: CasoDecidido): Set<string> {
+  return conjuntoDeGrupos(vigente(c)?.grupos ?? []);
+}
+
+function intersecao(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
+  return [...a].filter((g) => b.has(g)).length;
+}
+
+/** `a` contém todos os elementos de `b`. */
+function contem(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  return intersecao(b, a) === b.size;
+}
+
+function mesmoConjunto(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  return a.size === b.size && contem(a, b);
+}
+
+/**
+ * Caso de mesma identidade (spec §4.1.1: nomes + grupos). Entre os casos com alguma chave de nome
+ * em comum, vale o de mesmo conjunto de grupos; senão o de maior interseção de grupos; empate ou
+ * interseção zero não acham nada. Sem `grupos`, só por nome e só quando um único caso casa.
+ */
+export function acharCaso(
+  h: HistoricoDecisoes,
+  nomes: readonly string[],
+  grupos?: readonly string[],
+): CasoDecidido | undefined {
   const procuradas = new Set(chavesDe(nomes));
-  return h.casos.find((c) => c.chaves.some((ch) => procuradas.has(ch)));
+  const candidatos = h.casos.filter((c) => c.chaves.some((ch) => procuradas.has(ch)));
+  if (grupos === undefined) return candidatos.length === 1 ? candidatos[0] : undefined;
+  const alvo = conjuntoDeGrupos(grupos);
+  const exato = candidatos.find((c) => mesmoConjunto(gruposDoCaso(c), alvo));
+  if (exato) return exato;
+  const pontuados = candidatos.map((c) => ({ c, pontos: intersecao(gruposDoCaso(c), alvo) }));
+  const maior = Math.max(0, ...pontuados.map((p) => p.pontos));
+  const melhores = pontuados.filter((p) => p.pontos === maior);
+  return maior > 0 && melhores.length === 1 ? melhores[0].c : undefined;
+}
+
+function idDoCaso(nome: string, grupos: readonly string[]): string {
+  return `${normalizarNome(nome)}#${[...conjuntoDeGrupos(grupos)].sort().join("|")}`;
 }
 
 function copiarRegistro(r: RegistroManual): RegistroManual {
@@ -82,18 +133,27 @@ function copiarRegistro(r: RegistroManual): RegistroManual {
   };
 }
 
-/** Acrescenta o registro ao caso achado por qualquer chave (unindo as chaves) ou cria o caso. */
+/**
+ * Acrescenta o registro ao caso de mesma identidade (`acharCaso` com os grupos do registro),
+ * unindo as chaves de nome, ou cria um caso novo. Nunca funde dois casos.
+ */
 export function registrar(
   h: HistoricoDecisoes,
   nome: string,
   nomes: readonly string[],
   r: RegistroManual,
 ): HistoricoDecisoes {
+  if (normalizarNome(nome).length === 0) {
+    throw new DecisaoInvalidaError("O nome da pessoa do caso está vazio.");
+  }
   const novas = chavesDe([nome, ...nomes]);
-  const existente = acharCaso(h, [nome, ...nomes]);
+  const achado = acharCaso(h, [nome, ...nomes], r.grupos);
+  // Só acrescenta quando o registro cobre todos os grupos do caso (mesmo caso, ou reabertura com
+  // grupo novo); interseção parcial é outro caso (Jader Barbalho × Ex-Presidentes e × Jader Filho).
+  const existente = achado && contem(conjuntoDeGrupos(r.grupos), gruposDoCaso(achado)) ? achado : undefined;
   if (!existente) {
     const caso: CasoDecidido = {
-      id: normalizarNome(nome),
+      id: idDoCaso(nome, r.grupos),
       nome,
       chaves: novas,
       registros: [copiarRegistro(r)],
@@ -124,18 +184,23 @@ export function vigente(c: CasoDecidido): RegistroManual | undefined {
 export function situacaoDoCaso(c: CasoDecidido, gruposAtuais: readonly string[]): SituacaoNoContatos {
   const decisao = vigente(c);
   if (!decisao) return "sem_efeito";
-  const daDecisao = new Set(decisao.grupos.map(normalizarTexto));
-  const atuais = gruposAtuais.map(normalizarTexto);
-  if (atuais.some((g) => !daDecisao.has(g))) return "reaberto";
-  const convite = decisao.convidaPor === undefined ? undefined : normalizarTexto(decisao.convidaPor);
-  const soNoConvite = atuais.every((g) => g === convite);
+  const daDecisao = conjuntoDeGrupos(decisao.grupos);
+  const atuais = [...conjuntoDeGrupos(gruposAtuais)];
+  const convite = decisao.convidaPor?.trim() ? normalizarTexto(decisao.convidaPor) : undefined;
+  // O grupo do convite nunca reabre, mesmo fora dos grupos do registro (Contatos corrigido).
+  if (atuais.some((g) => g !== convite && !daDecisao.has(g))) return "reaberto";
+  const soNoConvite = convite !== undefined && atuais.every((g) => g === convite);
   switch (decisao.tipo) {
     case "mesma_pessoa":
+      return soNoConvite && atuais.length > 0 ? "tratado" : "pendente";
     case "ajustar_contatos":
+      if (convite === undefined) return atuais.length <= 1 ? "tratado" : "pendente";
       return soNoConvite ? "tratado" : "pendente";
     case "nao_recebe_convite":
       return atuais.length === 0 ? "tratado" : "pendente";
     case "pessoas_diferentes":
+      return "sem_efeito";
+    default:
       return "sem_efeito";
   }
 }

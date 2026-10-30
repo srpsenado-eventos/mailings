@@ -6,6 +6,7 @@ import {
 } from "@/data/grupos-posse";
 import {
   acharCaso,
+  DecisaoInvalidaError,
   grupoEquivalente,
   HISTORICO_VAZIO,
   registrar,
@@ -71,6 +72,10 @@ describe("grupoEquivalente", () => {
   it("eleito sem grupo de destino devolve o grupo informado", () => {
     expect(grupoEquivalente("Eleição 2026", "eleicao")).toBe("Eleição 2026");
   });
+
+  it("grupo de destino vazio vale como ausente", () => {
+    expect(grupoEquivalente("Eleição 2026", "eleicao", "")).toBe("Eleição 2026");
+  });
 });
 
 describe("registrar e acharCaso", () => {
@@ -87,7 +92,7 @@ describe("registrar e acharCaso", () => {
     // Assert
     expect(segundo.casos).toHaveLength(1);
     const caso = segundo.casos[0];
-    expect(caso.id).toBe("kassio nunes marques");
+    expect(caso.id).toBe("kassio nunes marques#ministros do stf|ministros do tse");
     expect(caso.registros).toHaveLength(2);
     expect(caso.chaves).toEqual(expect.arrayContaining(["kassio nunes marques", "nunes marques"]));
     expect(acharCaso(segundo, ["Kassio Nunes Marques"])).toBe(caso);
@@ -99,13 +104,73 @@ describe("registrar e acharCaso", () => {
     expect(acharCaso(h, ["Rodrigo Pacheco"])).toBeUndefined();
   });
 
+  it("mesmo nome com grupos diferentes cria dois casos, cada um com o seu vigente", () => {
+    // Arrange
+    const exPresidente = manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Ex-Presidentes do Senado", "Senadores"] });
+    const filho = manual({ tipo: "pessoas_diferentes", grupos: ["Senadores", GRUPO_DEPUTADOS_ELEITOS] });
+    // Act
+    const h1 = registrar(HISTORICO_VAZIO, "Jader Barbalho", ["Jader Barbalho"], exPresidente);
+    const h2 = registrar(h1, "Jader Barbalho", ["Jader Barbalho"], filho);
+    // Assert
+    expect(h2.casos).toHaveLength(2);
+    expect(vigente(h2.casos[0])?.tipo).toBe("mesma_pessoa");
+    expect(vigente(h2.casos[1])?.tipo).toBe("pessoas_diferentes");
+    expect(h2.casos[0].id).not.toBe(h2.casos[1].id);
+    expect(acharCaso(h2, ["Jader Barbalho"], ["Senadores", "Ex-Presidentes do Senado"])).toBe(h2.casos[0]);
+    expect(acharCaso(h2, ["Jader Barbalho"], [GRUPO_DEPUTADOS_ELEITOS])).toBe(h2.casos[1]);
+  });
+
+  it("com dois casos do mesmo nome, achar sem grupos ou com empate de grupos não acha nada", () => {
+    // Arrange
+    const h1 = registrar(HISTORICO_VAZIO, "Jader Barbalho", [], manual({ tipo: "mesma_pessoa", grupos: ["A", "B"] }));
+    const h2 = registrar(h1, "Jader Barbalho", [], manual({ tipo: "pessoas_diferentes", grupos: ["B", "C"] }));
+    // Act / Assert
+    expect(acharCaso(h2, ["Jader Barbalho"])).toBeUndefined();
+    expect(acharCaso(h2, ["Jader Barbalho"], ["B"])).toBeUndefined();
+    expect(acharCaso(h2, ["Jader Barbalho"], ["D"])).toBeUndefined();
+  });
+
+  it("registro com os mesmos grupos, em outra ordem e caixa, acrescenta ao caso existente", () => {
+    // Arrange
+    const h1 = registrar(HISTORICO_VAZIO, "Nunes Marques", [], NUNES_MARQUES);
+    // Act
+    const h2 = registrar(h1, "Nunes Marques", [], manual({ tipo: "pessoas_diferentes", grupos: [" ministros do tse", STF] }));
+    // Assert
+    expect(h2.casos).toHaveLength(1);
+    expect(h2.casos[0].registros).toHaveLength(2);
+  });
+
+  it("decisão de caso reaberto, com os grupos antigos e um novo, acrescenta ao mesmo caso", () => {
+    // Arrange
+    const h1 = registrar(HISTORICO_VAZIO, "Nunes Marques", [], NUNES_MARQUES);
+    // Act
+    const h2 = registrar(h1, "Nunes Marques", [], manual({ tipo: "mesma_pessoa", convidaPor: TSE, grupos: [STF, TSE, STJ], data: "2026-11-02" }));
+    // Assert
+    expect(h2.casos).toHaveLength(1);
+    expect(situacaoDoCaso(h2.casos[0], [TSE, STJ])).toBe("pendente");
+  });
+
+  it("nome vazio depois da normalização lança DecisaoInvalidaError", () => {
+    expect(() => registrar(HISTORICO_VAZIO, "  Ministro ", [], NUNES_MARQUES)).toThrow(DecisaoInvalidaError);
+  });
+
+  it("mudar os grupos do registro depois de registrar não muda o histórico", () => {
+    // Arrange
+    const r = manual({ tipo: "mesma_pessoa", convidaPor: TSE, grupos: [STF, TSE] });
+    const h = registrar(HISTORICO_VAZIO, "Nunes Marques", [], r);
+    // Act
+    r.grupos.push(STJ);
+    // Assert
+    expect(vigente(h.casos[0])?.grupos).toEqual([STF, TSE]);
+  });
+
   it("nomes diferentes sem chave em comum criam casos separados", () => {
     // Arrange
     const h1 = registrar(HISTORICO_VAZIO, "Davi Alcolumbre", ["Davi Alcolumbre"], manual({ tipo: "nao_recebe_convite" }));
     // Act
     const h2 = registrar(h1, "Eunício Oliveira", ["Eunício Oliveira"], manual({ tipo: "ajustar_contatos" }));
     // Assert
-    expect(h2.casos.map((c) => c.id)).toEqual(["davi alcolumbre", "eunicio oliveira"]);
+    expect(h2.casos.map((c) => c.id)).toEqual(["davi alcolumbre#", "eunicio oliveira#"]);
   });
 });
 
@@ -171,10 +236,30 @@ describe("situacaoDoCaso", () => {
     expect(situacaoDoCaso(caso, [STF, TSE])).toBe("pendente");
   });
 
-  it("ajustar_contatos sem grupo do convite só fecha quando a pessoa sai de todos os grupos", () => {
+  it("ajustar_contatos sem grupo do convite fecha quando a pessoa fica em um grupo só ou em nenhum", () => {
     const caso = casoCom(manual({ tipo: "ajustar_contatos", grupos: [STF, TSE] }));
     expect(situacaoDoCaso(caso, [])).toBe("tratado");
+    expect(situacaoDoCaso(caso, [TSE])).toBe("tratado");
+    expect(situacaoDoCaso(caso, [STF, TSE])).toBe("pendente");
+  });
+
+  it("mesma_pessoa fora de todos os grupos: pendente, porque ainda falta o grupo do convite", () => {
+    expect(situacaoDoCaso(nunes, [])).toBe("pendente");
+  });
+
+  it("mesma_pessoa sem grupo do convite: pendente", () => {
+    const caso = casoCom(manual({ tipo: "mesma_pessoa", grupos: [STF, TSE] }));
     expect(situacaoDoCaso(caso, [TSE])).toBe("pendente");
+  });
+
+  it("grupo do convite fora dos grupos do registro não reabre: só nele, tratado", () => {
+    // Arrange: eleita decidida para o grupo de destino, ainda não cadastrada nele na decisão
+    const caso = casoCom(
+      manual({ tipo: "mesma_pessoa", convidaPor: GRUPO_GOVERNADORES_ELEITOS, grupos: ["Governadores"] }),
+    );
+    // Act / Assert
+    expect(situacaoDoCaso(caso, [GRUPO_GOVERNADORES_ELEITOS])).toBe("tratado");
+    expect(situacaoDoCaso(caso, ["Governadores", GRUPO_GOVERNADORES_ELEITOS])).toBe("pendente");
   });
 
   it("caso sem registro manual: sem efeito", () => {

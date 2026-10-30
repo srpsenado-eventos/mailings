@@ -1,5 +1,10 @@
 import { NIVEIS_ELEITOS, PRECEDENCIA, type NivelPrecedencia, type RegraPrecedencia } from "@/data/precedencia";
 import { casaSegmento, segmentarGrupo } from "@/lib/catalogo";
+import {
+  acharCaso, grupoEquivalente, situacaoDoCaso, vigente,
+  type CasoDecidido, type HistoricoDecisoes, type RegistroManual, type SituacaoNoContatos, type TipoDecisao,
+} from "@/lib/decisoes";
+import { gruposAtuaisDoCaso } from "@/lib/decisoes-coleta";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import type { Etiqueta } from "@/lib/painel";
 import { NOME_GRUPO_DEPUTADOS, temGrupoDeputados } from "@/lib/painel-deputados";
@@ -60,6 +65,11 @@ export interface OcorrenciaRepetida {
   ex: boolean;
   possivelSaida: boolean;
   origem: OrigemOcorrencia;
+  /**
+   * Forma equivalente do grupo (spec 2026-10-30 §4.1.1), só no eleito com grupo de destino;
+   * nas demais, `equivalenteDaOcorrencia` calcula a partir de `grupo` e `origem`.
+   */
+  grupoEquivalente?: string;
 }
 
 const ROTULO_ORIGEM: Record<OrigemOcorrencia, string> = {
@@ -73,7 +83,8 @@ export function rotuloOrigem(origem: OrigemOcorrencia): string {
   return ROTULO_ORIGEM[origem];
 }
 
-export type SituacaoRepetida = "decidido" | "conferir";
+/** `decidido`: pela regra da Nominata; `decidido_gt`: pela decisão do GT; `tratado`: decisão já refletida no Contatos. */
+export type SituacaoRepetida = "decidido" | "conferir" | "decidido_gt" | "tratado";
 
 export interface AutoridadeRepetida {
   nome: string;
@@ -84,6 +95,12 @@ export interface AutoridadeRepetida {
   motivo: string;
   /** Há eleito de 2026 ligado pelo eixo da Eleição: pela Ata 14, convida o grupo atual (salvo o que o eixo deixou para conferir). */
   eleicao?: true;
+  /** Caso do histórico de decisões do GT que casou esta autoridade (spec 2026-10-30 §4.1). */
+  caso?: CasoDecidido;
+  /** Registro manual vigente do caso. */
+  decisao?: RegistroManual;
+  /** Situação no Contatos, calculada ao vivo com os grupos do retrato. */
+  noContatos?: SituacaoNoContatos;
 }
 
 export interface Escolha {
@@ -217,11 +234,15 @@ export const MOTIVO_ELEICAO_NOVO = "Eleição 2026: mandato novo de quem já est
 
 function eleitoLigado(
   nomes: readonly string[], contatos: readonly ContatoDoEleito[], destino: DestinoEleito | DestinoGoverno, motivo: string | undefined,
-  grupoDaLista: string, cargo: string, nivel: NivelPrecedencia | undefined,
+  grupoDaLista: string, cargo: string, nivel: NivelPrecedencia | undefined, grupoDestino: string | undefined,
 ): EleitoLigado[] {
   if (contatos.length === 0) return [];
   const [pessoa] = pessoaDeFora(nomes, grupoDaLista, cargo, "eleicao", nivel);
-  return pessoa ? [{ ocorrencia: pessoa.ocorrencia, contatos, destino, ...(motivo ? { motivo } : {}) }] : [];
+  if (!pessoa) return [];
+  const ocorrencia = grupoDestino?.trim()
+    ? { ...pessoa.ocorrencia, grupoEquivalente: grupoEquivalente(grupoDaLista, "eleicao", grupoDestino) }
+    : pessoa.ocorrencia;
+  return [{ ocorrencia, contatos, destino, ...(motivo ? { motivo } : {}) }];
 }
 
 /**
@@ -230,14 +251,14 @@ function eleitoLigado(
  */
 export function eleitosLigados(eleicao: ResultadoEleicao | undefined): EleitoLigado[] {
   if (!eleicao) return [];
-  const parlamentares = eleicao.eleitos.flatMap(({ eleito, contatos, destino, motivo }) =>
+  const parlamentares = eleicao.eleitos.flatMap(({ eleito, contatos, destino, motivo, grupoDestino }) =>
     eleito.casa === "senado"
-      ? eleitoLigado([eleito.nomeUrna, eleito.nomeCompleto], contatos, destino, motivo, "Senadores Eleitos", "Senador eleito", NIVEIS_ELEITOS.senado)
-      : eleitoLigado([eleito.nomeUrna, eleito.nomeCompleto], contatos, destino, motivo, "Deputados Federais Eleitos", "Deputado federal eleito", NIVEIS_ELEITOS.camara));
-  const governadores = (eleicao.governadores?.eleitos ?? []).flatMap(({ eleito, contatos, destino, motivo }) =>
+      ? eleitoLigado([eleito.nomeUrna, eleito.nomeCompleto], contatos, destino, motivo, "Senadores Eleitos", "Senador eleito", NIVEIS_ELEITOS.senado, grupoDestino)
+      : eleitoLigado([eleito.nomeUrna, eleito.nomeCompleto], contatos, destino, motivo, "Deputados Federais Eleitos", "Deputado federal eleito", NIVEIS_ELEITOS.camara, grupoDestino));
+  const governadores = (eleicao.governadores?.eleitos ?? []).flatMap(({ eleito, contatos, destino, motivo, grupoDestino }) =>
     eleitoLigado(
       [eleito.nomeUrna, eleito.nomeCompleto], contatos, destino, motivo, "Governadores Eleitos", "Governador eleito",
-      eleito.uf.trim().toUpperCase() === "DF" ? NIVEIS_ELEITOS.governadorDistritoFederal : NIVEIS_ELEITOS.governador,
+      eleito.uf.trim().toUpperCase() === "DF" ? NIVEIS_ELEITOS.governadorDistritoFederal : NIVEIS_ELEITOS.governador, grupoDestino,
     ));
   return [...parlamentares, ...governadores];
 }
@@ -358,13 +379,17 @@ function motivoDoEixo(eleitos: readonly EleitoLigado[]): string | undefined {
   return pendente.motivo ? `Eleição 2026: ${pendente.motivo}` : MOTIVO_ELEICAO_SEM_MOTIVO;
 }
 
+/** Uma ocorrência por grupo, regra, nome e origem. */
+function semRepeticao(ocorrencias: readonly OcorrenciaRepetida[]): OcorrenciaRepetida[] {
+  return ocorrencias.filter((o, i, todas) => todas.findIndex((x) =>
+    x.grupo === o.grupo && x.grupoRegra === o.grupoRegra && x.chave === o.chave && x.origem === o.origem) === i);
+}
+
 function autoridadeDoComponente(c: Componente, porChave: ReadonlyMap<string, Entrada[]>): AutoridadeRepetida[] {
   const doComponente = c.chaves.flatMap((k) => porChave.get(k) ?? []);
   const doCadastro = doComponente.find((e) => e.ocorrencia.origem === "contatos");
   if (!doCadastro) return [];
-  const ocorrencias = [...doComponente.map((e) => e.ocorrencia), ...c.eleitos.map((e) => e.ocorrencia)]
-    .filter((o, i, todas) => todas.findIndex((x) =>
-      x.grupo === o.grupo && x.grupoRegra === o.grupoRegra && x.chave === o.chave && x.origem === o.origem) === i);
+  const ocorrencias = semRepeticao([...doComponente.map((e) => e.ocorrencia), ...c.eleitos.map((e) => e.ocorrencia)]);
   if (new Set(ocorrencias.map((o) => o.grupoRegra)).size < 2) return [];
   const nome = doCadastro.nome;
   if (c.eleitos.length === 0) return [{ nome, ocorrencias, ...escolherGrupo(ocorrencias, c.parcial) }];
@@ -406,12 +431,153 @@ function ligarEleitos(
   }));
 }
 
+/** `AAAA-MM-DD` → `DD/MM`. */
+export function diaMesDaDecisao(data: string): string {
+  const [, mes, dia] = data.split("-");
+  return mes && dia ? `${dia}/${mes}` : data;
+}
+
+/** Forma equivalente do grupo da ocorrência (spec 2026-10-30 §4.1.1). */
+export function equivalenteDaOcorrencia(o: OcorrenciaRepetida): string {
+  return o.grupoEquivalente ?? grupoEquivalente(o.grupo, o.origem);
+}
+
+const mesmoGrupo = (a: string, b: string): boolean => normalizarTexto(a) === normalizarTexto(b);
+
+export const MOTIVO_PESSOA_NAO_ENCONTRADA = "Pessoa não encontrada no Contatos";
+
+/** Motivo do caso reaberto (spec 2026-10-30 §4.1.4). */
+export function textoReaberto(data: string): string {
+  return `grupo novo desde a decisão de ${diaMesDaDecisao(data)}`;
+}
+
+const TEXTO_TIPO: Record<TipoDecisao, string> = {
+  mesma_pessoa: "Mesma pessoa",
+  pessoas_diferentes: "Pessoas diferentes",
+  nao_recebe_convite: "Não recebe convite",
+  ajustar_contatos: "Ajustar no Contatos",
+};
+
+/** Decisão vigente em texto: tipo, grupo do convite e quem decidiu. */
+export function textoDecisao(d: RegistroManual): string {
+  const convite = d.convidaPor?.trim() ? `: convidar pelo grupo ${d.convidaPor.trim()}` : "";
+  return `${TEXTO_TIPO[d.tipo] ?? d.tipo}${convite} (${d.quem})`;
+}
+
+function motivoDaDecisao(d: RegistroManual): string {
+  const observacao = d.observacao.trim() ? ` · ${d.observacao.trim()}` : "";
+  return `Decisão do GT de ${diaMesDaDecisao(d.data)}: ${textoDecisao(d)}${observacao}`;
+}
+
+/** Caso do histórico com a mesma identidade da autoridade: nomes das ocorrências e grupos equivalentes. */
+function casoDaAutoridade(h: HistoricoDecisoes, a: AutoridadeRepetida): CasoDecidido | undefined {
+  const nomes = [a.nome, ...a.ocorrencias.map((o) => o.chave)];
+  const grupos = [...new Set(a.ocorrencias.map(equivalenteDaOcorrencia))];
+  return acharCaso(h, nomes, grupos);
+}
+
+/** Ocorrência do Contatos que convida, quando o grupo decidido está entre as da autoridade. */
+function ocorrenciaDoConvite(ocorrencias: readonly OcorrenciaRepetida[], convite: string): OcorrenciaRepetida | undefined {
+  const casam = ocorrencias.filter((o) => mesmoGrupo(equivalenteDaOcorrencia(o), convite));
+  return casam.find((o) => o.origem === "contatos") ?? casam[0];
+}
+
+/**
+ * Aplica a decisão vigente do caso (spec 2026-10-30 §4.1.3): a situação no Contatos é calculada ao
+ * vivo com os grupos do retrato; caso reaberto volta para conferir.
+ */
+function comDecisao(
+  a: AutoridadeRepetida, caso: CasoDecidido, grupos: readonly ResultadoGrupo[], eleicao: ResultadoEleicao | undefined,
+): AutoridadeRepetida {
+  const decisao = vigente(caso);
+  if (!decisao) return a;
+  const noContatos = situacaoDoCaso(caso, gruposAtuaisDoCaso(caso, grupos, eleicao));
+  const base = { nome: a.nome, ocorrencias: a.ocorrencias, ...(a.eleicao ? { eleicao: true as const } : {}), caso, decisao, noContatos };
+  if (noContatos === "reaberto") return { ...base, situacao: "conferir", motivo: textoReaberto(decisao.data) };
+  const convite = decisao.convidaPor?.trim();
+  const convidaPor = convite ? ocorrenciaDoConvite(a.ocorrencias, convite) : undefined;
+  return {
+    ...base,
+    situacao: noContatos === "tratado" ? "tratado" : "decidido_gt",
+    ...(convidaPor ? { convidaPor } : {}),
+    motivo: motivoDaDecisao(decisao),
+  };
+}
+
+/** Linhas do grupo com a pessoa do caso: pela regra da Nominata, ou pelo próprio rótulo quando fora dela. */
+function entradasDaPessoa(g: ResultadoGrupo, chaves: ReadonlySet<string>): Entrada[] {
+  const pelaRegra = entradasDoGrupo(g).filter((e) => chaves.has(e.ocorrencia.chave));
+  if (pelaRegra.length > 0) return pelaRegra;
+  return g.contatos
+    .filter((c) => chaves.has(normalizarNome(c.contato.nome)))
+    .map((c) => ({
+      nome: c.contato.nome,
+      ocorrencia: {
+        grupo: g.grupo, grupoRegra: g.grupo, chave: normalizarNome(c.contato.nome), cargo: c.contato.cargo ?? "",
+        ex: false, possivelSaida: Boolean(c.possivelSaida), origem: "contatos" as const,
+      },
+    }));
+}
+
+/**
+ * Caso decidido cuja pessoa já não aparece repetida (Nunes Marques, só no TSE): procura a pessoa nos
+ * grupos do retrato pelas chaves do caso, sem os grupos marcados como outra pessoa.
+ */
+function autoridadeForaDoCalculo(
+  caso: CasoDecidido, grupos: readonly ResultadoGrupo[], eleicao: ResultadoEleicao | undefined,
+): AutoridadeRepetida[] {
+  const decisao = vigente(caso);
+  if (!decisao) return [];
+  const chaves = new Set(caso.chaves);
+  const outraPessoa = new Set((decisao.outraPessoa ?? []).map((g) => normalizarTexto(grupoEquivalente(g, "contatos"))));
+  const entradas = grupos
+    .filter((g) => !outraPessoa.has(normalizarTexto(grupoEquivalente(g.grupo, "contatos"))))
+    .flatMap((g) => entradasDaPessoa(g, chaves));
+  const ocorrencias = semRepeticao(entradas.map((e) => e.ocorrencia));
+  const nome = entradas[0]?.nome ?? caso.nome;
+  if (ocorrencias.length > 0) return [comDecisao({ nome, ocorrencias, situacao: "decidido_gt", motivo: "" }, caso, grupos, eleicao)];
+  const naoRecebe = decisao.tipo === "nao_recebe_convite";
+  return [{
+    nome, ocorrencias, caso, decisao,
+    noContatos: situacaoDoCaso(caso, gruposAtuaisDoCaso(caso, grupos, eleicao)),
+    situacao: naoRecebe ? "tratado" : "decidido_gt",
+    motivo: naoRecebe ? motivoDaDecisao(decisao) : MOTIVO_PESSOA_NAO_ENCONTRADA,
+  }];
+}
+
+/**
+ * Cada autoridade com o caso do histórico que casa com ela; depois, os casos decididos que não casaram
+ * nenhuma e cuja pessoa (pelas chaves) não está em nenhuma autoridade da lista.
+ */
+function aplicarDecisoes(
+  lista: readonly AutoridadeRepetida[], h: HistoricoDecisoes, grupos: readonly ResultadoGrupo[], eleicao: ResultadoEleicao | undefined,
+): AutoridadeRepetida[] {
+  const usados = new Set<CasoDecidido>();
+  const decididas = lista.map((a) => {
+    const caso = casoDaAutoridade(h, a);
+    if (!caso || !vigente(caso)) return a;
+    usados.add(caso);
+    return comDecisao(a, caso, grupos, eleicao);
+  });
+  const chavesDaLista = new Set(lista.flatMap((a) => a.ocorrencias.filter((o) => o.origem === "contatos").map((o) => o.chave)));
+  const foraDoCalculo = h.casos
+    .filter((c) => !usados.has(c) && !c.chaves.some((k) => chavesDaLista.has(k)))
+    .flatMap((c) => autoridadeForaDoCalculo(c, grupos, eleicao));
+  return [...decididas, ...foraDoCalculo];
+}
+
+const ORDEM_SITUACAO: Record<SituacaoRepetida, number> = { conferir: 0, decidido: 1, decidido_gt: 2, tratado: 3 };
+
 /**
  * Autoridades em dois ou mais grupos do retrato, com o grupo do convite. "Conferir" primeiro.
  * Com `eleicao`, entram também os deputados atuais da planilha da Câmara (pelo nome) e os eleitos de
  * 2026 (pela ligação do eixo da Eleição, spec 2026-10-28 §8); só conta quem tem ocorrência no Contatos.
+ * Com `decisoes`, a decisão vigente do GT vale sobre a regra (spec 2026-10-30 §4.1.3), e os casos
+ * decididos cuja pessoa já não está repetida entram também.
  */
-export function autoridadesRepetidas(grupos: readonly ResultadoGrupo[], eleicao?: ResultadoEleicao): AutoridadeRepetida[] {
+export function autoridadesRepetidas(
+  grupos: readonly ResultadoGrupo[], eleicao?: ResultadoEleicao, decisoes?: HistoricoDecisoes,
+): AutoridadeRepetida[] {
   const porChave = new Map<string, Entrada[]>();
   const juntar = (chave: string, e: Entrada) => porChave.set(chave, [...(porChave.get(chave) ?? []), e]);
   for (const e of grupos.flatMap(entradasDoGrupo)) juntar(e.ocorrencia.chave, e);
@@ -422,22 +588,22 @@ export function autoridadesRepetidas(grupos: readonly ResultadoGrupo[], eleicao?
   }
 
   const casos = ligarEleitos(componentesDeNome(porChave, doContatos), eleitosLigados(eleicao), porChave);
-  const lista = casos.flatMap((c) => autoridadeDoComponente(c, porChave));
+  const pelaRegra = casos.flatMap((c) => autoridadeDoComponente(c, porChave));
+  const lista = decisoes ? aplicarDecisoes(pelaRegra, decisoes, grupos, eleicao) : pelaRegra;
 
   return lista.sort((a, b) =>
-    a.situacao !== b.situacao ? (a.situacao === "conferir" ? -1 : 1) : a.nome.localeCompare(b.nome, "pt-BR"),
+    a.situacao !== b.situacao ? ORDEM_SITUACAO[a.situacao] - ORDEM_SITUACAO[b.situacao] : a.nome.localeCompare(b.nome, "pt-BR"),
   );
 }
 
-/** Etiqueta da linha do contato no painel; fora de `etiquetasDoContato`, não pinta a situação. */
-export function etiquetaDeRepeticao(
-  repetidas: readonly AutoridadeRepetida[],
-  c: ResultadoContato,
-  grupo: string,
-): Etiqueta | undefined {
-  const chave = normalizarNome(c.contato.nome);
-  const a = repetidas.find((r) => r.ocorrencias.some((o) => o.origem === "contatos" && o.grupo === grupo && o.chave === chave));
-  if (!a) return undefined;
+/** Etiqueta da linha no painel e se a linha fica fosca (atenuada, fora das pendências). */
+export interface MarcaDeRepeticao {
+  etiqueta: Etiqueta;
+  fosca: boolean;
+}
+
+/** Etiqueta pela regra da Nominata (sem decisão do GT, ou caso reaberto). */
+function etiquetaDaRegra(a: AutoridadeRepetida, grupo: string): Etiqueta | undefined {
   const convidaPor = a.convidaPor;
   if (a.situacao === "conferir" || !convidaPor) {
     return { campo: "grupo", tom: "atencao", texto: "Em mais de um grupo: conferir", explicacao: a.motivo };
@@ -451,7 +617,51 @@ export function etiquetaDeRepeticao(
   return { campo: "grupo", tom: "ruim", texto: `Autoridade a ser convidada pelo grupo ${convidaPor.grupoRegra}`, explicacao: a.motivo };
 }
 
-export type FiltroRepetidas = "todas" | "decidido" | "conferir";
+/**
+ * Marca pela decisão vigente do GT (spec 2026-10-30 §4.1.3). A linha fosca leva etiqueta neutra: não
+ * conta como pendência. Nunca fosca no grupo que convida nem em `ajustar_contatos`.
+ */
+function marcaDaDecisao(a: AutoridadeRepetida, d: RegistroManual, grupo: string): MarcaDeRepeticao | undefined {
+  const dia = diaMesDaDecisao(d.data);
+  const daLinha = grupoEquivalente(grupo, "contatos");
+  if ((d.outraPessoa ?? []).some((g) => mesmoGrupo(grupoEquivalente(g, "contatos"), daLinha))) return undefined;
+  const marca = (tom: Etiqueta["tom"], texto: string, fosca: boolean): MarcaDeRepeticao =>
+    ({ etiqueta: { campo: "grupo", tom, texto, explicacao: a.motivo }, fosca });
+  switch (d.tipo) {
+    case "mesma_pessoa": {
+      const convite = d.convidaPor?.trim();
+      if (!convite) return undefined;
+      if (!mesmoGrupo(daLinha, convite)) return marca("neutro", `Será convidada pelo grupo ${convite} (decisão do GT de ${dia})`, true);
+      const outros = [...new Set(a.ocorrencias
+        .filter((o) => !mesmoGrupo(equivalenteDaOcorrencia(o), convite))
+        .map((o) => o.grupoRegra))].join(", ");
+      const tambem = outros ? `; também em ${outros}` : "";
+      return marca("neutro", `Convidada por este grupo${tambem} (decisão do GT de ${dia})`, false);
+    }
+    case "nao_recebe_convite":
+      return marca("neutro", `Não recebe convite (decisão do GT de ${dia})`, true);
+    case "ajustar_contatos":
+      return a.situacao === "tratado" ? undefined : marca("atencao", `Ajustar no Contatos (decisão de ${dia})`, false);
+    default:
+      return undefined;
+  }
+}
+
+/** Etiqueta da linha do contato no painel; fora de `etiquetasDoContato`, não pinta a situação. */
+export function etiquetaDeRepeticao(
+  repetidas: readonly AutoridadeRepetida[],
+  c: ResultadoContato,
+  grupo: string,
+): MarcaDeRepeticao | undefined {
+  const chave = normalizarNome(c.contato.nome);
+  const a = repetidas.find((r) => r.ocorrencias.some((o) => o.origem === "contatos" && o.grupo === grupo && o.chave === chave));
+  if (!a) return undefined;
+  if (a.decisao && a.situacao !== "conferir") return marcaDaDecisao(a, a.decisao, grupo);
+  const etiqueta = etiquetaDaRegra(a, grupo);
+  return etiqueta ? { etiqueta, fosca: false } : undefined;
+}
+
+export type FiltroRepetidas = "todas" | "conferir" | "decidido" | "decidido_gt" | "tratado";
 
 export function filtrarRepetidas(lista: readonly AutoridadeRepetida[], busca: string, filtro: FiltroRepetidas): AutoridadeRepetida[] {
   const termo = normalizarTexto(busca);

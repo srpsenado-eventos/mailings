@@ -193,14 +193,15 @@ function Detalhe({ c, g, retrato, eleicaoLigada }: { c: ResultadoContato; g: Res
   );
 }
 
-export function LinhaContato({ c, g, retrato, eleicaoLigada = false, repeticao }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato; eleicaoLigada?: boolean; repeticao?: EtiquetaPainel }) {
+/** `fosca`: linha atenuada pela decisão do GT (spec 2026-10-30 §4.1.3); o texto continua legível e a auditoria, igual. */
+export function LinhaContato({ c, g, retrato, eleicaoLigada = false, repeticao, fosca = false }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato; eleicaoLigada?: boolean; repeticao?: EtiquetaPainel; fosca?: boolean }) {
   const [aberto, setAberto] = useState(false);
   const etiquetas = [...(repeticao ? [repeticao] : []), ...etiquetasDoContato(c, g), ...(eleicaoLigada ? [...etiquetasDeEleicao(c.eleicao), ...etiquetasDeGoverno(c.eleicaoGoverno)] : [])];
   const situacao = situacaoDoContato(c, g);
   const motivo = motivoDoContato(c, g);
   const subtitulo = motivo ?? [c.contato.tratamento, c.contato.enderecamento].filter(Boolean).join(" · ");
   return (
-    <div className={`border-t border-separador ${eleicaoLigada && destacaLinha(c.eleicao, c.eleicaoGoverno) ? "border-l-4 border-l-atencao" : ""}`}>
+    <div className={`border-t border-separador ${eleicaoLigada && destacaLinha(c.eleicao, c.eleicaoGoverno) ? "border-l-4 border-l-atencao" : ""} ${fosca ? "opacity-60" : ""}`}>
       <div className={`${COLUNAS} cursor-pointer hover:bg-fundo/60`} onClick={() => setAberto((v) => !v)}>
         <button type="button" aria-expanded={aberto} className="text-left">
           <span className="block text-sm font-medium text-tinta">{c.contato.nome}</span>

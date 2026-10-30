@@ -13,5 +13,5 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   const aviso = [carga.avisoDecisoes, avisoDaVarredura].filter(Boolean).join(" ") || undefined;
   // O painel não usa a base de endereços (só o /prodasen) nem a memória de leitura; não vão ao cliente.
   const { baseEnderecos: _base, leituras: _leituras, ...retratoDoPainel } = carga.retrato;
-  return <Painel retrato={retratoDoPainel} modo={carga.modo} podePublicar={carga.podePublicar} aviso={aviso} />;
+  return <Painel retrato={retratoDoPainel} modo={carga.modo} podePublicar={carga.podePublicar} aviso={aviso} decisoes={carga.decisoes} />;
 }

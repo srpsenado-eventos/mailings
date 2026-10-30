@@ -3,15 +3,27 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { baixar, MIME_XLSX } from "@/components/baixar";
 import { Etiqueta } from "@/components/etiqueta";
-import { descreverOcorrencia, gerarXlsxRepetidas } from "@/lib/export-repetidos";
+import { descreverOcorrencia, gerarXlsxRepetidas, textoNoContatos } from "@/lib/export-repetidos";
 import { textoDataHora } from "@/lib/painel";
-import { filtrarRepetidas, separarRepetidas, textoLinkRepetidas, type AutoridadeRepetida, type FiltroRepetidas } from "@/lib/repetidos";
+import {
+  diaMesDaDecisao, filtrarRepetidas, separarRepetidas, textoDecisao, textoLinkRepetidas,
+  type AutoridadeRepetida, type FiltroRepetidas,
+} from "@/lib/repetidos";
 
 const FILTROS: readonly { id: FiltroRepetidas; rotulo: string }[] = [
   { id: "todas", rotulo: "Todas" },
   { id: "conferir", rotulo: "A conferir" },
-  { id: "decidido", rotulo: "Decididas" },
+  { id: "decidido", rotulo: "Decididas pela regra" },
+  { id: "decidido_gt", rotulo: "Decididas pelo GT" },
+  { id: "tratado", rotulo: "Tratadas no Contatos" },
 ];
+
+function SituacaoDaAutoridade({ a }: { a: AutoridadeRepetida }) {
+  if (a.situacao === "decidido") return <Etiqueta texto="Decidido pela regra" tom="ok" />;
+  if (a.situacao === "decidido_gt") return <Etiqueta texto="Decidido pelo GT" tom="ok" explicacao={a.motivo} />;
+  if (a.situacao === "tratado") return <Etiqueta texto="Tratado no Contatos" tom="ok" explicacao={a.motivo} />;
+  return <Etiqueta texto="Conferir" tom="atencao" explicacao={a.motivo} />;
+}
 
 export function TelaRepetidos({ repetidas, geradoEm, aviso }: { repetidas: AutoridadeRepetida[]; geradoEm: string; aviso?: string }) {
   const [busca, setBusca] = useState("");
@@ -81,12 +93,13 @@ function TabelaRepetidas({ lista }: { lista: readonly AutoridadeRepetida[] }) {
             <th className="px-4 py-2">Autoridade</th>
             <th className="px-4 py-2">Grupos em que está</th>
             <th className="px-4 py-2">Convidar pelo grupo</th>
+            <th className="px-4 py-2">Decisão do GT</th>
             <th className="px-4 py-2">Situação</th>
           </tr>
         </thead>
         <tbody>
-          {lista.map((a) => (
-            <tr key={`${a.ocorrencias[0]?.chave}-${a.ocorrencias[0]?.grupo}`} className="border-t border-separador align-top">
+          {lista.map((a, i) => (
+            <tr key={`${a.nome}-${i}`} className="border-t border-separador align-top">
               <td className="px-4 py-3 font-medium text-tinta">{a.nome}</td>
               <td className="px-4 py-3 text-cinza">
                 <ul>{a.ocorrencias.map((o) => <li key={`${o.grupo}-${o.grupoRegra}-${o.chave}-${o.origem}`}>{descreverOcorrencia(o)}</li>)}</ul>
@@ -95,10 +108,17 @@ function TabelaRepetidas({ lista }: { lista: readonly AutoridadeRepetida[] }) {
                 <span className="font-medium text-tinta">{a.convidaPor?.grupoRegra ?? "—"}</span>
                 <span className="block text-xs text-cinza">{a.motivo}</span>
               </td>
+              <td className="px-4 py-3 text-cinza">
+                {a.decisao ? (
+                  <>
+                    <span className="block text-tinta">{textoDecisao(a.decisao)}</span>
+                    <span className="block text-xs">Decisão de {diaMesDaDecisao(a.decisao.data)}</span>
+                    {textoNoContatos(a.noContatos) && <span className="block text-xs">{textoNoContatos(a.noContatos)}</span>}
+                  </>
+                ) : "—"}
+              </td>
               <td className="px-4 py-3">
-                {a.situacao === "decidido"
-                  ? <Etiqueta texto="Decidido" tom="ok" />
-                  : <Etiqueta texto="Conferir" tom="atencao" explicacao={a.motivo} />}
+                <SituacaoDaAutoridade a={a} />
               </td>
             </tr>
           ))}

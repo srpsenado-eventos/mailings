@@ -12,6 +12,7 @@ import { avisoDaEleicao, ehFiltroEleicao, esperadosDoAgrupador, FILTROS_ELEICAO,
 import { PublicarButton } from "@/components/publicar-button";
 import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-contato";
 import { avisoUrlCaida, cartoesDoResumo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoAlternativa, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoMudanca, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, textosProvisorias, type Filtro } from "@/lib/painel";
+import type { HistoricoDecisoes } from "@/lib/decisoes";
 import { autoridadesRepetidas, etiquetaDeRepeticao, textoLinkRepetidas } from "@/lib/repetidos";
 import type { FalhasPorUrl, ResultadoGrupo, Retrato } from "@/lib/types";
 
@@ -53,7 +54,7 @@ function EstadoDaFonte({ g, falhas }: { g: ResultadoGrupo; falhas?: FalhasPorUrl
   );
 }
 
-export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePublicar = false }: { retrato: Retrato; aviso?: string; onNovaVarredura?: () => void; modo?: "local" | "web"; podePublicar?: boolean }) {
+export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePublicar = false, decisoes }: { retrato: Retrato; aviso?: string; onNovaVarredura?: () => void; modo?: "local" | "web"; podePublicar?: boolean; decisoes?: HistoricoDecisoes }) {
   const [filtro, setFiltro] = useState<Filtro>("tudo");
   const [busca, setBusca] = useState("");
   const [grupo, setGrupo] = useState("");
@@ -64,7 +65,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
   const secoesGov = useMemo(() => (eleicaoLigada ? secoesDeGoverno(retrato.eleicao, filtro, busca) : []), [eleicaoLigada, retrato, filtro, busca]);
   const avisoEleicao = eleicaoLigada ? avisoDaEleicao(retrato.eleicao) : undefined;
   const grupos = useMemo(() => filtrarGrupos(retrato.grupos, filtro, busca, grupo), [retrato, filtro, busca, grupo]);
-  const repetidas = useMemo(() => autoridadesRepetidas(retrato.grupos, retrato.eleicao), [retrato]);
+  const repetidas = useMemo(() => autoridadesRepetidas(retrato.grupos, retrato.eleicao, decisoes), [retrato, decisoes]);
   const deputados = useMemo(() => grupoDeputados(retrato.eleicao, { busca, filtro, grupo }), [retrato, busca, filtro, grupo]);
   const total = retrato.resumo.total;
   const visiveis = contarContatos(grupos);
@@ -198,7 +199,10 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
                   <div className={`${CLASSES_COLUNAS} text-xs text-cinza-claro`}>
                     <div>Contato</div><div>Cargo no cadastro</div><div>Campos conferidos</div><div>Situação</div>
                   </div>
-                  {g.contatos.map((c, i) => <LinhaContato key={`${c.contato.nome}-${i}`} c={c} g={g} retrato={retrato} eleicaoLigada={eleicaoLigada} repeticao={etiquetaDeRepeticao(repetidas, c, g.grupo)} />)}
+                  {g.contatos.map((c, i) => {
+                    const marca = etiquetaDeRepeticao(repetidas, c, g.grupo);
+                    return <LinhaContato key={`${c.contato.nome}-${i}`} c={c} g={g} retrato={retrato} eleicaoLigada={eleicaoLigada} repeticao={marca?.etiqueta} fosca={marca?.fosca} />;
+                  })}
                   {g.novos.map((n, i) => (
                     <LinhaNovo
                       key={`novo-${i}`}

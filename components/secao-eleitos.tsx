@@ -2,9 +2,9 @@
 import { useState } from "react";
 import { Etiqueta } from "@/components/etiqueta";
 import { RegistroDecisao } from "@/components/registro-decisao";
-import type { HistoricoDecisoes } from "@/lib/decisoes";
+import type { HistoricoDecisoes, Registro } from "@/lib/decisoes";
 import type { SecaoGrupoEleito } from "@/lib/painel-eleicao";
-import { alvoDoEleito, alvoDoGovernador, historicoDoEleito, type AlvoDeDecisao } from "@/lib/registro-decisao";
+import { alvoDoEleito, alvoDoGovernador, historicoDoEleito, historicoDoGovernador, type AlvoDeDecisao } from "@/lib/registro-decisao";
 import type { EleitoClassificado, GovernadorClassificado } from "@/lib/types";
 
 const COLUNAS = "grid grid-cols-[minmax(0,2fr)_minmax(0,2.4fr)_minmax(0,0.6fr)_minmax(0,1fr)_minmax(0,2fr)] gap-4 px-4";
@@ -23,10 +23,10 @@ interface ContextoDecisao {
   modo: "local" | "web";
 }
 
-function DecisaoDoEleito({ alvo, ctx }: { alvo: AlvoDeDecisao; ctx: ContextoDecisao }) {
+function DecisaoDoEleito({ alvo, registros, modo }: { alvo: AlvoDeDecisao; registros: readonly Registro[]; modo: "local" | "web" }) {
   return (
     <div className="col-span-full -mt-1">
-      <RegistroDecisao alvo={alvo} registros={historicoDoEleito(ctx.decisoes, alvo)} modo={ctx.modo} />
+      <RegistroDecisao alvo={alvo} registros={registros} modo={modo} />
     </div>
   );
 }
@@ -42,7 +42,7 @@ function LinhaEleito({ x, conferir, ctx }: { x: EleitoClassificado; conferir: bo
       <div>{x.eleito.uf}</div>
       <div className="text-cinza">{x.eleito.partido ?? "—"}</div>
       <div className={conferir ? "text-xs text-atencao" : "text-cinza"}>{conferir ? x.motivo : (x.eleito.genero ?? "—")}</div>
-      <DecisaoDoEleito alvo={alvoDoEleito(x)} ctx={ctx} />
+      <DecisaoDoEleito alvo={alvoDoEleito(x)} registros={historicoDoEleito(ctx.decisoes, x)} modo={ctx.modo} />
     </div>
   );
 }
@@ -58,7 +58,7 @@ function LinhaGovernador({ x, conferir, ctx }: { x: GovernadorClassificado; conf
       <div>{x.eleito.uf}</div>
       <div className="text-cinza">{x.eleito.partido ?? "—"}</div>
       <div className={conferir ? "text-xs text-atencao" : "text-cinza"}>{conferir ? x.motivo : (x.eleito.genero || "—")}</div>
-      <DecisaoDoEleito alvo={alvoDoGovernador(x)} ctx={ctx} />
+      <DecisaoDoEleito alvo={alvoDoGovernador(x)} registros={historicoDoGovernador(ctx.decisoes, x)} modo={ctx.modo} />
     </div>
   );
 }

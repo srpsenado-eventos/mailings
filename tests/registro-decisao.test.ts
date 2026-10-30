@@ -5,7 +5,7 @@ import {
 import { registrar, HISTORICO_VAZIO, type RegistroColeta, type RegistroManual } from "@/lib/decisoes";
 import {
   alvoDoEleito, alvoDoGovernador, alvoDoRepetido, corpoDoPedido, errosDoFormulario, FORMULARIO_VAZIO, historicoDoEleito,
-  hojeEmBrasilia, paraRegistro, pedeConvite, registrosDoMaisRecente, textoDoRegistro, type FormularioDecisao,
+  historicoDoGovernador, hojeEmBrasilia, paraRegistro, pedeConvite, registrosDoMaisRecente, textoDoRegistro, type FormularioDecisao,
 } from "@/lib/registro-decisao";
 import type { AutoridadeRepetida, OcorrenciaRepetida } from "@/lib/repetidos-base";
 import type { EleitoClassificado, GovernadorClassificado } from "@/lib/types";
@@ -71,7 +71,7 @@ describe("errosDoFormulario", () => {
 describe("paraRegistro", () => {
   it("grava a data de hoje e os grupos do caso", () => {
     // Arrange
-    const f = formulario({ tipo: "mesma_pessoa", convidaPor: "Ministros do TSE", quem: " Clóvis ", observacao: " ok " });
+    const f = formulario({ tipo: "mesma_pessoa", convidaPor: "Ministros do TSE", quem: " Clóvis ", observacao: " ok ", validacao: "validado" });
 
     // Act
     const r = paraRegistro(f, ["Ministros do TSE", "Ministros do STF"], "2026-10-30");
@@ -127,6 +127,13 @@ describe("paraRegistro", () => {
   });
 });
 
+describe("FORMULARIO_VAZIO", () => {
+  it("começa com a validação em A validar", () => {
+    // Arrange + Act + Assert
+    expect(FORMULARIO_VAZIO.validacao).toBe("a_validar");
+  });
+});
+
 describe("pedeConvite", () => {
   it("só mesma_pessoa e ajustar_contatos pedem o grupo do convite", () => {
     // Arrange + Act + Assert
@@ -150,7 +157,7 @@ describe("textoDoRegistro", () => {
     expect(texto).toBe("30/10 · Coleta: Tratado no Contatos");
   });
 
-  it("descreve a decisão de mesma pessoa com o grupo do convite, quem e a validação", () => {
+  it("descreve a decisão de mesma pessoa com o texto da coluna Decisão do GT e a validação", () => {
     // Arrange
     const r = manual({});
 
@@ -158,7 +165,7 @@ describe("textoDoRegistro", () => {
     const texto = textoDoRegistro(r);
 
     // Assert
-    expect(texto).toBe("26/10 · Mesma pessoa: convidada pelo grupo Ministros do TSE · Marina e Clóvis · Validado");
+    expect(texto).toBe("26/10 · Mesma pessoa: convidar pelo grupo Ministros do TSE (Marina e Clóvis) · Validado");
   });
 
   it("acrescenta outra pessoa e a observação", () => {
@@ -170,7 +177,7 @@ describe("textoDoRegistro", () => {
 
     // Assert
     expect(texto).toBe(
-      "26/10 · Mesma pessoa: convidada pelo grupo Ministros do TSE; outra pessoa em Deputados Federais · Marina e Clóvis · A validar · Deputado homônimo",
+      "26/10 · Mesma pessoa: convidar pelo grupo Ministros do TSE (Marina e Clóvis) · Outra pessoa em Deputados Federais · A validar · Deputado homônimo",
     );
   });
 
@@ -180,8 +187,8 @@ describe("textoDoRegistro", () => {
     const ajuste = manual({ tipo: "ajustar_contatos", convidaPor: undefined });
 
     // Act + Assert
-    expect(textoDoRegistro(nao)).toBe("26/10 · Não recebe convite · Marina e Clóvis · Validado");
-    expect(textoDoRegistro(ajuste)).toBe("26/10 · Ajustar no Contatos · Marina e Clóvis · Validado");
+    expect(textoDoRegistro(nao)).toBe("26/10 · Não recebe convite (Marina e Clóvis) · Validado");
+    expect(textoDoRegistro(ajuste)).toBe("26/10 · Ajustar no Contatos (Marina e Clóvis) · Validado");
   });
 
   it("descreve a reabertura pela coleta", () => {
@@ -257,6 +264,38 @@ describe("alvoDoRepetido", () => {
     expect(alvo.ocorrencias).toHaveLength(2);
     expect(alvo.ocorrencias[0].nomes).toEqual(["fulano de tal", "fulano"]);
   });
+
+  it("autoridade tratada sem ocorrência registra com os grupos do caso", () => {
+    // Arrange
+    const h = registrar(HISTORICO_VAZIO, "Davi", [], manual({ grupos: ["Senadores", "Ex-Presidentes do Senado"], convidaPor: "Senadores" }));
+    const a: AutoridadeRepetida = { nome: "Davi", situacao: "tratado", motivo: "", ocorrencias: [], caso: h.casos[0] };
+
+    // Act
+    const alvo = alvoDoRepetido(a);
+
+    // Assert
+    expect(alvo.grupos).toEqual(["Senadores", "Ex-Presidentes do Senado"]);
+  });
+
+  it("pessoa que saiu de um grupo do caso registra no mesmo caso", () => {
+    // Arrange
+    const h = registrar(HISTORICO_VAZIO, "Nunes Marques", [], manual({ grupos: ["Ministros do STF", "Ministros do TSE"] }));
+    const a: AutoridadeRepetida = {
+      nome: "Nunes Marques", situacao: "tratado", motivo: "", caso: h.casos[0],
+      ocorrencias: [ocorrencia({ grupo: "Ministros do TSE", grupoRegra: "Ministros do TSE" })],
+    };
+    const f = formulario({ tipo: "ajustar_contatos", quem: "Clóvis" });
+
+    // Act
+    const alvo = alvoDoRepetido(a);
+    const corpo = corpoDoPedido(alvo, f, "2026-10-30");
+    const depois = registrar(h, corpo.nome, corpo.nomes, corpo.registro);
+
+    // Assert
+    expect(alvo.grupos).toEqual(["Ministros do STF", "Ministros do TSE"]);
+    expect(depois.casos).toHaveLength(1);
+    expect(depois.casos[0].registros).toHaveLength(2);
+  });
 });
 
 describe("corpoDoPedido", () => {
@@ -315,7 +354,7 @@ describe("alvoDoEleito", () => {
 
     // Assert
     expect(alvo.grupos).toEqual([GRUPO_DEPUTADOS_FEDERAIS]);
-    expect(alvo.convites).toEqual([GRUPO_DEPUTADOS_FEDERAIS, GRUPO_DEPUTADOS_ELEITOS, GRUPO_SENADORES]);
+    expect(alvo.convites).toEqual([GRUPO_SENADORES, GRUPO_DEPUTADOS_FEDERAIS, GRUPO_DEPUTADOS_ELEITOS]);
   });
 
   it("oferece aos senadores eleitos os convites do Senado", () => {
@@ -323,7 +362,7 @@ describe("alvoDoEleito", () => {
     const alvo = alvoDoEleito(eleito({}));
 
     // Assert
-    expect(alvo.convites).toEqual([GRUPO_SENADORES, GRUPO_SENADORES_ELEITOS, GRUPO_DEPUTADOS_FEDERAIS]);
+    expect(alvo.convites).toEqual([GRUPO_SENADORES, GRUPO_DEPUTADOS_FEDERAIS, GRUPO_SENADORES_ELEITOS]);
   });
 });
 
@@ -355,7 +394,7 @@ describe("historicoDoEleito", () => {
     const h = registrar(registrar(HISTORICO_VAZIO, "Eunício", ["Eunício Lopes de Oliveira"], r1), "Eunício", [], r2);
 
     // Act
-    const registros = historicoDoEleito(h, alvoDoEleito(x));
+    const registros = historicoDoEleito(h, x);
 
     // Assert
     expect(registros).toEqual([r2, r1]);
@@ -363,7 +402,34 @@ describe("historicoDoEleito", () => {
 
   it("não acha nada sem decisões", () => {
     // Arrange + Act + Assert
-    expect(historicoDoEleito(undefined, alvoDoEleito(eleito({})))).toEqual([]);
+    expect(historicoDoEleito(undefined, eleito({}))).toEqual([]);
+  });
+
+  it("mostra o caso sem grupos que a classificação aplica pelo nome", () => {
+    // Arrange
+    const h = registrar(HISTORICO_VAZIO, "Eunício", [], manual({ grupos: [], tipo: "ajustar_contatos", convidaPor: undefined }));
+
+    // Act
+    const registros = historicoDoEleito(h, eleito({}));
+
+    // Assert
+    expect(registros).toHaveLength(1);
+  });
+
+  it("não mostra a decisão do homônimo ligado por nome (Jader Filho e o pai)", () => {
+    // Arrange
+    const pai = manual({ grupos: ["Ex-Presidentes do Senado", GRUPO_SENADORES], convidaPor: GRUPO_SENADORES });
+    const h = registrar(HISTORICO_VAZIO, "Jader Barbalho", [], pai);
+    const filho = eleito({
+      eleito: { casa: "senado", uf: "PA", nomeUrna: "Jader Filho", nomeCompleto: "Jader Fontenelle Barbalho Filho", situacaoTse: "Eleito", statusMandato: "Novo" },
+      contatos: [{ grupo: GRUPO_SENADORES, nome: "Jader Barbalho" }],
+    });
+
+    // Act
+    const registros = historicoDoEleito(h, filho);
+
+    // Assert
+    expect(registros).toEqual([]);
   });
 
   it("não pega caso de outra pessoa com o mesmo nome em grupo fora do eixo", () => {
@@ -372,9 +438,27 @@ describe("historicoDoEleito", () => {
     const h = registrar(HISTORICO_VAZIO, "Eunício", [], r);
 
     // Act
-    const registros = historicoDoEleito(h, alvoDoEleito(eleito({})));
+    const registros = historicoDoEleito(h, eleito({}));
 
     // Assert
     expect(registros).toEqual([]);
+  });
+});
+
+describe("historicoDoGovernador", () => {
+  it("acha o caso do governador eleito pelo nome de urna no eixo do governo", () => {
+    // Arrange
+    const r = manual({ grupos: [GRUPO_GOVERNADORES, GRUPO_GOVERNADORES_ELEITOS], convidaPor: GRUPO_GOVERNADORES });
+    const h = registrar(HISTORICO_VAZIO, "Lucas Ribeiro", [], r);
+    const x: GovernadorClassificado = {
+      eleito: { uf: "PB", nomeUrna: "Lucas Ribeiro", nomeCompleto: "Lucas Ribeiro", situacaoTse: "Eleito", statusMandato: "Novo" },
+      destino: "conferir", contatos: [],
+    };
+
+    // Act
+    const registros = historicoDoGovernador(h, x);
+
+    // Assert
+    expect(registros).toHaveLength(1);
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
-import type { Registro, TipoDecisao } from "@/lib/decisoes";
+import type { Registro } from "@/lib/decisoes";
 import {
   corpoDoPedido, errosDoFormulario, FORMULARIO_VAZIO, hojeEmBrasilia, pedeConvite, textoDoRegistro, TIPOS_DO_FORMULARIO,
   type AlvoDeDecisao, type FormularioDecisao,
@@ -90,7 +90,7 @@ function Formulario({ alvo, onFechar }: { alvo: AlvoDeDecisao; onFechar: () => v
         <div className="mt-1 flex flex-wrap gap-3">
           {TIPOS_DO_FORMULARIO.map((t) => (
             <label key={t.valor} className="flex items-center gap-1">
-              <input type="radio" name={`${id}-tipo`} checked={f.tipo === t.valor} onChange={() => mudar({ tipo: t.valor as TipoDecisao })} className="accent-acao" />
+              <input type="radio" name={`${id}-tipo`} checked={f.tipo === t.valor} onChange={() => mudar({ tipo: t.valor })} className="accent-acao" />
               {t.rotulo}
             </label>
           ))}

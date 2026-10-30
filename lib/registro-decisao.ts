@@ -1,13 +1,12 @@
-import {
-  GRUPO_DEPUTADOS_ELEITOS, GRUPO_DEPUTADOS_FEDERAIS, GRUPO_GOVERNADORES, GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES, GRUPO_SENADORES_ELEITOS,
-} from "@/data/grupos-posse";
-import { casosDaPessoa, grupoEquivalente, type HistoricoDecisoes, type Registro, type RegistroManual, type TipoDecisao } from "@/lib/decisoes";
+import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_DEPUTADOS_FEDERAIS, GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
+import { grupoEquivalente, vigente, type HistoricoDecisoes, type Registro, type RegistroManual, type TipoDecisao } from "@/lib/decisoes";
 import { diaDaColeta } from "@/lib/decisoes-coleta";
+import { casosDoEleito, GRUPOS_DA_ELEICAO_DA_CASA, GRUPOS_DA_ELEICAO_DO_GOVERNO } from "@/lib/eleitos-decisoes";
 import { descreverOcorrencia } from "@/lib/export-repetidos";
 import { normalizarTexto } from "@/lib/normalize";
 import type { AutoridadeRepetida } from "@/lib/repetidos-base";
 import { equivalenteDaOcorrencia } from "@/lib/repetidos-base";
-import { dataDaDecisao, TEXTO_TIPO, textoNoContatos } from "@/lib/repetidos-decisoes";
+import { dataDaDecisao, TEXTO_TIPO, textoDecisao, textoNoContatos } from "@/lib/repetidos-decisoes";
 import type { CasaLegislativa, ContatoDoEleito, EleitoClassificado, GovernadorClassificado } from "@/lib/types";
 
 /**
@@ -25,8 +24,9 @@ export interface FormularioDecisao {
   validacao: "validado" | "a_validar";
 }
 
-export const FORMULARIO_VAZIO: FormularioDecisao = Object.freeze({
-  tipo: "", convidaPor: "", outraPessoa: Object.freeze([]) as unknown as string[], observacao: "", quem: "", validacao: "validado",
+/** Formulário novo. A validação começa em "A validar": "Validado" é escolha explícita de quem registra. */
+export const FORMULARIO_VAZIO: Readonly<FormularioDecisao> = Object.freeze({
+  tipo: "", convidaPor: "", outraPessoa: [], observacao: "", quem: "", validacao: "a_validar",
 });
 
 /** Tipos na ordem do formulário, com o nome que a tela mostra. */
@@ -66,21 +66,22 @@ export function paraRegistro(f: FormularioDecisao, grupos: readonly string[], ho
 
 const TEXTO_VALIDACAO: Record<RegistroManual["validacao"], string> = { validado: "Validado", a_validar: "A validar" };
 
-function oQueDecide(r: RegistroManual): string {
-  const convite = r.convidaPor?.trim();
-  const base = r.tipo === "mesma_pessoa" && convite
-    ? `${TEXTO_TIPO.mesma_pessoa}: convidada pelo grupo ${convite}`
-    : `${TEXTO_TIPO[r.tipo] ?? r.tipo}${convite ? `: convidar pelo grupo ${convite}` : ""}`;
-  const outras = (r.outraPessoa ?? []).filter((g) => g.trim());
-  return outras.length > 0 ? `${base}; outra pessoa em ${outras.join(", ")}` : base;
-}
-
-/** Linha do histórico: "26/10 · Mesma pessoa: convidada pelo grupo X · Marina e Clóvis · Validado". */
+/**
+ * Linha do histórico: "26/10 · Mesma pessoa: convidar pelo grupo X (Marina e Clóvis) · Validado", com
+ * a decisão no mesmo texto da coluna "Decisão do GT" (`textoDecisao`); depois, quando há, "Outra
+ * pessoa em Y" e a observação.
+ */
 export function textoDoRegistro(r: Registro): string {
   const dia = dataDaDecisao(r.data);
   if (r.tipo === "coleta") return `${dia} · Coleta: ${textoNoContatos(r.situacao) || "Sem efeito"}`;
+  const outras = (r.outraPessoa ?? []).filter((g) => g.trim());
   const observacao = r.observacao.trim();
-  return [dia, oQueDecide(r), r.quem.trim(), TEXTO_VALIDACAO[r.validacao], ...(observacao ? [observacao] : [])].join(" · ");
+  return [
+    dia, textoDecisao(r),
+    ...(outras.length > 0 ? [`Outra pessoa em ${outras.join(", ")}`] : []),
+    TEXTO_VALIDACAO[r.validacao],
+    ...(observacao ? [observacao] : []),
+  ].join(" · ");
 }
 
 /** Do mais recente para o mais antigo pela data; no empate, o gravado depois vem antes. */
@@ -138,23 +139,27 @@ function juntarOcorrencias(lista: readonly OcorrenciaDoCaso[]): OcorrenciaDoCaso
   return [...porValor.values()];
 }
 
-/** Caso de `/repetidos`: os grupos e os convites são as formas equivalentes das ocorrências. */
+/**
+ * Caso de `/repetidos`: os grupos (e os convites) são os do caso já decidido (registro vigente) mais
+ * as formas equivalentes das ocorrências de hoje. Assim o registro novo cobre o caso e entra no
+ * mesmo histórico, mesmo quando a pessoa já saiu de um dos grupos (Nunes Marques) ou de todos.
+ */
 export function alvoDoRepetido(a: AutoridadeRepetida): AlvoDeDecisao {
   const ocorrencias = juntarOcorrencias(a.ocorrencias.map((o) => ({
     valor: equivalenteDaOcorrencia(o), rotulo: descreverOcorrencia(o), nomes: [o.chave],
   })));
-  const grupos = ocorrencias.map((o) => o.valor);
+  const doCaso = a.caso ? (vigente(a.caso)?.grupos ?? []) : [];
+  const grupos = semRepetir([...doCaso, ...ocorrencias.map((o) => o.valor)]);
   return { nome: a.nome, nomes: semRepetir(a.ocorrencias.map((o) => o.chave)), grupos, convites: [...grupos], ocorrencias };
 }
 
 const ELEITOS_DA_CASA: Record<CasaLegislativa, string> = { senado: GRUPO_SENADORES_ELEITOS, camara: GRUPO_DEPUTADOS_ELEITOS };
 
-/** Convites possíveis do eleito: o grupo atual da Casa, o de eleitos da Casa e o da outra Casa (Ata 14). */
-const CONVITES_DA_CASA: Record<CasaLegislativa, readonly string[]> = {
-  senado: [GRUPO_SENADORES, GRUPO_SENADORES_ELEITOS, GRUPO_DEPUTADOS_FEDERAIS],
-  camara: [GRUPO_DEPUTADOS_FEDERAIS, GRUPO_DEPUTADOS_ELEITOS, GRUPO_SENADORES],
-};
-const CONVITES_DO_GOVERNO: readonly string[] = [GRUPO_GOVERNADORES, GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES, GRUPO_DEPUTADOS_FEDERAIS];
+/** Convites possíveis do eleito: os grupos da eleição da Casa, sem o grupo de eleitos da outra Casa. */
+function convitesDaCasa(casa: CasaLegislativa): string[] {
+  const outra = ELEITOS_DA_CASA[casa === "senado" ? "camara" : "senado"];
+  return GRUPOS_DA_ELEICAO_DA_CASA.filter((g) => g !== outra);
+}
 
 const ocorrenciaDoContato = (c: ContatoDoEleito): OcorrenciaDoCaso =>
   ({ valor: grupoEquivalente(c.grupo, "contatos"), rotulo: `${c.grupo}: ${c.nome}`, nomes: [c.nome] });
@@ -186,7 +191,7 @@ export function alvoDoEleito(x: EleitoClassificado): AlvoDeDecisao {
   return alvoDeEleito({
     nomeUrna, nomeCompleto,
     destino: x.grupoDestino?.trim() ? x.grupoDestino : ELEITOS_DA_CASA[casa],
-    convites: CONVITES_DA_CASA[casa],
+    convites: convitesDaCasa(casa),
     ocorrencias: x.contatos.map(ocorrenciaDoContato),
   });
 }
@@ -199,19 +204,23 @@ export function alvoDoGovernador(x: GovernadorClassificado): AlvoDeDecisao {
   return alvoDeEleito({
     nomeUrna: x.eleito.nomeUrna, nomeCompleto: x.eleito.nomeCompleto,
     destino: x.grupoDestino?.trim() ? x.grupoDestino : GRUPO_GOVERNADORES_ELEITOS,
-    convites: CONVITES_DO_GOVERNO,
+    convites: GRUPOS_DA_ELEICAO_DO_GOVERNO,
     ocorrencias: [...x.contatos.map(ocorrenciaDoContato), ...camara],
   });
 }
 
 /**
- * Histórico do eleito: os registros de todos os casos da pessoa que tocam os grupos dele ou os
- * convites possíveis (o eixo da eleição), do mais recente para o mais antigo.
+ * Histórico do eleito: os registros dos casos que a classificação aplica a ele (`casosDoEleito`, pelo
+ * nome de urna ou completo, no eixo da eleição), do mais recente para o mais antigo. O homônimo
+ * ligado por nome (Jader Filho e o pai, Jader Barbalho) não traz o caso do outro.
  */
-export function historicoDoEleito(decisoes: HistoricoDecisoes | undefined, alvo: AlvoDeDecisao): Registro[] {
-  if (!decisoes) return [];
-  const casos = casosDaPessoa(decisoes, [alvo.nome, ...alvo.nomes], [...alvo.grupos, ...alvo.convites]);
-  return registrosDoMaisRecente(casos.flatMap((c) => c.registros));
+export function historicoDoEleito(decisoes: HistoricoDecisoes | undefined, x: EleitoClassificado): Registro[] {
+  return registrosDoMaisRecente(casosDoEleito(x.eleito, decisoes, GRUPOS_DA_ELEICAO_DA_CASA).flatMap((c) => c.registros));
+}
+
+/** Histórico do governador eleito, pela mesma regra da classificação dele. */
+export function historicoDoGovernador(decisoes: HistoricoDecisoes | undefined, x: GovernadorClassificado): Registro[] {
+  return registrosDoMaisRecente(casosDoEleito(x.eleito, decisoes, GRUPOS_DA_ELEICAO_DO_GOVERNO).flatMap((c) => c.registros));
 }
 
 export interface PedidoDeDecisao {

@@ -1,7 +1,7 @@
 import {
   GRUPO_DEPUTADOS_ELEITOS, GRUPO_DEPUTADOS_FEDERAIS, GRUPO_GOVERNADORES, GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES, GRUPO_SENADORES_ELEITOS,
 } from "@/data/grupos-posse";
-import { chaveDoQueDecide, grupoEquivalente, vigente, type HistoricoDecisoes, type RegistroManual } from "@/lib/decisoes";
+import { chaveDoQueDecide, grupoEquivalente, vigente, type CasoDecidido, type HistoricoDecisoes, type RegistroManual } from "@/lib/decisoes";
 import { casaDoGrupo } from "@/lib/eleitos-casamento";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import { dataDaDecisao, MOTIVO_DUAS_DECISOES } from "@/lib/repetidos-decisoes";
@@ -50,19 +50,32 @@ function grupoDoEixo(grupo: string): string {
 const chave = (grupo: string): string => normalizarTexto(grupoDoEixo(grupo));
 
 /**
- * O caso vale para o eleito quando alguma chave de nome casa o nome de urna ou o completo e o
- * registro vigente toca os grupos da eleição (em `grupos` ou em `convidaPor`). Caso sem grupos (só
- * registrável pela seção dos eleitos) vale pelo nome.
+ * Casos que valem para o eleito: alguma chave de nome casa o nome de urna ou o completo e o registro
+ * vigente toca `grupos` (os da eleição; em `grupos` ou em `convidaPor`). Caso sem grupos (só
+ * registrável pela seção dos eleitos) vale pelo nome. A classificação e o histórico da tela usam
+ * esta mesma seleção.
  */
-function aplicaveis(e: { nomeUrna: string; nomeCompleto: string }, h: HistoricoDecisoes, alvo: ReadonlySet<string>): RegistroManual[] {
+export function casosDoEleito(
+  e: { nomeUrna: string; nomeCompleto: string },
+  decisoes: HistoricoDecisoes | undefined,
+  grupos: readonly string[],
+): CasoDecidido[] {
+  if (!decisoes) return [];
+  const alvo = new Set(grupos.map(chave));
   const nomes = new Set([e.nomeUrna, e.nomeCompleto].map(normalizarNome).filter((n) => n.length > 0));
-  return h.casos.flatMap((c) => {
+  return decisoes.casos.filter((c) => {
     const r = vigente(c);
-    if (!r || !c.chaves.some((ch) => nomes.has(ch))) return [];
+    if (!r || !c.chaves.some((ch) => nomes.has(ch))) return false;
     const doRegistro = [...r.grupos, ...(r.convidaPor?.trim() ? [r.convidaPor] : [])].map(chave);
-    return r.grupos.length === 0 || doRegistro.some((g) => alvo.has(g)) ? [r] : [];
+    return r.grupos.length === 0 || doRegistro.some((g) => alvo.has(g));
   });
 }
+
+const vigentes = (casos: readonly CasoDecidido[]): RegistroManual[] =>
+  casos.flatMap((c) => {
+    const r = vigente(c);
+    return r ? [r] : [];
+  });
 
 const maisRecente = (rs: readonly RegistroManual[]): RegistroManual =>
   rs.reduce((melhor, r) => (r.data >= melhor.data ? r : melhor));
@@ -98,8 +111,7 @@ export function decisaoDoEleito(
   decisoes: HistoricoDecisoes | undefined,
   grupos: readonly string[],
 ): DecisaoDoEleito | undefined {
-  if (!decisoes) return undefined;
-  const rs = aplicaveis(e, decisoes, new Set(grupos.map(chave)));
+  const rs = vigentes(casosDoEleito(e, decisoes, grupos));
   if (rs.length === 0) return undefined;
   const outraPessoa = ligacoesDeOutraPessoa(rs);
   const decisivos = rs.filter((r) => r.tipo !== "pessoas_diferentes");

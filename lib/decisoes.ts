@@ -39,6 +39,13 @@ export interface CasoDecidido {
   registros: Registro[];
 }
 
+/** Corpo de `POST /api/decisoes`: montado pelo formulário e validado pela rota. */
+export interface PedidoDeDecisao {
+  nome: string;
+  nomes: string[];
+  registro: RegistroManual;
+}
+
 export interface HistoricoDecisoes {
   versao: 1;
   casos: CasoDecidido[];
@@ -78,9 +85,24 @@ export function grupoEquivalente(
  * equivalente) quando há; senão o tipo. Duas decisões com a mesma chave não são conflito.
  */
 export function chaveDoQueDecide(r: RegistroManual): string {
-  const convite = r.convidaPor?.trim();
-  return convite ? `convite:${normalizarTexto(grupoEquivalente(convite, "contatos"))}` : `tipo:${r.tipo}`;
+  const convite = conviteNormalizado(r);
+  return convite ? `convite:${convite}` : `tipo:${r.tipo}`;
 }
+
+/** Grupo do convite do registro na forma equivalente e normalizada; `undefined` sem convite. */
+function conviteNormalizado(r: RegistroManual): string | undefined {
+  const convite = r.convidaPor?.trim();
+  return convite ? normalizarTexto(grupoEquivalente(convite, "contatos")) : undefined;
+}
+
+/** `AAAA-MM-DD` → `DD/MM` (ou `DD/MM/AAAA` com `comAno`). Data fora do formato volta como veio. */
+export function dataDaDecisao(data: string, comAno = false): string {
+  const [ano, mes, dia] = data.split("-");
+  if (!ano || !mes || !dia) return data;
+  return comAno ? `${dia}/${mes}/${ano}` : `${dia}/${mes}`;
+}
+
+export const MOTIVO_DUAS_DECISOES = "Duas decisões do GT para a mesma pessoa: conferir";
 
 function chavesDe(nomes: readonly string[]): string[] {
   return [...new Set(nomes.map(normalizarNome).filter((c) => c.length > 0))];
@@ -234,7 +256,7 @@ export function situacaoDoCaso(c: CasoDecidido, gruposAtuais: readonly string[])
   if (!decisao) return "sem_efeito";
   const daDecisao = conjuntoDeGrupos(decisao.grupos);
   const atuais = [...conjuntoDeGrupos(gruposAtuais)];
-  const convite = decisao.convidaPor?.trim() ? normalizarTexto(decisao.convidaPor) : undefined;
+  const convite = conviteNormalizado(decisao);
   // O grupo do convite nunca reabre, mesmo fora dos grupos do registro (Contatos corrigido).
   if (atuais.some((g) => g !== convite && !daDecisao.has(g))) return "reaberto";
   const soNoConvite = convite !== undefined && atuais.every((g) => g === convite);

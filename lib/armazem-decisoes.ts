@@ -4,7 +4,7 @@ import { ehArquivoAusente, gravarArquivoAtomico } from "@/lib/armazem";
 import { CAMINHO_DECISOES_BLOB, type ClienteBlob } from "@/lib/armazem-blob";
 import {
   DecisaoInvalidaError, HISTORICO_VAZIO, registrar,
-  type CasoDecidido, type HistoricoDecisoes, type Registro, type RegistroColeta, type RegistroManual,
+  type CasoDecidido, type HistoricoDecisoes, type PedidoDeDecisao, type Registro, type RegistroColeta, type RegistroManual,
   type SituacaoNoContatos, type TipoDecisao,
 } from "@/lib/decisoes";
 
@@ -71,7 +71,8 @@ export function lerRegistroManual(valor: unknown): Leitura<RegistroManual> {
   if (!o) return falha("o registro não é um objeto");
   if (!ehUm(TIPOS, o.tipo)) return falha(`registro sem tipo válido (${TIPOS.join(", ")})`);
   if (!ehData(o.data)) return falha("registro sem data válida no formato AAAA-MM-DD");
-  if (typeof o.quem !== "string") return falha("registro sem quem (texto)");
+  // Como no formulário: quem decidiu é obrigatório, e só espaços não conta.
+  if (typeof o.quem !== "string" || o.quem.trim() === "") return falha("registro sem quem (texto não vazio)");
   if (typeof o.observacao !== "string") return falha("registro sem observacao (texto)");
   if (!ehUm(VALIDACOES, o.validacao)) return falha(`registro sem validacao válida (${VALIDACOES.join(" ou ")})`);
   if (!ehTextos(o.grupos)) return falha("registro sem grupos (lista de textos)");
@@ -209,12 +210,6 @@ export function atualizarDecisoes(
 export interface RespostaDecisao {
   status: number;
   corpo: { ok: boolean; message?: string; historico?: HistoricoDecisoes };
-}
-
-interface PedidoDeDecisao {
-  nome: string;
-  nomes: string[];
-  registro: RegistroManual;
 }
 
 function lerPedido(corpo: unknown): Leitura<PedidoDeDecisao> {

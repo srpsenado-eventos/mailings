@@ -1,12 +1,15 @@
 import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_DEPUTADOS_FEDERAIS, GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
-import { grupoEquivalente, vigente, type HistoricoDecisoes, type Registro, type RegistroManual, type TipoDecisao } from "@/lib/decisoes";
+import {
+  dataDaDecisao, grupoEquivalente, vigente,
+  type HistoricoDecisoes, type PedidoDeDecisao, type Registro, type RegistroManual, type TipoDecisao,
+} from "@/lib/decisoes";
 import { diaDaColeta } from "@/lib/decisoes-coleta";
 import { casosDoEleito, GRUPOS_DA_ELEICAO_DA_CASA, GRUPOS_DA_ELEICAO_DO_GOVERNO } from "@/lib/eleitos-decisoes";
 import { descreverOcorrencia } from "@/lib/export-repetidos";
 import { normalizarTexto } from "@/lib/normalize";
 import type { AutoridadeRepetida } from "@/lib/repetidos-base";
 import { equivalenteDaOcorrencia } from "@/lib/repetidos-base";
-import { dataDaDecisao, TEXTO_TIPO, textoDecisao, textoNoContatos } from "@/lib/repetidos-decisoes";
+import { TEXTO_TIPO, textoDecisao, textoNoContatos } from "@/lib/repetidos-decisoes";
 import type { CasaLegislativa, ContatoDoEleito, EleitoClassificado, GovernadorClassificado } from "@/lib/types";
 
 /**
@@ -221,12 +224,6 @@ export function historicoDoEleito(decisoes: HistoricoDecisoes | undefined, x: El
 /** Histórico do governador eleito, pela mesma regra da classificação dele. */
 export function historicoDoGovernador(decisoes: HistoricoDecisoes | undefined, x: GovernadorClassificado): Registro[] {
   return registrosDoMaisRecente(casosDoEleito(x.eleito, decisoes, GRUPOS_DA_ELEICAO_DO_GOVERNO).flatMap((c) => c.registros));
-}
-
-export interface PedidoDeDecisao {
-  nome: string;
-  nomes: string[];
-  registro: RegistroManual;
 }
 
 /**

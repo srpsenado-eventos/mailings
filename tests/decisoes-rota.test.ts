@@ -89,11 +89,24 @@ describe("tratarRegistroDeDecisao", () => {
     ["31 de fevereiro", corpo("Ana Fictícia", { data: "2026-02-31" })],
     ["mesma_pessoa sem convidaPor", corpo("Ana Fictícia", { convidaPor: undefined })],
     ["nome só com tratamento", corpo("Dr.")],
+    ["quem vazio", corpo("Ana Fictícia", { quem: "" })],
+    ["quem só com espaços", corpo("Ana Fictícia", { quem: "   " })],
   ])("%s responde 400", async (_caso, valor) => {
     const r = await tratarRegistroDeDecisao(valor, armazemDecisoesEmMemoria());
     expect(r.status).toBe(400);
     expect(r.corpo.ok).toBe(false);
     expect(r.corpo.message).toBeTruthy();
+  });
+
+  test("quem vazio responde 400 dizendo que falta quem decidiu, e nada é gravado", async () => {
+    // Arrange
+    const armazem = armazemDecisoesEmMemoria();
+    // Act
+    const r = await tratarRegistroDeDecisao(corpo("Ana Fictícia", { quem: "  " }), armazem);
+    // Assert
+    expect(r.status).toBe(400);
+    expect(r.corpo.message).toMatch(/quem/);
+    expect((await armazem.ler()).casos).toHaveLength(0);
   });
 
   test("campos que não são do registro não vão para o arquivo", async () => {

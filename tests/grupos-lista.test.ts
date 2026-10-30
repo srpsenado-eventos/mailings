@@ -206,6 +206,26 @@ describe("aplicarListas (spec 2026-10-30 §4.6)", () => {
     expect(r.grupos[0].contatos[0]).toMatchObject({ semaforo: "indeterminado", observacao: OBSERVACAO_ELEITO_A_CONFERIR });
   });
 
+  test("em Deputados Federais o deputado atual com eleição a conferir segue a comparação com a lista da Câmara", () => {
+    // Arrange
+    const leo: ContatoPlanilha = { ...SENHOR, nome: "Leo Fictício", grupo: GRUPO_DEPUTADOS_FEDERAIS, cargo: "Deputado Federal", departamento: "BAHIA" };
+    const g = grupoLista(GRUPO_DEPUTADOS_FEDERAIS, [leo]);
+    const eleicaoContato = {
+      casa: "camara" as const, destino: "conferir" as const, projecao: false, uf: "BA", situacaoTse: "Eleito",
+      statusMandato: "Reeleição", nomeUrna: "Leo Fictício",
+    };
+    const comConferir = { ...g, contatos: [{ ...g.contatos[0], eleicao: eleicaoContato }] };
+
+    // Act
+    const r = aplicarListas(analise([comConferir], eleicao({ deputadosAtuais: [deputado()] })), "30/10");
+
+    // Assert
+    const [c] = r.grupos[0].contatos;
+    expect(c.semaforo).toBe("verde");
+    expect(c.observacao).toBeUndefined();
+    expect(c.eleicao).toEqual(eleicaoContato);
+  });
+
   test("contato que casa duas pessoas da lista sem nome igual sai indeterminado, sem propor o nome de outra", () => {
     const leo: ContatoPlanilha = { ...SENHOR, nome: "Leo Fictício", grupo: GRUPO_DEPUTADOS_FEDERAIS, cargo: "Deputado Federal", departamento: "BAHIA" };
     const atuais = [

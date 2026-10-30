@@ -1,5 +1,5 @@
 import {
-  casosDaPessoa, chaveDoQueDecide, grupoEquivalente, gruposAtuaisParaOCaso, situacaoDoCaso, vigente,
+  casosDaPessoa, chaveDoQueDecide, dataDaDecisao, grupoEquivalente, MOTIVO_DUAS_DECISOES, gruposAtuaisParaOCaso, situacaoDoCaso, vigente,
   type CasoDecidido, type HistoricoDecisoes, type RegistroManual, type SituacaoNoContatos, type TipoDecisao,
 } from "@/lib/decisoes";
 import { gruposAtuaisDoCaso } from "@/lib/decisoes-coleta";
@@ -10,6 +10,9 @@ import {
   type AutoridadeRepetida, type Entrada, type OcorrenciaRepetida, type SituacaoRepetida,
 } from "@/lib/repetidos-base";
 import type { ResultadoEleicao, ResultadoGrupo } from "@/lib/types";
+
+// Vivem em lib/decisoes.ts (o eixo dos eleitos também os usa); reexportados para a tela de repetidos.
+export { dataDaDecisao, MOTIVO_DUAS_DECISOES };
 
 /**
  * Decisões do GT aplicadas às autoridades em mais de um grupo (spec 2026-10-30 §4.1.3 e §4.1.4).
@@ -32,15 +35,7 @@ export function textoNoContatos(s: SituacaoNoContatos | undefined): string {
   return "";
 }
 
-/** `AAAA-MM-DD` → `DD/MM` (ou `DD/MM/AAAA` com `comAno`). Data fora do formato volta como veio. */
-export function dataDaDecisao(data: string, comAno = false): string {
-  const [ano, mes, dia] = data.split("-");
-  if (!ano || !mes || !dia) return data;
-  return comAno ? `${dia}/${mes}/${ano}` : `${dia}/${mes}`;
-}
-
 export const MOTIVO_PESSOA_NAO_ENCONTRADA = "Pessoa não encontrada no Contatos";
-export const MOTIVO_DUAS_DECISOES = "Duas decisões do GT para a mesma pessoa: conferir";
 
 /** Motivo do caso reaberto (spec §4.1.4). */
 export function textoReaberto(data: string): string {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { constaEntreAtuais, constaEntreAtuaisPor, deputadosEmExercicio, nomesComAbreviacao } from "@/lib/eleitos-casamento";
+import { deputadosEmExercicio, nomesComAbreviacao } from "@/lib/eleitos-casamento";
 import type { DeputadoAtual } from "@/lib/types";
 
 const dep = (over: Partial<DeputadoAtual>): DeputadoAtual => ({
@@ -134,31 +134,5 @@ describe("nomesComAbreviacao", () => {
   test("nome vazio não casa nada", () => {
     expect(nomesComAbreviacao("", "")).toBe(false);
     expect(nomesComAbreviacao("A.", "")).toBe(false);
-  });
-});
-
-describe("constaEntreAtuais e constaEntreAtuaisPor sobre a regra nova", () => {
-  const eleitoPlanilha = (over: object) => ({
-    casa: "camara" as const, situacaoTse: "Eleito", statusMandato: "Reeleição", ...eleito(), ...over,
-  });
-
-  test("consta quando exatamente um deputado satisfaz a regra", () => {
-    expect(constaEntreAtuais(eleitoPlanilha(GUILHERME_TSE), [guilherme("PE")])).toBe(true);
-  });
-
-  test("não consta quando há homônimo, que fica para conferência", () => {
-    expect(constaEntreAtuais(eleitoPlanilha(GUILHERME_TSE), [guilherme("PE"), guilherme("PE")])).toBe(false);
-  });
-
-  test("não consta quando ninguém satisfaz a regra", () => {
-    expect(constaEntreAtuais(eleitoPlanilha(GUILHERME_TSE), [guilherme("RJ")])).toBe(false);
-  });
-
-  test("constaEntreAtuaisPor devolve o único deputado que casa e nada quando há zero ou homônimo", () => {
-    const g = guilherme("PE");
-
-    expect(constaEntreAtuaisPor("PE", GUILHERME_TSE.nomeCompleto, GUILHERME_TSE.nomeUrna, [g])).toBe(g);
-    expect(constaEntreAtuaisPor("PE", GUILHERME_TSE.nomeCompleto, GUILHERME_TSE.nomeUrna, [g, g])).toBeUndefined();
-    expect(constaEntreAtuaisPor("PE", GUILHERME_TSE.nomeCompleto, GUILHERME_TSE.nomeUrna, [])).toBeUndefined();
   });
 });

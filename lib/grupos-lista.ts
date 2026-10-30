@@ -212,7 +212,15 @@ function foraDaLista(c: ResultadoContato, rotulo: string, dataDaLista: string): 
   return semPessoa(c, `Não está na lista de ${rotulo} (${planilha} de ${dataDaLista})`);
 }
 
-function eleitoAConferir(c: ResultadoContato): boolean {
+/** Grupos de eleitos: só neles o eleito em `conferir` fica fora da comparação com a lista. */
+const GRUPOS_DE_ELEITOS: ReadonlySet<string> = new Set([GRUPO_SENADORES_ELEITOS, GRUPO_DEPUTADOS_ELEITOS, GRUPO_GOVERNADORES_ELEITOS]);
+
+/**
+ * Eleito a conferir num grupo de eleitos. Em Deputados Federais o deputado atual com a eleição em
+ * `conferir` continua deputado em exercício e segue a comparação com a lista da Câmara.
+ */
+function eleitoAConferir(c: ResultadoContato, rotulo: string): boolean {
+  if (!GRUPOS_DE_ELEITOS.has(rotulo)) return false;
   return c.eleicao?.destino === "conferir" || c.eleicaoGoverno?.destino === "conferir";
 }
 
@@ -223,7 +231,7 @@ function compararContatoComLista(
   dataDaLista: string,
 ): ResultadoContato {
   // O eleito em `conferir` não entra em lista nenhuma: dizer que "não está na lista" seria falso.
-  if (eleitoAConferir(c)) return semPessoa(c, OBSERVACAO_ELEITO_A_CONFERIR);
+  if (eleitoAConferir(c, rotulo)) return semPessoa(c, OBSERVACAO_ELEITO_A_CONFERIR);
   const achado = pessoaDoContato(c.contato, lista, rotulo);
   if (!achado) return foraDaLista(c, rotulo, dataDaLista);
   if ("ambiguo" in achado) return semPessoa(c, observacaoNomeAmbiguo(rotulo));

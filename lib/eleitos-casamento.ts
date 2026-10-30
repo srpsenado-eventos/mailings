@@ -1,7 +1,7 @@
 import { pontuarPessoa } from "@/lib/match";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import { siglaDaUf } from "@/lib/uf";
-import type { CasaLegislativa, ContatoDoEleito, ContatoPlanilha, DeputadoAtual, EleitoPlanilha } from "@/lib/types";
+import type { CasaLegislativa, ContatoDoEleito, ContatoPlanilha, DeputadoAtual } from "@/lib/types";
 
 /** Casamento de pessoa e de grupo compartilhado pelos eixos de eleitos e de governadores. Módulo-folha: não importa os dois. */
 
@@ -77,23 +77,6 @@ export function deputadosEmExercicio(
       || nomesComAbreviacao(d.nomeCivil, e.nomeCompleto);
   });
 }
-
-/**
- * O deputado em exercício que é a pessoa, quando há exatamente um. Homônimo (mais de um) e
- * ausência devolvem `undefined`: o caso não é decidido por quem usa isto.
- */
-export function constaEntreAtuaisPor(
-  uf: string,
-  nomeCompleto: string,
-  nomeUrna: string,
-  atuais: readonly DeputadoAtual[],
-): DeputadoAtual | undefined {
-  const achados = deputadosEmExercicio({ uf, nomeCompleto, nomeUrna }, atuais);
-  return achados.length === 1 ? achados[0] : undefined;
-}
-
-export const constaEntreAtuais = (e: EleitoPlanilha, atuais: readonly DeputadoAtual[]): boolean =>
-  deputadosEmExercicio(e, atuais).length === 1;
 
 export const chavePessoa = (c: ContatoPlanilha): string => c.id ?? normalizarNome(c.nome);
 

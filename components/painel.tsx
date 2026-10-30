@@ -11,13 +11,15 @@ import { grupoDeputados, NOME_GRUPO_DEPUTADOS, temGrupoDeputados } from "@/lib/p
 import { avisoDaEleicao, ehFiltroEleicao, esperadosDoAgrupador, FILTROS_ELEICAO, secoesDeEleicao, secoesDeGoverno } from "@/lib/painel-eleicao";
 import { PublicarButton } from "@/components/publicar-button";
 import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-contato";
-import { avisoUrlCaida, cartoesDoResumo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoAlternativa, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoMudanca, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, textosProvisorias, type Filtro } from "@/lib/painel";
+import { avisoUrlCaida, cartoesDoResumo, estadoDaFonteDoGrupo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoAlternativa, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoMudanca, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, textosProvisorias, type Filtro } from "@/lib/painel";
 import type { HistoricoDecisoes } from "@/lib/decisoes";
 import { autoridadesRepetidas, etiquetaDeRepeticao, textoDoLinkDoPainel } from "@/lib/repetidos";
 import type { FalhasPorUrl, ResultadoGrupo, Retrato } from "@/lib/types";
 
 function EstadoDaFonte({ g, falhas }: { g: ResultadoGrupo; falhas?: FalhasPorUrl }) {
   const caida = avisoUrlCaida(falhas, g.fonteUrl);
+  const semPagina = estadoDaFonteDoGrupo(g);
+  if (semPagina) return <span className="text-xs text-cinza">{semPagina}</span>;
   if (g.semFonte) {
     return (
       <span className="text-xs text-ruim">

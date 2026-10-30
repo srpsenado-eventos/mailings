@@ -6,7 +6,7 @@ import {
 } from "@/lib/repetidos";
 import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
 import { HISTORICO_VAZIO, registrar, type HistoricoDecisoes, type RegistroManual } from "@/lib/decisoes";
-import { resumoDoGrupo, situacaoDoContato } from "@/lib/painel";
+import { situacaoDoContato } from "@/lib/painel";
 import type {
   CasaLegislativa, ContatoDoEleito, DeputadoAtual, EleitoClassificado, GovernadorClassificado, ResultadoContato, ResultadoEleicao, ResultadoGrupo,
 } from "@/lib/types";
@@ -754,18 +754,6 @@ describe("decisões do GT nos repetidos (spec 2026-10-30 §4.1.3)", () => {
     expect(noTse?.fosca).toBe(false);
     expect(noTse?.etiqueta.tom).toBe("neutro");
     expect(noTse?.etiqueta.texto).toBe("Convidada por este grupo; também em Ministros do STJ (decisão do GT de 26/10)");
-  });
-
-  test("a linha fosca não conta como pendência no resumo do grupo", () => {
-    // Arrange
-    const noStj = stj(CUEVA);
-    const repetidas = autoridadesRepetidas([noStj, tseM(CUEVA)], undefined, decisaoCueva);
-    // Act
-    const marca = etiquetaDeRepeticao(repetidas, noStj.contatos[0], noStj.grupo);
-    // Assert
-    expect(marca?.fosca).toBe(true);
-    expect(marca?.etiqueta.tom).toBe("neutro");
-    expect(resumoDoGrupo(noStj)).toBe("1 contato");
   });
 
   test("Nunes Marques só no TSE, com mesma pessoa → TSE: tratada no Contatos", () => {

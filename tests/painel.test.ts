@@ -6,6 +6,7 @@ import {
   contarContatos,
   contarNumeroNaBase,
   detalhesDoContato,
+  estadoDaFonteDoGrupo,
   etiquetasDoContato,
   filtrarGrupos,
   linhasDoEndereco,
@@ -183,6 +184,38 @@ describe("motivoDoContato", () => {
     expect(motivoDoContato(contato({ semaforo: "indeterminado" }), grupoInacessivel)).toBe("Fonte fora do ar: confira à mão");
     expect(motivoDoContato(contato({ semaforo: "indeterminado" }), { ...grupoComFonte, erroFonte: "x: HTTP 403" })).toBe("Não verificado: uma fonte não respondeu");
     expect(motivoDoContato(contato({}), grupoComFonte)).toBeUndefined();
+  });
+});
+
+describe("grupos de lista e neutros: linha e cabeçalho", () => {
+  const grupoLista: ResultadoGrupo = { grupo: "Senadores eleitos - Posse Presidencial 2027", semFonte: false, fiscalizacao: "lista", contatos: [], novos: [] };
+  const grupoNeutro: ResultadoGrupo = { grupo: "Convidados do presidente eleito - Posse 2027", semFonte: false, fiscalizacao: "neutro", contatos: [], novos: [] };
+
+  test("contato fora da lista mostra o motivo da comparação com a planilha, nunca fonte que não respondeu", () => {
+    // Arrange
+    const motivo = "Não está na lista de Senadores eleitos - Posse Presidencial 2027 (planilha do TSE de 28/10)";
+    const c = contato({ semaforo: "indeterminado", observacao: motivo });
+
+    // Act
+    const texto = motivoDoContato(c, grupoLista);
+    const situacao = situacaoDoContato(c, grupoLista);
+
+    // Assert
+    expect(texto).toBe(motivo);
+    expect(situacao.explicacao).toBe("Grupo comparado com a planilha, não com página oficial");
+    expect(situacao.explicacao).not.toBe("A fonte oficial não pôde ser lida nesta varredura");
+  });
+
+  test("sem a lista nesta varredura e eleito a conferir saem com o próprio motivo", () => {
+    expect(motivoDoContato(contato({ semaforo: "indeterminado", observacao: "Sem a lista nesta varredura" }), grupoLista)).toBe("Sem a lista nesta varredura");
+    expect(motivoDoContato(contato({ semaforo: "indeterminado", observacao: "Eleito a conferir: grupo do convite ainda não decidido" }), grupoLista))
+      .toBe("Eleito a conferir: grupo do convite ainda não decidido");
+  });
+
+  test("cabeçalho do grupo diz como ele é fiscalizado; grupo de fonte não tem texto próprio", () => {
+    expect(estadoDaFonteDoGrupo(grupoNeutro)).toBe("Sem fonte oficial (grupo de convidados)");
+    expect(estadoDaFonteDoGrupo(grupoLista)).toBe("Comparado com a planilha (TSE/Câmara)");
+    expect(estadoDaFonteDoGrupo(grupoComFonte)).toBeUndefined();
   });
 });
 

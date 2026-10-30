@@ -1,10 +1,12 @@
 import {
   GRUPO_DEPUTADOS_ELEITOS, GRUPO_DEPUTADOS_FEDERAIS, GRUPO_GOVERNADORES, GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES, GRUPO_SENADORES_ELEITOS,
 } from "@/data/grupos-posse";
-import { chaveDoQueDecide, grupoEquivalente, vigente, type CasoDecidido, type HistoricoDecisoes, type RegistroManual } from "@/lib/decisoes";
+import {
+  chaveDoQueDecide, dataDaDecisao, grupoEquivalente, MOTIVO_DUAS_DECISOES, vigente,
+  type CasoDecidido, type HistoricoDecisoes, type RegistroManual,
+} from "@/lib/decisoes";
 import { casaDoGrupo } from "@/lib/eleitos-casamento";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
-import { dataDaDecisao, MOTIVO_DUAS_DECISOES } from "@/lib/repetidos-decisoes";
 
 /**
  * Decisão do GT sobre um eleito de 2026 (spec 2026-10-30 §4.1.1 e §4.3.1: "a decisão do GT vence a
@@ -51,9 +53,10 @@ const chave = (grupo: string): string => normalizarTexto(grupoDoEixo(grupo));
 
 /**
  * Casos que valem para o eleito: alguma chave de nome casa o nome de urna ou o completo e o registro
- * vigente toca `grupos` (os da eleição; em `grupos` ou em `convidaPor`). Caso sem grupos (só
- * registrável pela seção dos eleitos) vale pelo nome. A classificação e o histórico da tela usam
- * esta mesma seleção.
+ * vigente toca `grupos` (os da eleição; em `grupos` ou em `convidaPor`). A rota recusa registro com
+ * `grupos` vazio; caso sem grupos só vem da carga manual do arquivo e vale pelo nome, sem cortar
+ * ligação (`pessoas_diferentes` só corta todas quando o caso tem um grupo de eleitos). A
+ * classificação e o histórico da tela usam esta mesma seleção.
  */
 export function casosDoEleito(
   e: { nomeUrna: string; nomeCompleto: string },

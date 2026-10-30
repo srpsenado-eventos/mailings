@@ -52,7 +52,19 @@ const EXPLICACAO = {
   divergeProtocolo: "Diferente do que a tabela de protocolo manda, ou incoerente com o cargo; veja no detalhe",
   cargoVazio: "O cadastro não informa o cargo; sem ele não há regra de protocolo",
   semParNaFonte: "Ninguém com este nome na composição oficial; confirmar se saiu",
+  comparadoComPlanilha: "Grupo comparado com a planilha, não com página oficial",
+  grupoDeConvidados: "Grupo de convidados, sem fonte oficial: nome e cargo não são conferidos",
 } as const;
+
+/**
+ * Cabeçalho do grupo que não é lido por página (spec 2026-10-30 §4.5 e §4.6): `neutro` não tem
+ * fonte oficial por natureza e `lista` é comparado com as planilhas. Grupo de fonte: `undefined`.
+ */
+export function estadoDaFonteDoGrupo(g: ResultadoGrupo): string | undefined {
+  if (g.fiscalizacao === "neutro") return "Sem fonte oficial (grupo de convidados)";
+  if (g.fiscalizacao === "lista") return "Comparado com a planilha (TSE/Câmara)";
+  return undefined;
+}
 
 /** Explicação da etiqueta "Pessoa da fonte sem par na planilha" (linha de proposta de inclusão). */
 export const EXPLICACAO_NOVO = "Pessoa publicada pela fonte, sem par na planilha";
@@ -195,13 +207,20 @@ function semFonteIndividual(c: ResultadoContato): boolean {
   return c.camposDivergentes.some((d) => d.campo === "fonte");
 }
 
+/** Grupo de lista ou neutro: nenhuma fonte foi tentada, então "não pôde ser lida" seria falso. */
+function explicacaoDoNaoVerificado(g: ResultadoGrupo): string {
+  if (g.fiscalizacao === "lista") return EXPLICACAO.comparadoComPlanilha;
+  if (g.fiscalizacao === "neutro") return EXPLICACAO.grupoDeConvidados;
+  return EXPLICACAO.naoVerificado;
+}
+
 export function situacaoDoContato(c: ResultadoContato, g: ResultadoGrupo): Situacao {
   if (c.possivelSaida) return { texto: "Possível saída", tom: "ruim", explicacao: EXPLICACAO.semParNaFonte };
   if (g.semFonte) return { texto: "Sem fonte", tom: "neutro", explicacao: "O grupo não tem fonte oficial cadastrada; nome e cargo não foram conferidos" };
   if (semFonteIndividual(c)) {
     return { texto: "Sem fonte", tom: "neutro", explicacao: "Sem fonte individual cadastrada para este contato; nome e cargo não foram conferidos" };
   }
-  if (c.semaforo === "indeterminado") return { texto: "Não verificado", tom: "neutro", explicacao: EXPLICACAO.naoVerificado };
+  if (c.semaforo === "indeterminado") return { texto: "Não verificado", tom: "neutro", explicacao: explicacaoDoNaoVerificado(g) };
   const etiquetas = etiquetasDoContato(c, g);
   const aRevisar = etiquetas.filter((e) => PRECISA_REVISAR.includes(e.tom)).length;
   if (aRevisar > 0) return { texto: `${aRevisar} a revisar`, tom: "atencao", explicacao: "Campos em atenção pedem revisão; veja as etiquetas e o detalhe" };
@@ -216,6 +235,9 @@ export function motivoDoContato(c: ResultadoContato, g: ResultadoGrupo): string 
   if (g.semFonte) return "Sem fonte cadastrada";
   if (semFonteIndividual(c)) return c.observacao ?? "Sem fonte cadastrada";
   if (g.fonteInacessivel) return "Fonte fora do ar: confira à mão";
+  // Grupo de lista ou neutro: o motivo é o da comparação com a planilha ("Não está na lista…",
+  // "Sem a lista nesta varredura", "Eleito a conferir…"); nenhuma fonte deixou de responder.
+  if (g.fiscalizacao && c.semaforo === "indeterminado") return c.observacao;
   if (c.semaforo === "indeterminado") return g.individuais && c.observacao ? c.observacao : "Não verificado: uma fonte não respondeu";
   return undefined;
 }

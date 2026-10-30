@@ -240,6 +240,18 @@ describe("situacaoDoCaso", () => {
     expect(situacaoDoCaso(nunes, [STF, TSE])).toBe("pendente");
   });
 
+  it("convidaPor com rótulo variante (espaço no fim, caixa diferente) acha o grupo do convite", () => {
+    // Arrange
+    const variante = casoCom(manual({ tipo: "mesma_pessoa", convidaPor: "ministros do TSE ", grupos: [STF, TSE] }));
+    const eleito = casoCom(manual({
+      tipo: "mesma_pessoa", convidaPor: "  SENADORES eleitos - Posse Presidencial 2027 ", grupos: ["Senadores eleitos - Posse Presidencial 2027"],
+    }));
+    // Act / Assert
+    expect(situacaoDoCaso(variante, [TSE])).toBe("tratado");
+    expect(situacaoDoCaso(variante, [STF, TSE])).toBe("pendente");
+    expect(situacaoDoCaso(eleito, ["Senadores eleitos - Posse Presidencial 2027"])).toBe("tratado");
+  });
+
   it("mesma_pessoa num grupo que não constava na decisão: reaberto", () => {
     expect(situacaoDoCaso(nunes, [TSE, STJ])).toBe("reaberto");
   });

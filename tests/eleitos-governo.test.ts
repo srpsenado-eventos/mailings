@@ -208,6 +208,7 @@ describe("grupo de destino dos governadores (spec 2026-10-30 §4.3.1)", () => {
 
   test("conferir fica sem grupo de destino", () => {
     const [r] = classificarGovernadores([gov()], []);
-    expect(r).toMatchObject({ destino: "conferir", grupoDestino: "" });
+    expect(r.destino).toBe("conferir");
+    expect("grupoDestino" in r).toBe(false);
   });
 });

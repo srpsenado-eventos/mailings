@@ -567,11 +567,14 @@ export interface EleitoClassificado {
   contatos: ContatoDoEleito[];
   /**
    * Rótulo do grupo do Contatos que convida a pessoa (Ata 14; spec 2026-10-30 §3.6): "Senadores",
-   * "Deputados Federais" ou um dos grupos de eleitos de `data/grupos-posse.ts`. Vazio em `conferir`.
-   * Retrato gravado antes de 30/10/2026 não traz o campo.
+   * "Deputados Federais" ou um dos grupos de eleitos de `data/grupos-posse.ts`.
+   * Ausente em `conferir` e em retrato gravado antes de 30/10/2026.
    */
-  grupoDestino: string;
-  /** Já está no grupo do Contatos cujo rótulo é `grupoDestino` (comparação por `normalizarTexto`). */
+  grupoDestino?: string;
+  /**
+   * Já está no grupo do Contatos cujo rótulo é `grupoDestino` (comparação por `normalizarTexto`).
+   * Para "Senadores", vale qualquer grupo de senador atual (inclusive os titulares fora de exercício).
+   */
   jaCadastrado?: boolean;
 }
 
@@ -599,9 +602,10 @@ export interface GovernadorClassificado {
   contatos: ContatoDoEleito[];
   /**
    * Grupo do Contatos que convida a pessoa: "Governadores", o grupo de governadores eleitos, ou
-   * "Senadores"/"Deputados Federais" para quem vai para outro cargo (Ata 14). Vazio em `conferir`.
+   * "Senadores"/"Deputados Federais" para quem vai para outro cargo (Ata 14).
+   * Ausente em `conferir` e em retrato gravado antes de 30/10/2026.
    */
-  grupoDestino: string;
+  grupoDestino?: string;
   /** Mandato novo já cadastrado em "Governadores Eleitos". */
   jaCadastrado?: boolean;
   /** Deputado em exercício (planilha da Câmara) eleito governador, quando o grupo não está no Contatos. */

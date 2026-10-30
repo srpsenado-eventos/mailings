@@ -45,7 +45,7 @@ const MOTIVO_SEM_LISTA_DEPUTADOS = "Planilha de deputados atuais não enviada: c
 const naoPrevisto = (e: GovernadorPlanilha) => `Status do mandato não previsto: "${e.statusMandato.trim()}"`;
 
 const conferir = (e: GovernadorPlanilha, motivo: string, achados: readonly Candidato[] = []): GovernadorClassificado =>
-  ({ eleito: e, destino: "conferir", grupoDestino: "", motivo, contatos: achados.map(referencia) });
+  ({ eleito: e, destino: "conferir", motivo, contatos: achados.map(referencia) });
 
 function classificarUm(
   e: GovernadorPlanilha,

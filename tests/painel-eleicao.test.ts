@@ -20,7 +20,7 @@ const ec = (over: Partial<EleicaoContato> = {}): EleicaoContato => ({
 });
 const classificado = (over: Partial<EleitoClassificado> & { nome?: string; casa?: "senado" | "camara" } = {}): EleitoClassificado => ({
   eleito: { casa: over.casa ?? "senado", uf: "MA", nomeUrna: over.nome ?? "Joana Fictícia", nomeCompleto: `${over.nome ?? "Joana Fictícia"} Souza`, situacaoTse: "Eleito", statusMandato: "Mandato novo" },
-  destino: "novo", projecao: false, grupoDestino: "", contatos: [], ...over,
+  destino: "novo", projecao: false, contatos: [], ...over,
 });
 const eleicao = (eleitos: EleitoClassificado[], camaraNoContatos = false): ResultadoEleicao => ({ arquivos: ["x.xlsx"], eleitos, camaraNoContatos });
 const linha = (eleicaoContato?: EleicaoContato): ResultadoContato => ({
@@ -137,7 +137,7 @@ const eg = (over: Partial<EleicaoGovernoContato> = {}): EleicaoGovernoContato =>
 });
 const gov = (nome: string, over: Partial<GovernadorClassificado> & { uf?: string; partido?: string } = {}): GovernadorClassificado => ({
   eleito: { uf: over.uf ?? "MA", nomeUrna: nome, nomeCompleto: `${nome} Completo`, partido: over.partido ?? "PXX", situacaoTse: "Eleito", statusMandato: "Mandato novo" },
-  destino: "novo", grupoDestino: "", contatos: [], ...over,
+  destino: "novo", contatos: [], ...over,
 });
 const comGov = (eleitos: GovernadorClassificado[], segundoTurno: UfSegundoTurno[] = []): ResultadoEleicao =>
   ({ ...eleicao([]), governadores: { eleitos, segundoTurno } });

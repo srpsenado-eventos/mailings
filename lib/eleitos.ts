@@ -95,16 +95,26 @@ const ROTULO_CASA_GRUPO: Record<CasaLegislativa, string> = { senado: "senadores"
 type Base = Pick<EleitoClassificado, "eleito" | "projecao">;
 
 const conferir = (base: Base, motivo: string, achados: readonly Candidato[] = []): EleitoClassificado =>
-  ({ ...base, destino: "conferir", grupoDestino: "", motivo, contatos: achados.map(referencia) });
+  ({ ...base, destino: "conferir", motivo, contatos: achados.map(referencia) });
 
-/** Classificado com destino; `jaCadastrado` quando alguma linha casada está no grupo do Contatos de rótulo `grupoDestino`. */
+/**
+ * A linha casada está no grupo de destino. "Senadores" vale para qualquer grupo de senador atual
+ * ("Senadores titulares fora de exercício - Posse 2027", "Presidente do Senado Federal; Senadores");
+ * os demais destinos exigem o rótulo do agrupador (`grupoDoAgrupador`).
+ */
+const estaNoDestino = (c: Candidato, grupoDestino: string): boolean =>
+  grupoDestino === GRUPO_SENADORES
+    ? c.casa === "senado" && !c.eleitos
+    : grupoDoAgrupador(c.grupo)?.rotulo === grupoDestino;
+
+/** Classificado com destino; `jaCadastrado` quando alguma linha casada já está no grupo de destino. */
 function destinado(
   base: Base,
   destino: Exclude<DestinoEleito, "conferir">,
   grupoDestino: string,
   contatos: readonly Candidato[],
 ): EleitoClassificado {
-  const ja = contatos.some((c) => grupoDoAgrupador(c.grupo)?.rotulo === grupoDestino);
+  const ja = contatos.some((c) => estaNoDestino(c, grupoDestino));
   return { ...base, destino, grupoDestino, contatos: contatos.map(referencia), ...(ja ? { jaCadastrado: true } : {}) };
 }
 

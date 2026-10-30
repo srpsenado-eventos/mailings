@@ -78,6 +78,17 @@ describe("maioriaDosPares", () => {
     expect(maioriaDosPares(["Senhor"])).toBeUndefined();
   });
 
+  test("forma genérica não conta nem vira o valor proposto", () => {
+    expect(maioriaDosPares(["Senhor(a)", "Senhor(a)", "Senhor"])).toBeUndefined();
+    expect(maioriaDosPares(["Senhor(a)", "Senhor", "Senhor"])).toEqual({ valor: "Senhor", n: 2, m: 2 });
+    expect(maioriaDosPares(["A Sua Excelência o(a) Senhor(a)", "A Sua Excelência o(a) Senhor(a)", "A Sua Excelência o Senhor"])).toBeUndefined();
+  });
+
+  test("no empate de grafia, a caixa normal vence a caixa alta", () => {
+    expect(maioriaDosPares(["SENHOR", "Senhor", "Doutor"])?.valor).toBe("Senhor");
+    expect(maioriaDosPares(["Senhor", "SENHOR", "Doutor"])?.valor).toBe("Senhor");
+  });
+
   test("valores vazios não contam", () => {
     expect(maioriaDosPares(["Senhor", "", "  "])).toBeUndefined();
     expect(maioriaDosPares(["Senhor", "", "Senhor"])).toEqual({ valor: "Senhor", n: 2, m: 2 });
@@ -141,10 +152,17 @@ describe("aplicarPares", () => {
     expect(comparacao(r.contatos[7], "enderecamento")).toMatchObject({ situacao: "divergente", valorEsperado: "A Sua Excelência a Senhora" });
   });
 
-  test("contato feminino com 'Senhor': esperado 'Senhora'; o gênero fica com a Camada A", () => {
+  test("contato feminino com 'Senhor' confere, com a maioria no gênero do próprio valor; o gênero fica com a Camada A", () => {
     const ministra = semRegra({ nome: "Ministra", cargo: "Ministra do Supremo Tribunal Federal", tratamento: "Senhor" });
     const r = aplicarPares(grupoCom([...seteEUm().slice(0, 7), ministra]));
-    expect(comparacao(r.contatos[7], "tratamento")).toMatchObject({ situacao: "confere", valorEsperado: "Senhora" });
+    expect(comparacao(r.contatos[7], "tratamento")).toMatchObject({ situacao: "confere", valorEsperado: "Senhor" });
+    expect(comparacao(r.contatos[7], "enderecamento")).toMatchObject({ situacao: "confere", valorEsperado: "A Sua Excelência o Senhor" });
+  });
+
+  test("forma genérica dos pares não conta: 'Senhor(a)', 'Senhor(a)', 'Senhor' não dá maioria", () => {
+    const pares = [semRegra({ nome: "A", tratamento: "Senhor(a)" }), semRegra({ nome: "B", tratamento: "Senhor(a)" }), semRegra({ nome: "C", tratamento: "Senhor" })];
+    const r = aplicarPares(grupoCom([...pares, semRegra({ nome: "D", tratamento: "Senhor" })]));
+    expect(comparacao(r.contatos[3], "tratamento")?.situacao).toBe("sem_regra");
   });
 
   test("feminino com 'Senhora' confere com a maioria 'Senhor'", () => {

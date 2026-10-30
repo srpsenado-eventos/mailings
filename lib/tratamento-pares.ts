@@ -103,13 +103,23 @@ function noGenero(valor: string, alvo: GeneroAlvo): string {
     .join(" ");
 }
 
+/** O gênero em que o valor está escrito: feminino quando tem palavra feminina da família "Senhor". */
+function generoDoValor(valor: string): GeneroAlvo {
+  return noGenero(valor, "masculino") === colapsar(valor) ? "masculino" : "feminino";
+}
+
+/** Caixa alta inteira ("SENHOR"): perde o desempate de grafia para a caixa normal. */
+function emCaixaAlta(valor: string): boolean {
+  return valor === valor.toUpperCase() && valor !== valor.toLowerCase();
+}
+
 /** Chave de comparação: normalizado, no masculino (tratamento e cargo), sem espaços dobrados. */
 function chaveDoValor(valor: string): string {
   return neutralizarGenero(normalizarTexto(noGenero(valor, "masculino")));
 }
 
 export interface MaioriaDosPares {
-  /** A grafia mais frequente da maioria (a primeira, no empate entre grafias). */
+  /** A grafia mais frequente da maioria; no empate, a que não está em caixa alta, e depois a primeira. */
   valor: string;
   /** Quantos pares usam a maioria. */
   n: number;
@@ -118,12 +128,13 @@ export interface MaioriaDosPares {
 }
 
 /**
- * Maioria entre os valores dos pares: exige `MIN_PARES` ou mais valores não vazios e mais da
+ * Maioria entre os valores dos pares: exige `MIN_PARES` ou mais valores válidos e mais da
  * metade deles iguais, comparados com o gênero neutralizado ("Senhora" conta como "Senhor").
- * Empate ou um par só: `undefined`.
+ * Vazio e forma genérica ("Senhor(a)", defeito que a Camada A acusa) não contam nem viram o
+ * valor proposto. Empate ou um par só: `undefined`.
  */
 export function maioriaDosPares(valores: readonly string[]): MaioriaDosPares | undefined {
-  const preenchidos = valores.map(colapsar).filter((v) => v.length > 0);
+  const preenchidos = valores.map(colapsar).filter((v) => v.length > 0 && !MARCADOR_GENERICO.test(v));
   if (preenchidos.length < MIN_PARES) return undefined;
   const porChave = new Map<string, string[]>();
   for (const v of preenchidos) {
@@ -133,7 +144,11 @@ export function maioriaDosPares(valores: readonly string[]): MaioriaDosPares | u
   const maior = [...porChave.values()].reduce((a, b) => (b.length > a.length ? b : a));
   if (maior.length * 2 <= preenchidos.length) return undefined;
   const contagem = (g: string) => maior.filter((v) => v === g).length;
-  const valor = maior.reduce((a, b) => (contagem(b) > contagem(a) ? b : a));
+  const melhor = (a: string, b: string): string => {
+    if (contagem(b) !== contagem(a)) return contagem(b) > contagem(a) ? b : a;
+    return emCaixaAlta(a) && !emCaixaAlta(b) ? b : a;
+  };
+  const valor = maior.reduce(melhor);
   return { valor, n: maior.length, m: preenchidos.length };
 }
 
@@ -167,10 +182,14 @@ function compararComPares(
   const maioria = maioriaDosPares(pares.map((p) => p.contato[campo] ?? ""));
   if (!maioria) return comp;
   const confere = chaveDoValor(comp.valorPlanilha) === chaveDoValor(maioria.valor);
+  // Divergente: o valor a copiar sai no gênero do contato. Confere: no gênero do próprio valor do
+  // cadastro, para o cartão não mostrar "a Senhora" ao lado de "o Senhor" que conferiu (o gênero
+  // fica com a Camada A).
+  const genero = confere ? generoDoValor(comp.valorPlanilha) : contatoEhFeminino(c.contato) ? "feminino" : "masculino";
   return {
     campo,
     valorPlanilha: comp.valorPlanilha,
-    valorEsperado: noGenero(maioria.valor, contatoEhFeminino(c.contato) ? "feminino" : "masculino"),
+    valorEsperado: noGenero(maioria.valor, genero),
     situacao: confere ? "confere" : "divergente",
     origemValor: "pares",
     observacao: observacaoDosPares(maioria),

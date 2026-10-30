@@ -121,6 +121,22 @@ export function acharCaso(
   return maior > 0 && melhores.length === 1 ? melhores[0].c : undefined;
 }
 
+/**
+ * Todos os casos com decisão da pessoa, para a tela e o painel: alguma chave de nome em comum e os
+ * grupos do registro vigente contidos em `gruposEquivalentes`. `acharCaso` continua escolhendo um só
+ * caso, para registrar.
+ */
+export function casosDaPessoa(
+  h: HistoricoDecisoes,
+  nomes: readonly string[],
+  gruposEquivalentes: readonly string[],
+): CasoDecidido[] {
+  const procuradas = new Set(chavesDe(nomes));
+  const alvo = conjuntoDeGrupos(gruposEquivalentes);
+  return h.casos.filter((c) =>
+    c.chaves.some((ch) => procuradas.has(ch)) && vigente(c) !== undefined && contem(alvo, gruposDoCaso(c)));
+}
+
 function idDoCaso(nome: string, grupos: readonly string[]): string {
   return `${normalizarNome(nome)}#${[...conjuntoDeGrupos(grupos)].sort().join("|")}`;
 }

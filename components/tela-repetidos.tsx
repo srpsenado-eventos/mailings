@@ -3,12 +3,12 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { baixar, MIME_XLSX } from "@/components/baixar";
 import { Etiqueta } from "@/components/etiqueta";
-import { descreverOcorrencia, gerarXlsxRepetidas, textoNoContatos } from "@/lib/export-repetidos";
+import { descreverOcorrencia, gerarXlsxRepetidas } from "@/lib/export-repetidos";
 import { textoDataHora } from "@/lib/painel";
 import {
-  diaMesDaDecisao, filtrarRepetidas, separarRepetidas, textoDecisao, textoLinkRepetidas,
-  type AutoridadeRepetida, type FiltroRepetidas,
+  filtrarRepetidas, separarRepetidas, textoLinkRepetidas, type AutoridadeRepetida, type FiltroRepetidas,
 } from "@/lib/repetidos";
+import { dataDaDecisao, TEXTO_SITUACAO_REPETIDA, textoDecisao, textoNoContatos } from "@/lib/repetidos-decisoes";
 
 const FILTROS: readonly { id: FiltroRepetidas; rotulo: string }[] = [
   { id: "todas", rotulo: "Todas" },
@@ -19,10 +19,8 @@ const FILTROS: readonly { id: FiltroRepetidas; rotulo: string }[] = [
 ];
 
 function SituacaoDaAutoridade({ a }: { a: AutoridadeRepetida }) {
-  if (a.situacao === "decidido") return <Etiqueta texto="Decidido pela regra" tom="ok" />;
-  if (a.situacao === "decidido_gt") return <Etiqueta texto="Decidido pelo GT" tom="ok" explicacao={a.motivo} />;
-  if (a.situacao === "tratado") return <Etiqueta texto="Tratado no Contatos" tom="ok" explicacao={a.motivo} />;
-  return <Etiqueta texto="Conferir" tom="atencao" explicacao={a.motivo} />;
+  const texto = TEXTO_SITUACAO_REPETIDA[a.situacao];
+  return <Etiqueta texto={texto} tom={a.situacao === "conferir" ? "atencao" : "ok"} explicacao={a.motivo} />;
 }
 
 export function TelaRepetidos({ repetidas, geradoEm, aviso }: { repetidas: AutoridadeRepetida[]; geradoEm: string; aviso?: string }) {
@@ -112,7 +110,7 @@ function TabelaRepetidas({ lista }: { lista: readonly AutoridadeRepetida[] }) {
                 {a.decisao ? (
                   <>
                     <span className="block text-tinta">{textoDecisao(a.decisao)}</span>
-                    <span className="block text-xs">Decisão de {diaMesDaDecisao(a.decisao.data)}</span>
+                    <span className="block text-xs">Decisão de {dataDaDecisao(a.decisao.data)}</span>
                     {textoNoContatos(a.noContatos) && <span className="block text-xs">{textoNoContatos(a.noContatos)}</span>}
                   </>
                 ) : "—"}

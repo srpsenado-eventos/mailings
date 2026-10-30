@@ -6,6 +6,7 @@ import {
 } from "@/data/grupos-posse";
 import {
   acharCaso,
+  casosDaPessoa,
   DecisaoInvalidaError,
   grupoEquivalente,
   HISTORICO_VAZIO,
@@ -128,6 +129,18 @@ describe("registrar e acharCaso", () => {
     expect(acharCaso(h2, ["Jader Barbalho"])).toBeUndefined();
     expect(acharCaso(h2, ["Jader Barbalho"], ["B"])).toBeUndefined();
     expect(acharCaso(h2, ["Jader Barbalho"], ["D"])).toBeUndefined();
+  });
+
+  it("casosDaPessoa devolve todos os casos cujos grupos estão contidos nos da pessoa", () => {
+    // Arrange
+    const h1 = registrar(HISTORICO_VAZIO, "Jader Barbalho", [], manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Ex-Presidentes do Senado", "Senadores"] }));
+    const h2 = registrar(h1, "Jader Barbalho", [], manual({ tipo: "pessoas_diferentes", grupos: ["Senadores", GRUPO_DEPUTADOS_ELEITOS] }));
+    const todos = ["senadores", "Ex-Presidentes do Senado", GRUPO_DEPUTADOS_ELEITOS];
+    // Act / Assert
+    expect(casosDaPessoa(h2, ["Jader Barbalho"], todos)).toEqual(h2.casos);
+    expect(casosDaPessoa(h2, ["Jader Barbalho"], ["Ex-Presidentes do Senado", "Senadores"])).toEqual([h2.casos[0]]);
+    expect(casosDaPessoa(h2, ["Outra Pessoa"], todos)).toEqual([]);
+    expect(casosDaPessoa(h2, ["Jader Barbalho"], ["Senadores"])).toEqual([]);
   });
 
   it("registro com os mesmos grupos, em outra ordem e caixa, acrescenta ao caso existente", () => {

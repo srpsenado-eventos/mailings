@@ -30,7 +30,7 @@ describe("export das autoridades em mais de um grupo", () => {
     const linhas = linhasRepetidas(lista);
     expect(linhas[0]).toEqual({
       Nome: "Ana Fictícia",
-      "Situação": "Decidido",
+      "Situação": "Decidido pela regra",
       "Convidar pelo grupo": "Ministros do STF",
       "Cargo do convite": "Ministra do Supremo Tribunal Federal",
       "Nível na Nominata": "4.9 Ministros do Supremo Tribunal Federal",

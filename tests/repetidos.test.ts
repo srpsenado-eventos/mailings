@@ -4,8 +4,9 @@ import {
   MOTIVO_SEM_NIVEL, eleitosLigados, MOTIVO_ELEICAO_NOVO, ocorrenciasDeFora, rotuloOrigem, separarRepetidas, textoEleitosRepetidos, textoLinkRepetidas, textoRepetidas,
   type OcorrenciaRepetida,
 } from "@/lib/repetidos";
+import { GRUPO_DEPUTADOS_ELEITOS } from "@/data/grupos-posse";
 import { HISTORICO_VAZIO, registrar, type HistoricoDecisoes, type RegistroManual } from "@/lib/decisoes";
-import { situacaoDoContato } from "@/lib/painel";
+import { resumoDoGrupo, situacaoDoContato } from "@/lib/painel";
 import type {
   CasaLegislativa, ContatoDoEleito, DeputadoAtual, EleitoClassificado, GovernadorClassificado, ResultadoContato, ResultadoEleicao, ResultadoGrupo,
 } from "@/lib/types";
@@ -755,11 +756,16 @@ describe("decisões do GT nos repetidos (spec 2026-10-30 §4.1.3)", () => {
     expect(noTse?.etiqueta.texto).toBe("Convidada por este grupo; também em Ministros do STJ (decisão do GT de 26/10)");
   });
 
-  test("a linha fosca não muda a situação do contato", () => {
-    const repetidas = autoridadesRepetidas([stj(CUEVA), tseM(CUEVA)], undefined, decisaoCueva);
-    const c = linha(CUEVA, "Ministro");
-    expect(etiquetaDeRepeticao(repetidas, c, "Ministros do STJ")?.etiqueta.tom).toBe("neutro");
-    expect(situacaoDoContato(c, stj(CUEVA))).toEqual(situacaoDoContato(c, grupo("Outro", [c])));
+  test("a linha fosca não conta como pendência no resumo do grupo", () => {
+    // Arrange
+    const noStj = stj(CUEVA);
+    const repetidas = autoridadesRepetidas([noStj, tseM(CUEVA)], undefined, decisaoCueva);
+    // Act
+    const marca = etiquetaDeRepeticao(repetidas, noStj.contatos[0], noStj.grupo);
+    // Assert
+    expect(marca?.fosca).toBe(true);
+    expect(marca?.etiqueta.tom).toBe("neutro");
+    expect(resumoDoGrupo(noStj)).toBe("1 contato");
   });
 
   test("Nunes Marques só no TSE, com mesma pessoa → TSE: tratada no Contatos", () => {
@@ -876,5 +882,86 @@ describe("decisões do GT nos repetidos (spec 2026-10-30 §4.1.3)", () => {
     expect(filtrarRepetidas(lista, "", "decidido_gt").map((a) => a.nome)).toEqual([CUEVA]);
     expect(filtrarRepetidas(lista, "", "tratado").map((a) => a.nome)).toEqual(["Nunes Marques"]);
     expect(filtrarRepetidas(lista, "", "decidido").map((a) => a.nome)).toEqual(["Ana Fictícia"]);
+  });
+
+  test("o link conta só quem está em dois ou mais grupos (tratada e não encontrada ficam de fora)", () => {
+    // Arrange
+    const h = decidir(
+      decidir(HISTORICO_VAZIO, "Nunes Marques", manual({ tipo: "mesma_pessoa", convidaPor: "Ministros do TSE", grupos: ["Ministros do STF", "Ministros do TSE"] })),
+      "Rui Sumido", manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Senadores", "Ex-Presidentes do Senado"] }),
+    );
+    // Act
+    const lista = autoridadesRepetidas([tseM("Nunes Marques"), stf(), tse()], undefined, h);
+    // Assert
+    expect(lista).toHaveLength(3);
+    expect(textoLinkRepetidas(lista)).toBe("1 autoridade em mais de um grupo");
+  });
+
+  test("pessoa só no grupo que não convida: atenção, sem fosco", () => {
+    // Arrange
+    const lista = autoridadesRepetidas([stj(CUEVA)], undefined, decisaoCueva);
+    // Act
+    const marca = etiquetaDeRepeticao(lista, linha(CUEVA, "Ministro"), "Ministros do STJ");
+    // Assert
+    expect(lista[0]).toMatchObject({ situacao: "decidido_gt", noContatos: "pendente" });
+    expect(lista[0].convidaPor).toBeUndefined();
+    expect(marca).toEqual({
+      etiqueta: expect.objectContaining({ tom: "atencao", texto: "Grupo do convite Ministros do TSE sem a pessoa no Contatos" }),
+      fosca: false,
+    });
+  });
+
+  test("Jader Barbalho: os dois casos valem; o eleito é outra pessoa e o convite é por Senadores", () => {
+    // Arrange
+    const h = decidir(
+      decidir(HISTORICO_VAZIO, "Jader Barbalho", manual({
+        tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Ex-Presidentes do Senado", "Senadores"],
+      })),
+      "Jader Barbalho", manual({
+        tipo: "pessoas_diferentes", data: "2026-10-29", outraPessoa: [GRUPO_DEPUTADOS_ELEITOS], grupos: ["Senadores", GRUPO_DEPUTADOS_ELEITOS],
+      }),
+    );
+    const grupos = [exPresidenteSenado("Jader Barbalho"), grupo("Senadores", [linha("Jader Barbalho", "Senador")])];
+    const filho = eleito("camara", "Jader Filho", "Jader Fontenelle Barbalho Filho", "PA", [lig("Senadores", "Jader Barbalho")], {
+      destino: "novo", grupoDestino: GRUPO_DEPUTADOS_ELEITOS,
+    });
+    // Act
+    const lista = autoridadesRepetidas(grupos, eleicao({ eleitos: [filho] }), h);
+    // Assert
+    expect(h.casos).toHaveLength(2);
+    expect(lista).toHaveLength(1);
+    const [jader] = lista;
+    expect(jader.situacao).toBe("decidido_gt");
+    expect(jader.convidaPor?.grupo).toBe("Senadores");
+    expect(jader.ocorrencias.map((o) => o.origem)).not.toContain("eleicao");
+    expect(etiquetaDeRepeticao(lista, linha("Jader Barbalho", "Senador"), "Senadores")?.etiqueta.texto)
+      .toBe("Convidada por este grupo; também em Ex-Presidentes do Senado (decisão do GT de 26/10)");
+    expect(etiquetaDeRepeticao(lista, linha("Jader Barbalho", "x"), "Ex-Presidentes do Senado")?.fosca).toBe(true);
+  });
+
+  test("duas decisões que decidem a mesma pessoa ficam para conferir, com o caso mais recente", () => {
+    // Arrange
+    const h = decidir(decisaoCueva, CUEVA, manual({ tipo: "nao_recebe_convite", data: "2026-10-28", grupos: ["Ministros do STJ"] }));
+    // Act
+    const [a] = autoridadesRepetidas([stj(CUEVA), tseM(CUEVA)], undefined, h);
+    // Assert
+    expect(h.casos).toHaveLength(2);
+    expect(a.situacao).toBe("conferir");
+    expect(a.motivo).toBe("Duas decisões do GT para a mesma pessoa: conferir");
+    expect(a.decisao?.tipo).toBe("nao_recebe_convite");
+    expect(etiquetaDeRepeticao([a], linha(CUEVA, "x"), "Ministros do STJ")?.etiqueta.tom).toBe("atencao");
+  });
+
+  test("ajustar no Contatos fora do cálculo segue a situação no Contatos", () => {
+    // Arrange
+    const h = decidir(
+      decidir(HISTORICO_VAZIO, "Celina Leão", manual({ tipo: "ajustar_contatos", convidaPor: "Governadores", grupos: ["Governadores", "Senadores"] })),
+      "Rui Sumido", manual({ tipo: "ajustar_contatos", grupos: ["Senadores", "Ex-Presidentes do Senado"] }),
+    );
+    // Act
+    const lista = autoridadesRepetidas([grupo("Governadores", [linha("Celina Leão", "Governadora")])], undefined, h);
+    // Assert
+    expect(lista.find((a) => a.nome === "Celina Leão")).toMatchObject({ situacao: "tratado", noContatos: "tratado" });
+    expect(lista.find((a) => a.nome === "Rui Sumido")).toMatchObject({ situacao: "tratado", noContatos: "tratado" });
   });
 });

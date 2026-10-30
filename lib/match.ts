@@ -14,7 +14,8 @@ import type {
   Semaforo,
 } from "@/lib/types";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
-import { CARGOS } from "@/lib/cargos";
+import { CARGOS, CARGOS_FEMININOS, CARGOS_MASCULINOS, neutralizarGenero } from "@/lib/cargos";
+import { ehGrupoDeTribunal, FUNCOES_DE_TRIBUNAL } from "@/data/cargos-tribunal";
 import { comparacaoRegraNome, comparacoesCoerencia, comparacoesProtocolo } from "@/lib/tratamento";
 
 const LIMIAR_PESSOA = 0.6;
@@ -183,6 +184,89 @@ function rolesDe(valor: string): string[] {
   return tokensSignificativos(valor).filter((t) => CARGOS.includes(t));
 }
 
+/** Contexto do grupo na comparação de cargo (spec 2026-10-30 §3.2). */
+export interface ContextoCargo {
+  /** Grupo de tribunal (`data/cargos-tribunal.ts`): as funções de tribunal valem como "Ministro". */
+  tribunal?: boolean;
+}
+
+/** O contexto de cargo do grupo canônico (nome do catálogo). */
+export function contextoCargoDoGrupo(grupoCanonico: string | undefined): ContextoCargo {
+  return { tribunal: ehGrupoDeTribunal(grupoCanonico) };
+}
+
+/** "Ministro(a)", "Corregedor(a)-Geral", "Ministro/Ministra": a página não diz o gênero (texto normalizado). */
+const MARCA_GENERO_NEUTRO = /\(a\)|\b([a-z]+?)o?\/\1a\b/;
+
+function temGeneroNeutro(valor: string): boolean {
+  return MARCA_GENERO_NEUTRO.test(normalizarTexto(valor));
+}
+
+/** Normaliza, descarta o "(a)" e põe os femininos do léxico no masculino. */
+function semGenero(valor: string): string {
+  return neutralizarGenero(normalizarTexto(valor).replace(/\(a\)/g, ""));
+}
+
+/** Gênero explícito do cargo ("m" ou "f"); sem palavra de gênero, com as duas, ou com a marca neutra, nenhum. */
+function generoDoCargo(valor: string): "m" | "f" | undefined {
+  if (temGeneroNeutro(valor)) return undefined;
+  const tokens = normalizarTexto(valor).split(/[^a-z]+/);
+  const m = tokens.some((t) => CARGOS_MASCULINOS.includes(t));
+  const f = tokens.some((t) => CARGOS_FEMININOS.includes(t));
+  if (m === f) return undefined;
+  return m ? "m" : "f";
+}
+
+/** Uma expressão por função de tribunal: o hífen também casa com espaço, e o "o" final também com "a" ("decana"). */
+const REGEX_FUNCOES: ReadonlyMap<string, RegExp> = new Map(
+  FUNCOES_DE_TRIBUNAL.map((f) => {
+    const corpo = f.replace(/o$/, "[oa]").replace(/-/g, "[- ]");
+    return [f, new RegExp(`(^|[^a-z])${corpo}($|[^a-z])`)];
+  }),
+);
+const REGEX_VICE_PRESIDENTE = /(^|[^a-z])vice[- ]?presidente($|[^a-z])/g;
+
+function temFuncao(texto: string, funcao: string): boolean {
+  return REGEX_FUNCOES.get(funcao)?.test(texto) ?? false;
+}
+
+/** "Presidente" que não é "Vice-Presidente" (texto já sem gênero). */
+function temPresidenciaPropria(texto: string): boolean {
+  return temFuncao(texto.replace(REGEX_VICE_PRESIDENTE, " "), "presidente");
+}
+
+/** Só a função genérica "Ministro(a)", sem nenhuma função específica. */
+function soMinistro(texto: string): boolean {
+  return temFuncao(texto, "ministro") && FUNCOES_DE_TRIBUNAL.every((f) => f === "ministro" || !temFuncao(texto, f));
+}
+
+/** Prefixos que negam a função, menos o "vice", que nos tribunais é função própria. */
+const NEGANTES_NO_TRIBUNAL = PREFIXOS_NEGANTES.filter((x) => x !== "vice");
+
+/**
+ * Cargo nos tribunais (spec 2026-10-30 §3.2). Só decide para o "Ministro(a) do …" e o
+ * "Presidente do …" do Contatos; outro cargo (o convocado) devolve `undefined` e segue a
+ * comparação de sempre. Ministro: qualquer função de tribunal da página confirma, menos
+ * "Presidente" (troca de presidência). Presidente: a página confirma com "Presidente" ou só
+ * com "Ministro(a)" (o STF não marca a presidência). Um gênero explícito na página não
+ * confirma o outro no Contatos, e "Substituto", "Interino" e "Ex-" continuam negando.
+ */
+function situacaoCargoTribunal(valorPlanilha: string, valorEsperado: string): SituacaoCampo | undefined {
+  const p = semGenero(valorPlanilha);
+  const s = semGenero(valorEsperado);
+  const presidente = temPresidenciaPropria(p);
+  if (!presidente && !temFuncao(p, "ministro")) return undefined;
+  const gp = generoDoCargo(valorPlanilha);
+  const gs = generoDoCargo(valorEsperado);
+  if (gp && gs && gp !== gs) return "divergente";
+  const tp = tokensSignificativos(p);
+  const ts = tokensSignificativos(s);
+  if (NEGANTES_NO_TRIBUNAL.some((x) => tp.includes(x) !== ts.includes(x))) return "divergente";
+  if (presidente) return temPresidenciaPropria(s) || soMinistro(s) ? "confere" : "divergente";
+  if (temPresidenciaPropria(s)) return "divergente";
+  return FUNCOES_DE_TRIBUNAL.some((f) => temFuncao(s, f)) ? "confere" : "divergente";
+}
+
 /**
  * Compara cargo planilha × site com foco no objetivo da auditoria: confirmar o
  * PAPEL declarado na planilha, ignorando qualificadores extras da fonte
@@ -190,9 +274,23 @@ function rolesDe(valor: string): string[] {
  * real de papel (Ministro→Presidente), gênero (Ministro≠Ministra) e prefixo
  * (Presidente≠Vice-Presidente, Senador≠Ex-Senador). Sem palavra-chave de cargo,
  * cai na comparação por tokens.
+ *
+ * Página sem gênero ("Ministro(a)", "Ministro/Ministra") confirma os dois gêneros do
+ * Contatos; com um gênero explícito, "Ministra" continua não confirmando "Ministro". Nos
+ * grupos de tribunal (`contexto.tribunal`), as funções de tribunal valem como "Ministro"
+ * (`situacaoCargoTribunal`). Spec 2026-10-30 §3.2.
  */
-export function situacaoCampo(valorPlanilha: string, valorEsperado?: string): SituacaoCampo {
+export function situacaoCampo(valorPlanilha: string, valorEsperado?: string, contexto: ContextoCargo = {}): SituacaoCampo {
   if (valorEsperado === undefined) return "fonte_nao_informa";
+  const doTribunal = contexto.tribunal ? situacaoCargoTribunal(valorPlanilha, valorEsperado) : undefined;
+  if (doTribunal) return doTribunal;
+  return temGeneroNeutro(valorEsperado)
+    ? situacaoPorPapel(semGenero(valorPlanilha), semGenero(valorEsperado))
+    : situacaoPorPapel(valorPlanilha, valorEsperado);
+}
+
+/** A régua de papel, gênero e prefixo de `situacaoCampo`, sem o contexto do grupo. */
+function situacaoPorPapel(valorPlanilha: string, valorEsperado: string): SituacaoCampo {
   const tp = tokensSignificativos(valorPlanilha);
   const ts = tokensSignificativos(valorEsperado);
   const rolesP = rolesDe(valorPlanilha);
@@ -325,7 +423,7 @@ function montarResultado(
       valorPlanilha: contato.cargo,
       valorEsperado: pessoa.cargo,
       origemValor: ov,
-      situacao: situacaoCampo(contato.cargo, pessoa.cargo),
+      situacao: situacaoCampo(contato.cargo, pessoa.cargo, contextoCargoDoGrupo(grupoCanonico)),
     });
   }
   if (contato.endereco) {
@@ -677,7 +775,12 @@ function tokensDistintivos(valor: string): string[] {
  * a mais ou a menos, é `divergente`, com a denominação oficial em `valorEsperado`. Sem token
  * em comum com denominação alguma, a lista não informa este cargo. Nome não entra aqui.
  */
-export function compararCargoNaLista(cargo: string, lista: readonly string[], fonteUrl: string): ComparacaoCampo {
+export function compararCargoNaLista(
+  cargo: string,
+  lista: readonly string[],
+  fonteUrl: string,
+  contexto: ContextoCargo = {},
+): ComparacaoCampo {
   const tc = tokensDistintivos(cargo);
   let melhor: { denominacao: string; n: number } | undefined;
   for (const d of lista) {
@@ -693,15 +796,15 @@ export function compararCargoNaLista(cargo: string, lista: readonly string[], fo
     valorPlanilha: cargo,
     valorEsperado: melhor.denominacao,
     origemValor: "pagina",
-    situacao: mesmoConjunto && situacaoCampo(cargo, melhor.denominacao) === "confere" ? "confere" : "divergente",
+    situacao: mesmoConjunto && situacaoCampo(cargo, melhor.denominacao, contexto) === "confere" ? "confere" : "divergente",
     fonteUrl,
   };
 }
 
-function comparacaoCargoPelaLista(cargo: string, lista: ListaCargos | undefined): ComparacaoCampo {
+function comparacaoCargoPelaLista(cargo: string, lista: ListaCargos | undefined, contexto: ContextoCargo = {}): ComparacaoCampo {
   if (!lista) return { campo: "cargo", valorPlanilha: cargo, situacao: "nao_verificado" };
   if ("erro" in lista) return { campo: "cargo", valorPlanilha: cargo, situacao: "nao_verificado", fonteUrl: lista.url };
-  return compararCargoNaLista(cargo, lista.cargos, lista.url);
+  return compararCargoNaLista(cargo, lista.cargos, lista.url, contexto);
 }
 
 export function comparacoesSemSite(contato: ContatoPlanilha): ComparacaoCampo[] {
@@ -777,6 +880,7 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
   const url = lida.urlDaMemoria ?? lida.alternativa?.url ?? fonte.url;
   const pelaAlternativa = lida.alternativa ? { alternativa: lida.alternativa } : {};
   const cobreCargo = fonte.campos.includes("cargo");
+  const contextoCargo = contextoCargoDoGrupo(grupoCanonico);
   const protocolo = comparacoesTratamento(contato, grupoCanonico);
   const cargoDe = (comp: ComparacaoCampo | undefined): ComparacaoCampo[] => (comp ? [comp] : []);
 
@@ -786,7 +890,7 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
     const cargo = contato.cargo
       ? cobreCargo
         ? { campo: "cargo", valorPlanilha: contato.cargo, situacao: "nao_verificado" as const, fonteUrl: url }
-        : comparacaoCargoPelaLista(contato.cargo, listaCargos)
+        : comparacaoCargoPelaLista(contato.cargo, listaCargos, contextoCargo)
       : undefined;
     const comparacoes: ComparacaoCampo[] = [
       { campo: "nome", valorPlanilha: contato.nome, situacao: "nao_verificado", fonteUrl: url },
@@ -848,10 +952,10 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
           valorPlanilha: contato.cargo,
           valorEsperado: achado.pessoa?.cargo,
           origemValor: "pagina" as const,
-          situacao: situacaoCampo(contato.cargo, achado.pessoa?.cargo),
+          situacao: situacaoCampo(contato.cargo, achado.pessoa?.cargo, contextoCargo),
           fonteUrl: url,
         }
-      : comparacaoCargoPelaLista(contato.cargo, listaCargos)
+      : comparacaoCargoPelaLista(contato.cargo, listaCargos, contextoCargo)
     : undefined;
   const comparacoes: ComparacaoCampo[] = [
     // Nome mais longo na página (R9): a pessoa está lá, mas o GT quer o nome como o site o
@@ -894,7 +998,7 @@ export function compararContatoSemIndividual(
   if (o.listaCargos) {
     const comparacoes: ComparacaoCampo[] = [
       { campo: "nome", valorPlanilha: contato.nome, situacao: "nao_verificado" },
-      ...(contato.cargo ? [comparacaoCargoPelaLista(contato.cargo, o.listaCargos)] : []),
+      ...(contato.cargo ? [comparacaoCargoPelaLista(contato.cargo, o.listaCargos, contextoCargoDoGrupo(o.grupoCanonico))] : []),
       ...comparacoesSemSite(contato),
       ...protocolo,
     ];

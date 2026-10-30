@@ -10,6 +10,7 @@ import {
   MOTIVO_SEM_LISTA,
   OBSERVACAO_SEM_FONTE_OFICIAL,
   pontuarPessoa,
+  situacaoCampo,
   sugerirGrupos,
   unirFontes,
 } from "@/lib/match";
@@ -622,5 +623,93 @@ describe("compararContatoSemFonteOficial (spec 2026-10-30 §4.5)", () => {
     expect(r.observacao).toBe(MOTIVO_SEM_LISTA);
     expect(r.possivelSaida).toBeUndefined();
     expect(r.camposDivergentes.some((d) => d.campo === "fonte")).toBe(false);
+  });
+});
+
+describe("cargo nos tribunais (spec 2026-10-30 §3.2)", () => {
+  const TRIBUNAL = { tribunal: true };
+
+  test("função de tribunal da página confirma o Ministro do Contatos", () => {
+    expect(situacaoCampo("Ministro do Superior Tribunal de Justiça", "Vice-Presidente e Corregedor-Geral da Justiça Federal", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Ministro do Superior Tribunal de Justiça", "Diretor-Geral da ENFAM", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Ministro do TSE", "(Corregedor-Geral)", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Ministro do Tribunal Superior do Trabalho", "Corregedor-Geral da Justiça do Trabalho", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Ministro do STF", "Ministro (Decano)", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Ministra do STJ", "Ouvidora", TRIBUNAL)).toBe("confere");
+  });
+
+  test("Ministro(a) da página confirma a Ministra do Contatos", () => {
+    expect(situacaoCampo("Ministra do STM", "Ministro(a)", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Ministro do STM", "Ministro(a)", TRIBUNAL)).toBe("confere");
+  });
+
+  test("um gênero explícito na página não confirma o outro gênero do Contatos", () => {
+    expect(situacaoCampo("Ministra do STF", "Ministro", TRIBUNAL)).toBe("divergente");
+    expect(situacaoCampo("Ministro do STF", "Ministra", TRIBUNAL)).toBe("divergente");
+  });
+
+  test("Presidente do tribunal é confirmado por Presidente ou só por Ministro", () => {
+    expect(situacaoCampo("Presidente do Supremo Tribunal Federal", "Ministro", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Presidente do Supremo Tribunal Federal", "Ministro(a)", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Presidente do Supremo Tribunal Federal", "Presidente", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Presidente do Supremo Tribunal Federal", "PRESIDENTE:", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Presidente do Superior Tribunal de Justiça", "Presidente:", TRIBUNAL)).toBe("confere");
+  });
+
+  test("função específica diferente não confirma Presidente do tribunal", () => {
+    expect(situacaoCampo("Presidente do Supremo Tribunal Federal", "Vice-Presidente", TRIBUNAL)).toBe("divergente");
+    expect(situacaoCampo("Presidente do TST", "Corregedor-Geral da Justiça do Trabalho", TRIBUNAL)).toBe("divergente");
+  });
+
+  test("página que diz Presidente para quem está cadastrado como Ministro diverge", () => {
+    expect(situacaoCampo("Ministro do STF", "Presidente", TRIBUNAL)).toBe("divergente");
+    expect(situacaoCampo("Ministro do STF", "PRESIDENTE:", TRIBUNAL)).toBe("divergente");
+  });
+
+  test("Substituto, Interino e Ex- continuam negando a função no tribunal", () => {
+    expect(situacaoCampo("Ministro do Tribunal de Contas da União", "Ministro-Substituto", TRIBUNAL)).toBe("divergente");
+    expect(situacaoCampo("Presidente do STF", "Ex-Presidente", TRIBUNAL)).toBe("divergente");
+    expect(situacaoCampo("Ministra do STJ", "Decana", TRIBUNAL)).toBe("confere");
+  });
+
+  test("convocado continua comparado como hoje", () => {
+    expect(situacaoCampo("Desembargador Convocado do STJ", "Desembargador Convocado", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Desembargador Convocado do STJ", "Vice-Presidente", TRIBUNAL)).toBe("divergente");
+  });
+
+  test("fora de tribunal as funções não confirmam Ministro e a regra de papel continua", () => {
+    expect(situacaoCampo("Ministro do Superior Tribunal de Justiça", "Vice-Presidente e Corregedor-Geral da Justiça Federal")).toBe("divergente");
+    expect(situacaoCampo("Governador do Estado de Sergipe", "Secretário Especial de Governo")).toBe("divergente");
+    expect(situacaoCampo("Presidente", "Vice-Presidente")).toBe("divergente");
+    expect(situacaoCampo("Ministra de Estado", "Ministro de Estado")).toBe("divergente");
+  });
+
+  test("gênero neutro da página vale em qualquer grupo: Ministro(a) e Ministro/Ministra confirmam os dois", () => {
+    expect(situacaoCampo("Ministra de Estado", "Ministro(a) de Estado")).toBe("confere");
+    expect(situacaoCampo("Ministro de Estado", "Ministro(a) de Estado")).toBe("confere");
+    expect(situacaoCampo("Ministra de Estado", "Ministro/Ministra de Estado")).toBe("confere");
+    expect(situacaoCampo("Ministro de Estado", "Ministro/Ministra de Estado")).toBe("confere");
+  });
+
+  test("compararGrupo de tribunal confirma o cargo pela função da página", () => {
+    const f: ConteudoFonte = {
+      url: "https://tse",
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [{ nome: "Fulano de Tal Silva", cargo: "(Corregedor-Geral)" }],
+    };
+    const r = compararGrupo("TSE", [contato({ nome: "Fulano de Tal Silva", cargo: "Ministro do TSE" })], f, "Ministros do TSE");
+    expect(r.contatos[0].comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("confere");
+  });
+
+  test("compararGrupo fora de tribunal mantém a divergência pela mesma página", () => {
+    const f: ConteudoFonte = {
+      url: "https://orgao",
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [{ nome: "Fulano de Tal Silva", cargo: "(Corregedor-Geral)" }],
+    };
+    const r = compararGrupo("ORG", [contato({ nome: "Fulano de Tal Silva", cargo: "Ministro do TSE" })], f, "ORG");
+    expect(r.contatos[0].comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("divergente");
   });
 });

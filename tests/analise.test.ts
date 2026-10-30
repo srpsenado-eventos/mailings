@@ -1204,3 +1204,32 @@ describe("analisar: grupos de modo lista e neutro (spec 2026-10-30 §4.5 e §4.6
     expect(r.resumo.contatosSemFonte).toBe(0);
   });
 });
+
+describe("cargo nos tribunais (spec 2026-10-30 §3.2)", () => {
+  const depsTribunal = (grupoCanonico: string, cargoNaPagina: string): Dependencias => ({
+    resolverFonte: () => ({
+      grupoCanonico,
+      fontes: [{ url: "https://tribunal.jus.br", ativo: true }],
+      fontesIndividuais: [],
+      sugestoes: [],
+    }),
+    raspar: async () => ({
+      url: "https://tribunal.jus.br",
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [{ nome: "Fulano de Tal Silva", cargo: cargoNaPagina, origem: "pagina" }],
+    }),
+    extrairComposicao: async () => [],
+  });
+  const ministro: ContatoPlanilha = { nome: "Fulano de Tal Silva", grupo: "TRIB", cargo: "Ministro do Superior Tribunal de Justiça", ...CADASTRO_OK };
+
+  test("Diretor-Geral da ENFAM na página confirma o Ministro do STJ", async () => {
+    const r = await analisar("c.xlsx", [ministro], depsTribunal("Ministros do STJ", "Diretor-Geral da ENFAM"));
+    expect(r.grupos[0].contatos[0].comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("confere");
+  });
+
+  test("a mesma página fora de tribunal continua divergindo no cargo", async () => {
+    const r = await analisar("c.xlsx", [ministro], depsTribunal("ORG", "Diretor-Geral da ENFAM"));
+    expect(r.grupos[0].contatos[0].comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("divergente");
+  });
+});

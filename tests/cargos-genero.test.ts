@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { CARGOS_FEMININOS, CARGOS_MASCULINOS, neutralizarGenero } from "@/lib/cargos";
+import { FUNCOES_DE_TRIBUNAL, GRUPOS_DE_TRIBUNAL, ehGrupoDeTribunal } from "@/data/cargos-tribunal";
+import { normalizarTexto } from "@/lib/normalize";
 
 describe("neutralizarGenero", () => {
   test("troca cada feminino do léxico pelo masculino, palavra a palavra", () => {
@@ -25,5 +27,28 @@ describe("neutralizarGenero", () => {
 
   test("nome herdado de Object.prototype não vaza", () => {
     expect(neutralizarGenero("constructor")).toBe("constructor");
+  });
+});
+
+describe("grupos de tribunal (spec 2026-10-30 §3.2)", () => {
+  test("os seis segmentos de tribunal do catálogo são grupos de tribunal", () => {
+    for (const g of ["Ministros do STF", "Ministros do STJ", "Ministros do TSE", "Ministros do TST", "Ministros do STM", "Ministros do TCU"]) {
+      expect(ehGrupoDeTribunal(g)).toBe(true);
+    }
+    expect(GRUPOS_DE_TRIBUNAL).toHaveLength(6);
+  });
+
+  test("outros grupos e grupo ausente não são de tribunal", () => {
+    expect(ehGrupoDeTribunal("Ministros de Estado")).toBe(false);
+    expect(ehGrupoDeTribunal("Governadores")).toBe(false);
+    expect(ehGrupoDeTribunal(undefined)).toBe(false);
+  });
+
+  test("as funções de tribunal estão normalizadas e no masculino", () => {
+    for (const f of FUNCOES_DE_TRIBUNAL) {
+      expect(f).toBe(neutralizarGenero(normalizarTexto(f)));
+    }
+    expect(FUNCOES_DE_TRIBUNAL).toContain("vice-presidente");
+    expect(FUNCOES_DE_TRIBUNAL).toContain("corregedor-geral");
   });
 });

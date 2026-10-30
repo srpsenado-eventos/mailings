@@ -34,17 +34,19 @@ export type OrigemDado = "pagina" | "conhecimento" | "protocolo" | "coerencia";
  * da Camada C (regras de escrita do cadastro, `data/regras-nome.ts`). Identifica **qual**
  * verificação apontou. `lib/tratamento.ts` traduz cada código com `rotuloAchado`.
  *
- * `nome_tratamento_academico` é o único achado com `valorEsperado` preenchido na
- * comparação que o carrega: diferente dos achados da Camada A (contradição entre campos
- * do próprio contato, sem "certo" a apontar), a Camada C tem uma correção objetiva — o
- * nome sem o tratamento —, e ela precisa chegar ao usuário para copiar.
+ * Os achados da Camada C (`nome_tratamento_academico`, `nome_sem_prefixo`) são os únicos
+ * com `valorEsperado` preenchido na comparação que os carrega: diferente dos achados da
+ * Camada A (contradição entre campos do próprio contato, sem "certo" a apontar), a Camada C
+ * tem uma correção objetiva — o nome sem o tratamento, o nome com o prefixo do cargo —, e
+ * ela precisa chegar ao usuário para copiar.
  */
 export type AchadoCoerencia =
   | "genero_tratamento_enderecamento"
   | "genero_cargo_tratamento"
   | "forma_generica"
   | "campo_vazio"
-  | "nome_tratamento_academico";
+  | "nome_tratamento_academico"
+  | "nome_sem_prefixo";
 
 /** Uma pessoa extraída (estruturada) da fonte oficial. */
 export interface PessoaSite {

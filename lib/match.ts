@@ -23,7 +23,7 @@ import {
   temGeneroNeutro,
   type ContextoCargo,
 } from "@/lib/cargo-tribunal";
-import { comparacaoRegraNome, comparacoesCoerencia, comparacoesProtocolo } from "@/lib/tratamento";
+import { comparacaoPrefixoNome, comparacaoRegraNome, comparacoesCoerencia, comparacoesProtocolo } from "@/lib/tratamento";
 
 const LIMIAR_PESSOA = 0.6;
 const LIMIAR_TOKEN = 0.85;
@@ -257,6 +257,7 @@ export function comparacoesTratamento(
     ...comparacoesCoerencia(contato),
     ...comparacoesProtocolo(contato),
     ...comparacaoRegraNome(contato, grupoCanonico),
+    ...comparacaoPrefixoNome(contato, grupoCanonico),
   ];
 }
 

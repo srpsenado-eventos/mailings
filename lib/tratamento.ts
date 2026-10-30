@@ -480,8 +480,14 @@ export function rotuloAchado(achado: AchadoCoerencia): string {
       return "campo vazio";
     case "nome_tratamento_academico":
       return "nome traz tratamento acadêmico; grafar sem ele no cadastro";
+    case "nome_sem_prefixo":
+      return "Nome sem o prefixo do cargo";
   }
 }
+
+/** A regra do prefixo no nome do presidente, como o GT a fixou (spec 2026-10-30 §3.3). */
+export const EXPLICACAO_PREFIXO_NOME =
+  'O Presidente de tribunal leva "Ministro(a)" antes do nome; o Presidente da República leva "Presidente" (regra do GT, 2026-10-30)';
 
 /**
  * Rótulos de exibição dos dois campos que a Camada A audita. Moram aqui — e não em
@@ -511,6 +517,9 @@ export function textoCoerencia(c: ComparacaoCampo): string {
   // usuário copiar direto para o cadastro — é o que o spec pede para a coluna Coerência.
   if (c.achado === "nome_tratamento_academico") {
     return `${rotulo} (${c.valorEsperado ?? ""})`;
+  }
+  if (c.achado === "nome_sem_prefixo") {
+    return `${rotulo} (${c.valorEsperado ?? ""}). ${EXPLICACAO_PREFIXO_NOME}`;
   }
   const nome = ROTULOS_CAMPO_TRATAMENTO[c.campo] ?? c.campo;
   return `${rotulo} (${nome})`;
@@ -639,16 +648,89 @@ export function comparacaoRegraNome(
   grupoCanonico: string | undefined,
   regras: Readonly<Record<string, RegraNome>> = REGRAS_NOME,
 ): ComparacaoCampo[] {
-  const regra = grupoCanonico ? regras[grupoCanonico] : undefined;
-  if (!regra || !temTratamentoProibido(contato.nome, regra.tratamentosProibidos)) return [];
+  const proibidos = (grupoCanonico ? regras[grupoCanonico] : undefined)?.tratamentosProibidos ?? [];
+  if (!temTratamentoProibido(contato.nome, proibidos)) return [];
   return [
     {
       campo: "nome",
       valorPlanilha: contato.nome,
-      valorEsperado: semTratamentosProibidos(contato.nome, regra.tratamentosProibidos),
+      valorEsperado: semTratamentosProibidos(contato.nome, proibidos),
       situacao: "divergente",
       origemValor: "coerencia",
       achado: "nome_tratamento_academico",
+    },
+  ];
+}
+
+/**
+ * O contato é mulher pelo próprio cadastro: tratamento ou endereçamento no feminino
+ * ("Senhora", "Excelentíssima Senhora", "a Senhora") ou cargo feminino pelo léxico de
+ * cargos ("Ministra"). Forma genérica ("Senhor(a)") e cargo sem gênero ("Presidente do
+ * STF") não dizem nada; sem sinal feminino, `false`.
+ */
+export function contatoEhFeminino(contato: ContatoPlanilha): boolean {
+  return (
+    generoDaForma(contato.tratamento) === "feminino" ||
+    generoDaForma(contato.enderecamento) === "feminino" ||
+    generoDoCargo(contato.cargo) === "feminino"
+  );
+}
+
+/** Primeiras palavras aceitas como prefixo, já normalizadas, por tipo de regra. */
+const PREFIXOS_ACEITOS: Readonly<Record<NonNullable<RegraNome["prefixoDoPresidente"]>, readonly string[]>> = {
+  ministro: ["ministro", "ministra"],
+  presidente: ["presidente"],
+};
+
+/** O cargo é o de Presidente (não "Vice-Presidente", que começa com "vice"). */
+function cargoDePresidente(cargo: string | undefined): boolean {
+  return /^presidente\b/.test(neutralizarGenero(normalizarTexto(cargo ?? "")));
+}
+
+/** O prefixo que o nome deve levar, já no gênero do contato. */
+function prefixoEsperado(tipo: NonNullable<RegraNome["prefixoDoPresidente"]>, contato: ContatoPlanilha): string {
+  if (tipo === "presidente") return "Presidente";
+  return contatoEhFeminino(contato) ? "Ministra" : "Ministro";
+}
+
+/**
+ * Camada C, prefixo no nome do presidente (spec 2026-10-30 §3.3). Com
+ * `prefixoDoPresidente: "ministro"` (grupos de tribunal) vale só para o contato cujo cargo
+ * começa com "Presidente"; com `"presidente"` (Presidente da República), para todo contato
+ * do grupo. Nome que já começa com o prefixo (comparado após `normalizarTexto`, qualquer
+ * gênero de "Ministro(a)") não gera achado; sem ele, o nome diverge e o esperado é o
+ * prefixo, no gênero do contato, seguido do nome do cadastro — sem o tratamento proibido
+ * do grupo, quando há, e sem a forma genérica "Ministro(a)" no início. Nunca propõe tirar
+ * o prefixo, e nos grupos sem a regra não tem efeito.
+ */
+export function comparacaoPrefixoNome(
+  contato: ContatoPlanilha,
+  grupoCanonico: string | undefined,
+  regras: Readonly<Record<string, RegraNome>> = REGRAS_NOME,
+): ComparacaoCampo[] {
+  const regra = grupoCanonico ? regras[grupoCanonico] : undefined;
+  const tipo = regra?.prefixoDoPresidente;
+  if (!tipo || (tipo === "ministro" && !cargoDePresidente(contato.cargo))) return [];
+  // Guarda: um "Vice-…" que caia no grupo do Presidente da República nunca recebe "Presidente".
+  if (/^vice\b/.test(normalizarTexto(contato.cargo ?? ""))) return [];
+
+  const nome = semTratamentosProibidos(contato.nome, regra?.tratamentosProibidos ?? []);
+  const [primeira = "", ...resto] = nome.split(/\s+/).filter((t) => t.length > 0);
+  if (primeira.length === 0) return [];
+  const aceitos = PREFIXOS_ACEITOS[tipo];
+  if (aceitos.includes(normalizarTexto(primeira))) return [];
+  // "Ministro(a) Fulana": o prefixo está lá na forma genérica; troca-se, não se repete.
+  const generico = aceitos.includes(normalizarTexto(primeira).replace(MARCADOR_GENERICO, ""));
+  const semPrefixo = generico ? resto : [primeira, ...resto];
+
+  return [
+    {
+      campo: "nome",
+      valorPlanilha: contato.nome,
+      valorEsperado: [prefixoEsperado(tipo, contato), ...semPrefixo].join(" "),
+      situacao: "divergente",
+      origemValor: "coerencia",
+      achado: "nome_sem_prefixo",
     },
   ];
 }

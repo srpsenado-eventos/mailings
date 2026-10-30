@@ -127,3 +127,93 @@ describe("Camada C nos quatro caminhos de ResultadoContato", () => {
     expect(achadosDe(g.contatos[0].comparacoes)).not.toContain("nome_tratamento_academico");
   });
 });
+
+describe("Prefixo do presidente (Camada C) nos caminhos de ResultadoContato", () => {
+  const GRUPO_STF = "Ministros do STF";
+  const presidente = (p: Partial<ContatoPlanilha> = {}): ContatoPlanilha => ({
+    nome: "Joaquim Bezerra Vilaça",
+    grupo: "STF",
+    cargo: "Presidente do Supremo Tribunal Federal",
+    ...CADASTRO_OK,
+    ...p,
+  });
+  const fonteStf: ConteudoFonte = {
+    url: "https://stf.jus.br",
+    textoLimpo: "Joaquim Bezerra Vilaça, Ministro.",
+    destaques: [],
+    pessoas: [{ nome: "Joaquim Bezerra Vilaça", cargo: "Ministro", origem: "pagina" }],
+  };
+
+  test("pessoa casada sem o prefixo pinta amarelo no nome", () => {
+    // Act
+    const g = compararGrupo("STF", [presidente()], fonteStf, GRUPO_STF);
+
+    // Assert
+    expect(g.contatos[0].semaforo).toBe("amarelo");
+    expect(achadosDe(g.contatos[0].comparacoes)).toContain("nome_sem_prefixo");
+  });
+
+  test("pessoa casada com o prefixo: a página sem o prefixo confere e não há achado", () => {
+    // Act
+    const g = compararGrupo("STF", [presidente({ nome: "Ministro Joaquim Bezerra Vilaça" })], fonteStf, GRUPO_STF);
+
+    // Assert
+    expect(achadosDe(g.contatos[0].comparacoes)).not.toContain("nome_sem_prefixo");
+    expect(g.contatos[0].camposDivergentes.map((d) => d.campo)).not.toContain("nome");
+  });
+
+  test("possível saída: acusa o prefixo e continua vermelho", () => {
+    // Act
+    const g = compararGrupo("STF", [presidente()], { ...fonteStf, pessoas: [] }, GRUPO_STF);
+
+    // Assert
+    expect(g.contatos[0].possivelSaida).toBe(true);
+    expect(achadosDe(g.contatos[0].comparacoes)).toContain("nome_sem_prefixo");
+  });
+
+  test("fonte inacessível: acusa o prefixo e continua indeterminado", () => {
+    // Act
+    const g = marcarFonteInacessivel("STF", [presidente()], "https://stf.jus.br", "timeout", GRUPO_STF);
+
+    // Assert
+    expect(g.contatos[0].semaforo).toBe("indeterminado");
+    expect(achadosDe(g.contatos[0].comparacoes)).toContain("nome_sem_prefixo");
+  });
+
+  test("grupo sem fonte: acusa o prefixo sem perder o campo 'fonte', e continua vermelho", () => {
+    // Act
+    const g = compararGrupo("STF", [presidente()], undefined, GRUPO_STF);
+
+    // Assert
+    expect(g.contatos[0].semaforo).toBe("vermelho");
+    expect(achadosDe(g.contatos[0].comparacoes)).toContain("nome_sem_prefixo");
+    expect(g.contatos[0].camposDivergentes.map((d) => d.campo)).toContain("fonte");
+  });
+
+  test("Presidente da República sem fonte: \"Presidente\" + nome como esperado", () => {
+    // Act
+    const g = compararGrupo(
+      "Presidente da República",
+      [presidente({ nome: "Luís Inácio Lula da Silva", cargo: "Presidente da República", grupo: "Presidente da República" })],
+      undefined,
+      "Presidente da República",
+    );
+
+    // Assert
+    const achado = g.contatos[0].comparacoes.find((c) => c.achado === "nome_sem_prefixo");
+    expect(achado?.valorEsperado).toBe("Presidente Luís Inácio Lula da Silva");
+  });
+
+  test("Senadores: \"Senador Davi Alcolumbre\" não ganha achado de prefixo", () => {
+    // Act
+    const g = compararGrupo(
+      "Senadores",
+      [presidente({ nome: "Senador Davi Alcolumbre", cargo: "Senador", grupo: "Senadores" })],
+      undefined,
+      "Senadores",
+    );
+
+    // Assert
+    expect(achadosDe(g.contatos[0].comparacoes)).not.toContain("nome_sem_prefixo");
+  });
+});

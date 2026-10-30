@@ -37,12 +37,23 @@ import type {
  */
 
 export interface PessoaDaLista {
-  /** Nome de urna (TSE) ou nome parlamentar (Câmara): o valor esperado do nome. */
+  /** Nome de urna (TSE) ou nome parlamentar (Câmara): o único valor esperado do nome (regra do GT). */
   nome: string;
-  /** Nome completo (TSE) ou nome civil (Câmara): também confere o nome. */
+  /** Nome completo (TSE) ou nome civil (Câmara): só serve para achar a pessoa, nunca confere o nome. */
   nomeCompleto: string;
   uf: string;
   cargoEsperado: string;
+  /** Sem gênero na lista, a forma feminina do cargo também confirma (`cargoEsperado` fica no masculino). */
+  cargoFeminino?: string;
+}
+
+/** Observação do nome divergente em Deputados Federais: o esperado é o nome parlamentar da Câmara. */
+export const OBSERVACAO_NOME_PARLAMENTAR = "Nome parlamentar (Câmara)";
+/** Eleito cujo grupo do convite a classificação não decidiu: a lista não diz nada sobre ele. */
+export const OBSERVACAO_ELEITO_A_CONFERIR = "Eleito a conferir: grupo do convite ainda não decidido";
+
+export function observacaoNomeAmbiguo(rotulo: string): string {
+  return `Nome casa mais de uma pessoa da lista de ${rotulo}: conferir`;
 }
 
 const LIGACOES = new Set(["de", "da", "do", "das", "dos", "e"]);
@@ -56,9 +67,24 @@ function nomeProprio(maiusculas: string): string {
     .join(" ");
 }
 
-/** Gênero do TSE ("Feminino") ou sexo da Câmara ("Feminino"/"F"); vazio não decide e fica o masculino. */
-function ehFeminino(genero: string | undefined): boolean {
-  return normalizarTexto(genero ?? "").startsWith("f");
+type Genero = "feminino" | "masculino" | undefined;
+
+/** Gênero do TSE ("Feminino") ou sexo da Câmara ("Feminino"/"F"); vazio ou outro texto não decide. */
+function generoDe(valor: string | undefined): Genero {
+  const g = normalizarTexto(valor ?? "");
+  if (g.startsWith("f")) return "feminino";
+  if (g.startsWith("m")) return "masculino";
+  return undefined;
+}
+
+/**
+ * Cargo esperado no gênero da pessoa ("Ministra" não confirma "Ministro", lib/cargos.ts). Sem
+ * gênero, o masculino é o esperado e o feminino também confirma.
+ */
+function cargos(genero: Genero, forma: (feminino: boolean) => string): Pick<PessoaDaLista, "cargoEsperado" | "cargoFeminino"> {
+  if (genero === "feminino") return { cargoEsperado: forma(true) };
+  if (genero === "masculino") return { cargoEsperado: forma(false) };
+  return { cargoEsperado: forma(false), cargoFeminino: forma(true) };
 }
 
 /** Cargo esperado pelo papel, no gênero da pessoa: "Ministra" não confirma "Ministro" (lib/cargos.ts). */
@@ -81,7 +107,7 @@ function eleitosDaCasa(rotulo: string, casa: CasaLegislativa, eleicao: Resultado
   return eleicao.eleitos
     .filter((x) => x.grupoDestino === rotulo)
     .map(({ eleito: e }) => ({
-      nome: e.nomeUrna, nomeCompleto: e.nomeCompleto, uf: e.uf, cargoEsperado: cargoParlamentar(casa, ehFeminino(e.genero)),
+      nome: e.nomeUrna, nomeCompleto: e.nomeCompleto, uf: e.uf, ...cargos(generoDe(e.genero), (f) => cargoParlamentar(casa, f)),
     }));
 }
 
@@ -97,30 +123,48 @@ export function composicaoDaLista(grupo: string, eleicao: ResultadoEleicao): Pes
     return eleicao.governadores?.eleitos
       .filter((x) => x.grupoDestino === rotulo)
       .map(({ eleito: g }) => ({
-        nome: g.nomeUrna, nomeCompleto: g.nomeCompleto, uf: g.uf, cargoEsperado: cargoGovernador(g.uf, ehFeminino(g.genero)),
+        nome: g.nomeUrna, nomeCompleto: g.nomeCompleto, uf: g.uf, ...cargos(generoDe(g.genero), (f) => cargoGovernador(g.uf, f)),
       }));
   }
   if (rotulo === GRUPO_DEPUTADOS_FEDERAIS) {
     return eleicao.deputadosAtuais?.map((d) => ({
-      nome: d.nomeParlamentar, nomeCompleto: d.nomeCivil, uf: d.uf, cargoEsperado: cargoParlamentar("camara", ehFeminino(d.sexo)),
+      nome: d.nomeParlamentar, nomeCompleto: d.nomeCivil, uf: d.uf, ...cargos(generoDe(d.sexo), (f) => cargoParlamentar("camara", f)),
     }));
   }
   return undefined;
 }
 
-/** Igualdade de `normalizarNome` com o nome de urna ou com o completo. */
+/** O nome confere só com o nome de urna ou o parlamentar (spec §4.6); o completo ou civil não confere. */
 function nomeConfere(contato: ContatoPlanilha, p: PessoaDaLista): boolean {
+  return normalizarNome(contato.nome) === normalizarNome(p.nome);
+}
+
+/** Nome igual a um dos dois nomes da pessoa: serve só para escolher entre várias pessoas que casam. */
+function nomeIgual(contato: ContatoPlanilha, p: PessoaDaLista): boolean {
   const alvo = normalizarNome(contato.nome);
   return alvo === normalizarNome(p.nome) || alvo === normalizarNome(p.nomeCompleto);
 }
 
-/** A pessoa da lista que o contato é; entre várias que casam, a de nome igual vem antes. */
-function pessoaDoContato(contato: ContatoPlanilha, lista: readonly PessoaDaLista[], rotulo: string): PessoaDaLista | undefined {
+type Achado = { pessoa: PessoaDaLista } | { ambiguo: true } | undefined;
+
+/**
+ * A pessoa da lista que o contato é. Uma só que casa: ela. Várias: a única de nome igual (urna ou
+ * completo); sem uma única de nome igual, é ambíguo e nunca se propõe o nome de outra pessoa.
+ */
+function pessoaDoContato(contato: ContatoPlanilha, lista: readonly PessoaDaLista[], rotulo: string): Achado {
   // Governador: o Departamento vem vazio e a UF está no Cargo ou no Órgão. Nos outros grupos,
   // `undefined` faz `casaPessoa` usar a UF do Departamento.
   const uf = rotulo === GRUPO_GOVERNADORES_ELEITOS ? ufDoContatoGoverno(contato) : undefined;
   const casadas = lista.filter((p) => casaPessoa(contato, { uf: p.uf, nomeUrna: p.nome, nomeCompleto: p.nomeCompleto }, uf));
-  return casadas.find((p) => nomeConfere(contato, p)) ?? casadas[0];
+  if (casadas.length === 0) return undefined;
+  if (casadas.length === 1) return { pessoa: casadas[0] };
+  const iguais = casadas.filter((p) => nomeIgual(contato, p));
+  return iguais.length === 1 ? { pessoa: iguais[0] } : { ambiguo: true };
+}
+
+/** Sem gênero na lista, o cargo feminino que confirma vira o esperado; senão vale o `cargoEsperado`. */
+function cargoDaComparacao(cargo: string, p: PessoaDaLista): string {
+  return p.cargoFeminino && situacaoCampo(cargo, p.cargoFeminino) === "confere" ? p.cargoFeminino : p.cargoEsperado;
 }
 
 /** Os eixos já anexados ao contato (Camada D e eleição) não dependem da lista e seguem com ele. */
@@ -132,14 +176,15 @@ function eixosDoContato(c: ResultadoContato): Pick<ResultadoContato, "endereco" 
   };
 }
 
-function comparadoComPessoa(c: ResultadoContato, p: PessoaDaLista): ResultadoContato {
+function comparadoComPessoa(c: ResultadoContato, p: PessoaDaLista, rotulo: string): ResultadoContato {
   const { contato } = c;
   const nomeOk = nomeConfere(contato, p);
+  const cargo = contato.cargo ? cargoDaComparacao(contato.cargo, p) : "";
   const comparacoes: ComparacaoCampo[] = [
     { campo: "nome", valorPlanilha: contato.nome, valorEsperado: p.nome, situacao: nomeOk ? "confere" : "divergente" },
     // Cargo vazio fica fora, como na comparação com a página: o painel já o acusa como "Cargo vazio".
     ...(contato.cargo
-      ? [{ campo: "cargo" as const, valorPlanilha: contato.cargo, valorEsperado: p.cargoEsperado, situacao: situacaoCampo(contato.cargo, p.cargoEsperado) }]
+      ? [{ campo: "cargo" as const, valorPlanilha: contato.cargo, valorEsperado: cargo, situacao: situacaoCampo(contato.cargo, cargo) }]
       : []),
     ...comparacoesSemSite(contato),
     ...comparacoesTratamento(contato, undefined),
@@ -152,18 +197,37 @@ function comparadoComPessoa(c: ResultadoContato, p: PessoaDaLista): ResultadoCon
     comparacoes,
     camposDivergentes,
     origem: "oficial",
-    ...(nomeOk ? {} : { observacao: OBSERVACAO_NOME_URNA }),
+    ...(nomeOk ? {} : { observacao: rotulo === GRUPO_DEPUTADOS_FEDERAIS ? OBSERVACAO_NOME_PARLAMENTAR : OBSERVACAO_NOME_URNA }),
     ...eixosDoContato(c),
   };
 }
 
+/** Indeterminado com a auditoria de tratamento de sempre e o motivo dado; nunca saída. */
+function semPessoa(c: ResultadoContato, observacao: string): ResultadoContato {
+  return { ...compararContatoSemFonteOficial(c.contato, "lista"), observacao, ...eixosDoContato(c) };
+}
+
 function foraDaLista(c: ResultadoContato, rotulo: string, dataDaLista: string): ResultadoContato {
   const planilha = rotulo === GRUPO_DEPUTADOS_FEDERAIS ? "planilha da Câmara" : "planilha do TSE";
-  return {
-    ...compararContatoSemFonteOficial(c.contato, "lista"),
-    observacao: `Não está na lista de ${rotulo} (${planilha} de ${dataDaLista})`,
-    ...eixosDoContato(c),
-  };
+  return semPessoa(c, `Não está na lista de ${rotulo} (${planilha} de ${dataDaLista})`);
+}
+
+function eleitoAConferir(c: ResultadoContato): boolean {
+  return c.eleicao?.destino === "conferir" || c.eleicaoGoverno?.destino === "conferir";
+}
+
+function compararContatoComLista(
+  c: ResultadoContato,
+  lista: readonly PessoaDaLista[],
+  rotulo: string,
+  dataDaLista: string,
+): ResultadoContato {
+  // O eleito em `conferir` não entra em lista nenhuma: dizer que "não está na lista" seria falso.
+  if (eleitoAConferir(c)) return semPessoa(c, OBSERVACAO_ELEITO_A_CONFERIR);
+  const achado = pessoaDoContato(c.contato, lista, rotulo);
+  if (!achado) return foraDaLista(c, rotulo, dataDaLista);
+  if ("ambiguo" in achado) return semPessoa(c, observacaoNomeAmbiguo(rotulo));
+  return comparadoComPessoa(c, achado.pessoa, rotulo);
 }
 
 function compararGrupoComLista(g: ResultadoGrupo, eleicao: ResultadoEleicao, dataDaLista: string): ResultadoGrupo {
@@ -172,10 +236,7 @@ function compararGrupoComLista(g: ResultadoGrupo, eleicao: ResultadoEleicao, dat
   if (!rotulo || !lista) return g;
   return {
     ...g,
-    contatos: g.contatos.map((c) => {
-      const p = pessoaDoContato(c.contato, lista, rotulo);
-      return p ? comparadoComPessoa(c, p) : foraDaLista(c, rotulo, dataDaLista);
-    }),
+    contatos: g.contatos.map((c) => compararContatoComLista(c, lista, rotulo, dataDaLista)),
   };
 }
 

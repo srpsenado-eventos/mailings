@@ -361,6 +361,16 @@ describe("Cargo do ex-presidente com o período (Camada C) nos caminhos de Resul
     expect(r.camposDivergentes.map((d) => d.campo)).toContain("cargo");
   });
 
+  test('pessoa casada com "Presidente do Senado Federal" sem período pinta amarelo no cargo', () => {
+    // Act
+    const g = compararGrupo(GRUPO_EX, [ex("Presidente do Senado Federal")], paginaSemCargo, GRUPO_EX);
+
+    // Assert
+    const r = g.contatos[0];
+    expect(r.semaforo).toBe("amarelo");
+    expect(cargoDivergente(r.comparacoes)?.valorEsperado).toBe("Presidente do Senado Federal de AAAA a AAAA");
+  });
+
   test("pessoa casada com o cargo no formato do GT: cargo sem achado", () => {
     // Act
     const g = compararGrupo(GRUPO_EX, [ex("Presidente do Senado Federal de 2019 a 2021")], paginaSemCargo, GRUPO_EX);

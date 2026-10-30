@@ -94,15 +94,34 @@ describe("comparacaoCargoExPresidente", () => {
     expect(r[0].valorEsperado).toBe("Presidente do Senado Federal de AAAA a AAAA");
   });
 
-  test("cargo sem \"Ex\" e sem período não é desta regra", () => {
+  test.each([
+    "Presidente do Senado Federal",
+    "Presidente do Senado de 2019 a 2021",
+    "Presidente do Senado Federal 2019 a 2021",
+    "Senador",
+    "Presidente do Senado Federal de 2019 a 2021 (licenciado)",
+  ])('todo cargo fora do formato diverge, mesmo sem "Ex": "%s"', (cargo) => {
+    // Act
+    const r = comparacaoCargoExPresidente(exPresidente(cargo), SENADO);
+
     // Assert
-    expect(comparacaoCargoExPresidente(exPresidente("Presidente do Senado Federal"), SENADO)).toEqual([]);
-    expect(comparacaoCargoExPresidente(exPresidente("Senador"), SENADO)).toEqual([]);
+    expect(r.map((x) => x.achado)).toEqual(["cargo_ex_presidente"]);
+    expect(r[0].valorEsperado).toBe("Presidente do Senado Federal de AAAA a AAAA");
+    expect(r[0].observacao).toBe(OBSERVACAO_PERIODO);
   });
 
-  test("cargo vazio não é desta regra", () => {
+  test("na República, o cargo sem período diverge com o esperado da República", () => {
+    // Act
+    const [c] = comparacaoCargoExPresidente(exPresidente("Presidente da República", REPUBLICA), REPUBLICA);
+
+    // Assert
+    expect(c.valorEsperado).toBe("Presidente da República Federativa do Brasil de AAAA a AAAA");
+  });
+
+  test("cargo vazio, ou só espaços, não é desta regra (o painel já acusa \"Cargo vazio\")", () => {
     // Assert
     expect(comparacaoCargoExPresidente(exPresidente(""), SENADO)).toEqual([]);
+    expect(comparacaoCargoExPresidente(exPresidente("   "), SENADO)).toEqual([]);
     expect(comparacaoCargoExPresidente({ nome: "Rui Fictício", grupo: SENADO }, SENADO)).toEqual([]);
   });
 

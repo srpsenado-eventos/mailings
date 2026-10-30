@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { CARGOS_FEMININOS, CARGOS_MASCULINOS, neutralizarGenero } from "@/lib/cargos";
+import { CARGOS_FEMININOS, CARGOS_MASCULINOS, generoDoCargo, neutralizarGenero } from "@/lib/cargos";
 import { FUNCOES_DE_TRIBUNAL, GRUPOS_DE_TRIBUNAL, ehGrupoDeTribunal } from "@/data/cargos-tribunal";
 import { normalizarTexto } from "@/lib/normalize";
 
@@ -50,5 +50,16 @@ describe("grupos de tribunal (spec 2026-10-30 §3.2)", () => {
     }
     expect(FUNCOES_DE_TRIBUNAL).toContain("vice-presidente");
     expect(FUNCOES_DE_TRIBUNAL).toContain("corregedor-geral");
+  });
+});
+
+describe("generoDoCargo (léxico único, usado por match e tratamento)", () => {
+  test("um gênero explícito é reconhecido; marcador genérico, os dois gêneros ou nenhum ficam indeterminados", () => {
+    expect(generoDoCargo("Ministra do STF")).toBe("feminino");
+    expect(generoDoCargo("Corregedor-Geral")).toBe("masculino");
+    expect(generoDoCargo("Ministro(a)")).toBe("indeterminado");
+    expect(generoDoCargo("Ministro/Ministra")).toBe("indeterminado");
+    expect(generoDoCargo("Presidente")).toBe("indeterminado");
+    expect(generoDoCargo(undefined)).toBe("indeterminado");
   });
 });

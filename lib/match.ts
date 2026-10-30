@@ -14,16 +14,21 @@ import type {
   Semaforo,
 } from "@/lib/types";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
-import { CARGOS, CARGOS_FEMININOS, CARGOS_MASCULINOS, neutralizarGenero } from "@/lib/cargos";
-import { ehGrupoDeTribunal, FUNCOES_DE_TRIBUNAL } from "@/data/cargos-tribunal";
+import { CARGOS, PREFIXOS_NEGANTES, tokensSignificativos } from "@/lib/cargos";
+import {
+  cargoEsperadoNoTribunal,
+  contextoCargoDoGrupo,
+  semGenero,
+  situacaoCargoTribunal,
+  temGeneroNeutro,
+  type ContextoCargo,
+} from "@/lib/cargo-tribunal";
 import { comparacaoRegraNome, comparacoesCoerencia, comparacoesProtocolo } from "@/lib/tratamento";
 
 const LIMIAR_PESSOA = 0.6;
 const LIMIAR_TOKEN = 0.85;
 const LIMIAR_SUGESTAO = 0.4;
 const MAX_SUGESTOES = 3;
-/** Prefixos que mudam o sentido de um cargo de 1 token (ex.: "Presidente" ≠ "Vice-Presidente"). */
-const PREFIXOS_NEGANTES = ["vice", "ex", "sub", "adjunto", "interino", "substituto"];
 
 /**
  * Quando o rótulo da planilha não casa nenhum grupo cadastrado, sugere os nomes
@@ -171,100 +176,9 @@ function melhorPessoa(nome: string, pessoas: PessoaSite[]): { indice: number; sc
   return { indice, score };
 }
 
-/** Tokens significativos (sem acento, sem pontuação, sem palavras de 1 letra). */
-function tokensSignificativos(valor: string): string[] {
-  return normalizarTexto(valor)
-    .replace(/[^a-z0-9 ]/g, " ")
-    .split(" ")
-    .filter((t) => t.length > 1);
-}
-
 /** Papéis de autoridade (do léxico) presentes no valor, por token exato. */
 function rolesDe(valor: string): string[] {
   return tokensSignificativos(valor).filter((t) => CARGOS.includes(t));
-}
-
-/** Contexto do grupo na comparação de cargo (spec 2026-10-30 §3.2). */
-export interface ContextoCargo {
-  /** Grupo de tribunal (`data/cargos-tribunal.ts`): as funções de tribunal valem como "Ministro". */
-  tribunal?: boolean;
-}
-
-/** O contexto de cargo do grupo canônico (nome do catálogo). */
-export function contextoCargoDoGrupo(grupoCanonico: string | undefined): ContextoCargo {
-  return { tribunal: ehGrupoDeTribunal(grupoCanonico) };
-}
-
-/** "Ministro(a)", "Corregedor(a)-Geral", "Ministro/Ministra": a página não diz o gênero (texto normalizado). */
-const MARCA_GENERO_NEUTRO = /\(a\)|\b([a-z]+?)o?\/\1a\b/;
-
-function temGeneroNeutro(valor: string): boolean {
-  return MARCA_GENERO_NEUTRO.test(normalizarTexto(valor));
-}
-
-/** Normaliza, descarta o "(a)" e põe os femininos do léxico no masculino. */
-function semGenero(valor: string): string {
-  return neutralizarGenero(normalizarTexto(valor).replace(/\(a\)/g, ""));
-}
-
-/** Gênero explícito do cargo ("m" ou "f"); sem palavra de gênero, com as duas, ou com a marca neutra, nenhum. */
-function generoDoCargo(valor: string): "m" | "f" | undefined {
-  if (temGeneroNeutro(valor)) return undefined;
-  const tokens = normalizarTexto(valor).split(/[^a-z]+/);
-  const m = tokens.some((t) => CARGOS_MASCULINOS.includes(t));
-  const f = tokens.some((t) => CARGOS_FEMININOS.includes(t));
-  if (m === f) return undefined;
-  return m ? "m" : "f";
-}
-
-/** Uma expressão por função de tribunal: o hífen também casa com espaço, e o "o" final também com "a" ("decana"). */
-const REGEX_FUNCOES: ReadonlyMap<string, RegExp> = new Map(
-  FUNCOES_DE_TRIBUNAL.map((f) => {
-    const corpo = f.replace(/o$/, "[oa]").replace(/-/g, "[- ]");
-    return [f, new RegExp(`(^|[^a-z])${corpo}($|[^a-z])`)];
-  }),
-);
-const REGEX_VICE_PRESIDENTE = /(^|[^a-z])vice[- ]?presidente($|[^a-z])/g;
-
-function temFuncao(texto: string, funcao: string): boolean {
-  return REGEX_FUNCOES.get(funcao)?.test(texto) ?? false;
-}
-
-/** "Presidente" que não é "Vice-Presidente" (texto já sem gênero). */
-function temPresidenciaPropria(texto: string): boolean {
-  return temFuncao(texto.replace(REGEX_VICE_PRESIDENTE, " "), "presidente");
-}
-
-/** Só a função genérica "Ministro(a)", sem nenhuma função específica. */
-function soMinistro(texto: string): boolean {
-  return temFuncao(texto, "ministro") && FUNCOES_DE_TRIBUNAL.every((f) => f === "ministro" || !temFuncao(texto, f));
-}
-
-/** Prefixos que negam a função, menos o "vice", que nos tribunais é função própria. */
-const NEGANTES_NO_TRIBUNAL = PREFIXOS_NEGANTES.filter((x) => x !== "vice");
-
-/**
- * Cargo nos tribunais (spec 2026-10-30 §3.2). Só decide para o "Ministro(a) do …" e o
- * "Presidente do …" do Contatos; outro cargo (o convocado) devolve `undefined` e segue a
- * comparação de sempre. Ministro: qualquer função de tribunal da página confirma, menos
- * "Presidente" (troca de presidência). Presidente: a página confirma com "Presidente" ou só
- * com "Ministro(a)" (o STF não marca a presidência). Um gênero explícito na página não
- * confirma o outro no Contatos, e "Substituto", "Interino" e "Ex-" continuam negando.
- */
-function situacaoCargoTribunal(valorPlanilha: string, valorEsperado: string): SituacaoCampo | undefined {
-  const p = semGenero(valorPlanilha);
-  const s = semGenero(valorEsperado);
-  const presidente = temPresidenciaPropria(p);
-  if (!presidente && !temFuncao(p, "ministro")) return undefined;
-  const gp = generoDoCargo(valorPlanilha);
-  const gs = generoDoCargo(valorEsperado);
-  if (gp && gs && gp !== gs) return "divergente";
-  const tp = tokensSignificativos(p);
-  const ts = tokensSignificativos(s);
-  if (NEGANTES_NO_TRIBUNAL.some((x) => tp.includes(x) !== ts.includes(x))) return "divergente";
-  if (presidente) return temPresidenciaPropria(s) || soMinistro(s) ? "confere" : "divergente";
-  if (temPresidenciaPropria(s)) return "divergente";
-  return FUNCOES_DE_TRIBUNAL.some((f) => temFuncao(s, f)) ? "confere" : "divergente";
 }
 
 /**
@@ -278,7 +192,7 @@ function situacaoCargoTribunal(valorPlanilha: string, valorEsperado: string): Si
  * Página sem gênero ("Ministro(a)", "Ministro/Ministra") confirma os dois gêneros do
  * Contatos; com um gênero explícito, "Ministra" continua não confirmando "Ministro". Nos
  * grupos de tribunal (`contexto.tribunal`), as funções de tribunal valem como "Ministro"
- * (`situacaoCargoTribunal`). Spec 2026-10-30 §3.2.
+ * (`situacaoCargoTribunal`, `lib/cargo-tribunal.ts`). Spec 2026-10-30 §3.2.
  */
 export function situacaoCampo(valorPlanilha: string, valorEsperado?: string, contexto: ContextoCargo = {}): SituacaoCampo {
   if (valorEsperado === undefined) return "fonte_nao_informa";
@@ -418,12 +332,13 @@ function montarResultado(
     },
   ];
   if (contato.cargo) {
+    const contextoCargo = contextoCargoDoGrupo(grupoCanonico);
     comparacoes.push({
       campo: "cargo",
       valorPlanilha: contato.cargo,
-      valorEsperado: pessoa.cargo,
+      valorEsperado: cargoEsperadoNoTribunal(contato.cargo, pessoa.cargo, contextoCargo),
       origemValor: ov,
-      situacao: situacaoCampo(contato.cargo, pessoa.cargo, contextoCargoDoGrupo(grupoCanonico)),
+      situacao: situacaoCampo(contato.cargo, pessoa.cargo, contextoCargo),
     });
   }
   if (contato.endereco) {
@@ -794,7 +709,7 @@ export function compararCargoNaLista(
   return {
     campo: "cargo",
     valorPlanilha: cargo,
-    valorEsperado: melhor.denominacao,
+    valorEsperado: cargoEsperadoNoTribunal(cargo, melhor.denominacao, contexto),
     origemValor: "pagina",
     situacao: mesmoConjunto && situacaoCampo(cargo, melhor.denominacao, contexto) === "confere" ? "confere" : "divergente",
     fonteUrl,
@@ -950,7 +865,7 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
       ? {
           campo: "cargo",
           valorPlanilha: contato.cargo,
-          valorEsperado: achado.pessoa?.cargo,
+          valorEsperado: cargoEsperadoNoTribunal(contato.cargo, achado.pessoa?.cargo, contextoCargo),
           origemValor: "pagina" as const,
           situacao: situacaoCampo(contato.cargo, achado.pessoa?.cargo, contextoCargo),
           fonteUrl: url,

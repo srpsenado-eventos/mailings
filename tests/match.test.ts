@@ -672,6 +672,21 @@ describe("cargo nos tribunais (spec 2026-10-30 §3.2)", () => {
     expect(situacaoCampo("Ministra do STJ", "Decana", TRIBUNAL)).toBe("confere");
   });
 
+  test("Ministro/Ministra da página no tribunal confirma os dois gêneros", () => {
+    expect(situacaoCampo("Ministra do STF", "Ministro/Ministra", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Ministro do STF", "Ministro/Ministra", TRIBUNAL)).toBe("confere");
+  });
+
+  test("Vice Presidente com espaço é vice, não presidência própria", () => {
+    expect(situacaoCampo("Ministro do STJ", "Vice Presidente", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Presidente do STJ", "Vice Presidente", TRIBUNAL)).toBe("divergente");
+  });
+
+  test("Ministra do Contatos com função no masculino explícito na página diverge (escolha da revisão)", () => {
+    expect(situacaoCampo("Ministra do TST", "Corregedor-Geral da Justiça do Trabalho", TRIBUNAL)).toBe("divergente");
+    expect(situacaoCampo("Ministra do TST", "Corregedora-Geral da Justiça do Trabalho", TRIBUNAL)).toBe("confere");
+  });
+
   test("convocado continua comparado como hoje", () => {
     expect(situacaoCampo("Desembargador Convocado do STJ", "Desembargador Convocado", TRIBUNAL)).toBe("confere");
     expect(situacaoCampo("Desembargador Convocado do STJ", "Vice-Presidente", TRIBUNAL)).toBe("divergente");
@@ -700,6 +715,31 @@ describe("cargo nos tribunais (spec 2026-10-30 §3.2)", () => {
     };
     const r = compararGrupo("TSE", [contato({ nome: "Fulano de Tal Silva", cargo: "Ministro do TSE" })], f, "Ministros do TSE");
     expect(r.contatos[0].comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("confere");
+  });
+
+  test("troca de presidência no tribunal: esperado é Presidente do tribunal, não o texto da página", () => {
+    const f: ConteudoFonte = {
+      url: "https://tse",
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [{ nome: "Fulano de Tal Silva", cargo: "(Presidente)" }],
+    };
+    const r = compararGrupo("TSE", [contato({ nome: "Fulano de Tal Silva", cargo: "Ministro do Tribunal Superior Eleitoral" })], f, "Ministros do TSE");
+    expect(r.contatos[0].comparacoes.find((c) => c.campo === "cargo")).toMatchObject({
+      situacao: "divergente",
+      valorEsperado: "Presidente do Tribunal Superior Eleitoral",
+    });
+  });
+
+  test("fora da troca de presidência o esperado continua o da página", () => {
+    const f: ConteudoFonte = {
+      url: "https://stf",
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [{ nome: "Fulano de Tal Silva", cargo: "Vice-Presidente" }],
+    };
+    const r = compararGrupo("STF", [contato({ nome: "Fulano de Tal Silva", cargo: "Presidente do Supremo Tribunal Federal" })], f, "Ministros do STF");
+    expect(r.contatos[0].comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "divergente", valorEsperado: "Vice-Presidente" });
   });
 
   test("compararGrupo fora de tribunal mantém a divergência pela mesma página", () => {

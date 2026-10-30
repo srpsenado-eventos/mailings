@@ -3,7 +3,7 @@ import { normalizarTexto } from "@/lib/normalize";
 import { REGRAS_TRATAMENTO } from "@/data/tratamentos";
 import { EXCECOES_CARGO } from "@/data/cargos-tratamento";
 import { REGRAS_NOME, type RegraNome } from "@/data/regras-nome";
-import { CARGOS_FEMININOS, CARGOS_MASCULINOS, neutralizarGenero } from "@/lib/cargos";
+import { generoDoCargo, generoPorLexico, MARCADOR_GENERICO, neutralizarGenero, type Genero } from "@/lib/cargos";
 import type {
   AchadoCoerencia,
   ComparacaoCampo,
@@ -108,9 +108,6 @@ export function expandirFormas(padrao: string, contato: ContatoPlanilha): string
 // ---------------------------------------------------------------------------
 // Compartilhado pelas duas camadas.
 // ---------------------------------------------------------------------------
-
-/** Marcador de forma genérica: `(a)`, `(o)`, `(as)`, `(os)` em qualquer posição. */
-const MARCADOR_GENERICO = /\((?:a|o|as|os)\)/i;
 
 function estaVazio(valor: string | undefined): boolean {
   return (valor ?? "").trim().length === 0;
@@ -430,8 +427,6 @@ export function comparacoesProtocolo(
 // Ver docs/superpowers/specs/2026-09-15-auditoria-tratamento-correcao-de-alvo.md, Decisão 4.
 // ---------------------------------------------------------------------------
 
-type Genero = "masculino" | "feminino" | "indeterminado";
-
 /**
  * Formas nominais de tratamento que marcam gênero. Só palavras que **distinguem**:
  * "excelencia", "santidade" e "eminencia" valem para os dois e ficam de fora, assim como
@@ -448,32 +443,8 @@ const TRATAMENTOS_FEMININOS = [
   "eminentissima", "reverendissima", "doutora", "dona",
 ];
 
-/**
- * Gênero de um texto pelo léxico recebido. Separa em palavras quebrando também no hífen,
- * para que "advogado-geral" entregue "advogado".
- *
- * Devolve `indeterminado` — que nunca vira acusação — em três casos: nenhuma palavra do
- * léxico, palavras dos dois gêneros no mesmo texto (sinal ambíguo é sinal nenhum), ou
- * forma genérica, cujo "Senhor(a)" traz "senhor" sem de fato afirmar o masculino.
- */
-function generoPorLexico(
-  valor: string | undefined,
-  masculinos: readonly string[],
-  femininos: readonly string[],
-): Genero {
-  if (estaVazio(valor) || formaGenerica(valor)) return "indeterminado";
-  const palavras = new Set(normalizarTexto(valor ?? "").split(/[^a-z]+/).filter(Boolean));
-  const temMasculino = masculinos.some((p) => palavras.has(p));
-  const temFeminino = femininos.some((p) => palavras.has(p));
-  if (temMasculino === temFeminino) return "indeterminado";
-  return temMasculino ? "masculino" : "feminino";
-}
-
 const generoDaForma = (valor?: string): Genero =>
   generoPorLexico(valor, TRATAMENTOS_MASCULINOS, TRATAMENTOS_FEMININOS);
-
-const generoDoCargo = (valor?: string): Genero =>
-  generoPorLexico(valor, CARGOS_MASCULINOS, CARGOS_FEMININOS);
 
 /** Dois gêneros se contradizem só quando ambos são conhecidos e diferentes. */
 function discordam(a: Genero, b: Genero): boolean {

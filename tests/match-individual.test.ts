@@ -374,3 +374,39 @@ describe("nome mais curto em destaque (spec 2026-10-23 §4.1)", () => {
     expect(v.nomeConfirmado).toBe(true);
   });
 });
+
+describe("troca de presidência no tribunal (spec 2026-10-30 §3.2)", () => {
+  const ENCHIMENTO = " Página institucional do tribunal, com a agenda, a biografia, os contatos do gabinete e as notícias recentes.".repeat(4);
+  const juiz = contato({ nome: "Fulano de Tal Silva", cargo: "Ministro do Tribunal Superior Eleitoral", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" });
+  const fonteTse: FonteIndividual = { url: "https://www.tse.jus.br/ministro", ativo: true, chave: { nome: juiz.nome }, campos: ["nome", "cargo"] };
+  const pagina: ConteudoFonte = {
+    url: fonteTse.url,
+    textoLimpo: `PRESIDENTE: Fulano de Tal Silva.${ENCHIMENTO}`,
+    destaques: [],
+    pessoas: [{ nome: "Fulano de Tal Silva", cargo: "PRESIDENTE:" }],
+  };
+
+  test("página individual: esperado é Presidente do tribunal", () => {
+    const v = compararContatoIndividual({ contato: juiz, fonte: fonteTse, lida: { conteudo: pagina }, grupoCanonico: "Ministros do TSE" });
+    expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({
+      situacao: "divergente",
+      valorEsperado: "Presidente do Tribunal Superior Eleitoral",
+    });
+  });
+
+  test("página individual fora de tribunal: esperado é o da página", () => {
+    const v = compararContatoIndividual({ contato: juiz, fonte: fonteTse, lida: { conteudo: pagina }, grupoCanonico: "Ministros de Estado" });
+    expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "divergente", valorEsperado: "PRESIDENTE:" });
+  });
+
+  test("lista de cargos: esperado é Presidente do tribunal só no tribunal", () => {
+    const lista = ["Presidente - Tribunal Superior Eleitoral"];
+    expect(compararCargoNaLista("Ministra do Tribunal Superior Eleitoral", lista, "https://x", { tribunal: true })).toMatchObject({
+      situacao: "divergente",
+      valorEsperado: "Presidente do Tribunal Superior Eleitoral",
+    });
+    expect(compararCargoNaLista("Ministra do Tribunal Superior Eleitoral", lista, "https://x")).toMatchObject({
+      valorEsperado: "Presidente - Tribunal Superior Eleitoral",
+    });
+  });
+});

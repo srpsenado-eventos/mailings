@@ -2,7 +2,7 @@
  * Cargo nos tribunais (spec 2026-10-30 §3.2). Nos grupos de tribunal, as funções que a
  * página publica ("Vice-Presidente", "Corregedor-Geral …", "Diretor-Geral da ENFAM",
  * "(Corregedor-Geral)", "Decano") valem como "Ministro" e confirmam o cargo
- * "Ministro(a) do <tribunal>" do Contatos. A regra fica em `situacaoCampo` (`lib/match.ts`).
+ * "Ministro(a) do <tribunal>" do Contatos. A regra fica em `lib/cargo-tribunal.ts`.
  */
 
 /** Segmentos do catálogo (`GrupoCatalogo.nome`) que são tribunais. */
@@ -17,7 +17,7 @@ export const GRUPOS_DE_TRIBUNAL: readonly string[] = Object.freeze([
 
 /**
  * Funções de tribunal, normalizadas (minúsculas, sem acento) e no masculino: o feminino
- * da página chega aqui por `neutralizarGenero`, e "decana" pela comparação em `lib/match.ts`.
+ * da página chega aqui por `neutralizarGenero`, e "decana" pela comparação em `lib/cargo-tribunal.ts`.
  * A forma com hífen também casa com espaço ("vice presidente").
  */
 export const FUNCOES_DE_TRIBUNAL: readonly string[] = Object.freeze([

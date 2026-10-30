@@ -5,7 +5,7 @@ import {
   GRUPO_GOVERNADORES_ELEITOS,
   GRUPO_SENADORES_ELEITOS,
 } from "@/data/grupos-posse";
-import { grupoDoAgrupador, linhasDoAgrupador, modoDoGrupo } from "@/lib/agrupador";
+import { grupoDoAgrupador, linhasDoAgrupador, modoDoGrupo, ROTULO_FISCALIZACAO, TITULO_AGRUPADOR } from "@/lib/agrupador";
 import { NOME_GRUPO_DEPUTADOS } from "@/lib/painel-deputados";
 
 const NEUTROS = [
@@ -132,5 +132,12 @@ describe("linhasDoAgrupador", () => {
       {},
     );
     expect(duas.find((l) => l.rotulo === "Governadores")?.noContatos).toBe(3);
+  });
+});
+
+describe("textos do bloco do agrupador", () => {
+  it("título conta os 28 grupos e o modo neutro usa o texto fixado pela spec", () => {
+    expect(TITULO_AGRUPADOR).toBe("Grupos da Posse 2027 (28)");
+    expect(ROTULO_FISCALIZACAO.neutro).toBe("Sem fonte oficial (grupo de convidados)");
   });
 });

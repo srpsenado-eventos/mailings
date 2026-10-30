@@ -1,8 +1,9 @@
+import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_DEPUTADOS_FEDERAIS, GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
+import { grupoDoAgrupador } from "@/lib/agrupador";
 import { ORIENTACAO_OUTRA_CASA } from "@/lib/eleitos";
 import { normalizarTexto } from "@/lib/normalize";
-import { temGrupoDeputados } from "@/lib/painel-deputados";
 import type { Etiqueta } from "@/lib/painel";
-import type { CasaLegislativa, EleicaoContato, EleicaoGovernoContato, EleitoClassificado, GovernadorClassificado, ResultadoContato, ResultadoEleicao, UfSegundoTurno } from "@/lib/types";
+import type { CasaLegislativa, EleicaoContato, EleicaoGovernoContato, EleitoClassificado, GovernadorClassificado, ResultadoContato, ResultadoEleicao, ResultadoGrupo, UfSegundoTurno } from "@/lib/types";
 
 /**
  * O que o painel mostra da Eleição 2026 (spec 2026-10-05 §5), decidido fora do JSX.
@@ -97,12 +98,21 @@ export function passaFiltroEleicao(c: ResultadoContato, f: FiltroEleicao): boole
   return false; // a_cadastrar e a_conferir são seções, não linhas do Contatos
 }
 
-export interface SecaoEleicao {
-  id: "senado_novos" | "camara_novos" | "conferir";
+/**
+ * Eleitos de um grupo de destino do Contatos (spec 2026-10-30 §4.4): a seção única antiga dos
+ * eleitos a conferir deu lugar a uma seção por grupo, com as subseções A cadastrar e A conferir.
+ */
+export interface SecaoGrupoEleito {
+  /** Rótulo oficial do grupo no agrupador da Posse 2027 (`data/grupos-posse.ts`). */
+  grupo: string;
   titulo: string;
-  linhas: EleitoClassificado[];
-  /** Governadores a conferir, na seção "conferir". Ausente nas seções montadas fora deste módulo. */
-  governo?: GovernadorClassificado[];
+  aCadastrar: EleitoClassificado[];
+  aConferir: EleitoClassificado[];
+  governo: { aCadastrar: GovernadorClassificado[]; aConferir: GovernadorClassificado[] };
+  /** Classificados (eleitos e governadores) com este grupo de destino. Não depende de filtro nem de busca. */
+  pelaLista: number;
+  /** Contatos do retrato nos grupos cujo rótulo casa este (`grupoDoAgrupador`). */
+  noContatos: number;
 }
 
 function casaBusca(x: EleitoClassificado, busca: string): boolean {
@@ -117,64 +127,151 @@ function governoBusca(g: GovernadorClassificado, busca: string): boolean {
   return [e.nomeUrna, e.nomeCompleto, e.partido ?? "", e.uf].some((v) => normalizarTexto(v).includes(busca));
 }
 
-const SECOES_POR_FILTRO: Record<string, readonly SecaoEleicao["id"][]> = {
-  tudo: ["senado_novos", "camara_novos", "conferir"],
-  a_cadastrar: ["senado_novos", "camara_novos"],
-  a_conferir: ["conferir"],
-};
+const GRUPO_ELEITO_DA_CASA: Record<CasaLegislativa, string> = { senado: GRUPO_SENADORES_ELEITOS, camara: GRUPO_DEPUTADOS_ELEITOS };
 
-export function secoesDeEleicao(eleicao: ResultadoEleicao | undefined, filtro: string, busca: string): SecaoEleicao[] {
-  if (!eleicao) return [];
-  const b = normalizarTexto(busca.trim());
-  const ids = SECOES_POR_FILTRO[filtro] ?? [];
-  const visiveis = eleicao.eleitos.filter((x) => casaBusca(x, b));
-  const novos = (casa: CasaLegislativa) => visiveis.filter((x) => x.destino === "novo" && !x.jaCadastrado && x.eleito.casa === casa);
-  const governoConferir = (eleicao.governadores?.eleitos ?? []).filter((g) => g.destino === "conferir" && governoBusca(g, b));
-  const todas: SecaoEleicao[] = [
-    { id: "senado_novos", titulo: "Senadores Eleitos — a cadastrar", linhas: novos("senado"), governo: [] },
-    { id: "camara_novos", titulo: "Deputados Federais Eleitos — a cadastrar", linhas: novos("camara"), governo: [] },
-    { id: "conferir", titulo: "Eleitos — a conferir", linhas: visiveis.filter((x) => x.destino === "conferir"), governo: governoConferir },
-  ];
-  // Com o grupo virtual "Deputados Federais" na tela, os eleitos novos da Câmara já aparecem dentro dele.
-  const grupoVirtual = temGrupoDeputados(eleicao);
-  return todas
-    .filter((s) => ids.includes(s.id) && s.linhas.length + (s.governo?.length ?? 0) > 0 && !(grupoVirtual && s.id === "camara_novos"))
-    .map((s) => ({ ...s, titulo: `${s.titulo} (${s.linhas.length + (s.governo?.length ?? 0)})` }));
+/**
+ * Grupo do convite do eleito; `conferir` não tem. Retrato gravado antes de 30/10/2026 não traz
+ * `grupoDestino`: o mandato novo cai no grupo de eleitos da sua Casa, como na seção antiga.
+ */
+function grupoDoEleito(x: EleitoClassificado): string | undefined {
+  if (x.grupoDestino !== undefined) return x.grupoDestino;
+  return x.destino === "novo" ? GRUPO_ELEITO_DA_CASA[x.eleito.casa] : undefined;
 }
 
+/** Idem para o governador: sem `grupoDestino` (retrato antigo), o mandato novo vai para os governadores eleitos. */
+function grupoDoGovernador(g: GovernadorClassificado): string | undefined {
+  if (g.grupoDestino !== undefined) return g.grupoDestino;
+  return g.destino === "novo" ? GRUPO_GOVERNADORES_ELEITOS : undefined;
+}
+
+/** Quem entra em cada subseção de um grupo, antes do filtro e da busca. */
+interface RegraDoGrupo {
+  grupo: string;
+  aCadastrar: (x: EleitoClassificado) => boolean;
+  aConferir: (x: EleitoClassificado) => boolean;
+  governoACadastrar: (g: GovernadorClassificado) => boolean;
+  governoAConferir: (g: GovernadorClassificado) => boolean;
+}
+
+const nenhum = () => false;
+const naoCadastradoEm = (grupo: string) => (x: EleitoClassificado) => grupoDoEleito(x) === grupo && !x.jaCadastrado;
+const conferirDaCasa = (casa: CasaLegislativa) => (x: EleitoClassificado) => x.destino === "conferir" && x.eleito.casa === casa;
+
+const REGRAS_DOS_ELEITOS: readonly RegraDoGrupo[] = [
+  { grupo: GRUPO_SENADORES_ELEITOS, aCadastrar: naoCadastradoEm(GRUPO_SENADORES_ELEITOS), aConferir: conferirDaCasa("senado"), governoACadastrar: nenhum, governoAConferir: nenhum },
+  { grupo: GRUPO_DEPUTADOS_ELEITOS, aCadastrar: naoCadastradoEm(GRUPO_DEPUTADOS_ELEITOS), aConferir: conferirDaCasa("camara"), governoACadastrar: nenhum, governoAConferir: nenhum },
+  {
+    grupo: GRUPO_GOVERNADORES_ELEITOS, aCadastrar: nenhum, aConferir: nenhum,
+    governoACadastrar: (g) => grupoDoGovernador(g) === GRUPO_GOVERNADORES_ELEITOS && !g.jaCadastrado,
+    governoAConferir: (g) => g.destino === "conferir",
+  },
+];
+
+/** Com "Deputados Federais" no Contatos, os reeleitos que ainda não estão nele (spec §4.4). */
+const REGRA_DEPUTADOS_FEDERAIS: RegraDoGrupo = {
+  grupo: GRUPO_DEPUTADOS_FEDERAIS,
+  aCadastrar: (x) => x.destino === "reeleito" && naoCadastradoEm(GRUPO_DEPUTADOS_FEDERAIS)(x),
+  aConferir: nenhum, governoACadastrar: nenhum, governoAConferir: nenhum,
+};
+
+const SUBSECOES_POR_FILTRO: Record<string, { aCadastrar: boolean; aConferir: boolean }> = {
+  tudo: { aCadastrar: true, aConferir: true },
+  a_cadastrar: { aCadastrar: true, aConferir: false },
+  a_conferir: { aCadastrar: false, aConferir: true },
+};
+
+function contatosNoGrupo(grupos: readonly ResultadoGrupo[], rotulo: string): number {
+  return grupos
+    .filter((g) => grupoDoAgrupador(g.grupo)?.rotulo === rotulo)
+    .reduce((soma, g) => soma + g.contatos.length, 0);
+}
+
+/**
+ * Uma seção por grupo de eleitos, na ordem Senadores, Deputado Federal e Governadores, e "Deputados
+ * Federais" quando o grupo já está no Contatos. Os números do título são totais (sem filtro nem
+ * busca); as listas seguem o filtro e a busca, e a seção sem linha visível some.
+ */
+export function secoesDeEleicao(
+  eleicao: ResultadoEleicao | undefined,
+  grupos: readonly ResultadoGrupo[],
+  filtro: string,
+  busca: string,
+): SecaoGrupoEleito[] {
+  const mostra = SUBSECOES_POR_FILTRO[filtro];
+  if (!eleicao || !mostra) return [];
+  const b = normalizarTexto(busca.trim());
+  const eleitos = eleicao.eleitos;
+  const governadores = eleicao.governadores?.eleitos ?? [];
+  const regras = eleicao.camaraNoContatos ? [...REGRAS_DOS_ELEITOS, REGRA_DEPUTADOS_FEDERAIS] : REGRAS_DOS_ELEITOS;
+  return regras.flatMap((r): SecaoGrupoEleito[] => {
+    const pelaLista = eleitos.filter((x) => grupoDoEleito(x) === r.grupo).length
+      + governadores.filter((g) => grupoDoGovernador(g) === r.grupo).length;
+    const totalACadastrar = eleitos.filter(r.aCadastrar).length + governadores.filter(r.governoACadastrar).length;
+    const noContatos = contatosNoGrupo(grupos, r.grupo);
+    const secao: SecaoGrupoEleito = {
+      grupo: r.grupo,
+      titulo: `${r.grupo} — ${pelaLista} pela lista · ${noContatos} no Contatos · ${totalACadastrar} a cadastrar`,
+      aCadastrar: mostra.aCadastrar ? eleitos.filter((x) => r.aCadastrar(x) && casaBusca(x, b)) : [],
+      aConferir: mostra.aConferir ? eleitos.filter((x) => r.aConferir(x) && casaBusca(x, b)) : [],
+      governo: {
+        aCadastrar: mostra.aCadastrar ? governadores.filter((g) => r.governoACadastrar(g) && governoBusca(g, b)) : [],
+        aConferir: mostra.aConferir ? governadores.filter((g) => r.governoAConferir(g) && governoBusca(g, b)) : [],
+      },
+      pelaLista,
+      noContatos,
+    };
+    const linhas = secao.aCadastrar.length + secao.aConferir.length + secao.governo.aCadastrar.length + secao.governo.aConferir.length;
+    return linhas > 0 ? [secao] : [];
+  });
+}
+
+/**
+ * Quantidade esperada pela eleição ou pela Câmara, por rótulo do agrupador (spec §4.5): só nos três
+ * grupos de eleitos e em "Deputados Federais". Eleitos e governadores contam pelo grupo de destino
+ * (`conferir` não conta); "Deputados Federais" é o total de deputados em exercício da planilha da
+ * Câmara. Sem a planilha de uma Casa, dos governadores ou da Câmara, a chave fica de fora.
+ */
+export function esperadosDoAgrupador(eleicao: ResultadoEleicao | undefined): Record<string, number> {
+  if (!eleicao) return {};
+  const destinos = [
+    ...eleicao.eleitos.map(grupoDoEleito),
+    ...(eleicao.governadores?.eleitos ?? []).map(grupoDoGovernador),
+  ];
+  const conta = (grupo: string) => ({ [grupo]: destinos.filter((d) => d === grupo).length });
+  const temCasa = (casa: CasaLegislativa) => eleicao.eleitos.some((x) => x.eleito.casa === casa);
+  const atuais = eleicao.deputadosAtuais?.length ?? 0;
+  return {
+    ...(temCasa("senado") ? conta(GRUPO_SENADORES_ELEITOS) : {}),
+    ...(temCasa("camara") ? conta(GRUPO_DEPUTADOS_ELEITOS) : {}),
+    ...(eleicao.governadores ? conta(GRUPO_GOVERNADORES_ELEITOS) : {}),
+    ...(atuais > 0 ? { [GRUPO_DEPUTADOS_FEDERAIS]: atuais } : {}),
+  };
+}
+
+/** Seção das UFs que aguardam o 2º turno. Os governadores a cadastrar estão na seção do seu grupo (`secoesDeEleicao`). */
 export interface SecaoGoverno {
-  id: "governo_novos" | "governo_segundo_turno";
+  id: "governo_segundo_turno";
   titulo: string;
-  novos: GovernadorClassificado[];
   segundoTurno: UfSegundoTurno[];
 }
-
-const SECOES_GOVERNO_POR_FILTRO: Record<string, readonly SecaoGoverno["id"][]> = {
-  tudo: ["governo_novos", "governo_segundo_turno"],
-  a_cadastrar: ["governo_novos"],
-};
 
 function segundoTurnoBusca(u: UfSegundoTurno, busca: string): boolean {
   if (busca === "") return true;
   return [u.uf, ...u.candidatos.map((c) => c.nomeUrna)].some((v) => normalizarTexto(v).includes(busca));
 }
 
+/** O 2º turno só aparece sem filtro, como antes ("A cadastrar" mostrava só os governadores novos). */
 export function secoesDeGoverno(eleicao: ResultadoEleicao | undefined, filtro: string, busca: string): SecaoGoverno[] {
   const gov = eleicao?.governadores;
-  if (!gov) return [];
+  if (!gov || filtro !== "tudo") return [];
   const b = normalizarTexto(busca.trim());
-  const ids = SECOES_GOVERNO_POR_FILTRO[filtro] ?? [];
-  const novos = gov.eleitos.filter((g) => g.destino === "novo" && !g.jaCadastrado && governoBusca(g, b));
   const segundoTurno = gov.segundoTurno.filter((u) => segundoTurnoBusca(u, b));
-  const todas: SecaoGoverno[] = [
-    { id: "governo_novos", titulo: `Governadores Eleitos — a cadastrar (${novos.length})`, novos, segundoTurno: [] },
-    {
-      id: "governo_segundo_turno",
-      titulo: `Governadores — aguarda 2º turno, 25/10 (${segundoTurno.length} ${segundoTurno.length === 1 ? "UF" : "UFs"})`,
-      novos: [], segundoTurno,
-    },
-  ];
-  return todas.filter((s) => ids.includes(s.id) && s.novos.length + s.segundoTurno.length > 0);
+  if (segundoTurno.length === 0) return [];
+  return [{
+    id: "governo_segundo_turno",
+    titulo: `Governadores — aguarda 2º turno, 25/10 (${segundoTurno.length} ${segundoTurno.length === 1 ? "UF" : "UFs"})`,
+    segundoTurno,
+  }];
 }
 
 export function avisoDaEleicao(eleicao: ResultadoEleicao | undefined): string | undefined {

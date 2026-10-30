@@ -239,6 +239,11 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
   {
     // Spec 2026-10-15: existe para o casamento exato vencer a contenção e os eleitos de
     // mandato novo não serem ligados às páginas dos governadores atuais.
+    // Nota de 2026-10-30 (spec 2026-10-30 §4.6): o rótulo da Posse no Contatos,
+    // "Governadores eleitos - Posse Presidencial 2027", é do modo `lista` do agrupador
+    // (`data/grupos-posse.ts`), que `lib/analise.ts` decide antes de resolver o catálogo; esta
+    // entrada não é mais alcançada por ele, e as fontes de campanha abaixo não são lidas para
+    // esse grupo. Ficam só para um rótulo antigo que case "Governadores Eleitos" fora do agrupador.
     nome: "Governadores Eleitos",
     fontes: [],
     // Spec 2026-10-26: os eleitos de mandato novo no 2º turno (ES, RN e TO) não têm página

@@ -1,5 +1,16 @@
 import { GRUPOS_POSSE, type GrupoPosse, type ModoFiscalizacao } from "@/data/grupos-posse";
+import { OBSERVACAO_SEM_FONTE_OFICIAL } from "@/lib/match";
 import { normalizarTexto } from "@/lib/normalize";
+
+/** Cabeçalho do bloco do painel (spec 2026-10-30 §4.5). */
+export const TITULO_AGRUPADOR = `Grupos da Posse 2027 (${GRUPOS_POSSE.length})`;
+
+/** Como cada modo de fiscalização aparece no bloco do agrupador. */
+export const ROTULO_FISCALIZACAO: Readonly<Record<ModoFiscalizacao, string>> = {
+  fonte: "Página oficial",
+  lista: "Lista do TSE ou da Câmara",
+  neutro: OBSERVACAO_SEM_FONTE_OFICIAL,
+};
 
 export interface LinhaAgrupador {
   rotulo: string;

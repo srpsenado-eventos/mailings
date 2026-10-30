@@ -499,6 +499,57 @@ describe("contarContatosCasados (spec 2026-10-20 §5.1)", () => {
   });
 });
 
+describe("nome em destaque (spec 2026-10-30 §3.1, STJ)", () => {
+  const STJ: ConteudoFonte = {
+    url: "https://www.stj.jus.br/web/verMinistrosSTJ?parametro=1",
+    textoLimpo: "",
+    destaques: [],
+    pessoas: [{ nome: "Sérgio Luíz Kukina", nomeDestaque: "Sérgio Kukina" }],
+  };
+  const nomeDe = (r: ReturnType<typeof compararContato>) => r.comparacoes.find((c) => c.campo === "nome");
+
+  test("contato igual ao destaque confere", () => {
+    // Arrange / Act
+    const r = compararContato(contato({ nome: "Sérgio Kukina" }), STJ);
+
+    // Assert
+    expect(nomeDe(r)?.situacao).toBe("confere");
+    expect(nomeDe(r)?.valorEsperado).toBe("Sérgio Kukina");
+    expect(r.semaforo).toBe("verde");
+  });
+
+  test("contato igual ao nome completo, mas não ao destaque, diverge com o destaque como esperado", () => {
+    const r = compararContato(contato({ nome: "Sérgio Luíz Kukina" }), STJ);
+    expect(nomeDe(r)?.situacao).toBe("divergente");
+    expect(nomeDe(r)?.valorEsperado).toBe("Sérgio Kukina");
+    expect(r.camposDivergentes).toContainEqual({ campo: "nome", valorPlanilha: "Sérgio Luíz Kukina", valorEncontrado: "Sérgio Kukina" });
+  });
+
+  test("pessoa sem destaque segue como hoje: o nome completo é o esperado", () => {
+    const semDestaque: ConteudoFonte = { ...STJ, pessoas: [{ nome: "Sérgio Luíz Kukina" }] };
+    expect(nomeDe(compararContato(contato({ nome: "Sérgio Luíz Kukina" }), semDestaque))?.situacao).toBe("confere");
+    const curto = nomeDe(compararContato(contato({ nome: "Sérgio Kukina" }), semDestaque));
+    expect(curto?.situacao).toBe("divergente");
+    expect(curto?.valorEsperado).toBe("Sérgio Luíz Kukina");
+  });
+
+  test("o casamento considera também o destaque (o maior dos dois escores)", () => {
+    // Arrange — pelo nome completo só 2 de 5 partes casam; pelo destaque, 2 de 2
+    const pessoa: PessoaSite = { nome: "Ana Bia Carla Dora Eva", nomeDestaque: "Ana Eva" };
+    const f: ConteudoFonte = { ...STJ, pessoas: [pessoa] };
+    const c = contato({ nome: "Ana Eva Fabi Gina Hele" });
+    expect(pontuarPessoa(c.nome, pessoa.nome)).toBeLessThan(0.6);
+
+    // Act
+    const r = compararContato(c, f);
+
+    // Assert
+    expect(r.possivelSaida).toBeUndefined();
+    expect(nomeDe(r)?.valorEsperado).toBe("Ana Eva");
+    expect(contarContatosCasados([c], [pessoa])).toBe(1);
+  });
+});
+
 describe("aplicarNomesDoContatos (spec 2026-10-23 §4.2)", () => {
   const contatos = [{ nome: "Garibaldi Alves Filho", grupo: "G", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" }, { nome: "Outra Pessoa Qualquer", grupo: "G", tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" }];
   const fonte = { url: "https://x.leg.br", textoLimpo: "", destaques: [], pessoas: [{ nome: "Garibaldi Alves" }, { nome: "Outra Pessoa" }] };

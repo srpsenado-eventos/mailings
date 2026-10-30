@@ -63,6 +63,12 @@ export interface PessoaSite {
   fonteUrl?: string;
   /** A fonte de origem propõe inclusão: não casar com ninguém faz desta pessoa um "novo". */
   propoeInclusao?: boolean;
+  /**
+   * Partes do nome em negrito no bloco da pessoa, na ordem, unidas por espaço ("Sérgio Kukina"
+   * de "<b>Sérgio</b> Luíz <b>Kukina</b>"). Só em fonte `nomeEmDestaque`; quando existe, é o
+   * nome esperado (spec 2026-10-30 §3.1). Ausente: o bloco não tem negrito.
+   */
+  nomeDestaque?: string;
 }
 
 /** Conteúdo limpo de uma página oficial. */
@@ -373,6 +379,11 @@ export interface FonteCatalogo {
   tipo?: "html" | "pdf";
   /** Extração por marcador: só as pessoas cujo nome é seguido de um destes textos (spec 2026-10-23 §5.2). */
   marcador?: { textos: readonly string[] };
+  /**
+   * O nome esperado é só a parte em negrito da página (spec 2026-10-30 §3.1, regra do GT
+   * "STJ: usar as partes do nome em negrito"). Só no STJ.
+   */
+  nomeEmDestaque?: true;
 }
 
 /** Chave que liga uma fonte individual ao contato: a UF do cargo, ou o nome como está no Contatos. */
@@ -406,7 +417,10 @@ export interface FonteIndividual {
 export type TipoFonteProvisoria = "noticia" | "campanha";
 
 /** Uma fonte que o raspador sabe ler: o que `FonteCatalogo` e `FonteIndividual` têm em comum. */
-export type FonteLegivel = Pick<FonteCatalogo, "url" | "tabela" | "navegador" | "urlAlternativa" | "tipo" | "marcador">;
+export type FonteLegivel = Pick<
+  FonteCatalogo,
+  "url" | "tabela" | "navegador" | "urlAlternativa" | "tipo" | "marcador" | "nomeEmDestaque"
+>;
 
 /**
  * Grupo no catálogo versionado (`data/catalogo.ts`), com responsáveis internos

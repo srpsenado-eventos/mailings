@@ -76,6 +76,22 @@ export function pontuarPessoa(nomePlanilha: string, nomeSite: string): number {
 }
 
 /**
+ * Escore do contato contra uma pessoa da composição: o maior entre o nome completo e o nome
+ * em destaque, quando a fonte o marca (spec 2026-10-30 §3.1). Qualquer um dos dois casa.
+ */
+function pontuarContraPessoa(nomePlanilha: string, pessoa: PessoaSite): number {
+  const pelaPessoa = pontuarPessoa(nomePlanilha, pessoa.nome);
+  return pessoa.nomeDestaque === undefined
+    ? pelaPessoa
+    : Math.max(pelaPessoa, pontuarPessoa(nomePlanilha, pessoa.nomeDestaque));
+}
+
+/** O nome que o Contatos deve ter: o destaque da página, quando há; senão, o nome completo. */
+function nomeEsperado(pessoa: PessoaSite): string {
+  return pessoa.nomeDestaque ?? pessoa.nome;
+}
+
+/**
  * Compõe a lista final de pessoas a partir da Camada 1 (página) e da Camada 2 (IA):
  * - Página ilegível (sem pessoas) → usa a composição da IA (cobertura, ex.: TCU/JS).
  * - Página legível → base oficial + RESGATE: anexa só as pessoas da IA que casam algum
@@ -103,7 +119,7 @@ export function mesclarComposicao(
  * menos da metade do grupo?
  */
 export function contarContatosCasados(contatos: readonly ContatoPlanilha[], pessoas: readonly PessoaSite[]): number {
-  return contatos.filter((c) => pessoas.some((p) => pontuarPessoa(c.nome, p.nome) >= LIMIAR_PESSOA)).length;
+  return contatos.filter((c) => pessoas.some((p) => pontuarContraPessoa(c.nome, p) >= LIMIAR_PESSOA)).length;
 }
 
 /**
@@ -140,7 +156,7 @@ function melhorPessoa(nome: string, pessoas: PessoaSite[]): { indice: number; sc
   let indice = -1;
   let score = 0;
   pessoas.forEach((p, i) => {
-    const s = pontuarPessoa(nome, p.nome);
+    const s = pontuarContraPessoa(nome, p);
     if (s > score) {
       score = s;
       indice = i;
@@ -195,9 +211,12 @@ export function situacaoCampo(valorPlanilha: string, valorEsperado?: string): Si
   return "confere";
 }
 
-/** Nome: o site é o parâmetro — confere só se igual normalizado. */
-function situacaoNome(planilha: string, site: string): SituacaoCampo {
-  return normalizarNome(planilha) === normalizarNome(site) ? "confere" : "divergente";
+/**
+ * Nome: o site é o parâmetro — confere só se igual normalizado ao nome esperado. Com destaque
+ * (STJ), o esperado é o destaque: o nome completo da página diverge (spec 2026-10-30 §3.1).
+ */
+function situacaoNome(planilha: string, pessoa: PessoaSite): SituacaoCampo {
+  return normalizarNome(planilha) === normalizarNome(nomeEsperado(pessoa)) ? "confere" : "divergente";
 }
 
 /**
@@ -290,9 +309,9 @@ function montarResultado(
     {
       campo: "nome",
       valorPlanilha: contato.nome,
-      valorEsperado: pessoa.nome,
+      valorEsperado: nomeEsperado(pessoa),
       origemValor: ov,
-      situacao: situacaoNome(contato.nome, pessoa.nome),
+      situacao: situacaoNome(contato.nome, pessoa),
     },
   ];
   if (contato.cargo) {
@@ -902,6 +921,6 @@ export function compararContatoSemIndividual(
  */
 export function novosForaDaPlanilha(pessoas: PessoaSite[], contatos: ContatoPlanilha[]): PessoaSite[] {
   return pessoas.filter(
-    (p) => Boolean(p.cargo) && !contatos.some((c) => pontuarPessoa(c.nome, p.nome) >= LIMIAR_PESSOA),
+    (p) => Boolean(p.cargo) && !contatos.some((c) => pontuarContraPessoa(c.nome, p) >= LIMIAR_PESSOA),
   );
 }

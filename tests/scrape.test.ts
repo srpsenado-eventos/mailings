@@ -334,6 +334,65 @@ describe("extrairConteudo (nome partido pelo negrito, caso STJ)", () => {
       "Diretor-Geral da ENFAM",
     );
   });
+
+  describe("nome em destaque (spec 2026-10-30 §3.1)", () => {
+    const URL_STJ = "https://www.stj.jus.br/web/verMinistrosSTJ?parametro=1";
+    const destaqueDe = (c: ReturnType<typeof extrairConteudo>, nome: string) =>
+      c.pessoas.find((p) => p.nome === nome)?.nomeDestaque;
+
+    test("com a marca, cada pessoa leva as partes em negrito do seu nome, na ordem", () => {
+      // Arrange / Act
+      const c = extrairConteudo(htmlStj, URL_STJ, { nomeEmDestaque: true });
+
+      // Assert
+      expect(destaqueDe(c, "Sérgio Luíz Kukina")).toBe("Sérgio Kukina");
+      expect(destaqueDe(c, "Antonio Herman de Vasconcellos e Benjamin")).toBe("Herman Benjamin");
+      expect(destaqueDe(c, "Luiz Alberto Gurgel de Faria")).toBe("Gurgel de Faria");
+      expect(destaqueDe(c, "Maria Isabel Diniz Gallotti Rodrigues")).toBe("Isabel Gallotti");
+      expect(destaqueDe(c, "Marco Aurélio Bellizze Oliveira")).toBe("Marco Aurélio Bellizze");
+    });
+
+    test("nome e cargo na mesma linha: o destaque é só o nome", () => {
+      const c = extrairConteudo(htmlStj, URL_STJ, { nomeEmDestaque: true });
+      expect(destaqueDe(c, "Benedito Gonçalves")).toBe("Benedito Gonçalves");
+      expect(destaqueDe(c, "Mauro Luiz Campbell Marques")).toBe("Mauro Campbell Marques");
+    });
+
+    test("negrito com espaço dentro da tag não gruda as partes", () => {
+      const c = extrairConteudo(htmlStj, URL_STJ, { nomeEmDestaque: true });
+      expect(destaqueDe(c, "Rogerio Schietti Machado Cruz")).toBe("Rogerio Schietti Cruz");
+    });
+
+    test("sem a marca, nenhuma pessoa leva destaque", () => {
+      const c = extrairConteudo(htmlStj, URL_STJ);
+      expect(c.pessoas.some((p) => p.nomeDestaque !== undefined)).toBe(false);
+    });
+
+    test("ministro sem negrito na página fica sem destaque e com o nome completo", () => {
+      // Arrange — ministro novo publicado sem <b> (ponto 1 da revisão)
+      const semNegrito = htmlStj.replace("<b>Sérgio</b> Luíz <b>Kukina</b>", "Sérgio Luíz Kukina");
+
+      // Act
+      const c = extrairConteudo(semNegrito, URL_STJ, { nomeEmDestaque: true });
+
+      // Assert
+      const kukina = c.pessoas.find((p) => p.nome === "Sérgio Luíz Kukina");
+      expect(kukina).toBeDefined();
+      expect(kukina?.nomeDestaque).toBeUndefined();
+      expect(destaqueDe(c, "Luiz Alberto Gurgel de Faria")).toBe("Gurgel de Faria");
+    });
+
+    test("negrito que não é parte do nome não vira destaque", () => {
+      // Arrange — o negrito cobre o cargo, não o nome
+      const pagina = '<html><body><div><a><b>Presidente</b> Fulano de Tal Beltrano</a></div></body></html>';
+
+      // Act
+      const c = extrairConteudo(pagina, "https://exemplo.jus.br", { nomeEmDestaque: true });
+
+      // Assert
+      expect(c.pessoas.every((p) => p.nomeDestaque === undefined)).toBe(true);
+    });
+  });
 });
 
 describe("raspar", () => {

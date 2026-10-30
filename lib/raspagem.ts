@@ -37,6 +37,7 @@ function montarOpcoes(fonte: FonteLegivel): OpcoesRaspagem {
     ...(fonte.tabela ? { tabela: fonte.tabela } : {}),
     ...(fonte.marcador ? { marcador: fonte.marcador.textos } : {}),
     ...(fonte.tipo ? { tipo: fonte.tipo } : {}),
+    ...(fonte.nomeEmDestaque ? { nomeEmDestaque: true } : {}),
   };
 }
 

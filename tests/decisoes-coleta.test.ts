@@ -176,6 +176,26 @@ describe("registrarColetasDoRetrato", () => {
     expect(registrarColetasDoRetrato(uma, retrato)).toBe(uma);
   });
 
+  test("Jader Barbalho: Ex-Presidentes do Senado, só do outro caso dele, não reabre o caso Senadores × Jader Filho", () => {
+    // Arrange
+    const h1 = registrar(HISTORICO_VAZIO, "Jader Barbalho", [], decisao({
+      convidaPor: GRUPO_SENADORES, grupos: ["Ex-Presidentes do Senado", GRUPO_SENADORES],
+    }));
+    const h = registrar(h1, "Jader Barbalho", [], decisao({
+      tipo: "pessoas_diferentes", convidaPor: undefined, outraPessoa: [GRUPO_DEPUTADOS_ELEITOS], grupos: [GRUPO_SENADORES, GRUPO_DEPUTADOS_ELEITOS],
+    }));
+    const retrato = {
+      geradoEm: "2026-10-31T01:00:00.000Z",
+      grupos: [grupo("Ex-Presidentes do Senado", ["Jader Barbalho"]), grupo(GRUPO_SENADORES, ["Jader Barbalho"])],
+    };
+    // Act
+    const novo = registrarColetasDoRetrato(h, retrato);
+    // Assert
+    expect(h.casos).toHaveLength(2);
+    expect(novo.casos[0].registros.at(-1)).toMatchObject({ tipo: "coleta", situacao: "pendente" });
+    expect(novo.casos[1].registros.some((r) => r.tipo === "coleta" && r.situacao === "reaberto")).toBe(false);
+  });
+
   test("histórico vazio volta como está", () => {
     expect(registrarColetasDoRetrato(HISTORICO_VAZIO, { geradoEm: "2026-10-30T14:00:00.000Z", grupos: [] })).toBe(HISTORICO_VAZIO);
   });

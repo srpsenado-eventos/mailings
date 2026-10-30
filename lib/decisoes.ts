@@ -137,6 +137,28 @@ export function casosDaPessoa(
     c.chaves.some((ch) => procuradas.has(ch)) && vigente(c) !== undefined && contem(alvo, gruposDoCaso(c)));
 }
 
+/**
+ * Grupos atuais que contam para a situação deste caso (tela e coleta usam esta mesma regra): sai o
+ * grupo que não está nos `grupos` do vigente deste caso, mas está nos de outro caso da mesma pessoa
+ * (outro caso de `casos` com alguma chave de nome em comum). Jader Barbalho em Ex-Presidentes do
+ * Senado é do caso "Ex-Presidentes × Senadores" e não reabre o caso "Senadores × Jader Filho".
+ */
+export function gruposAtuaisParaOCaso(
+  caso: CasoDecidido,
+  gruposAtuais: readonly string[],
+  casos: readonly CasoDecidido[],
+): string[] {
+  const chaves = new Set(caso.chaves);
+  const proprios = gruposDoCaso(caso);
+  const dosOutros = new Set(casos
+    .filter((c) => c !== caso && c.chaves.some((ch) => chaves.has(ch)))
+    .flatMap((c) => [...gruposDoCaso(c)]));
+  return gruposAtuais.filter((g) => {
+    const chave = normalizarTexto(g);
+    return proprios.has(chave) || !dosOutros.has(chave);
+  });
+}
+
 function idDoCaso(nome: string, grupos: readonly string[]): string {
   return `${normalizarNome(nome)}#${[...conjuntoDeGrupos(grupos)].sort().join("|")}`;
 }

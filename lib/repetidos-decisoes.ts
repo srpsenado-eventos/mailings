@@ -1,5 +1,5 @@
 import {
-  casosDaPessoa, grupoEquivalente, situacaoDoCaso, vigente,
+  casosDaPessoa, grupoEquivalente, gruposAtuaisParaOCaso, situacaoDoCaso, vigente,
   type CasoDecidido, type HistoricoDecisoes, type RegistroManual, type SituacaoNoContatos, type TipoDecisao,
 } from "@/lib/decisoes";
 import { gruposAtuaisDoCaso } from "@/lib/decisoes-coleta";
@@ -68,6 +68,8 @@ function motivoDaDecisao(d: RegistroManual): string {
 interface Contexto {
   grupos: readonly ResultadoGrupo[];
   eleicao?: ResultadoEleicao;
+  /** Todos os casos do histórico: os da mesma pessoa delimitam os grupos de cada caso. */
+  casos: readonly CasoDecidido[];
 }
 
 /** Caso com o seu registro vigente (só entram casos com decisão). */
@@ -78,18 +80,9 @@ interface Aplicado {
 
 const conjunto = (grupos: readonly string[]): Set<string> => new Set(grupos.map(normalizarTexto));
 
-/**
- * Situação no Contatos de um caso entre os casos da mesma pessoa: o grupo coberto só por outro caso
- * dela não reabre este (Jader Barbalho em Ex-Presidentes do Senado não reabre o caso Senadores × Jader Filho).
- */
-function noContatosEntre(a: Aplicado, todos: readonly Aplicado[], ctx: Contexto): SituacaoNoContatos {
-  const proprios = conjunto(a.decisao.grupos);
-  const dosOutros = conjunto(todos.filter((x) => x !== a).flatMap((x) => x.decisao.grupos));
-  const atuais = gruposAtuaisDoCaso(a.caso, ctx.grupos, ctx.eleicao).filter((g) => {
-    const chave = normalizarTexto(g);
-    return proprios.has(chave) || !dosOutros.has(chave);
-  });
-  return situacaoDoCaso(a.caso, atuais);
+/** Situação no Contatos ao vivo, com a mesma regra da coleta (`gruposAtuaisParaOCaso`). */
+function noContatosDoCaso(caso: CasoDecidido, ctx: Contexto): SituacaoNoContatos {
+  return situacaoDoCaso(caso, gruposAtuaisParaOCaso(caso, gruposAtuaisDoCaso(caso, ctx.grupos, ctx.eleicao), ctx.casos));
 }
 
 /** O mais recente pela data do registro vigente; no empate, o último do histórico. */
@@ -144,7 +137,7 @@ function semAsOutrasPessoas(a: AutoridadeRepetida, outras: ReadonlySet<string>):
  * 4. só `pessoas_diferentes`: sem `outraPessoa` silencia o caso; com ela, vale a regra sobre o que restou.
  */
 function aplicarCasos(a: AutoridadeRepetida, aplicados: readonly Aplicado[], ctx: Contexto): AutoridadeRepetida {
-  const situacoes = new Map(aplicados.map((x) => [x, noContatosEntre(x, aplicados, ctx)] as const));
+  const situacoes = new Map(aplicados.map((x) => [x, noContatosDoCaso(x.caso, ctx)] as const));
   const noContatos = (x: Aplicado): SituacaoNoContatos => situacoes.get(x) ?? "sem_efeito";
   const reabertos = aplicados.filter((x) => noContatos(x) === "reaberto");
   if (reabertos.length > 0) return comDecisao(a, maisRecente(reabertos), "reaberto");
@@ -197,7 +190,7 @@ function autoridadeForaDoCalculo(x: Aplicado, ctx: Contexto): AutoridadeRepetida
     .flatMap((g) => entradasDaPessoa(g, chaves));
   const ocorrencias = semRepeticao(entradas.map((e) => e.ocorrencia));
   const nome = entradas[0]?.nome ?? x.caso.nome;
-  const noContatos = situacaoDoCaso(x.caso, gruposAtuaisDoCaso(x.caso, ctx.grupos, ctx.eleicao));
+  const noContatos = noContatosDoCaso(x.caso, ctx);
   const decidida = comDecisao({ nome, ocorrencias, situacao: "decidido_gt", motivo: "" }, x, noContatos);
   if (ocorrencias.length > 0 || decidida.situacao !== "decidido_gt") return decidida;
   return { ...decidida, motivo: MOTIVO_PESSOA_NAO_ENCONTRADA };
@@ -215,7 +208,7 @@ function aplicado(caso: CasoDecidido): Aplicado[] {
 export function aplicarDecisoes(
   lista: readonly AutoridadeRepetida[], h: HistoricoDecisoes, grupos: readonly ResultadoGrupo[], eleicao: ResultadoEleicao | undefined,
 ): AutoridadeRepetida[] {
-  const ctx: Contexto = { grupos, ...(eleicao ? { eleicao } : {}) };
+  const ctx: Contexto = { grupos, casos: h.casos, ...(eleicao ? { eleicao } : {}) };
   const usados = new Set<CasoDecidido>();
   const decididas = lista.map((a) => {
     const nomes = [a.nome, ...a.ocorrencias.map((o) => o.chave)];

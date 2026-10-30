@@ -9,6 +9,7 @@ import {
   casosDaPessoa,
   DecisaoInvalidaError,
   grupoEquivalente,
+  gruposAtuaisParaOCaso,
   HISTORICO_VAZIO,
   registrar,
   registrarColetas,
@@ -141,6 +142,20 @@ describe("registrar e acharCaso", () => {
     expect(casosDaPessoa(h2, ["Jader Barbalho"], ["Ex-Presidentes do Senado", "Senadores"])).toEqual([h2.casos[0]]);
     expect(casosDaPessoa(h2, ["Outra Pessoa"], todos)).toEqual([]);
     expect(casosDaPessoa(h2, ["Jader Barbalho"], ["Senadores"])).toEqual([]);
+  });
+
+  it("gruposAtuaisParaOCaso tira o grupo que só outro caso da mesma pessoa cobre", () => {
+    // Arrange
+    const h1 = registrar(HISTORICO_VAZIO, "Jader Barbalho", [], manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Ex-Presidentes do Senado", "Senadores"] }));
+    const h2 = registrar(h1, "Jader Barbalho", [], manual({ tipo: "pessoas_diferentes", outraPessoa: [GRUPO_DEPUTADOS_ELEITOS], grupos: ["Senadores", GRUPO_DEPUTADOS_ELEITOS] }));
+    const outro = registrar(HISTORICO_VAZIO, "Outra Pessoa", [], manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Ex-Presidentes do Senado", "Senadores"] })).casos[0];
+    const [exPresidente, filho] = h2.casos;
+    const atuais = ["Senadores", "Ex-Presidentes do Senado"];
+    // Act / Assert
+    expect(gruposAtuaisParaOCaso(exPresidente, atuais, h2.casos)).toEqual(atuais);
+    expect(gruposAtuaisParaOCaso(filho, atuais, h2.casos)).toEqual(["Senadores"]);
+    expect(situacaoDoCaso(filho, gruposAtuaisParaOCaso(filho, atuais, h2.casos))).toBe("sem_efeito");
+    expect(gruposAtuaisParaOCaso(filho, atuais, [filho, outro])).toEqual(atuais);
   });
 
   it("registro com os mesmos grupos, em outra ordem e caixa, acrescenta ao caso existente", () => {

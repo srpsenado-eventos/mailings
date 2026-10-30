@@ -1,5 +1,5 @@
 import {
-  grupoEquivalente, registrarColetas, vigente, type CasoDecidido, type HistoricoDecisoes,
+  grupoEquivalente, gruposAtuaisParaOCaso, registrarColetas, vigente, type CasoDecidido, type HistoricoDecisoes,
 } from "@/lib/decisoes";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import type { ContatoDoEleito, ResultadoEleicao, ResultadoGrupo, Retrato } from "@/lib/types";
@@ -71,7 +71,10 @@ export function registrarColetasDoRetrato(
   h: HistoricoDecisoes,
   retrato: Pick<Retrato, "grupos" | "eleicao" | "geradoEm">,
 ): HistoricoDecisoes {
-  const novo = registrarColetas(h, (c) => gruposAtuaisDoCaso(c, retrato.grupos, retrato.eleicao), diaDaColeta(retrato.geradoEm));
+  // Grupo coberto só por outro caso da mesma pessoa não conta (`gruposAtuaisParaOCaso`, a mesma regra da tela).
+  const gruposDoCaso = (c: CasoDecidido): string[] =>
+    gruposAtuaisParaOCaso(c, gruposAtuaisDoCaso(c, retrato.grupos, retrato.eleicao), h.casos);
+  const novo = registrarColetas(h, gruposDoCaso, diaDaColeta(retrato.geradoEm));
   return novo.casos.every((c, i) => c === h.casos[i]) ? h : novo;
 }
 

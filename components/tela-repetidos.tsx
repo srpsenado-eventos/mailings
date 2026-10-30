@@ -3,11 +3,13 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { baixar, MIME_XLSX } from "@/components/baixar";
 import { Etiqueta } from "@/components/etiqueta";
+import { RegistroDecisao } from "@/components/registro-decisao";
 import { descreverOcorrencia, gerarXlsxRepetidas } from "@/lib/export-repetidos";
 import { textoDataHora } from "@/lib/painel";
 import {
   filtrarRepetidas, separarRepetidas, textoLinkRepetidas, type AutoridadeRepetida, type FiltroRepetidas,
 } from "@/lib/repetidos";
+import { alvoDoRepetido, registrosDoMaisRecente } from "@/lib/registro-decisao";
 import { dataDaDecisao, TEXTO_SITUACAO_REPETIDA, textoDecisao, textoNoContatos } from "@/lib/repetidos-decisoes";
 
 const FILTROS: readonly { id: FiltroRepetidas; rotulo: string }[] = [
@@ -23,7 +25,15 @@ function SituacaoDaAutoridade({ a }: { a: AutoridadeRepetida }) {
   return <Etiqueta texto={texto} tom={a.situacao === "conferir" ? "atencao" : "ok"} explicacao={a.motivo} />;
 }
 
-export function TelaRepetidos({ repetidas, geradoEm, aviso }: { repetidas: AutoridadeRepetida[]; geradoEm: string; aviso?: string }) {
+interface PropsTela {
+  repetidas: AutoridadeRepetida[];
+  geradoEm: string;
+  aviso?: string;
+  /** Em modo local cada caso ganha "Registrar decisão"; na web, só o histórico. */
+  modo: "local" | "web";
+}
+
+export function TelaRepetidos({ repetidas, geradoEm, aviso, modo }: PropsTela) {
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState<FiltroRepetidas>("todas");
   const lista = useMemo(() => filtrarRepetidas(repetidas, busca, filtro), [repetidas, busca, filtro]);
@@ -71,18 +81,18 @@ export function TelaRepetidos({ repetidas, geradoEm, aviso }: { repetidas: Autor
       </div>
 
       {lista.length === 0 && <p className="mt-8 text-sm text-cinza">Nenhuma autoridade nesta seleção.</p>}
-      {demais.length > 0 && <TabelaRepetidas lista={demais} />}
+      {demais.length > 0 && <TabelaRepetidas lista={demais} modo={modo} />}
       {eleitos.length > 0 && (
         <section className="mt-8">
           <h2 className="font-serif text-xl font-semibold">Eleitos em 2026 já no Contatos — convidar pelo grupo atual</h2>
-          <TabelaRepetidas lista={eleitos} />
+          <TabelaRepetidas lista={eleitos} modo={modo} />
         </section>
       )}
     </main>
   );
 }
 
-function TabelaRepetidas({ lista }: { lista: readonly AutoridadeRepetida[] }) {
+function TabelaRepetidas({ lista, modo }: { lista: readonly AutoridadeRepetida[]; modo: "local" | "web" }) {
   return (
     <div className="mt-6 overflow-x-auto rounded-lg border border-borda-forte bg-cartao">
       <table className="w-full text-left text-sm">
@@ -114,6 +124,7 @@ function TabelaRepetidas({ lista }: { lista: readonly AutoridadeRepetida[] }) {
                     {textoNoContatos(a.noContatos) && <span className="block text-xs">{textoNoContatos(a.noContatos)}</span>}
                   </>
                 ) : "—"}
+                <RegistroDecisao alvo={alvoDoRepetido(a)} registros={registrosDoMaisRecente(a.caso?.registros ?? [])} modo={modo} />
               </td>
               <td className="px-4 py-3">
                 <SituacaoDaAutoridade a={a} />

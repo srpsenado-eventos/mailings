@@ -219,7 +219,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
           );
         })}
         {deputados && <GrupoDeputados grupo={deputados} aberto={estaAberto(NOME_GRUPO_DEPUTADOS)} onAlternar={() => alternar(NOME_GRUPO_DEPUTADOS)} />}
-        {secoes.map((s) => <SecaoEleitos key={`${s.grupo}-${filtrando}`} secao={s} abertoInicial={filtrando} />)}
+        {secoes.map((s) => <SecaoEleitos key={`${s.grupo}-${filtrando}`} secao={s} abertoInicial={filtrando} modo={modo} decisoes={decisoes} />)}
         {secoesGov.map((s) => <SecaoGoverno key={`${s.id}-${filtrando}`} secao={s} abertoInicial={filtrando} />)}
         {grupos.length === 0 && secoes.length === 0 && secoesGov.length === 0 && !deputados && <p className="text-sm text-cinza">Nada para mostrar com este filtro.</p>}
       </div>

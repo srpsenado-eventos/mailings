@@ -47,7 +47,8 @@ export function textoReaberto(data: string): string {
   return `grupo novo desde a decisão de ${dataDaDecisao(data)}`;
 }
 
-const TEXTO_TIPO: Record<TipoDecisao, string> = {
+/** Nome de cada tipo de decisão, o mesmo na tela, no formulário e na planilha. */
+export const TEXTO_TIPO: Record<TipoDecisao, string> = {
   mesma_pessoa: "Mesma pessoa",
   pessoas_diferentes: "Pessoas diferentes",
   nao_recebe_convite: "Não recebe convite",

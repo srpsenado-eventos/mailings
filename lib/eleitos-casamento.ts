@@ -32,23 +32,67 @@ export function casaPessoa(
   return nomes.some((n) => normalizarNome(n) === alvo || pontuarPessoa(contato.nome, n) >= 1);
 }
 
-/** O deputado em exercício que é a pessoa (UF + nome civil ou de urna), se houver. */
+/** Partes do nome já normalizado, sem pontuação ("a." vira "a"). Ligações ("de", "da"...) ficam: contam como parte. */
+function partesDoNome(nome: string): string[] {
+  return normalizarNome(nome).split(" ").map((p) => p.replace(/[.,;:]/g, "")).filter(Boolean);
+}
+
+/**
+ * Os dois nomes coincidem parte a parte, na ordem e com o mesmo número de partes. Uma parte de
+ * uma letra só ("A.") casa qualquer parte do outro nome que comece com ela, nos dois sentidos.
+ * As partes de ligação não são descartadas: a Câmara e o TSE gravam a ligação no mesmo lugar
+ * ("... PESSOA DE MELO ..."), e descartá-la só afrouxaria a regra.
+ */
+export function nomesComAbreviacao(a: string, b: string): boolean {
+  const pa = partesDoNome(a);
+  const pb = partesDoNome(b);
+  if (pa.length === 0 || pa.length !== pb.length) return false;
+  return pa.every((parte, i) => {
+    const outra = pb[i];
+    if (parte === outra) return true;
+    if (parte.length === 1) return outra.startsWith(parte);
+    if (outra.length === 1) return parte.startsWith(outra);
+    return false;
+  });
+}
+
+/**
+ * Deputados distintos da lista de exercício da Câmara que são a pessoa (spec 2026-10-30 §4.3.2):
+ * nome civil igual em qualquer UF; ou nome parlamentar igual ao de urna na mesma UF; ou, na mesma
+ * UF, nome civil igual ao nome completo do TSE considerando abreviações. Zero é "fora da lista",
+ * um é "em exercício", mais de um é homônimo.
+ */
+export function deputadosEmExercicio(
+  e: { uf: string; nomeUrna: string; nomeCompleto: string },
+  atuais: readonly DeputadoAtual[],
+): DeputadoAtual[] {
+  const civil = normalizarNome(e.nomeCompleto);
+  const urna = normalizarNome(e.nomeUrna);
+  const uf = e.uf.toUpperCase();
+  return atuais.filter((d) => {
+    if (civil !== "" && normalizarNome(d.nomeCivil) === civil) return true;
+    if (d.uf.toUpperCase() !== uf) return false;
+    return (urna !== "" && normalizarNome(d.nomeParlamentar) === urna)
+      || nomesComAbreviacao(d.nomeCivil, e.nomeCompleto);
+  });
+}
+
+/**
+ * O deputado em exercício que é a pessoa, quando há exatamente um. Homônimo (mais de um) e
+ * ausência devolvem `undefined`: o caso não é decidido por quem usa isto.
+ */
 export function constaEntreAtuaisPor(
   uf: string,
   nomeCompleto: string,
   nomeUrna: string,
   atuais: readonly DeputadoAtual[],
 ): DeputadoAtual | undefined {
-  const civil = normalizarNome(nomeCompleto);
-  const urna = normalizarNome(nomeUrna);
-  return atuais.find(
-    (d) => d.uf.toUpperCase() === uf.toUpperCase()
-      && (normalizarNome(d.nomeCivil) === civil || normalizarNome(d.nomeParlamentar) === urna),
-  );
+  const achados = deputadosEmExercicio({ uf, nomeCompleto, nomeUrna }, atuais);
+  return achados.length === 1 ? achados[0] : undefined;
 }
 
 export const constaEntreAtuais = (e: EleitoPlanilha, atuais: readonly DeputadoAtual[]): boolean =>
-  constaEntreAtuaisPor(e.uf, e.nomeCompleto, e.nomeUrna, atuais) !== undefined;
+  deputadosEmExercicio(e, atuais).length === 1;
 
 export const chavePessoa = (c: ContatoPlanilha): string => c.id ?? normalizarNome(c.nome);
 

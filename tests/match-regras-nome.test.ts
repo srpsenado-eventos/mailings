@@ -331,3 +331,99 @@ describe("Nome da página com o prefixo do presidente: o esperado copiável nunc
     expect(achadosDe(v.resultado.comparacoes)).toContain("nome_sem_prefixo");
   });
 });
+
+describe("Cargo do ex-presidente com o período (Camada C) nos caminhos de ResultadoContato", () => {
+  const GRUPO_EX = "Ex-Presidentes do Senado";
+  const ex = (cargo = "Ex-Presidente do Senado Federal"): ContatoPlanilha => ({
+    nome: "Rui Fictício Barbosa",
+    grupo: GRUPO_EX,
+    cargo,
+    ...CADASTRO_OK,
+  });
+  // A página `nova-republica` lista os ex-presidentes sem cargo (catálogo, conferida em 23/10).
+  const paginaSemCargo: ConteudoFonte = {
+    url: "https://www25.senado.leg.br/web/senadores/nova-republica",
+    textoLimpo: "Rui Fictício Barbosa",
+    destaques: [],
+    pessoas: [{ nome: "Rui Fictício Barbosa", origem: "pagina" }],
+  };
+  const cargoDivergente = (comparacoes: readonly ComparacaoCampo[]) =>
+    comparacoes.find((c) => c.campo === "cargo" && c.achado === "cargo_ex_presidente");
+
+  test('pessoa casada com "Ex-Presidente" pinta amarelo no cargo, com o formato do GT como esperado', () => {
+    // Act
+    const g = compararGrupo(GRUPO_EX, [ex()], paginaSemCargo, GRUPO_EX);
+
+    // Assert
+    const r = g.contatos[0];
+    expect(r.semaforo).toBe("amarelo");
+    expect(cargoDivergente(r.comparacoes)?.valorEsperado).toBe("Presidente do Senado Federal de AAAA a AAAA");
+    expect(r.camposDivergentes.map((d) => d.campo)).toContain("cargo");
+  });
+
+  test("pessoa casada com o cargo no formato do GT: cargo sem achado", () => {
+    // Act
+    const g = compararGrupo(GRUPO_EX, [ex("Presidente do Senado Federal de 2019 a 2021")], paginaSemCargo, GRUPO_EX);
+
+    // Assert
+    expect(cargoDivergente(g.contatos[0].comparacoes)).toBeUndefined();
+    expect(g.contatos[0].camposDivergentes.map((d) => d.campo)).not.toContain("cargo");
+  });
+
+  test('página com "Presidente do Senado Federal" confirma o cargo com o período', () => {
+    // Arrange
+    const pagina: ConteudoFonte = {
+      ...paginaSemCargo,
+      pessoas: [{ nome: "Rui Fictício Barbosa", cargo: "Presidente do Senado Federal", origem: "pagina" }],
+    };
+
+    // Act
+    const g = compararGrupo(GRUPO_EX, [ex("Presidente do Senado Federal de 2019 a 2021")], pagina, GRUPO_EX);
+
+    // Assert
+    const cargo = g.contatos[0].comparacoes.find((c) => c.campo === "cargo" && c.origemValor !== "coerencia");
+    expect(cargo?.situacao).toBe("confere");
+  });
+
+  test("possível saída: acusa o cargo e continua vermelho, nunca sai da possível saída", () => {
+    // Act
+    const g = compararGrupo(GRUPO_EX, [ex()], { ...paginaSemCargo, pessoas: [] }, GRUPO_EX);
+
+    // Assert
+    expect(g.contatos[0].possivelSaida).toBe(true);
+    expect(g.contatos[0].semaforo).toBe("vermelho");
+    expect(cargoDivergente(g.contatos[0].comparacoes)).toBeDefined();
+  });
+
+  test("fonte inacessível: acusa o cargo e continua indeterminado", () => {
+    // Act
+    const g = marcarFonteInacessivel(GRUPO_EX, [ex()], paginaSemCargo.url, "timeout", GRUPO_EX);
+
+    // Assert
+    expect(g.contatos[0].semaforo).toBe("indeterminado");
+    expect(cargoDivergente(g.contatos[0].comparacoes)).toBeDefined();
+  });
+
+  test("grupo sem fonte (Ex-Presidentes da República): acusa o cargo sem perder o campo 'fonte', e continua vermelho", () => {
+    // Arrange
+    const c: ContatoPlanilha = { ...ex("Ex-Presidente da República"), grupo: "Ex-Presidentes da República" };
+
+    // Act
+    const g = compararGrupo("Ex-Presidentes da República", [c], undefined, "Ex-Presidentes da República");
+
+    // Assert
+    expect(g.contatos[0].semaforo).toBe("vermelho");
+    expect(cargoDivergente(g.contatos[0].comparacoes)?.valorEsperado).toBe(
+      "Presidente da República Federativa do Brasil de AAAA a AAAA",
+    );
+    expect(g.contatos[0].camposDivergentes.map((d) => d.campo)).toContain("fonte");
+  });
+
+  test('"Ex-Senador" em Senadores não é acusado', () => {
+    // Act
+    const g = compararGrupo("Senadores", [{ ...ex("Ex-Senador"), grupo: "Senadores" }], undefined, "Senadores");
+
+    // Assert
+    expect(cargoDivergente(g.contatos[0].comparacoes)).toBeUndefined();
+  });
+});

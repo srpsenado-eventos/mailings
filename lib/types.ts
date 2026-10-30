@@ -46,7 +46,8 @@ export type AchadoCoerencia =
   | "forma_generica"
   | "campo_vazio"
   | "nome_tratamento_academico"
-  | "nome_sem_prefixo";
+  | "nome_sem_prefixo"
+  | "cargo_ex_presidente";
 
 /** Uma pessoa extraída (estruturada) da fonte oficial. */
 export interface PessoaSite {
@@ -157,6 +158,11 @@ export interface ComparacaoCampo {
    * há: a regra do grupo dá a correção objetiva, e `valorEsperado` a carrega.
    */
   achado?: AchadoCoerencia;
+  /**
+   * Orientação ao usuário que acompanha o achado, quando o valor esperado não basta
+   * ("Informar o período da presidência", spec 2026-10-30 §3.5).
+   */
+  observacao?: string;
   /** Página de onde saiu o valor esperado, ou que se tentou ler quando `nao_verificado` (spec 2026-10-15 §5.1). */
   fonteUrl?: string;
 }

@@ -41,6 +41,12 @@ export interface RegraNome {
    * nunca propõe tirar o prefixo; a comparação com a página já o ignora (`normalizarNome`).
    */
   prefixoDoPresidente?: "ministro" | "presidente";
+  /**
+   * Cargo que o ex-presidente leva no cadastro, seguido do período da presidência ("Presidente
+   * do Senado Federal de 2019 a 2021"), sem "Ex-" (spec 2026-10-30 §3.5, decisão 5 do Clovis).
+   * Regra do campo `Cargo`, aplicada por `comparacaoCargoExPresidente` (`lib/regras-cargo.ts`).
+   */
+  cargoComPeriodo?: string;
 }
 
 /** Os 6 grupos de tribunal: o Presidente leva "Ministro(a)" no nome. */
@@ -56,4 +62,7 @@ export const REGRAS_NOME: Readonly<Record<string, RegraNome>> = {
   },
   // O nome é "Presidente Luís Inácio Lula da Silva": o prefixo é regra, não erro (GT, 2026-10-30).
   "Presidente da República": { prefixoDoPresidente: "presidente" },
+  // O cargo é o da presidência com o período, nunca "Ex-Presidente…" (GT, 2026-10-30).
+  "Ex-Presidentes do Senado": { cargoComPeriodo: "Presidente do Senado Federal" },
+  "Ex-Presidentes da República": { cargoComPeriodo: "Presidente da República Federativa do Brasil" },
 };

@@ -30,6 +30,7 @@ import {
   comparacoesProtocolo,
   nomeEsperadoComPrefixo,
 } from "@/lib/tratamento";
+import { comparacaoCargoExPresidente } from "@/lib/regras-cargo";
 
 const LIMIAR_PESSOA = 0.6;
 const LIMIAR_TOKEN = 0.85;
@@ -264,6 +265,7 @@ export function comparacoesTratamento(
     ...comparacoesProtocolo(contato),
     ...comparacaoRegraNome(contato, grupoCanonico),
     ...comparacaoPrefixoNome(contato, grupoCanonico),
+    ...comparacaoCargoExPresidente(contato, grupoCanonico),
   ];
 }
 

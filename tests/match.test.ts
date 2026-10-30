@@ -753,3 +753,16 @@ describe("cargo nos tribunais (spec 2026-10-30 §3.2)", () => {
     expect(r.contatos[0].comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("divergente");
   });
 });
+
+describe("cargo do ex-presidente com o período (spec 2026-10-30 §3.5)", () => {
+  test("o período não atrapalha o papel: confere com a página que diz o cargo sem período", () => {
+    // Assert
+    expect(situacaoCampo("Presidente do Senado Federal de 2019 a 2021", "Presidente do Senado Federal")).toBe("confere");
+    expect(situacaoCampo("Presidente do Senado Federal de 1995 a 1997 e de 2009 a 2011", "Presidente do Senado Federal")).toBe("confere");
+  });
+
+  test('"1º Vice-Presidente" na página continua divergente', () => {
+    // Assert
+    expect(situacaoCampo("Presidente do Senado Federal de 2019 a 2021", "1º Vice-Presidente")).toBe("divergente");
+  });
+});

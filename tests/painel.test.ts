@@ -125,6 +125,22 @@ describe("etiquetasDoContato", () => {
     expect(t.some((x) => x.startsWith("Nome") || x.startsWith("Cargo"))).toBe(false);
   });
 
+  test("possível saída com achado da Camada C no cargo (ex-presidente) mostra 'Cargo diverge'", () => {
+    const c = contato({
+      semaforo: "vermelho", possivelSaida: true,
+      contato: { nome: "Rui Fictício", grupo: "Ex-Presidentes do Senado", cargo: "Ex-Presidente do Senado Federal" },
+      comparacoes: [{
+        campo: "cargo", valorPlanilha: "Ex-Presidente do Senado Federal", valorEsperado: "Presidente do Senado Federal de AAAA a AAAA",
+        situacao: "divergente", origemValor: "coerencia", achado: "cargo_ex_presidente", observacao: "Informar o período da presidência",
+      }],
+    });
+    expect(textos(c, grupoComFonte).slice(0, 2)).toEqual(["Sem par na fonte", "Cargo diverge"]);
+    const cargo = detalhesDoContato(c, grupoComFonte).find((d) => d.campo === "cargo");
+    expect(cargo?.coerencias).toEqual([
+      "Cargo de ex-presidente fora do formato do GT (Presidente do Senado Federal de AAAA a AAAA). Informar o período da presidência",
+    ]);
+  });
+
   test("possível saída com achado da Camada C no nome mostra as duas coisas (contrato herdado de celulaDivergencias)", () => {
     const c = contato({
       semaforo: "vermelho", possivelSaida: true,

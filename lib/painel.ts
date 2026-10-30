@@ -130,10 +130,12 @@ export function etiquetasDoContato(c: ResultadoContato, _g: ResultadoGrupo): Eti
   const lista: Etiqueta[] = [];
   const semCargo = cargoEstaVazio(c);
   if (c.possivelSaida) {
-    // Não há com o que comparar nome e cargo; só a Camada C (nome) ainda pode acusar.
+    // Não há com o que comparar nome e cargo; só a Camada C (nome; cargo do ex-presidente) ainda pode acusar.
     lista.push({ campo: "fonte", texto: "Sem par na fonte", tom: "ruim", explicacao: EXPLICACAO.semParNaFonte });
-    const nome = etiquetaDoCampo(c, "nome");
-    if (nome?.tom === "atencao") lista.push(nome);
+    for (const campo of ["nome", "cargo"] as const) {
+      const e = etiquetaDoCampo(c, campo);
+      if (e?.tom === "atencao") lista.push(e);
+    }
   } else {
     const nome = etiquetaDoCampo(c, "nome");
     if (nome) lista.push(nome);

@@ -23,12 +23,14 @@ export async function POST(req: NextRequest) {
     const decisoes = await armazemDecisoesPadrao().ler();
     const publicadoEm = new Date().toISOString();
     const cliente = clienteBlobPadrao(token);
-    await armazemDecisoesEmBlob(cliente).gravar(decisoes);
+    // O retrato primeiro: é o que a web mostra. Se as decisões falharem depois, a web fica com o
+    // retrato novo e as decisões da publicação anterior, e publicar de novo acerta as duas.
     await armazemEmBlob(cliente).gravarRetrato(enxugarParaPublicar(retrato, publicadoEm));
+    await armazemDecisoesEmBlob(cliente).gravar(decisoes);
     return NextResponse.json({ ok: true, publicadoEm });
   } catch (err) {
     if (err instanceof RetratoIlegivelError) return NextResponse.json({ ok: false, message: "O retrato local não pôde ser lido." }, { status: 422 });
-    if (err instanceof DecisoesIlegiveisError) return NextResponse.json({ ok: false, message: "O arquivo .fiscal/decisoes.json não pôde ser lido; nada foi publicado." }, { status: 422 });
+    if (err instanceof DecisoesIlegiveisError) return NextResponse.json({ ok: false, message: "O arquivo .fiscal/decisoes.json não pôde ser lido; nada foi publicado. Restaure o arquivo .fiscal/decisoes.json ou renomeie-o para começar vazio." }, { status: 422 });
     // Só o motivo técnico: nunca o retrato.
     console.error("[/api/publicar] falha:", err instanceof Error ? err.message : "erro desconhecido");
     return NextResponse.json({ ok: false, message: "Não foi possível publicar. Tente de novo." }, { status: 500 });

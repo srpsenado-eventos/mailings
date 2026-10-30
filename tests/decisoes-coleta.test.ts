@@ -1,7 +1,12 @@
 import { describe, expect, test } from "vitest";
-import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_DEPUTADOS_FEDERAIS, GRUPO_GOVERNADORES, GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES } from "@/data/grupos-posse";
+import {
+  GRUPO_DEPUTADOS_ELEITOS, GRUPO_DEPUTADOS_FEDERAIS, GRUPO_GOVERNADORES, GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES, GRUPO_SENADORES_ELEITOS,
+} from "@/data/grupos-posse";
+import { situacaoDoCaso } from "@/lib/decisoes";
 import { HISTORICO_VAZIO, registrar, type CasoDecidido, type RegistroManual } from "@/lib/decisoes";
-import { diaDaColeta, gruposAtuaisDoCaso, registrarColetasDoRetrato } from "@/lib/decisoes-coleta";
+import {
+  AVISO_DECISOES_NAO_ATUALIZADAS, avisoDoParametro, diaDaColeta, gruposAtuaisDoCaso, registrarColetasDoRetrato, rotaDepoisDaVarredura,
+} from "@/lib/decisoes-coleta";
 import type {
   DeputadoAtual, EleitoClassificado, GovernadorClassificado, ResultadoContato, ResultadoEleicao, ResultadoGrupo,
 } from "@/lib/types";
@@ -55,43 +60,36 @@ describe("gruposAtuaisDoCaso", () => {
       .toEqual(["Ministros do STJ"]);
   });
 
-  test("deputado da planilha da Câmara vale como Deputados Federais, pelo nome parlamentar ou civil", () => {
+  test("a planilha da Câmara é lista de fora e não entra nos grupos atuais", () => {
     const c = caso("Rui Fictício Lima");
     const eleicao = eleicaoCom({ deputadosAtuais: [deputado("Rui Fictício", "Rui Fictício Lima")] });
-    expect(gruposAtuaisDoCaso(c, [grupo(GRUPO_SENADORES, ["Rui Fictício Lima"])], eleicao)).toEqual([GRUPO_SENADORES, GRUPO_DEPUTADOS_FEDERAIS]);
+    expect(gruposAtuaisDoCaso(c, [grupo(GRUPO_SENADORES, ["Rui Fictício Lima"])], eleicao)).toEqual([GRUPO_SENADORES]);
   });
 
-  test("com o grupo Deputados Federais no Contatos, a planilha da Câmara não conta", () => {
-    const c = caso("Rui Fictício");
-    const eleicao = eleicaoCom({ camaraNoContatos: true, deputadosAtuais: [deputado("Rui Fictício", "Rui Fictício Lima")] });
-    expect(gruposAtuaisDoCaso(c, [grupo(GRUPO_SENADORES, ["Rui Fictício"])], eleicao)).toEqual([GRUPO_SENADORES]);
-  });
-
-  test("eleito ligado vale como o seu grupo de destino", () => {
+  test("eleito ligado entra pelos grupos do Contatos a que está ligado, nunca pelo grupo de destino", () => {
+    // Arrange: ligado a uma linha de Senadores; o destino (Deputados eleitos) é lista de fora
     const c = caso("Bia Fictícia");
-    const eleicao = eleicaoCom({ eleitos: [eleitoDeputado("Bia Fictícia", "Beatriz Fictícia Souza")] });
-    expect(gruposAtuaisDoCaso(c, [grupo(GRUPO_SENADORES, ["Bia Fictícia"])], eleicao)).toEqual([GRUPO_SENADORES, GRUPO_DEPUTADOS_ELEITOS]);
+    const eleicao = eleicaoCom({ eleitos: [eleitoDeputado("Bia Fictícia", "Beatriz Fictícia Souza", { contatos: [{ grupo: "senadores ", nome: "Bia Fictícia" }] })] });
+    // Act
+    const atuais = gruposAtuaisDoCaso(c, [], eleicao);
+    // Assert
+    expect(atuais).toEqual([GRUPO_SENADORES]);
   });
 
-  test("eleito sem ligação ao Contatos, ou sem grupo de destino, não conta", () => {
+  test("eleito sem ligação ao Contatos não acrescenta grupo", () => {
     const c = caso("Bia Fictícia");
-    const eleicao = eleicaoCom({
-      eleitos: [
-        eleitoDeputado("Bia Fictícia", "Beatriz Fictícia Souza", { contatos: [] }),
-        eleitoDeputado("Bia Fictícia", "Beatriz Fictícia Souza", { destino: "conferir", grupoDestino: undefined }),
-      ],
-    });
+    const eleicao = eleicaoCom({ eleitos: [eleitoDeputado("Bia Fictícia", "Beatriz Fictícia Souza", { contatos: [] })] });
     expect(gruposAtuaisDoCaso(c, [], eleicao)).toEqual([]);
   });
 
-  test("governador eleito ligado entra pelo nome completo", () => {
+  test("governador eleito ligado entra pelo nome completo, com os grupos do Contatos dele", () => {
     const c = caso("Lu Fictício Completo");
     const eleicao = eleicaoCom({ governadores: { eleitos: [governador("Lu Fictício", { grupoDestino: GRUPO_GOVERNADORES_ELEITOS })], segundoTurno: [] } });
-    expect(gruposAtuaisDoCaso(c, [], eleicao)).toEqual([GRUPO_GOVERNADORES_ELEITOS]);
+    expect(gruposAtuaisDoCaso(c, [], eleicao)).toEqual([GRUPO_GOVERNADORES]);
   });
 
   test("ocorrência marcada como outra pessoa fica de fora (caso Lucas Ribeiro)", () => {
-    // Arrange: mesma pessoa em Governadores e Governadores eleitos; o deputado da Câmara é outro
+    // Arrange: a linha de Deputados Federais casou pelo nome, mas é outra pessoa
     const c = caso("Lu Fictício", ["Lu Fictício Completo"], decisao({
       convidaPor: GRUPO_GOVERNADORES, grupos: [GRUPO_GOVERNADORES, GRUPO_GOVERNADORES_ELEITOS, GRUPO_DEPUTADOS_FEDERAIS],
       outraPessoa: [GRUPO_DEPUTADOS_FEDERAIS],
@@ -101,9 +99,55 @@ describe("gruposAtuaisDoCaso", () => {
       governadores: { eleitos: [governador("Lu Fictício")], segundoTurno: [] },
     });
     // Act
-    const atuais = gruposAtuaisDoCaso(c, [grupo("Governadores ", ["Lu Fictício"])], eleicao);
+    const atuais = gruposAtuaisDoCaso(c, [grupo("Governadores ", ["Lu Fictício"]), grupo(GRUPO_DEPUTADOS_FEDERAIS, ["Lu Fictício"])], eleicao);
     // Assert
     expect(atuais).toEqual([GRUPO_GOVERNADORES]);
+  });
+
+  describe("eleito decidido para Senadores eleitos (caso Deltan)", () => {
+    const decidido = () => caso("Deltan Fictício", [], decisao({
+      convidaPor: GRUPO_SENADORES_ELEITOS, grupos: [GRUPO_SENADORES_ELEITOS],
+    }));
+    const eleicao = (contatos: { grupo: string; nome: string }[]) => eleicaoCom({
+      eleitos: [{
+        eleito: { casa: "senado", uf: "PR", nomeUrna: "Deltan Fictício", nomeCompleto: "Deltan Fictício Completo", situacaoTse: "Eleito", statusMandato: "Novo" },
+        destino: "novo", projecao: false, contatos, grupoDestino: GRUPO_SENADORES_ELEITOS,
+      }],
+    });
+
+    test("ainda não cadastrado: nenhum grupo atual, pendente no Contatos", () => {
+      const c = decidido();
+      const atuais = gruposAtuaisDoCaso(c, [], eleicao([]));
+      expect(atuais).toEqual([]);
+      expect(situacaoDoCaso(c, atuais)).toBe("pendente");
+    });
+
+    test("cadastrado no grupo de destino: tratado no Contatos", () => {
+      const c = decidido();
+      const grupos = [grupo(GRUPO_SENADORES_ELEITOS, ["Deltan Fictício"])];
+      const atuais = gruposAtuaisDoCaso(c, grupos, eleicao([{ grupo: GRUPO_SENADORES_ELEITOS, nome: "Deltan Fictício" }]));
+      expect(atuais).toEqual([GRUPO_SENADORES_ELEITOS]);
+      expect(situacaoDoCaso(c, atuais)).toBe("tratado");
+    });
+  });
+});
+
+describe("aviso das decisões depois da varredura", () => {
+  test("sem aviso, a tela volta ao painel", () => {
+    expect(rotaDepoisDaVarredura(undefined)).toBe("/");
+  });
+
+  test("com aviso, o painel recebe só a marca na URL e mostra o texto fixo", () => {
+    const rota = rotaDepoisDaVarredura(AVISO_DECISOES_NAO_ATUALIZADAS);
+    const parametro = new URL(rota, "http://localhost").searchParams.get("aviso") ?? undefined;
+    expect(rota).not.toContain(" ");
+    expect(avisoDoParametro(parametro)).toBe(AVISO_DECISOES_NAO_ATUALIZADAS);
+  });
+
+  test("parâmetro desconhecido ou ausente não vira aviso", () => {
+    expect(avisoDoParametro(undefined)).toBeUndefined();
+    expect(avisoDoParametro("<script>")).toBeUndefined();
+    expect(avisoDoParametro(["decisoes", "x"])).toBe(AVISO_DECISOES_NAO_ATUALIZADAS);
   });
 });
 

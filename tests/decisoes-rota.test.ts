@@ -84,6 +84,9 @@ describe("tratarRegistroDeDecisao", () => {
     ["data fora do formato", corpo("Ana Fictícia", { data: "26/10/2026" })],
     ["validação desconhecida", corpo("Ana Fictícia", { validacao: "talvez" })],
     ["grupos ausentes", corpo("Ana Fictícia", { grupos: undefined })],
+    ["grupos vazios", corpo("Ana Fictícia", { grupos: [] })],
+    ["data que não existe", corpo("Ana Fictícia", { data: "2026-13-45" })],
+    ["31 de fevereiro", corpo("Ana Fictícia", { data: "2026-02-31" })],
     ["mesma_pessoa sem convidaPor", corpo("Ana Fictícia", { convidaPor: undefined })],
     ["nome só com tratamento", corpo("Dr.")],
   ])("%s responde 400", async (_caso, valor) => {

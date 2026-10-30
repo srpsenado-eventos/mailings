@@ -1,9 +1,7 @@
-import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
 import {
   grupoEquivalente, registrarColetas, vigente, type CasoDecidido, type HistoricoDecisoes,
 } from "@/lib/decisoes";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
-import { NOME_GRUPO_DEPUTADOS, temGrupoDeputados } from "@/lib/painel-deputados";
 import type { ContatoDoEleito, ResultadoEleicao, ResultadoGrupo, Retrato } from "@/lib/types";
 
 /**
@@ -14,38 +12,25 @@ import type { ContatoDoEleito, ResultadoEleicao, ResultadoGrupo, Retrato } from 
 interface EleitoDoEixo {
   nomes: readonly string[];
   contatos: readonly ContatoDoEleito[];
-  grupoDaLista: string;
-  grupoDestino?: string;
 }
 
-/** Eleitos de 2026 (Senado, Câmara e governos) com os nomes e o grupo de destino. */
+/** Eleitos de 2026 (Senado, Câmara e governos) com os nomes e as linhas do Contatos ligadas. */
 function eleitosDoEixo(eleicao: ResultadoEleicao): EleitoDoEixo[] {
-  const parlamentares = eleicao.eleitos.map(({ eleito, contatos, grupoDestino }) => ({
+  return [...eleicao.eleitos, ...(eleicao.governadores?.eleitos ?? [])].map(({ eleito, contatos }) => ({
     nomes: [eleito.nomeUrna, eleito.nomeCompleto],
     contatos,
-    grupoDaLista: eleito.casa === "senado" ? GRUPO_SENADORES_ELEITOS : GRUPO_DEPUTADOS_ELEITOS,
-    ...(grupoDestino ? { grupoDestino } : {}),
   }));
-  const governadores = (eleicao.governadores?.eleitos ?? []).map(({ eleito, contatos, grupoDestino }) => ({
-    nomes: [eleito.nomeUrna, eleito.nomeCompleto],
-    contatos,
-    grupoDaLista: GRUPO_GOVERNADORES_ELEITOS,
-    ...(grupoDestino ? { grupoDestino } : {}),
-  }));
-  return [...parlamentares, ...governadores];
 }
 
 const casaAlgumaChave = (nomes: readonly string[], chaves: ReadonlySet<string>): boolean =>
   nomes.some((n) => chaves.has(normalizarNome(n)));
 
 /**
- * Grupos atuais do caso, na forma equivalente (`grupoEquivalente`), sem repetição:
- * - contatos de `grupos` cujo nome normalizado é uma chave do caso;
- * - deputados atuais da planilha da Câmara (nome parlamentar ou civil), enquanto o grupo Deputados
- *   Federais não existe no Contatos, valendo como "Deputados Federais";
- * - eleitos de 2026 ligados a linhas do Contatos e com grupo de destino, valendo como esse grupo
- *   (eleito em `conferir`, sem destino, não conta: as linhas dele no Contatos já contam).
- * Saem os grupos que a decisão vigente marcou como outra pessoa (`outraPessoa`).
+ * Grupos atuais do caso **no Contatos**, na forma equivalente (`grupoEquivalente`), sem repetição:
+ * - os grupos do retrato com um contato cujo nome normalizado é uma chave do caso;
+ * - os grupos das linhas do Contatos ligadas aos eleitos de 2026 do caso (pelo nome de urna ou completo).
+ * As listas de fora (planilha da Câmara, grupo de destino do eleito) não entram: a situação no
+ * Contatos só olha o Contatos. Saem os grupos que a decisão vigente marcou como outra pessoa.
  */
 export function gruposAtuaisDoCaso(
   caso: CasoDecidido,
@@ -53,22 +38,16 @@ export function gruposAtuaisDoCaso(
   eleicao?: ResultadoEleicao,
 ): string[] {
   const chaves = new Set(caso.chaves);
-  const doContatos = grupos
+  const doRetrato = grupos
     .filter((g) => g.contatos.some((c) => chaves.has(normalizarNome(c.contato.nome))))
-    .map((g) => grupoEquivalente(g.grupo, "contatos"));
-  const daCamara = eleicao && temGrupoDeputados(eleicao)
-    && (eleicao.deputadosAtuais ?? []).some((d) => casaAlgumaChave([d.nomeParlamentar, d.nomeCivil], chaves))
-    ? [grupoEquivalente(NOME_GRUPO_DEPUTADOS, "camara")]
-    : [];
-  const daEleicao = eleicao
-    ? eleitosDoEixo(eleicao)
-      .filter((e) => e.contatos.length > 0 && e.grupoDestino !== undefined && casaAlgumaChave(e.nomes, chaves))
-      .map((e) => grupoEquivalente(e.grupoDaLista, "eleicao", e.grupoDestino))
+    .map((g) => g.grupo);
+  const dosEleitos = eleicao
+    ? eleitosDoEixo(eleicao).filter((e) => casaAlgumaChave(e.nomes, chaves)).flatMap((e) => e.contatos.map((c) => c.grupo))
     : [];
 
   const outraPessoa = new Set((vigente(caso)?.outraPessoa ?? []).map((g) => normalizarTexto(grupoEquivalente(g, "contatos"))));
   const vistos = new Set<string>();
-  return [...doContatos, ...daCamara, ...daEleicao].filter((g) => {
+  return [...doRetrato, ...dosEleitos].map((g) => grupoEquivalente(g, "contatos")).filter((g) => {
     const chave = normalizarTexto(g);
     if (outraPessoa.has(chave) || vistos.has(chave)) return false;
     vistos.add(chave);
@@ -94,4 +73,25 @@ export function registrarColetasDoRetrato(
 ): HistoricoDecisoes {
   const novo = registrarColetas(h, (c) => gruposAtuaisDoCaso(c, retrato.grupos, retrato.eleicao), diaDaColeta(retrato.geradoEm));
   return novo.casos.every((c, i) => c === h.casos[i]) ? h : novo;
+}
+
+/** Aviso da varredura cujo histórico de decisões não pôde ser atualizado (o retrato foi guardado). */
+export const AVISO_DECISOES_NAO_ATUALIZADAS =
+  "A varredura terminou e o retrato foi guardado, mas o histórico das decisões do GT não foi atualizado com esta coleta.";
+
+const PARAMETRO_AVISO = "aviso";
+const VALOR_AVISO_DECISOES = "decisoes";
+
+/**
+ * Para onde a tela de Nova varredura vai depois de uma varredura guardada. Com o aviso das
+ * decisões, a URL leva só uma marca fixa (nunca o texto), e o painel mostra o texto.
+ */
+export function rotaDepoisDaVarredura(avisoDecisoes: string | undefined): string {
+  return avisoDecisoes ? `/?${PARAMETRO_AVISO}=${VALOR_AVISO_DECISOES}` : "/";
+}
+
+/** Texto do aviso a partir do parâmetro `aviso` da URL do painel; outro valor não vira aviso. */
+export function avisoDoParametro(valor: string | string[] | undefined): string | undefined {
+  const primeiro = Array.isArray(valor) ? valor[0] : valor;
+  return primeiro === VALOR_AVISO_DECISOES ? AVISO_DECISOES_NAO_ATUALIZADAS : undefined;
 }

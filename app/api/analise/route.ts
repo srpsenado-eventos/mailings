@@ -3,7 +3,7 @@ import { analisar, type Dependencias } from "@/lib/analise";
 import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload";
 import { armazemPadrao, type Armazem } from "@/lib/armazem";
 import { armazemDecisoesPadrao, atualizarDecisoes } from "@/lib/armazem-decisoes";
-import { registrarColetasDoRetrato } from "@/lib/decisoes-coleta";
+import { AVISO_DECISOES_NAO_ATUALIZADAS, registrarColetasDoRetrato } from "@/lib/decisoes-coleta";
 import { aplicarEleicao } from "@/lib/eleitos";
 import { resolverGrupoEFonte } from "@/lib/catalogo";
 import { aplicarListas } from "@/lib/grupos-lista";
@@ -17,11 +17,11 @@ import { extrairComposicao, diagnosticarIa } from "@/lib/gemini";
 import type { Retrato } from "@/lib/types";
 
 const AVISO_NAO_GUARDADO = "A varredura terminou, mas o retrato não pôde ser guardado: na próxima abertura o app não a terá.";
-const AVISO_DECISOES = "A varredura terminou e o retrato foi guardado, mas o histórico das decisões do GT não foi atualizado com esta coleta.";
 
 /**
  * Situação no Contatos de cada caso decidido (spec 2026-10-30 §4.1.4), só com o retrato guardado.
- * Falha vira aviso e não derruba a varredura; o arquivo de decisões ilegível não é sobrescrito.
+ * Falha vira `avisoDecisoes` (campo próprio: `aviso` quer dizer "retrato não guardado" para a tela)
+ * e não derruba a varredura; o arquivo de decisões ilegível não é sobrescrito.
  */
 async function registrarColetaNasDecisoes(retrato: Retrato): Promise<string | undefined> {
   try {
@@ -30,7 +30,7 @@ async function registrarColetaNasDecisoes(retrato: Retrato): Promise<string | un
   } catch (err) {
     // Só o motivo técnico: nada de nomes no log.
     console.error("[/api/analise] decisões não atualizadas:", err instanceof Error ? err.message : "erro desconhecido");
-    return AVISO_DECISOES;
+    return AVISO_DECISOES_NAO_ATUALIZADAS;
   }
 }
 
@@ -120,13 +120,13 @@ export async function POST(req: NextRequest) {
       console.error("[/api/analise] retrato não guardado:", err instanceof Error ? err.message : "erro desconhecido");
       aviso = AVISO_NAO_GUARDADO;
     }
-    if (!aviso) aviso = await registrarColetaNasDecisoes(retrato);
+    const avisoDecisoes = aviso ? undefined : await registrarColetaNasDecisoes(retrato);
 
     // Diagnóstico temporário (não-PII): só roda com ?diag=1 (custo zero no fluxo normal).
     const diag = req.nextUrl.searchParams.get("diag") === "1" ? await diagnosticarIa() : undefined;
     // A base inteira tem PII e a memória só interessa à máquina: ambas já estão no arquivo local.
     const { baseEnderecos: _baseGuardada, leituras: _memoria, ...retratoDaResposta } = retrato;
-    return NextResponse.json({ ok: true, retrato: retratoDaResposta, ...(aviso ? { aviso } : {}), ...(diag ? { diag } : {}) });
+    return NextResponse.json({ ok: true, retrato: retratoDaResposta, ...(aviso ? { aviso } : {}), ...(avisoDecisoes ? { avisoDecisoes } : {}), ...(diag ? { diag } : {}) });
   } catch (err) {
     if (err instanceof PayloadInvalidoError) {
       return NextResponse.json({ ok: false, message: err.message }, { status: 422 });

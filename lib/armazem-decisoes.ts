@@ -37,6 +37,14 @@ const SITUACOES: readonly SituacaoNoContatos[] = ["tratado", "pendente", "reaber
 const VALIDACOES: readonly RegistroManual["validacao"][] = ["validado", "a_validar"];
 const DATA = /^\d{4}-\d{2}-\d{2}$/;
 
+/** `AAAA-MM-DD` de um dia que existe ("2026-02-31" e "2026-13-45" não servem). */
+function ehData(v: unknown): v is string {
+  if (typeof v !== "string" || !DATA.test(v)) return false;
+  const [ano, mes, dia] = v.split("-").map(Number);
+  const d = new Date(Date.UTC(ano, mes - 1, dia));
+  return d.getUTCFullYear() === ano && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
+}
+
 /** Resultado de uma leitura: o valor, ou o motivo (sem nomes de pessoas) por que não serve. */
 type Leitura<T> = { ok: true; valor: T } | { ok: false; motivo: string };
 
@@ -62,7 +70,7 @@ export function lerRegistroManual(valor: unknown): Leitura<RegistroManual> {
   const o = objeto(valor);
   if (!o) return falha("o registro não é um objeto");
   if (!ehUm(TIPOS, o.tipo)) return falha(`registro sem tipo válido (${TIPOS.join(", ")})`);
-  if (typeof o.data !== "string" || !DATA.test(o.data)) return falha("registro sem data no formato AAAA-MM-DD");
+  if (!ehData(o.data)) return falha("registro sem data válida no formato AAAA-MM-DD");
   if (typeof o.quem !== "string") return falha("registro sem quem (texto)");
   if (typeof o.observacao !== "string") return falha("registro sem observacao (texto)");
   if (!ehUm(VALIDACOES, o.validacao)) return falha(`registro sem validacao válida (${VALIDACOES.join(" ou ")})`);
@@ -80,7 +88,7 @@ export function lerRegistroManual(valor: unknown): Leitura<RegistroManual> {
 }
 
 function lerRegistroColeta(o: Record<string, unknown>): Leitura<RegistroColeta> {
-  if (typeof o.data !== "string" || !DATA.test(o.data)) return falha("coleta sem data no formato AAAA-MM-DD");
+  if (!ehData(o.data)) return falha("coleta sem data válida no formato AAAA-MM-DD");
   if (!ehUm(SITUACOES, o.situacao)) return falha("coleta sem situação válida");
   if (!ehTextos(o.grupos)) return falha("coleta sem grupos (lista de textos)");
   return { ok: true, valor: { tipo: "coleta", data: o.data, situacao: o.situacao, grupos: [...o.grupos] } };
@@ -216,6 +224,9 @@ function lerPedido(corpo: unknown): Leitura<PedidoDeDecisao> {
   if (!ehTextos(o.nomes)) return falha("nomes deve ser uma lista de textos.");
   const registro = lerRegistroManual(o.registro);
   if (!registro.ok) return falha(`Registro inválido: ${registro.motivo}.`);
+  if (registro.valor.grupos.every((g) => g.trim() === "")) {
+    return falha("Registro inválido: grupos vazio (informe os grupos do caso).");
+  }
   if (registro.valor.tipo === "mesma_pessoa" && !registro.valor.convidaPor?.trim()) {
     return falha("Registro inválido: mesma_pessoa exige convidaPor (o grupo do convite).");
   }

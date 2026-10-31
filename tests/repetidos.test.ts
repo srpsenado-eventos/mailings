@@ -54,6 +54,28 @@ describe("autoridadesRepetidas", () => {
     expect(a.motivo).toBe("Ex-Presidentes da República (3.4) antes de Ex-Presidentes do Senado (3.5)");
   });
 
+  test("ex-presidente com o cargo no formato do GT (com o período) continua ex- e perde para o cargo atual", () => {
+    const [a] = autoridadesRepetidas([
+      grupo("Ex-Presidentes do Senado", [linha("Rui Fictício", "Presidente do Senado Federal de 2019 a 2021")]),
+      grupo("Senadores", [linha("Rui Fictício", "Senador")]),
+    ]);
+    const doEx = a.ocorrencias.find((o) => o.grupo === "Ex-Presidentes do Senado");
+    expect(doEx?.ex).toBe(true);
+    expect(doEx?.nivel?.nivel).toBe("3.5");
+    expect(a.convidaPor?.grupoRegra).toBe("Senadores");
+    expect(a.motivo).toBe("Cargo atual (Senadores) vence cargo de ex- (Ex-Presidentes do Senado)");
+  });
+
+  test("o período no cargo do ex-presidente não vira o nível do Presidente do Senado atual", () => {
+    const [a] = autoridadesRepetidas([
+      grupo("Ex-Presidentes do Senado", [linha("Rui Fictício", "Presidente do Senado Federal de 2019 a 2021")]),
+      grupo("Ex-Presidentes da República", [linha("Rui Fictício", "Presidente da República Federativa do Brasil de 1990 a 1992")]),
+    ]);
+    expect(a.ocorrencias.every((o) => o.ex)).toBe(true);
+    expect(a.convidaPor?.grupoRegra).toBe("Ex-Presidentes da República");
+    expect(a.motivo).toBe("Ex-Presidentes da República (3.4) antes de Ex-Presidentes do Senado (3.5)");
+  });
+
   test("cargo fora da Nominata perde para cargo que está nela", () => {
     const [a] = autoridadesRepetidas([
       grupo("Conselho Nacional de Justiça (CNJ)", [linha("Ana Fictícia", "Conselheira")]),

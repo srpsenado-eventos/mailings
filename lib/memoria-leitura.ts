@@ -78,13 +78,19 @@ export function ehLeituraGuardada(v: unknown): v is LeituraGuardada {
  * Presidente do Senado e como tabela pelos grupos de Senadores): cada forma guarda a sua
  * leitura, senão a última a gravar vence e a outra reaproveita uma extração que não é a dela.
  * A fonte de extração padrão fica sob a URL pura, para a memória já gravada continuar valendo.
- * Sufixos na ordem tabela, marcador, pdf. `LeituraGuardada.url` continua a URL real.
+ * Sufixos na ordem tabela, marcador, pdf, destaque. `LeituraGuardada.url` continua a URL real.
+ * O `#destaque` (spec 2026-10-30 §3.1) separa a leitura com `nomeDestaque` da guardada antes
+ * da marca, que não traz o destaque e não pode ser reaproveitada no lugar dela.
  */
-export function chaveDaLeitura(url: string, fonte: Pick<FonteLegivel, "tabela" | "marcador" | "tipo">): string {
+export function chaveDaLeitura(
+  url: string,
+  fonte: Pick<FonteLegivel, "tabela" | "marcador" | "tipo" | "nomeEmDestaque">,
+): string {
   const sufixos = [
     ...(fonte.tabela ? [`#tabela:${JSON.stringify(fonte.tabela)}`] : []),
     ...(fonte.marcador ? [`#marcador:${JSON.stringify(fonte.marcador.textos)}`] : []),
     ...(fonte.tipo === "pdf" ? ["#pdf"] : []),
+    ...(fonte.nomeEmDestaque ? ["#destaque"] : []),
   ];
   return `${url}${sufixos.join("")}`;
 }

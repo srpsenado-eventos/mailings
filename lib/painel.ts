@@ -106,15 +106,18 @@ function etiquetaDoCampo(c: ResultadoContato, campo: CampoComparado): Etiqueta |
   const rotulo = ROTULO_CAMPO[campo];
   const doSite = campo === "nome" || campo === "cargo";
   const comp = comparacaoDeValor(c, campo);
+  // A regra dos pares explica a si mesma: "Pela maioria dos pares: N de M no grupo usam …".
+  const dosPares = comp?.origemValor === "pares" ? comp.observacao : undefined;
   if (coerenciasDo(c, campo).length > 0 || comp?.situacao === "divergente") {
-    return { campo, texto: `${rotulo} diverge`, tom: "atencao", explicacao: doSite ? EXPLICACAO.divergeSite : EXPLICACAO.divergeProtocolo };
+    const explicacao = comp?.situacao === "divergente" && dosPares ? dosPares : doSite ? EXPLICACAO.divergeSite : EXPLICACAO.divergeProtocolo;
+    return { campo, texto: `${rotulo} diverge`, tom: "atencao", explicacao };
   }
   if (comp?.situacao === "nao_verificado") {
     return { campo, texto: `${rotulo} não verificado`, tom: "neutro", explicacao: EXPLICACAO.naoVerificado };
   }
   if (!comp) return { campo, texto: `${rotulo} não verificado`, tom: "neutro", explicacao: EXPLICACAO.naoVerificado };
   if (comp.situacao === "confere") {
-    return { campo, texto: `${rotulo} confere`, tom: "ok", explicacao: doSite ? EXPLICACAO.confereSite : EXPLICACAO.confereProtocolo };
+    return { campo, texto: `${rotulo} confere`, tom: "ok", explicacao: dosPares ?? (doSite ? EXPLICACAO.confereSite : EXPLICACAO.confereProtocolo) };
   }
   if (comp.situacao === "sem_regra") {
     return { campo, texto: `${rotulo} sem regra`, tom: "neutro", explicacao: explicacaoSemRegra(c.contato.cargo) };
@@ -130,10 +133,12 @@ export function etiquetasDoContato(c: ResultadoContato, _g: ResultadoGrupo): Eti
   const lista: Etiqueta[] = [];
   const semCargo = cargoEstaVazio(c);
   if (c.possivelSaida) {
-    // Não há com o que comparar nome e cargo; só a Camada C (nome) ainda pode acusar.
+    // Não há com o que comparar nome e cargo; só a Camada C (nome; cargo do ex-presidente) ainda pode acusar.
     lista.push({ campo: "fonte", texto: "Sem par na fonte", tom: "ruim", explicacao: EXPLICACAO.semParNaFonte });
-    const nome = etiquetaDoCampo(c, "nome");
-    if (nome?.tom === "atencao") lista.push(nome);
+    for (const campo of ["nome", "cargo"] as const) {
+      const e = etiquetaDoCampo(c, campo);
+      if (e?.tom === "atencao") lista.push(e);
+    }
   } else {
     const nome = etiquetaDoCampo(c, "nome");
     if (nome) lista.push(nome);
@@ -251,6 +256,8 @@ export interface DetalheCampo {
   valorReferencia: string;
   copiavel?: string;
   coerencias: string[];
+  /** Como a referência foi obtida, quando ela não vem de uma fonte só (maioria dos pares, spec 2026-10-30 §3.4). */
+  observacao?: string;
   /** Página de onde veio a referência deste campo, quando o retrato a registra (fontes individuais). */
   url?: string;
 }
@@ -260,7 +267,8 @@ const TEXTO_NAO_VERIFICADO = "não verificado nesta varredura";
 const TEXTO_SEM_REGRA = "sem regra de protocolo para este cargo";
 const SUFIXO_VIA_IA = " (via IA — confira)";
 
-function origemDe(campo: CampoComparado): string {
+function origemDe(campo: CampoComparado, comp: ComparacaoCampo | undefined): string {
+  if (comp?.origemValor === "pares") return "Maioria dos pares diz";
   return campo === "nome" || campo === "cargo" ? "Site do órgão diz" : "Tabela de protocolo diz";
 }
 
@@ -286,10 +294,11 @@ export function detalhesDoContato(c: ResultadoContato, _g: ResultadoGrupo): Deta
       rotulo: ROTULO_CAMPO[campo],
       etiqueta: etiquetaDoCampo(c, campo),
       valorPlanilha,
-      origem: origemDe(campo),
+      origem: origemDe(campo, comp),
       valorReferencia: valorReferenciaDe(comp),
       ...(copiavel ? { copiavel } : {}),
       ...(comp?.fonteUrl ? { url: comp.fonteUrl } : {}),
+      ...(comp?.origemValor === "pares" && comp.observacao ? { observacao: comp.observacao } : {}),
       coerencias: coerencias.map(textoCoerencia),
     });
   }

@@ -541,3 +541,31 @@ describe("resolverRegra — Ministro de Estado pelo prefixo (2026-10-27)", () =>
   });
 
 });
+
+describe("resolverRegra — Governador e Vice-Governador pelo prefixo (spec 2026-10-30 §3.4)", () => {
+  const primeiraLinha = (cargo: string) => resolverRegra(cargo)?.cargoDestinatario.split("\n")[0];
+
+  test("'Governador(a) do Estado de …' e do Distrito Federal usam a regra Governador da tabela", () => {
+    expect(primeiraLinha("Governador do Estado de São Paulo")).toBe("Governador");
+    expect(primeiraLinha("Governadora do Estado do Rio Grande do Norte")).toBe("Governador");
+    expect(primeiraLinha("Governadora do Distrito Federal")).toBe("Governador");
+  });
+
+  test("'Vice-Governador do Estado de …' usa a regra Vice-Governador, nunca a do titular", () => {
+    expect(primeiraLinha("Vice-Governador do Estado de Goiás")).toBe("Vice-Governador");
+    expect(primeiraLinha("Vice-Governadora do Distrito Federal")).toBe("Vice-Governador");
+  });
+
+  test("ex-governador e governadoria não herdam a regra pelo prefixo", () => {
+    expect(primeiraLinha("Ex-Governador do Estado de Goiás")).not.toBe("Governador");
+    expect(primeiraLinha("Governadoria do Estado de Goiás")).not.toBe("Governador");
+  });
+
+  test("governador com o cadastro da tabela confere no tratamento e no endereçamento", () => {
+    const protocolo = comparacoesProtocolo({
+      nome: "Fulano", grupo: "Governadores", cargo: "Governador do Estado de Sergipe",
+      tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor",
+    });
+    expect(protocolo.map((c) => c.situacao)).toEqual(["confere", "confere"]);
+  });
+});

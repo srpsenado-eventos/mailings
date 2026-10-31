@@ -1,7 +1,7 @@
 import { raspar, ScrapeError, type OpcoesRaspagem } from "@/lib/scrape";
 import { paginaComConteudo } from "@/lib/match";
-import { rasparComNavegador, type OpcoesNavegador } from "@/lib/navegador";
-import type { ConteudoFonte, ExtracaoTabela, FonteLegivel } from "@/lib/types";
+import { rasparComNavegador, type OpcoesExtracaoNavegador, type OpcoesNavegador } from "@/lib/navegador";
+import type { ConteudoFonte, FonteLegivel } from "@/lib/types";
 
 /**
  * Escolhe como ler UMA fonte do catálogo: `fetch` + cheerio (padrão), Chrome headless
@@ -13,7 +13,7 @@ export interface Raspadores {
   porFetch: (url: string, opcoes: OpcoesRaspagem) => Promise<ConteudoFonte>;
   porNavegador: (url: string, opcoes: OpcoesNavegador) => Promise<ConteudoFonte>;
   /** A sessão com janela da varredura (`abrirSessao().raspar`). Sem sessão, a fonte falha. */
-  porJanela: (url: string, opcoes: { tabela?: ExtracaoTabela }) => Promise<ConteudoFonte>;
+  porJanela: (url: string, opcoes: OpcoesExtracaoNavegador) => Promise<ConteudoFonte>;
 }
 
 export const MOTIVO_SESSAO_AUSENTE = "sessão do navegador com janela não aberta";
@@ -37,6 +37,7 @@ function montarOpcoes(fonte: FonteLegivel): OpcoesRaspagem {
     ...(fonte.tabela ? { tabela: fonte.tabela } : {}),
     ...(fonte.marcador ? { marcador: fonte.marcador.textos } : {}),
     ...(fonte.tipo ? { tipo: fonte.tipo } : {}),
+    ...(fonte.nomeEmDestaque ? { nomeEmDestaque: true } : {}),
   };
 }
 

@@ -54,6 +54,7 @@ import { ScrapeError } from "@/lib/scrape";
 import { fonteIndividualDe, type FonteResolvida } from "@/lib/catalogo";
 import { ufDoContato } from "@/lib/uf";
 import { auditarEndereco, indexarEnderecos, type IndiceEnderecos } from "@/lib/endereco";
+import { aplicarPares } from "@/lib/tratamento-pares";
 
 function motivoDaFalha(err: unknown): string {
   if (err instanceof ScrapeError) return err.motivo;
@@ -600,7 +601,6 @@ async function analisarGrupoIndividual(
         resultado: compararContatoSemIndividual(l.contato, { grupoCanonico, listaCargos, uf: ufDoContato(l.contato) }),
         nomeConfirmado: false,
         lidaHoje: false,
-        novos: [] as PessoaSite[],
       };
     }
     const lida = porUrl.get(l.fonte.url)!;
@@ -667,7 +667,8 @@ async function analisarGrupoIndividual(
       ...(geral ? { fonteUrl: geral.url } : {}),
       semFonte: false,
       contatos: vereditos.map((v) => v.resultado),
-      novos: [...vereditos.flatMap((v) => v.novos), ...novosDaGeral],
+      // A página individual fala de uma pessoa: quem mais está nela não é candidato ao grupo (spec 2026-10-30 §3.6).
+      novos: novosDaGeral,
       ...(erros.length > 0 ? { erroFonte: erros.join(" · ") } : {}),
       // A geral é a `fonteUrl` do grupo: reaproveitada, o cabeçalho diz a data e o motivo.
       ...(geral && geralReaproveitada ? { reaproveitada: { url: geral.url, ...geralReaproveitada } } : {}),
@@ -746,7 +747,9 @@ export async function analisar(
   const analisados = await Promise.all(
     [...porGrupo.entries()].map(([grupo, lista]) => analisarGrupo(grupo, lista, deps, agora)),
   );
-  const grupos = analisados.map((a) => anexarEnderecos(a.grupo, indice));
+  // Tratamento e endereçamento sem regra na tabela, decididos pela maioria dos pares (spec
+  // 2026-10-30 §3.4), antes do resumo, para que ele conte o amarelo que os pares acusam.
+  const grupos = analisados.map((a) => aplicarPares(anexarEnderecos(a.grupo, indice)));
   // A memória que sai desta varredura (spec 2026-10-20 §6, passo 3): a anterior podada,
   // sobreposta pelas leituras boas de hoje e pelas reaproveitadas, com a data original.
   const leituras = mesclarLeituras(deps.leiturasAnteriores ?? {}, analisados.flatMap((a) => a.leituras), agora);

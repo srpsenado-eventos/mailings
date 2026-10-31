@@ -662,3 +662,22 @@ describe("leitura resiliente no export (spec 2026-10-23 §6)", () => {
     expect(resultadoParaLinhas(individual)[0].Observacao).toBe("Lida pela URL alternativa (HTTP 404) · Fonte caída há 2 coletas, desde 19/10: conferir se o endereço mudou");
   });
 });
+
+describe("tratamento pela maioria dos pares no export (spec 2026-10-30 §3.4)", () => {
+  test("a coluna (protocolo) traz o valor da maioria com a contagem dos pares", () => {
+    const analise = analiseCom(
+      [
+        {
+          campo: "tratamento",
+          valorPlanilha: "Doutor",
+          valorEsperado: "Senhor",
+          situacao: "divergente",
+          origemValor: "pares",
+          observacao: "Pela maioria dos pares: 6 de 7 no grupo usam Senhor",
+        },
+      ],
+      { nome: "Ana", grupo: "ORG" },
+    );
+    expect(resultadoParaLinhas(analise)[0]["Tratamento (protocolo)"]).toBe("Senhor (maioria dos pares: 6 de 7)");
+  });
+});

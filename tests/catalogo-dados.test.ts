@@ -35,6 +35,13 @@ describe("catálogo real (data/catalogo.ts)", () => {
       expect(tst.fontes[1]).toMatchObject({ ativo: true, rotulo: "convocado", propoeInclusao: true, marcador: { textos: ["(convocado)", "(convocada)"] } });
     });
 
+    test("STJ: a página dos ministros marca o nome em destaque; o PDF dos convocados não", () => {
+      const stj = CATALOGO.find((g) => g.nome === "Ministros do STJ")!;
+      expect(stj.fontes[0]).toMatchObject({ url: "https://www.stj.jus.br/web/verMinistrosSTJ?parametro=1", ativo: true, nomeEmDestaque: true });
+      expect(stj.fontes[1].nomeEmDestaque).toBeUndefined();
+      expect(CATALOGO.flatMap((g) => g.fontes).filter((f) => f.nomeEmDestaque).length).toBe(1);
+    });
+
     test("STJ: segunda fonte é o PDF da composição, por marcador **", () => {
       const stj = CATALOGO.find((g) => g.nome === "Ministros do STJ")!;
       expect(stj.fontes[1]).toMatchObject({ url: "https://www.stj.jus.br/sites/portalp/SiteAssets/Paginas/Institucional/Composicao/Composicao-do-STJ.pdf", ativo: true, tipo: "pdf", rotulo: "convocado", propoeInclusao: true, marcador: { textos: ["**"] } });

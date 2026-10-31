@@ -386,7 +386,9 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp2: "cleria.rosa@senado.leg.br",
     emailBackup: "andriele@senado.leg.br",
     fontes: [
-      { url: "https://www.stj.jus.br/web/verMinistrosSTJ?parametro=1", ativo: true },
+      // nomeEmDestaque: o nome esperado é só a parte em negrito da página (spec 2026-10-30 §3.1;
+      // regra do GT, e-mail de 20/07: "STJ: usar as partes do nome em negrito").
+      { url: "https://www.stj.jus.br/web/verMinistrosSTJ?parametro=1", ativo: true, nomeEmDestaque: true },
       // Planilha de 23/10, conferida com fetch em 23/10 (200, 1 página). PDF da composição: os
       // convocados são os nomes seguidos de "**" (spec 2026-10-23 §5.1 e §5.2).
       {

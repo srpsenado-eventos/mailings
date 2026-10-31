@@ -14,15 +14,28 @@ import type {
   Semaforo,
 } from "@/lib/types";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
-import { CARGOS } from "@/lib/cargos";
-import { comparacaoRegraNome, comparacoesCoerencia, comparacoesProtocolo } from "@/lib/tratamento";
+import { CARGOS, PREFIXOS_NEGANTES, tokensSignificativos } from "@/lib/cargos";
+import {
+  cargoEsperadoNoTribunal,
+  contextoCargoDoGrupo,
+  semGenero,
+  situacaoCargoTribunal,
+  temGeneroNeutro,
+  type ContextoCargo,
+} from "@/lib/cargo-tribunal";
+import {
+  comparacaoPrefixoNome,
+  comparacaoRegraNome,
+  comparacoesCoerencia,
+  comparacoesProtocolo,
+  nomeEsperadoComPrefixo,
+} from "@/lib/tratamento";
+import { comparacaoCargoExPresidente } from "@/lib/regras-cargo";
 
 const LIMIAR_PESSOA = 0.6;
 const LIMIAR_TOKEN = 0.85;
 const LIMIAR_SUGESTAO = 0.4;
 const MAX_SUGESTOES = 3;
-/** Prefixos que mudam o sentido de um cargo de 1 token (ex.: "Presidente" ≠ "Vice-Presidente"). */
-const PREFIXOS_NEGANTES = ["vice", "ex", "sub", "adjunto", "interino", "substituto"];
 
 /**
  * Quando o rótulo da planilha não casa nenhum grupo cadastrado, sugere os nomes
@@ -75,6 +88,36 @@ export function pontuarPessoa(nomePlanilha: string, nomeSite: string): number {
   return fortes / Math.min(a.length, b.length);
 }
 
+/** Partes significativas que o destaque precisa ter para valer no casamento. */
+const MIN_TOKENS_DESTAQUE = 2;
+
+/**
+ * Escore do contato contra uma pessoa da composição: o maior entre o nome completo e o nome
+ * em destaque, quando a fonte o marca (spec 2026-10-30 §3.1). Qualquer um dos dois casa.
+ * Destaque de uma parte só ("Moura") não entra no escore: casaria quem tem a mesma palavra
+ * no nome ("Moura Ribeiro") com a pessoa errada. Ele continua sendo o nome esperado.
+ */
+function pontuarContraPessoa(nomePlanilha: string, pessoa: PessoaSite): number {
+  const pelaPessoa = pontuarPessoa(nomePlanilha, pessoa.nome);
+  const destaque = pessoa.nomeDestaque;
+  if (destaque === undefined || tokensNome(destaque).length < MIN_TOKENS_DESTAQUE) return pelaPessoa;
+  return Math.max(pelaPessoa, pontuarPessoa(nomePlanilha, destaque));
+}
+
+/** O nome que o Contatos deve ter: o destaque da página, quando há; senão, o nome completo. */
+function nomeEsperado(pessoa: PessoaSite): string {
+  return pessoa.nomeDestaque ?? pessoa.nome;
+}
+
+/**
+ * A pessoa como proposta de inclusão: com destaque, o nome que o Contatos deve ter é o
+ * destaque e o nome completo da página fica em `contexto` (sem contexto próprio).
+ */
+function comoProposta(pessoa: PessoaSite): PessoaSite {
+  if (pessoa.nomeDestaque === undefined) return pessoa;
+  return { ...pessoa, nome: pessoa.nomeDestaque, contexto: pessoa.contexto ?? `Nome completo: ${pessoa.nome}` };
+}
+
 /**
  * Compõe a lista final de pessoas a partir da Camada 1 (página) e da Camada 2 (IA):
  * - Página ilegível (sem pessoas) → usa a composição da IA (cobertura, ex.: TCU/JS).
@@ -103,7 +146,7 @@ export function mesclarComposicao(
  * menos da metade do grupo?
  */
 export function contarContatosCasados(contatos: readonly ContatoPlanilha[], pessoas: readonly PessoaSite[]): number {
-  return contatos.filter((c) => pessoas.some((p) => pontuarPessoa(c.nome, p.nome) >= LIMIAR_PESSOA)).length;
+  return contatos.filter((c) => pessoas.some((p) => pontuarContraPessoa(c.nome, p) >= LIMIAR_PESSOA)).length;
 }
 
 /**
@@ -140,21 +183,13 @@ function melhorPessoa(nome: string, pessoas: PessoaSite[]): { indice: number; sc
   let indice = -1;
   let score = 0;
   pessoas.forEach((p, i) => {
-    const s = pontuarPessoa(nome, p.nome);
+    const s = pontuarContraPessoa(nome, p);
     if (s > score) {
       score = s;
       indice = i;
     }
   });
   return { indice, score };
-}
-
-/** Tokens significativos (sem acento, sem pontuação, sem palavras de 1 letra). */
-function tokensSignificativos(valor: string): string[] {
-  return normalizarTexto(valor)
-    .replace(/[^a-z0-9 ]/g, " ")
-    .split(" ")
-    .filter((t) => t.length > 1);
 }
 
 /** Papéis de autoridade (do léxico) presentes no valor, por token exato. */
@@ -169,9 +204,23 @@ function rolesDe(valor: string): string[] {
  * real de papel (Ministro→Presidente), gênero (Ministro≠Ministra) e prefixo
  * (Presidente≠Vice-Presidente, Senador≠Ex-Senador). Sem palavra-chave de cargo,
  * cai na comparação por tokens.
+ *
+ * Página sem gênero ("Ministro(a)", "Ministro/Ministra") confirma os dois gêneros do
+ * Contatos; com um gênero explícito, "Ministra" continua não confirmando "Ministro". Nos
+ * grupos de tribunal (`contexto.tribunal`), as funções de tribunal valem como "Ministro"
+ * (`situacaoCargoTribunal`, `lib/cargo-tribunal.ts`). Spec 2026-10-30 §3.2.
  */
-export function situacaoCampo(valorPlanilha: string, valorEsperado?: string): SituacaoCampo {
+export function situacaoCampo(valorPlanilha: string, valorEsperado?: string, contexto: ContextoCargo = {}): SituacaoCampo {
   if (valorEsperado === undefined) return "fonte_nao_informa";
+  const doTribunal = contexto.tribunal ? situacaoCargoTribunal(valorPlanilha, valorEsperado) : undefined;
+  if (doTribunal) return doTribunal;
+  return temGeneroNeutro(valorEsperado)
+    ? situacaoPorPapel(semGenero(valorPlanilha), semGenero(valorEsperado))
+    : situacaoPorPapel(valorPlanilha, valorEsperado);
+}
+
+/** A régua de papel, gênero e prefixo de `situacaoCampo`, sem o contexto do grupo. */
+function situacaoPorPapel(valorPlanilha: string, valorEsperado: string): SituacaoCampo {
   const tp = tokensSignificativos(valorPlanilha);
   const ts = tokensSignificativos(valorEsperado);
   const rolesP = rolesDe(valorPlanilha);
@@ -195,9 +244,12 @@ export function situacaoCampo(valorPlanilha: string, valorEsperado?: string): Si
   return "confere";
 }
 
-/** Nome: o site é o parâmetro — confere só se igual normalizado. */
-function situacaoNome(planilha: string, site: string): SituacaoCampo {
-  return normalizarNome(planilha) === normalizarNome(site) ? "confere" : "divergente";
+/**
+ * Nome: o site é o parâmetro — confere só se igual normalizado ao nome esperado. Com destaque
+ * (STJ), o esperado é o destaque: o nome completo da página diverge (spec 2026-10-30 §3.1).
+ */
+function situacaoNome(planilha: string, pessoa: PessoaSite): SituacaoCampo {
+  return normalizarNome(planilha) === normalizarNome(nomeEsperado(pessoa)) ? "confere" : "divergente";
 }
 
 /**
@@ -221,6 +273,8 @@ export function comparacoesTratamento(
     ...comparacoesCoerencia(contato),
     ...comparacoesProtocolo(contato),
     ...comparacaoRegraNome(contato, grupoCanonico),
+    ...comparacaoPrefixoNome(contato, grupoCanonico),
+    ...comparacaoCargoExPresidente(contato, grupoCanonico),
   ];
 }
 
@@ -290,18 +344,20 @@ function montarResultado(
     {
       campo: "nome",
       valorPlanilha: contato.nome,
-      valorEsperado: pessoa.nome,
+      // Com a regra do prefixo (spec 2026-10-30 §3.3), o copiável leva o prefixo: nunca propõe tirá-lo.
+      valorEsperado: nomeEsperadoComPrefixo(contato, grupoCanonico, nomeEsperado(pessoa)),
       origemValor: ov,
-      situacao: situacaoNome(contato.nome, pessoa.nome),
+      situacao: situacaoNome(contato.nome, pessoa),
     },
   ];
   if (contato.cargo) {
+    const contextoCargo = contextoCargoDoGrupo(grupoCanonico);
     comparacoes.push({
       campo: "cargo",
       valorPlanilha: contato.cargo,
-      valorEsperado: pessoa.cargo,
+      valorEsperado: cargoEsperadoNoTribunal(contato.cargo, pessoa.cargo, contextoCargo),
       origemValor: ov,
-      situacao: situacaoCampo(contato.cargo, pessoa.cargo),
+      situacao: situacaoCampo(contato.cargo, pessoa.cargo, contextoCargo),
     });
   }
   if (contato.endereco) {
@@ -457,10 +513,12 @@ export function compararGrupo(
   // "novos": de fonte que propõe inclusão, só quem está na faixa de UF do grupo. Das
   // demais fontes, mantém a regra antiga — só pessoa com cargo, que corta item de menu
   // do texto achatado. Numa fonte tabular toda linha já é pessoa.
-  const novos = fonte.pessoas.filter((p, i) => {
-    if (usados.has(i)) return false;
-    return p.propoeInclusao ? naFaixaDeUf(p, ufsDoGrupo) : Boolean(p.cargo);
-  });
+  const novos = fonte.pessoas
+    .filter((p, i) => {
+      if (usados.has(i)) return false;
+      return p.propoeInclusao ? naFaixaDeUf(p, ufsDoGrupo) : Boolean(p.cargo);
+    })
+    .map(comoProposta);
   return { grupo, fonteUrl: fonte.url, semFonte: false, contatos: resultados, novos };
 }
 
@@ -653,7 +711,12 @@ function tokensDistintivos(valor: string): string[] {
  * a mais ou a menos, é `divergente`, com a denominação oficial em `valorEsperado`. Sem token
  * em comum com denominação alguma, a lista não informa este cargo. Nome não entra aqui.
  */
-export function compararCargoNaLista(cargo: string, lista: readonly string[], fonteUrl: string): ComparacaoCampo {
+export function compararCargoNaLista(
+  cargo: string,
+  lista: readonly string[],
+  fonteUrl: string,
+  contexto: ContextoCargo = {},
+): ComparacaoCampo {
   const tc = tokensDistintivos(cargo);
   let melhor: { denominacao: string; n: number } | undefined;
   for (const d of lista) {
@@ -667,17 +730,17 @@ export function compararCargoNaLista(cargo: string, lista: readonly string[], fo
   return {
     campo: "cargo",
     valorPlanilha: cargo,
-    valorEsperado: melhor.denominacao,
+    valorEsperado: cargoEsperadoNoTribunal(cargo, melhor.denominacao, contexto),
     origemValor: "pagina",
-    situacao: mesmoConjunto && situacaoCampo(cargo, melhor.denominacao) === "confere" ? "confere" : "divergente",
+    situacao: mesmoConjunto && situacaoCampo(cargo, melhor.denominacao, contexto) === "confere" ? "confere" : "divergente",
     fonteUrl,
   };
 }
 
-function comparacaoCargoPelaLista(cargo: string, lista: ListaCargos | undefined): ComparacaoCampo {
+function comparacaoCargoPelaLista(cargo: string, lista: ListaCargos | undefined, contexto: ContextoCargo = {}): ComparacaoCampo {
   if (!lista) return { campo: "cargo", valorPlanilha: cargo, situacao: "nao_verificado" };
   if ("erro" in lista) return { campo: "cargo", valorPlanilha: cargo, situacao: "nao_verificado", fonteUrl: lista.url };
-  return compararCargoNaLista(cargo, lista.cargos, lista.url);
+  return compararCargoNaLista(cargo, lista.cargos, lista.url, contexto);
 }
 
 export function comparacoesSemSite(contato: ContatoPlanilha): ComparacaoCampo[] {
@@ -741,8 +804,6 @@ export interface VereditoIndividual {
   nomeConfirmado: boolean;
   /** A página individual foi lida com conteúdo (independe de o nome estar nela). */
   lidaComConteudo: boolean;
-  /** Pessoas com cargo da página individual quando o contato não está nela (proposta de inclusão). */
-  novos: PessoaSite[];
 }
 
 /** Veredito de um contato ligado a uma fonte individual: a tabela da spec 2026-10-15 §5.2. */
@@ -753,6 +814,7 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
   const url = lida.urlDaMemoria ?? lida.alternativa?.url ?? fonte.url;
   const pelaAlternativa = lida.alternativa ? { alternativa: lida.alternativa } : {};
   const cobreCargo = fonte.campos.includes("cargo");
+  const contextoCargo = contextoCargoDoGrupo(grupoCanonico);
   const protocolo = comparacoesTratamento(contato, grupoCanonico);
   const cargoDe = (comp: ComparacaoCampo | undefined): ComparacaoCampo[] => (comp ? [comp] : []);
 
@@ -762,7 +824,7 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
     const cargo = contato.cargo
       ? cobreCargo
         ? { campo: "cargo", valorPlanilha: contato.cargo, situacao: "nao_verificado" as const, fonteUrl: url }
-        : comparacaoCargoPelaLista(contato.cargo, listaCargos)
+        : comparacaoCargoPelaLista(contato.cargo, listaCargos, contextoCargo)
       : undefined;
     const comparacoes: ComparacaoCampo[] = [
       { campo: "nome", valorPlanilha: contato.nome, situacao: "nao_verificado", fonteUrl: url },
@@ -783,7 +845,6 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
       },
       nomeConfirmado: false,
       lidaComConteudo,
-      novos: [],
     };
   };
 
@@ -812,7 +873,6 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
       },
       nomeConfirmado: false,
       lidaComConteudo: true,
-      novos: conteudo.pessoas.filter((p) => Boolean(p.cargo)).map((p) => ({ ...p, origem: "pagina" as const, fonteUrl: url })),
     };
   }
 
@@ -821,19 +881,19 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
       ? {
           campo: "cargo",
           valorPlanilha: contato.cargo,
-          valorEsperado: achado.pessoa?.cargo,
+          valorEsperado: cargoEsperadoNoTribunal(contato.cargo, achado.pessoa?.cargo, contextoCargo),
           origemValor: "pagina" as const,
-          situacao: situacaoCampo(contato.cargo, achado.pessoa?.cargo),
+          situacao: situacaoCampo(contato.cargo, achado.pessoa?.cargo, contextoCargo),
           fonteUrl: url,
         }
-      : comparacaoCargoPelaLista(contato.cargo, listaCargos)
+      : comparacaoCargoPelaLista(contato.cargo, listaCargos, contextoCargo)
     : undefined;
   const comparacoes: ComparacaoCampo[] = [
     // Nome mais longo na página (R9): a pessoa está lá, mas o GT quer o nome como o site o
     // escreve; sai "divergente" (amarelo) com o nome da página para copiar.
     achado.exato
-      ? { campo: "nome", valorPlanilha: contato.nome, valorEsperado: achado.pessoa?.nome ?? contato.nome, origemValor: "pagina", situacao: "confere", fonteUrl: url }
-      : { campo: "nome", valorPlanilha: contato.nome, valorEsperado: achado.nomeNaPagina, origemValor: "pagina", situacao: "divergente", fonteUrl: url },
+      ? { campo: "nome", valorPlanilha: contato.nome, valorEsperado: nomeEsperadoComPrefixo(contato, grupoCanonico, achado.pessoa?.nome ?? contato.nome), origemValor: "pagina", situacao: "confere", fonteUrl: url }
+      : { campo: "nome", valorPlanilha: contato.nome, valorEsperado: achado.nomeNaPagina && nomeEsperadoComPrefixo(contato, grupoCanonico, achado.nomeNaPagina), origemValor: "pagina", situacao: "divergente", fonteUrl: url },
     ...cargoDe(cargo),
     ...comparacoesSemSite(contato),
     ...protocolo,
@@ -852,7 +912,6 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
     },
     nomeConfirmado: true,
     lidaComConteudo: true,
-    novos: [],
   };
 }
 
@@ -869,7 +928,7 @@ export function compararContatoSemIndividual(
   if (o.listaCargos) {
     const comparacoes: ComparacaoCampo[] = [
       { campo: "nome", valorPlanilha: contato.nome, situacao: "nao_verificado" },
-      ...(contato.cargo ? [comparacaoCargoPelaLista(contato.cargo, o.listaCargos)] : []),
+      ...(contato.cargo ? [comparacaoCargoPelaLista(contato.cargo, o.listaCargos, contextoCargoDoGrupo(o.grupoCanonico))] : []),
       ...comparacoesSemSite(contato),
       ...protocolo,
     ];
@@ -900,7 +959,7 @@ export function compararContatoSemIndividual(
  * "pessoa"` num grupo que também tem individuais (spec §5.5).
  */
 export function novosForaDaPlanilha(pessoas: PessoaSite[], contatos: ContatoPlanilha[]): PessoaSite[] {
-  return pessoas.filter(
-    (p) => Boolean(p.cargo) && !contatos.some((c) => pontuarPessoa(c.nome, p.nome) >= LIMIAR_PESSOA),
-  );
+  return pessoas
+    .filter((p) => Boolean(p.cargo) && !contatos.some((c) => pontuarContraPessoa(c.nome, p) >= LIMIAR_PESSOA))
+    .map(comoProposta);
 }

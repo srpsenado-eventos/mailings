@@ -24,27 +24,31 @@ export interface ContatoPlanilha {
 
 /**
  * Procedência do valor esperado: página oficial, conhecimento da IA, tabela de protocolo,
- * ou `coerencia` — a Camada A, que confronta campos do próprio contato entre si e por isso
- * não tem valor esperado externo nenhum.
+ * `coerencia` — a Camada A, que confronta campos do próprio contato entre si e por isso
+ * não tem valor esperado externo nenhum — ou `pares`: a maioria dos contatos do mesmo grupo
+ * com o mesmo núcleo de cargo, quando a tabela de protocolo não tem regra (spec 2026-10-30 §3.4).
  */
-export type OrigemDado = "pagina" | "conhecimento" | "protocolo" | "coerencia";
+export type OrigemDado = "pagina" | "conhecimento" | "protocolo" | "coerencia" | "pares";
 
 /**
  * Achado da Camada A (coerência interna de `Tratamento`, `Endereçamento` e `Cargo`) ou
  * da Camada C (regras de escrita do cadastro, `data/regras-nome.ts`). Identifica **qual**
  * verificação apontou. `lib/tratamento.ts` traduz cada código com `rotuloAchado`.
  *
- * `nome_tratamento_academico` é o único achado com `valorEsperado` preenchido na
- * comparação que o carrega: diferente dos achados da Camada A (contradição entre campos
- * do próprio contato, sem "certo" a apontar), a Camada C tem uma correção objetiva — o
- * nome sem o tratamento —, e ela precisa chegar ao usuário para copiar.
+ * Os achados da Camada C (`nome_tratamento_academico`, `nome_sem_prefixo`) são os únicos
+ * com `valorEsperado` preenchido na comparação que os carrega: diferente dos achados da
+ * Camada A (contradição entre campos do próprio contato, sem "certo" a apontar), a Camada C
+ * tem uma correção objetiva — o nome sem o tratamento, o nome com o prefixo do cargo —, e
+ * ela precisa chegar ao usuário para copiar.
  */
 export type AchadoCoerencia =
   | "genero_tratamento_enderecamento"
   | "genero_cargo_tratamento"
   | "forma_generica"
   | "campo_vazio"
-  | "nome_tratamento_academico";
+  | "nome_tratamento_academico"
+  | "nome_sem_prefixo"
+  | "cargo_ex_presidente";
 
 /** Uma pessoa extraída (estruturada) da fonte oficial. */
 export interface PessoaSite {
@@ -63,6 +67,12 @@ export interface PessoaSite {
   fonteUrl?: string;
   /** A fonte de origem propõe inclusão: não casar com ninguém faz desta pessoa um "novo". */
   propoeInclusao?: boolean;
+  /**
+   * Partes do nome em negrito no bloco da pessoa, na ordem, unidas por espaço ("Sérgio Kukina"
+   * de "<b>Sérgio</b> Luíz <b>Kukina</b>"). Só em fonte `nomeEmDestaque`; quando existe, é o
+   * nome esperado (spec 2026-10-30 §3.1). Ausente: o bloco não tem negrito.
+   */
+  nomeDestaque?: string;
 }
 
 /** Conteúdo limpo de uma página oficial. */
@@ -149,6 +159,11 @@ export interface ComparacaoCampo {
    * há: a regra do grupo dá a correção objetiva, e `valorEsperado` a carrega.
    */
   achado?: AchadoCoerencia;
+  /**
+   * Orientação ao usuário que acompanha o achado, quando o valor esperado não basta
+   * ("Informar o período da presidência", spec 2026-10-30 §3.5).
+   */
+  observacao?: string;
   /** Página de onde saiu o valor esperado, ou que se tentou ler quando `nao_verificado` (spec 2026-10-15 §5.1). */
   fonteUrl?: string;
 }
@@ -373,6 +388,11 @@ export interface FonteCatalogo {
   tipo?: "html" | "pdf";
   /** Extração por marcador: só as pessoas cujo nome é seguido de um destes textos (spec 2026-10-23 §5.2). */
   marcador?: { textos: readonly string[] };
+  /**
+   * O nome esperado é só a parte em negrito da página (spec 2026-10-30 §3.1, regra do GT
+   * "STJ: usar as partes do nome em negrito"). Só no STJ.
+   */
+  nomeEmDestaque?: true;
 }
 
 /** Chave que liga uma fonte individual ao contato: a UF do cargo, ou o nome como está no Contatos. */
@@ -406,7 +426,10 @@ export interface FonteIndividual {
 export type TipoFonteProvisoria = "noticia" | "campanha";
 
 /** Uma fonte que o raspador sabe ler: o que `FonteCatalogo` e `FonteIndividual` têm em comum. */
-export type FonteLegivel = Pick<FonteCatalogo, "url" | "tabela" | "navegador" | "urlAlternativa" | "tipo" | "marcador">;
+export type FonteLegivel = Pick<
+  FonteCatalogo,
+  "url" | "tabela" | "navegador" | "urlAlternativa" | "tipo" | "marcador" | "nomeEmDestaque"
+>;
 
 /**
  * Grupo no catálogo versionado (`data/catalogo.ts`), com responsáveis internos

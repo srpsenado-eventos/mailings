@@ -332,4 +332,21 @@ describe("aplicarListas (spec 2026-10-30 §4.6)", () => {
     expect(r.grupos[0]).toBe(entrada.grupos[0]);
     expect(entrada).toEqual(copia);
   });
+
+  test("tratamento sem regra na tabela segue julgado pelos pares depois da comparação com a lista (spec 2026-10-30 §3.4)", () => {
+    // Arrange: cargo fora da tabela de protocolo; ninguém está na lista do TSE.
+    const pessoa = (id: string, nome: string, tratamento: string): ContatoPlanilha => ({
+      ...SENHOR, id, nome, tratamento, grupo: GRUPO_SENADORES_ELEITOS, cargo: "Parlamentar Eleito", departamento: "PARANÁ",
+    });
+    const lote = [pessoa("1", "Ana Um", "Senhor"), pessoa("2", "Bia Dois", "Senhor"), pessoa("3", "Caio Tres", "Senhor"), pessoa("4", "Davi Quatro", "Doutor")];
+
+    // Act
+    const r = aplicarListas(analise([grupoLista(GRUPO_SENADORES_ELEITOS, lote)], eleicao()), "30/10");
+
+    // Assert
+    const davi = r.grupos[0].contatos[3];
+    expect(davi.comparacoes.find((x) => x.campo === "tratamento" && x.origemValor === "pares")).toMatchObject({ situacao: "divergente", valorEsperado: "Senhor" });
+    expect(davi.semaforo).toBe("indeterminado");
+    expect(davi.possivelSaida).toBeUndefined();
+  });
 });

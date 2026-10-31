@@ -125,6 +125,22 @@ describe("etiquetasDoContato", () => {
     expect(t.some((x) => x.startsWith("Nome") || x.startsWith("Cargo"))).toBe(false);
   });
 
+  test("possível saída com achado da Camada C no cargo (ex-presidente) mostra 'Cargo diverge'", () => {
+    const c = contato({
+      semaforo: "vermelho", possivelSaida: true,
+      contato: { nome: "Rui Fictício", grupo: "Ex-Presidentes do Senado", cargo: "Ex-Presidente do Senado Federal" },
+      comparacoes: [{
+        campo: "cargo", valorPlanilha: "Ex-Presidente do Senado Federal", valorEsperado: "Presidente do Senado Federal de AAAA a AAAA",
+        situacao: "divergente", origemValor: "coerencia", achado: "cargo_ex_presidente", observacao: "Informar o período da presidência",
+      }],
+    });
+    expect(textos(c, grupoComFonte).slice(0, 2)).toEqual(["Sem par na fonte", "Cargo diverge"]);
+    const cargo = detalhesDoContato(c, grupoComFonte).find((d) => d.campo === "cargo");
+    expect(cargo?.coerencias).toEqual([
+      "Cargo de ex-presidente fora do formato do GT (Presidente do Senado Federal de AAAA a AAAA). Informar o período da presidência",
+    ]);
+  });
+
   test("possível saída com achado da Camada C no nome mostra as duas coisas (contrato herdado de celulaDivergencias)", () => {
     const c = contato({
       semaforo: "vermelho", possivelSaida: true,
@@ -923,5 +939,38 @@ describe("textos da leitura resiliente (spec 2026-10-23 §6)", () => {
     const g: ResultadoGrupo = { ...grupoComFonte, alternativa: { url: "https://alt.gov.br", urlPrincipal: "https://orgao.gov.br", motivoPrincipal: "HTTP 404" } };
     const falhas = { "https://orgao.gov.br": { desde: "2026-10-19T12:00:00.000Z", coletas: 3, motivo: "HTTP 404" } };
     expect(procedenciaDoContato(contato({}), g, falhas)[0]).toMatchObject({ rotulo: "Nome e cargo", alternativa: true, caida: "Fonte caída há 3 coletas, desde 19/10: conferir se o endereço mudou" });
+  });
+});
+
+describe("tratamento e endereçamento pela maioria dos pares (spec 2026-10-30 §3.4)", () => {
+  const OBSERVACAO = "Pela maioria dos pares: 6 de 7 no grupo usam Senhor";
+  const pares = (situacao: "confere" | "divergente", planilha: string): ComparacaoCampo => ({
+    campo: "tratamento", valorPlanilha: planilha, valorEsperado: "Senhor", situacao, origemValor: "pares", observacao: OBSERVACAO,
+  });
+
+  test("divergente dos pares: etiqueta 'Tratamento diverge' explicada pela observação; cartão com a maioria e o valor a copiar", () => {
+    // Arrange
+    const c = contato({ semaforo: "amarelo", comparacoes: [pares("divergente", "Doutor")] });
+
+    // Act
+    const etiqueta = etiquetasDoContato(c, grupoComFonte).find((e) => e.campo === "tratamento");
+    const d = cartao(c, "tratamento");
+
+    // Assert
+    expect(etiqueta).toMatchObject({ texto: "Tratamento diverge", tom: "atencao", explicacao: OBSERVACAO });
+    expect(d).toMatchObject({ origem: "Maioria dos pares diz", valorReferencia: "Senhor", copiavel: "Senhor", observacao: OBSERVACAO });
+  });
+
+  test("confere pelos pares: etiqueta 'Tratamento confere' explicada pela observação, sem valor a copiar", () => {
+    const c = contato({ comparacoes: [pares("confere", "Senhor")] });
+    const etiqueta = etiquetasDoContato(c, grupoComFonte).find((e) => e.campo === "tratamento");
+    expect(etiqueta).toMatchObject({ texto: "Tratamento confere", tom: "ok", explicacao: OBSERVACAO });
+    expect(cartao(c, "tratamento").copiavel).toBeUndefined();
+  });
+
+  test("comparação da tabela de protocolo não ganha observação no cartão", () => {
+    const c = contato({ comparacoes: [diverge("tratamento", "protocolo", "Doutor", "Senhor")] });
+    expect(cartao(c, "tratamento")).toMatchObject({ origem: "Tabela de protocolo diz" });
+    expect(cartao(c, "tratamento").observacao).toBeUndefined();
   });
 });

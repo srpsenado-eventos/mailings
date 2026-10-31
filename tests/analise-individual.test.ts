@@ -139,12 +139,13 @@ describe("analisar com fontes individuais (spec 2026-10-15 §4 e §5.5)", () => 
     expect(g.individuais).toEqual({ lidas: 2, caidas: 0 });
   });
 
-  test("governador que saiu: página lida sem o nome → possível saída, com o novo titular em novos", async () => {
+  test("governador que saiu: página lida sem o nome → possível saída, sem propor inclusão do novo titular", async () => {
     const trocada: ConteudoFonte = { ...paginaGo, pessoas: [{ nome: "Novo Titular do Estado", cargo: "Governador" }], textoLimpo: paginaGo.textoLimpo.replace("João Carlos Destaque Silva", "Novo Titular do Estado") };
     const r = await analisar("c.xlsx", [govGo, govRs], deps({ [URL_GO]: trocada, [URL_RS]: paginaRs }));
     const g = r.grupos[0];
     expect(g.contatos[0]).toMatchObject({ semaforo: "vermelho", possivelSaida: true });
-    expect(g.novos.map((n) => [n.nome, n.fonteUrl])).toEqual([["Novo Titular do Estado", URL_GO]]);
+    expect(g.novos).toEqual([]);
+    expect(r.resumo.novo).toBe(0);
     expect(r.resumo.possivelSaida).toBe(1);
   });
 

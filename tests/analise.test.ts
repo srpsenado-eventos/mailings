@@ -1204,3 +1204,102 @@ describe("analisar: grupos de modo lista e neutro (spec 2026-10-30 §4.5 e §4.6
     expect(r.resumo.contatosSemFonte).toBe(0);
   });
 });
+
+describe("cargo nos tribunais (spec 2026-10-30 §3.2)", () => {
+  const depsTribunal = (grupoCanonico: string, cargoNaPagina: string): Dependencias => ({
+    resolverFonte: () => ({
+      grupoCanonico,
+      fontes: [{ url: "https://tribunal.jus.br", ativo: true }],
+      fontesIndividuais: [],
+      sugestoes: [],
+    }),
+    raspar: async () => ({
+      url: "https://tribunal.jus.br",
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [{ nome: "Fulano de Tal Silva", cargo: cargoNaPagina, origem: "pagina" }],
+    }),
+    extrairComposicao: async () => [],
+  });
+  const ministro: ContatoPlanilha = { nome: "Fulano de Tal Silva", grupo: "TRIB", cargo: "Ministro do Superior Tribunal de Justiça", ...CADASTRO_OK };
+
+  test("Diretor-Geral da ENFAM na página confirma o Ministro do STJ", async () => {
+    const r = await analisar("c.xlsx", [ministro], depsTribunal("Ministros do STJ", "Diretor-Geral da ENFAM"));
+    expect(r.grupos[0].contatos[0].comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("confere");
+  });
+
+  test("a mesma página fora de tribunal continua divergindo no cargo", async () => {
+    const r = await analisar("c.xlsx", [ministro], depsTribunal("ORG", "Diretor-Geral da ENFAM"));
+    expect(r.grupos[0].contatos[0].comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("divergente");
+  });
+});
+
+describe("tratamento e endereçamento pela maioria dos pares (spec 2026-10-30 §3.4)", () => {
+  const semFonte: Dependencias = {
+    resolverFonte: () => ({ fontes: [], fontesIndividuais: [], sugestoes: [] }),
+    raspar: async () => {
+      throw new Error("raspar não deveria ser chamado");
+    },
+    extrairComposicao: async () => [],
+  };
+  const embaixador = (nome: string, cargo: string, tratamento: string): ContatoPlanilha => ({
+    nome, grupo: "Embaixadores", cargo, tratamento, enderecamento: "A Sua Excelência o Senhor",
+  });
+
+  test("cargo sem regra na tabela é julgado pelos pares também no grupo sem fonte", async () => {
+    // Arrange: "Encarregado de Negócios" não está na tabela de protocolo.
+    const lote = [
+      embaixador("Um", "Encarregado de Negócios da Embaixada do Iraque", "Senhor"),
+      embaixador("Dois", "Encarregado de Negócios a.i. da Embaixada do Peru", "Senhor"),
+      embaixador("Quatro", "Encarregada de Negócios da Embaixada do Chile", "Senhora"),
+      embaixador("Três", "Encarregado de Negócios da Embaixada de Gana", "Doutor"),
+    ];
+    const sozinho = await analisar("c.xlsx", [lote[3]], semFonte);
+    expect(sozinho.grupos[0].contatos[0].comparacoes.find((c) => c.campo === "tratamento" && c.origemValor !== "coerencia")?.situacao).toBe("sem_regra");
+
+    // Act
+    const r = await analisar("c.xlsx", lote, semFonte);
+
+    // Assert
+    const [um, , , tres] = r.grupos[0].contatos;
+    expect(um.comparacoes.find((c) => c.campo === "tratamento" && c.origemValor === "pares")?.situacao).toBe("confere");
+    expect(tres.comparacoes.find((c) => c.campo === "tratamento" && c.origemValor === "pares")).toMatchObject({
+      situacao: "divergente",
+      valorEsperado: "Senhor",
+      observacao: "Pela maioria dos pares: 3 de 3 no grupo usam Senhor",
+    });
+    expect(tres.camposDivergentes.some((d) => d.campo === "tratamento")).toBe(true);
+    // Grupo sem fonte: o contato continua vermelho "cadastrar fonte"; os pares não mudam o semáforo.
+    expect(tres.semaforo).toBe("vermelho");
+    expect(r.resumo.vermelho).toBe(4);
+  });
+
+  test("grupo lido com cargo sem regra: divergente dos pares pinta amarelo e entra no resumo", async () => {
+    // Arrange
+    const lote = [
+      embaixador("Ana Um", "Encarregado de Negócios da Embaixada do Iraque", "Senhor"),
+      embaixador("Bia Dois", "Encarregado de Negócios da Embaixada do Peru", "Senhor"),
+      embaixador("Davi Quatro", "Encarregado de Negócios da Embaixada do Chile", "Senhor"),
+      embaixador("Caio Tres", "Encarregado de Negócios da Embaixada de Gana", "Doutor"),
+    ];
+    const pagina: Dependencias = {
+      resolverFonte: () => ({ grupoCanonico: "ORG", fontes: [{ url: "https://orgao.gov.br", ativo: true }], fontesIndividuais: [], sugestoes: [] }),
+      raspar: async () => ({
+        url: "https://orgao.gov.br",
+        textoLimpo: "",
+        destaques: [],
+        pessoas: lote.map((c) => ({ nome: c.nome, cargo: c.cargo, origem: "pagina" as const })),
+      }),
+      extrairComposicao: async () => [],
+    };
+
+    // Act
+    const r = await analisar("c.xlsx", lote, pagina);
+
+    // Assert
+    expect(r.grupos[0].contatos.map((c) => c.semaforo)).toEqual(["verde", "verde", "verde", "amarelo"]);
+    expect(r.grupos[0].contatos[0].comparacoes.find((c) => c.campo === "tratamento" && c.origemValor === "pares")?.situacao).toBe("confere");
+    expect(r.resumo.verde).toBe(3);
+    expect(r.resumo.amarelo).toBe(1);
+  });
+});

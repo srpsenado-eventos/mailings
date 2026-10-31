@@ -8,8 +8,10 @@ import {
   marcarFonteInacessivel,
   mesclarComposicao,
   MOTIVO_SEM_LISTA,
+  novosForaDaPlanilha,
   OBSERVACAO_SEM_FONTE_OFICIAL,
   pontuarPessoa,
+  situacaoCampo,
   sugerirGrupos,
   unirFontes,
 } from "@/lib/match";
@@ -499,6 +501,109 @@ describe("contarContatosCasados (spec 2026-10-20 §5.1)", () => {
   });
 });
 
+describe("nome em destaque (spec 2026-10-30 §3.1, STJ)", () => {
+  const STJ: ConteudoFonte = {
+    url: "https://www.stj.jus.br/web/verMinistrosSTJ?parametro=1",
+    textoLimpo: "",
+    destaques: [],
+    pessoas: [{ nome: "Sérgio Luíz Kukina", nomeDestaque: "Sérgio Kukina" }],
+  };
+  const nomeDe = (r: ReturnType<typeof compararContato>) => r.comparacoes.find((c) => c.campo === "nome");
+
+  test("contato igual ao destaque confere", () => {
+    // Arrange / Act
+    const r = compararContato(contato({ nome: "Sérgio Kukina" }), STJ);
+
+    // Assert
+    expect(nomeDe(r)?.situacao).toBe("confere");
+    expect(nomeDe(r)?.valorEsperado).toBe("Sérgio Kukina");
+    expect(r.semaforo).toBe("verde");
+  });
+
+  test("contato igual ao nome completo, mas não ao destaque, diverge com o destaque como esperado", () => {
+    const r = compararContato(contato({ nome: "Sérgio Luíz Kukina" }), STJ);
+    expect(nomeDe(r)?.situacao).toBe("divergente");
+    expect(nomeDe(r)?.valorEsperado).toBe("Sérgio Kukina");
+    expect(r.camposDivergentes).toContainEqual({ campo: "nome", valorPlanilha: "Sérgio Luíz Kukina", valorEncontrado: "Sérgio Kukina" });
+  });
+
+  test("pessoa sem destaque segue como hoje: o nome completo é o esperado", () => {
+    const semDestaque: ConteudoFonte = { ...STJ, pessoas: [{ nome: "Sérgio Luíz Kukina" }] };
+    expect(nomeDe(compararContato(contato({ nome: "Sérgio Luíz Kukina" }), semDestaque))?.situacao).toBe("confere");
+    const curto = nomeDe(compararContato(contato({ nome: "Sérgio Kukina" }), semDestaque));
+    expect(curto?.situacao).toBe("divergente");
+    expect(curto?.valorEsperado).toBe("Sérgio Luíz Kukina");
+  });
+
+  test("o casamento considera também o destaque (o maior dos dois escores)", () => {
+    // Arrange — pelo nome completo só 2 de 5 partes casam; pelo destaque, 2 de 2
+    const pessoa: PessoaSite = { nome: "Ana Bia Carla Dora Eva", nomeDestaque: "Ana Eva" };
+    const f: ConteudoFonte = { ...STJ, pessoas: [pessoa] };
+    const c = contato({ nome: "Ana Eva Fabi Gina Hele" });
+    expect(pontuarPessoa(c.nome, pessoa.nome)).toBeLessThan(0.6);
+
+    // Act
+    const r = compararContato(c, f);
+
+    // Assert
+    expect(r.possivelSaida).toBeUndefined();
+    expect(nomeDe(r)?.valorEsperado).toBe("Ana Eva");
+    expect(contarContatosCasados([c], [pessoa])).toBe(1);
+  });
+
+  test("destaque de uma palavra só não vale para o casamento, mas continua o nome esperado", () => {
+    // Arrange — "Moura" sozinho casaria "Moura Ribeiro" com a pessoa errada
+    const errada: PessoaSite = { nome: "Maria Thereza Rocha de Assis Moura", nomeDestaque: "Moura" };
+    const certa: PessoaSite = { nome: "Paulo Dias de Moura Ribeiro", nomeDestaque: "Moura Ribeiro" };
+    const c = contato({ nome: "Moura Ribeiro" });
+
+    // Act
+    const r = compararContato(c, { ...STJ, pessoas: [errada, certa] });
+    const soErrada = compararContato(c, { ...STJ, pessoas: [errada] });
+
+    // Assert
+    expect(nomeDe(r)?.valorEsperado).toBe("Moura Ribeiro");
+    expect(nomeDe(r)?.situacao).toBe("confere");
+    expect(soErrada.possivelSaida).toBe(true);
+    expect(contarContatosCasados([c], [errada])).toBe(0);
+    const pelaPessoa = compararContato(contato({ nome: "Maria Thereza Rocha de Assis Moura" }), { ...STJ, pessoas: [errada] });
+    expect(nomeDe(pelaPessoa)?.valorEsperado).toBe("Moura");
+  });
+
+  test("presidente do STJ com destaque: confere pelo destaque, com o prefixo \"Ministro\" e sem achado de prefixo", () => {
+    // Arrange
+    const pessoa: PessoaSite = { nome: "Antonio Herman de Vasconcellos e Benjamin", nomeDestaque: "Herman Benjamin", cargo: "Presidente" };
+    const c = contato({ nome: "Ministro Herman Benjamin", grupo: "STJ", cargo: "Presidente do Superior Tribunal de Justiça" });
+
+    // Act
+    const g = compararGrupo("STJ", [c], { ...STJ, pessoas: [pessoa] }, "Ministros do STJ");
+    const r = g.contatos[0];
+
+    // Assert
+    expect(nomeDe(r)?.situacao).toBe("confere");
+    expect(nomeDe(r)?.valorEsperado).toBe("Ministro Herman Benjamin");
+    expect(r.comparacoes.find((x) => x.campo === "cargo")?.situacao).toBe("confere");
+    expect(r.comparacoes.some((x) => x.achado === "nome_sem_prefixo")).toBe(false);
+  });
+
+  test("proposta de inclusão mostra o nome em destaque e guarda o completo no contexto", () => {
+    // Arrange
+    const nova: PessoaSite = { nome: "Maria Thereza Rocha de Assis Moura", nomeDestaque: "Maria Thereza Moura", cargo: "Ministra" };
+    const semDestaque: PessoaSite = { nome: "Paulo Dias Exemplo", cargo: "Ministro", contexto: "Convocado" };
+
+    // Act
+    const g = compararGrupo("STJ", [], { ...STJ, pessoas: [nova, semDestaque] });
+    const fora = novosForaDaPlanilha([nova, semDestaque], []);
+
+    // Assert
+    for (const novos of [g.novos, fora]) {
+      expect(novos[0].nome).toBe("Maria Thereza Moura");
+      expect(novos[0].contexto).toBe("Nome completo: Maria Thereza Rocha de Assis Moura");
+      expect(novos[1]).toEqual(semDestaque);
+    }
+  });
+});
+
 describe("aplicarNomesDoContatos (spec 2026-10-23 §4.2)", () => {
   const contatos = [{ nome: "Garibaldi Alves Filho", grupo: "G", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" }, { nome: "Outra Pessoa Qualquer", grupo: "G", tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" }];
   const fonte = { url: "https://x.leg.br", textoLimpo: "", destaques: [], pessoas: [{ nome: "Garibaldi Alves" }, { nome: "Outra Pessoa" }] };
@@ -552,5 +657,146 @@ describe("compararContatoSemFonteOficial (spec 2026-10-30 §4.5)", () => {
     expect(r.observacao).toBe(MOTIVO_SEM_LISTA);
     expect(r.possivelSaida).toBeUndefined();
     expect(r.camposDivergentes.some((d) => d.campo === "fonte")).toBe(false);
+  });
+});
+
+describe("cargo nos tribunais (spec 2026-10-30 §3.2)", () => {
+  const TRIBUNAL = { tribunal: true };
+
+  test("função de tribunal da página confirma o Ministro do Contatos", () => {
+    expect(situacaoCampo("Ministro do Superior Tribunal de Justiça", "Vice-Presidente e Corregedor-Geral da Justiça Federal", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Ministro do Superior Tribunal de Justiça", "Diretor-Geral da ENFAM", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Ministro do TSE", "(Corregedor-Geral)", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Ministro do Tribunal Superior do Trabalho", "Corregedor-Geral da Justiça do Trabalho", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Ministro do STF", "Ministro (Decano)", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Ministra do STJ", "Ouvidora", TRIBUNAL)).toBe("confere");
+  });
+
+  test("Ministro(a) da página confirma a Ministra do Contatos", () => {
+    expect(situacaoCampo("Ministra do STM", "Ministro(a)", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Ministro do STM", "Ministro(a)", TRIBUNAL)).toBe("confere");
+  });
+
+  test("um gênero explícito na página não confirma o outro gênero do Contatos", () => {
+    expect(situacaoCampo("Ministra do STF", "Ministro", TRIBUNAL)).toBe("divergente");
+    expect(situacaoCampo("Ministro do STF", "Ministra", TRIBUNAL)).toBe("divergente");
+  });
+
+  test("Presidente do tribunal é confirmado por Presidente ou só por Ministro", () => {
+    expect(situacaoCampo("Presidente do Supremo Tribunal Federal", "Ministro", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Presidente do Supremo Tribunal Federal", "Ministro(a)", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Presidente do Supremo Tribunal Federal", "Presidente", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Presidente do Supremo Tribunal Federal", "PRESIDENTE:", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Presidente do Superior Tribunal de Justiça", "Presidente:", TRIBUNAL)).toBe("confere");
+  });
+
+  test("função específica diferente não confirma Presidente do tribunal", () => {
+    expect(situacaoCampo("Presidente do Supremo Tribunal Federal", "Vice-Presidente", TRIBUNAL)).toBe("divergente");
+    expect(situacaoCampo("Presidente do TST", "Corregedor-Geral da Justiça do Trabalho", TRIBUNAL)).toBe("divergente");
+  });
+
+  test("página que diz Presidente para quem está cadastrado como Ministro diverge", () => {
+    expect(situacaoCampo("Ministro do STF", "Presidente", TRIBUNAL)).toBe("divergente");
+    expect(situacaoCampo("Ministro do STF", "PRESIDENTE:", TRIBUNAL)).toBe("divergente");
+  });
+
+  test("Substituto, Interino e Ex- continuam negando a função no tribunal", () => {
+    expect(situacaoCampo("Ministro do Tribunal de Contas da União", "Ministro-Substituto", TRIBUNAL)).toBe("divergente");
+    expect(situacaoCampo("Presidente do STF", "Ex-Presidente", TRIBUNAL)).toBe("divergente");
+    expect(situacaoCampo("Ministra do STJ", "Decana", TRIBUNAL)).toBe("confere");
+  });
+
+  test("Ministro/Ministra da página no tribunal confirma os dois gêneros", () => {
+    expect(situacaoCampo("Ministra do STF", "Ministro/Ministra", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Ministro do STF", "Ministro/Ministra", TRIBUNAL)).toBe("confere");
+  });
+
+  test("Vice Presidente com espaço é vice, não presidência própria", () => {
+    expect(situacaoCampo("Ministro do STJ", "Vice Presidente", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Presidente do STJ", "Vice Presidente", TRIBUNAL)).toBe("divergente");
+  });
+
+  test("Ministra do Contatos com função no masculino explícito na página diverge (escolha da revisão)", () => {
+    expect(situacaoCampo("Ministra do TST", "Corregedor-Geral da Justiça do Trabalho", TRIBUNAL)).toBe("divergente");
+    expect(situacaoCampo("Ministra do TST", "Corregedora-Geral da Justiça do Trabalho", TRIBUNAL)).toBe("confere");
+  });
+
+  test("convocado continua comparado como hoje", () => {
+    expect(situacaoCampo("Desembargador Convocado do STJ", "Desembargador Convocado", TRIBUNAL)).toBe("confere");
+    expect(situacaoCampo("Desembargador Convocado do STJ", "Vice-Presidente", TRIBUNAL)).toBe("divergente");
+  });
+
+  test("fora de tribunal as funções não confirmam Ministro e a regra de papel continua", () => {
+    expect(situacaoCampo("Ministro do Superior Tribunal de Justiça", "Vice-Presidente e Corregedor-Geral da Justiça Federal")).toBe("divergente");
+    expect(situacaoCampo("Governador do Estado de Sergipe", "Secretário Especial de Governo")).toBe("divergente");
+    expect(situacaoCampo("Presidente", "Vice-Presidente")).toBe("divergente");
+    expect(situacaoCampo("Ministra de Estado", "Ministro de Estado")).toBe("divergente");
+  });
+
+  test("gênero neutro da página vale em qualquer grupo: Ministro(a) e Ministro/Ministra confirmam os dois", () => {
+    expect(situacaoCampo("Ministra de Estado", "Ministro(a) de Estado")).toBe("confere");
+    expect(situacaoCampo("Ministro de Estado", "Ministro(a) de Estado")).toBe("confere");
+    expect(situacaoCampo("Ministra de Estado", "Ministro/Ministra de Estado")).toBe("confere");
+    expect(situacaoCampo("Ministro de Estado", "Ministro/Ministra de Estado")).toBe("confere");
+  });
+
+  test("compararGrupo de tribunal confirma o cargo pela função da página", () => {
+    const f: ConteudoFonte = {
+      url: "https://tse",
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [{ nome: "Fulano de Tal Silva", cargo: "(Corregedor-Geral)" }],
+    };
+    const r = compararGrupo("TSE", [contato({ nome: "Fulano de Tal Silva", cargo: "Ministro do TSE" })], f, "Ministros do TSE");
+    expect(r.contatos[0].comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("confere");
+  });
+
+  test("troca de presidência no tribunal: esperado é Presidente do tribunal, não o texto da página", () => {
+    const f: ConteudoFonte = {
+      url: "https://tse",
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [{ nome: "Fulano de Tal Silva", cargo: "(Presidente)" }],
+    };
+    const r = compararGrupo("TSE", [contato({ nome: "Fulano de Tal Silva", cargo: "Ministro do Tribunal Superior Eleitoral" })], f, "Ministros do TSE");
+    expect(r.contatos[0].comparacoes.find((c) => c.campo === "cargo")).toMatchObject({
+      situacao: "divergente",
+      valorEsperado: "Presidente do Tribunal Superior Eleitoral",
+    });
+  });
+
+  test("fora da troca de presidência o esperado continua o da página", () => {
+    const f: ConteudoFonte = {
+      url: "https://stf",
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [{ nome: "Fulano de Tal Silva", cargo: "Vice-Presidente" }],
+    };
+    const r = compararGrupo("STF", [contato({ nome: "Fulano de Tal Silva", cargo: "Presidente do Supremo Tribunal Federal" })], f, "Ministros do STF");
+    expect(r.contatos[0].comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "divergente", valorEsperado: "Vice-Presidente" });
+  });
+
+  test("compararGrupo fora de tribunal mantém a divergência pela mesma página", () => {
+    const f: ConteudoFonte = {
+      url: "https://orgao",
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [{ nome: "Fulano de Tal Silva", cargo: "(Corregedor-Geral)" }],
+    };
+    const r = compararGrupo("ORG", [contato({ nome: "Fulano de Tal Silva", cargo: "Ministro do TSE" })], f, "ORG");
+    expect(r.contatos[0].comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("divergente");
+  });
+});
+
+describe("cargo do ex-presidente com o período (spec 2026-10-30 §3.5)", () => {
+  test("o período não atrapalha o papel: confere com a página que diz o cargo sem período", () => {
+    // Assert
+    expect(situacaoCampo("Presidente do Senado Federal de 2019 a 2021", "Presidente do Senado Federal")).toBe("confere");
+    expect(situacaoCampo("Presidente do Senado Federal de 1995 a 1997 e de 2009 a 2011", "Presidente do Senado Federal")).toBe("confere");
+  });
+
+  test('"1º Vice-Presidente" na página continua divergente', () => {
+    // Assert
+    expect(situacaoCampo("Presidente do Senado Federal de 2019 a 2021", "1º Vice-Presidente")).toBe("divergente");
   });
 });

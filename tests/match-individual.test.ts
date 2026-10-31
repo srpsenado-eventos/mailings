@@ -171,7 +171,6 @@ describe("compararContatoIndividual (tabela §5.2)", () => {
     expect(v.resultado.fonteUrl).toBe(ministerio.url);
     expect(v.resultado.comparacoes.find((c) => c.campo === "nome")).toMatchObject({ situacao: "confere", fonteUrl: ministerio.url });
     expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "confere", fonteUrl: LISTA.url });
-    expect(v.novos).toEqual([]);
   });
 
   test("cargo diverge da lista: amarelo com o texto oficial em valorEsperado", () => {
@@ -197,14 +196,30 @@ describe("compararContatoIndividual (tabela §5.2)", () => {
     expect(v2.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "confere", valorEsperado: "Governador do Estado Exemplar" });
   });
 
-  test("individual lida com conteúdo e nome ausente: vermelho, possível saída, pessoas com cargo viram novos com a URL", () => {
+  test("individual lida com conteúdo e nome ausente: vermelho, possível saída, e a página individual nunca propõe inclusão", () => {
     const v = compararContatoIndividual({ contato: { ...ministra, nome: "Outra Pessoa Qualquer" }, fonte: indNome, lida: { conteudo: ministerio }, listaCargos: LISTA });
     expect(v.resultado).toMatchObject({ semaforo: "vermelho", possivelSaida: true, observacao: OBSERVACAO_NAO_CONSTA_INDIVIDUAL, fonteUrl: ministerio.url });
     expect(v.resultado.camposDivergentes[0]).toEqual({ campo: "nome", valorPlanilha: "Outra Pessoa Qualquer" });
     expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toBeUndefined();
     expect(v.nomeConfirmado).toBe(false);
     expect(v.lidaComConteudo).toBe(true);
-    expect(v.novos.map((n) => [n.nome, n.fonteUrl])).toEqual([["Ana Maria Política Completa", ministerio.url]]);
+    expect(ministerio.pessoas.some((pe) => Boolean(pe.cargo))).toBe(true);
+  });
+
+  test("página individual com 3 pessoas com cargo e sem o contato: possível saída e nenhuma proposta de inclusão", () => {
+    const tabela: ConteudoFonte = {
+      url: estado.url,
+      textoLimpo: "Principais cargos do Estado. Fulano de Tal Primeiro, Vice-Governador. Beltrano de Tal Segundo, Secretário de Fazenda. Sicrano de Tal Terceiro, Secretário de Saúde." + " Texto de enchimento para a página contar como lida com conteúdo. ".repeat(6),
+      destaques: [],
+      pessoas: [
+        { nome: "Fulano de Tal Primeiro", cargo: "Vice-Governador" },
+        { nome: "Beltrano de Tal Segundo", cargo: "Secretário de Fazenda" },
+        { nome: "Sicrano de Tal Terceiro", cargo: "Secretário de Saúde" },
+      ],
+    };
+    const v = compararContatoIndividual({ contato: governador, fonte: indNomeCargo, lida: { conteudo: tabela } });
+    expect(v.resultado).toMatchObject({ semaforo: "vermelho", possivelSaida: true });
+    expect(v.lidaComConteudo).toBe(true);
   });
 
   test("individual caiu (erro): indeterminado, nome 'nao_verificado', cargo ainda pela lista, motivo na observação", () => {
@@ -215,7 +230,6 @@ describe("compararContatoIndividual (tabela §5.2)", () => {
     expect(v.resultado.comparacoes.find((c) => c.campo === "nome")).toMatchObject({ situacao: "nao_verificado", fonteUrl: ministerio.url });
     expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "confere", fonteUrl: LISTA.url });
     expect(v.lidaComConteudo).toBe(false);
-    expect(v.novos).toEqual([]);
   });
 
   test("página com texto abaixo do mínimo (CAPTCHA, só menu) é inacessível, não ausência: nunca possível saída", () => {
@@ -237,7 +251,6 @@ describe("compararContatoIndividual (tabela §5.2)", () => {
     expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "nao_verificado", fonteUrl: estado.url });
     expect(v.nomeConfirmado).toBe(false);
     expect(v.lidaComConteudo).toBe(true);
-    expect(v.novos).toEqual([]);
   });
 
   test("contato com nome vazio e cargo pela lista: cargo continua conferido pela lista", () => {
@@ -354,5 +367,41 @@ describe("nome mais curto em destaque (spec 2026-10-23 §4.1)", () => {
     expect(v.resultado.possivelSaida).toBeUndefined();
     expect(v.resultado.comparacoes.find((c) => c.campo === "nome")).toMatchObject({ situacao: "divergente", valorEsperado: "Waldez Góes" });
     expect(v.nomeConfirmado).toBe(true);
+  });
+});
+
+describe("troca de presidência no tribunal (spec 2026-10-30 §3.2)", () => {
+  const ENCHIMENTO = " Página institucional do tribunal, com a agenda, a biografia, os contatos do gabinete e as notícias recentes.".repeat(4);
+  const juiz = contato({ nome: "Fulano de Tal Silva", cargo: "Ministro do Tribunal Superior Eleitoral", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" });
+  const fonteTse: FonteIndividual = { url: "https://www.tse.jus.br/ministro", ativo: true, chave: { nome: juiz.nome }, campos: ["nome", "cargo"] };
+  const pagina: ConteudoFonte = {
+    url: fonteTse.url,
+    textoLimpo: `PRESIDENTE: Fulano de Tal Silva.${ENCHIMENTO}`,
+    destaques: [],
+    pessoas: [{ nome: "Fulano de Tal Silva", cargo: "PRESIDENTE:" }],
+  };
+
+  test("página individual: esperado é Presidente do tribunal", () => {
+    const v = compararContatoIndividual({ contato: juiz, fonte: fonteTse, lida: { conteudo: pagina }, grupoCanonico: "Ministros do TSE" });
+    expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({
+      situacao: "divergente",
+      valorEsperado: "Presidente do Tribunal Superior Eleitoral",
+    });
+  });
+
+  test("página individual fora de tribunal: esperado é o da página", () => {
+    const v = compararContatoIndividual({ contato: juiz, fonte: fonteTse, lida: { conteudo: pagina }, grupoCanonico: "Ministros de Estado" });
+    expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")).toMatchObject({ situacao: "divergente", valorEsperado: "PRESIDENTE:" });
+  });
+
+  test("lista de cargos: esperado é Presidente do tribunal só no tribunal", () => {
+    const lista = ["Presidente - Tribunal Superior Eleitoral"];
+    expect(compararCargoNaLista("Ministra do Tribunal Superior Eleitoral", lista, "https://x", { tribunal: true })).toMatchObject({
+      situacao: "divergente",
+      valorEsperado: "Presidente do Tribunal Superior Eleitoral",
+    });
+    expect(compararCargoNaLista("Ministra do Tribunal Superior Eleitoral", lista, "https://x")).toMatchObject({
+      valorEsperado: "Presidente - Tribunal Superior Eleitoral",
+    });
   });
 });

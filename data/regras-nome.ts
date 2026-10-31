@@ -1,3 +1,5 @@
+import { GRUPOS_DE_TRIBUNAL } from "@/data/cargos-tribunal";
+
 /**
  * Regras de escrita do campo `Nome` do cadastro, por grupo canônico (Camada C).
  *
@@ -16,6 +18,10 @@
  * conta própria. Patente militar ("Coronel Tadeu Silva") é nome parlamentar, não
  * tratamento a apagar, e não é afetada por esta regra.
  *
+ * A segunda é decisão do Clovis de 2026-10-30 (spec 2026-10-30 §3.3): o Presidente de
+ * tribunal leva "Ministro(a)" antes do nome e o Presidente da República leva
+ * "Presidente". Presidente do Senado e da Câmara ficam fora.
+ *
  * Chave: nome do grupo exatamente como cadastrado em `data/catalogo.ts`
  * (`GrupoCatalogo.nome`) — o grupo CANÔNICO, nunca o rótulo cru da coluna `Grupo`
  * da planilha, que pode ser um apelido ou vir com vários grupos colados por ";".
@@ -26,11 +32,37 @@ export interface RegraNome {
    * (sem acento, sem caixa, sem ponto final) — o formato que `normalizarTexto`
    * produz para uma palavra isolada.
    */
-  tratamentosProibidos: readonly string[];
+  tratamentosProibidos?: readonly string[];
+  /**
+   * Prefixo que o nome do presidente leva no cadastro (spec 2026-10-30 §3.3, decisão 3 do
+   * Clovis). `"ministro"`: o contato cujo cargo começa com "Presidente" (o Presidente do
+   * tribunal, nunca o Vice) leva "Ministro " ou "Ministra " antes do nome, no gênero do
+   * contato. `"presidente"`: todo contato do grupo leva "Presidente " antes do nome. O app
+   * nunca propõe tirar o prefixo; a comparação com a página já o ignora (`normalizarNome`).
+   */
+  prefixoDoPresidente?: "ministro" | "presidente";
+  /**
+   * Cargo que o ex-presidente leva no cadastro, seguido do período da presidência ("Presidente
+   * do Senado Federal de 2019 a 2021"), sem "Ex-" (spec 2026-10-30 §3.5, decisão 5 do Clovis).
+   * Regra do campo `Cargo`, aplicada por `comparacaoCargoExPresidente` (`lib/regras-cargo.ts`).
+   */
+  cargoComPeriodo?: string;
 }
 
+/** Os 6 grupos de tribunal: o Presidente leva "Ministro(a)" no nome. */
+const PREFIXO_NOS_TRIBUNAIS: Readonly<Record<string, RegraNome>> = Object.fromEntries(
+  GRUPOS_DE_TRIBUNAL.map((grupo): [string, RegraNome] => [grupo, { prefixoDoPresidente: "ministro" }]),
+);
+
 export const REGRAS_NOME: Readonly<Record<string, RegraNome>> = {
+  ...PREFIXO_NOS_TRIBUNAIS,
   "Ministros do STM": {
     tratamentosProibidos: ["dr", "dra", "doutor", "doutora"],
+    prefixoDoPresidente: "ministro",
   },
+  // O nome é "Presidente Luís Inácio Lula da Silva": o prefixo é regra, não erro (GT, 2026-10-30).
+  "Presidente da República": { prefixoDoPresidente: "presidente" },
+  // O cargo é o da presidência com o período, nunca "Ex-Presidente…" (GT, 2026-10-30).
+  "Ex-Presidentes do Senado": { cargoComPeriodo: "Presidente do Senado Federal" },
+  "Ex-Presidentes da República": { cargoComPeriodo: "Presidente da República Federativa do Brasil" },
 };

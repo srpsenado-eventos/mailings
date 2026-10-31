@@ -4,6 +4,7 @@ import { PDFParse } from "pdf-parse";
 import { normalizarNome, normalizarTexto, nucleoDeNome } from "@/lib/normalize";
 import { CARGOS } from "@/lib/cargos";
 import type { ConteudoFonte, PessoaSite, ExtracaoTabela } from "@/lib/types";
+import { colherDestaquesPorLinha, comDestaque, type DestaquesPorLinha } from "@/lib/scrape-destaque";
 
 export class ScrapeError extends Error {
   constructor(
@@ -391,15 +392,22 @@ function indiceDoCargoAntes(
   return ehCargo(linhas[j]) ? j : undefined;
 }
 
-/** Segmenta linhas em pessoas: linha-nome + cargo adjacente, do lado que a página usa. */
-function segmentarPessoas(linhas: string[], titulos: ReadonlySet<number>): PessoaSite[] {
+/**
+ * Segmenta linhas em pessoas: linha-nome + cargo adjacente, do lado que a página usa. Com
+ * `destaques` (fonte `nomeEmDestaque`), cada pessoa leva as partes em negrito da sua linha.
+ */
+function segmentarPessoas(
+  linhas: string[],
+  titulos: ReadonlySet<number>,
+  destaques?: DestaquesPorLinha,
+): PessoaSite[] {
   const pessoas: PessoaSite[] = [];
   const { orientacao, tituloEhCargo } = orientacaoDoCargo(linhas, titulos);
   const consumidas = new Set<number>();
   for (let i = 0; i < linhas.length; i++) {
     const emLinhaUnica = pessoaEmLinhaUnica(linhas[i]);
     if (emLinhaUnica) {
-      pessoas.push(emLinhaUnica);
+      pessoas.push(comDestaque(emLinhaUnica, linhas[i], destaques));
       continue;
     }
     const nome = nomeDaLinha(linhas[i]);
@@ -410,7 +418,7 @@ function segmentarPessoas(linhas: string[], titulos: ReadonlySet<number>): Pesso
         : indiceDoCargoDepois(linhas, i, titulos);
     if (indiceCargo !== undefined) consumidas.add(indiceCargo);
     const cargo = indiceCargo === undefined ? undefined : linhas[indiceCargo];
-    pessoas.push({ nome, cargo, contexto: linhas[i] });
+    pessoas.push(comDestaque({ nome, cargo, contexto: linhas[i] }, linhas[i], destaques));
   }
   return pessoas;
 }
@@ -610,6 +618,8 @@ export function extrairPorMarcador(texto: string, textos: readonly string[]): Pe
 export interface OpcoesExtracao {
   /** Textos que marcam as pessoas do grupo; presentes, só elas são extraídas. */
   marcador?: readonly string[];
+  /** Cada pessoa leva `nomeDestaque`, as partes em negrito do nome (spec 2026-10-30 §3.1). */
+  nomeEmDestaque?: boolean;
 }
 
 /** Extrai texto limpo + destaques + pessoas estruturadas de um HTML já baixado. Função pura. */
@@ -627,10 +637,13 @@ export function extrairConteudo(html: string, url: string, opcoes: OpcoesExtraca
     if (txt) destaquesBrutos.push(txt);
   });
 
+  // Também antes de mutar o DOM: o negrito de cada linha, para o nome em destaque.
+  const destaquesPorLinha = opcoes.nomeEmDestaque ? colherDestaquesPorLinha($, TAGS_SEPARAR) : undefined;
+
   const { linhas, titulos } = extrairLinhas($);
   const pessoas = opcoes.marcador?.length
     ? extrairPorMarcador(linhas.join("\n"), opcoes.marcador)
-    : segmentarPessoas(linhas, titulos);
+    : segmentarPessoas(linhas, titulos, destaquesPorLinha);
   const destaques = [...new Set(destaquesBrutos.filter(ehNome))];
 
   return { url, textoLimpo: linhas.join(" "), destaques, pessoas };
@@ -733,6 +746,8 @@ export interface OpcoesRaspagem {
   marcador?: readonly string[];
   /** "pdf": a fonte é um PDF, lido pelo pdf-parse (spec 2026-10-23 §5.1). Ausente → HTML. */
   tipo?: "html" | "pdf";
+  /** O nome esperado é a parte em negrito (spec 2026-10-30 §3.1). Só vale na extração de texto. */
+  nomeEmDestaque?: boolean;
   timeoutMs?: number;
 }
 
@@ -743,7 +758,10 @@ export interface OpcoesRaspagem {
 export async function raspar(url: string, opcoes: OpcoesRaspagem = {}): Promise<ConteudoFonte> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opcoes.timeoutMs ?? 15000);
-  const extracao: OpcoesExtracao = opcoes.marcador ? { marcador: opcoes.marcador } : {};
+  const extracao: OpcoesExtracao = {
+    ...(opcoes.marcador ? { marcador: opcoes.marcador } : {}),
+    ...(opcoes.nomeEmDestaque ? { nomeEmDestaque: true } : {}),
+  };
   try {
     if (opcoes.tipo === "pdf") {
       const bytes = await comRetryTls((dispatcher) => requisitarBytes(url, ctrl.signal, dispatcher));

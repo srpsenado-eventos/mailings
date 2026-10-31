@@ -101,8 +101,14 @@ describe("chaveDaLeitura (memória por forma de extração)", () => {
     expect(chaveDaLeitura(URL_A, { marcador: { textos: ["(convocado)", "(convocada)"] } })).toBe(`${URL_A}#marcador:["(convocado)","(convocada)"]`);
     expect(chaveDaLeitura(URL_A, { tipo: "pdf" })).toBe(`${URL_A}#pdf`);
   });
-  test("mais de um: sufixos combinados na ordem tabela, marcador, pdf", () => {
+  test("nome em destaque: sufixo #destaque, para a leitura sem destaque não ser reaproveitada no lugar", () => {
+    expect(chaveDaLeitura(URL_A, { nomeEmDestaque: true })).toBe(`${URL_A}#destaque`);
+  });
+  test("mais de um: sufixos combinados na ordem tabela, marcador, pdf, destaque", () => {
     expect(chaveDaLeitura(URL_A, { tipo: "pdf", marcador: { textos: ["X"] }, tabela: TABELA })).toBe(`${URL_A}#tabela:${JSON.stringify(TABELA)}#marcador:["X"]#pdf`);
+    expect(chaveDaLeitura(URL_A, { nomeEmDestaque: true, tipo: "pdf", marcador: { textos: ["X"] }, tabela: TABELA })).toBe(
+      `${URL_A}#tabela:${JSON.stringify(TABELA)}#marcador:["X"]#pdf#destaque`,
+    );
   });
 });
 

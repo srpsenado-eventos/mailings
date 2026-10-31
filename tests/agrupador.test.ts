@@ -80,8 +80,13 @@ describe("modoDoGrupo e grupoDoAgrupador", () => {
     );
   });
 
+  it("casa o apelido que o Contatos ainda usa: \"Defensor\" é o Defensor Público Geral", () => {
+    expect(grupoDoAgrupador("Defensor")?.rotulo).toBe("Defensor Público Geral");
+    expect(grupoDoAgrupador(" defensor ")?.fiscalizacao).toBe("fonte");
+  });
+
   it("devolve undefined para rótulo fora do agrupador", () => {
-    expect(grupoDoAgrupador("Defensor")).toBeUndefined();
+    expect(grupoDoAgrupador("PILOTO")).toBeUndefined();
   });
 });
 
@@ -89,6 +94,7 @@ describe("linhasDoAgrupador", () => {
   const grupos = [
     { grupo: "Governadores ", contatos: [1, 2] },
     { grupo: "Defensor", contatos: [1] },
+    { grupo: "PILOTO", contatos: [1] },
   ];
   const linhas = linhasDoAgrupador(grupos, { [GRUPO_SENADORES_ELEITOS]: 22 });
 
@@ -108,9 +114,14 @@ describe("linhasDoAgrupador", () => {
     expect(linhas.find((l) => l.rotulo === "Governadores")?.esperado).toBeUndefined();
   });
 
+  it("conta o apelido no grupo oficial: \"Defensor\" entra em Defensor Público Geral", () => {
+    expect(linhas.find((l) => l.rotulo === "Defensor Público Geral")?.noContatos).toBe(1);
+    expect(linhas.some((l) => l.rotulo === "Defensor")).toBe(false);
+  });
+
   it("coloca por último o grupo do retrato que não casa, marcado como fora do agrupador", () => {
     expect(linhas[linhas.length - 1]).toEqual({
-      rotulo: "Defensor",
+      rotulo: "PILOTO",
       fiscalizacao: "fonte",
       noContatos: 1,
       foraDoAgrupador: true,

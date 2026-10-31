@@ -21,10 +21,10 @@ export interface LinhaAgrupador {
 }
 
 const POR_ROTULO_NORMALIZADO: ReadonlyMap<string, GrupoPosse> = new Map(
-  GRUPOS_POSSE.map((g) => [normalizarTexto(g.rotulo), g]),
+  GRUPOS_POSSE.flatMap((g) => [g.rotulo, ...(g.apelidos ?? [])].map((r): [string, GrupoPosse] => [normalizarTexto(r), g])),
 );
 
-/** Grupo do agrupador da Posse 2027 que casa o rótulo do Contatos (igualdade após `normalizarTexto`). */
+/** Grupo do agrupador da Posse 2027 que casa o rótulo do Contatos, ou um apelido dele (igualdade após `normalizarTexto`). */
 export function grupoDoAgrupador(rotulo: string): GrupoPosse | undefined {
   return POR_ROTULO_NORMALIZADO.get(normalizarTexto(rotulo));
 }

@@ -11,6 +11,8 @@ export type ModoFiscalizacao = "fonte" | "lista" | "neutro";
 export interface GrupoPosse {
   rotulo: string;
   fiscalizacao: ModoFiscalizacao;
+  /** Rótulos que o Contatos ainda usa para o mesmo grupo (ex.: "Defensor"); casam como o rótulo oficial. */
+  apelidos?: readonly string[];
 }
 
 export const GRUPO_SENADORES_ELEITOS = "Senadores eleitos - Posse Presidencial 2027";
@@ -22,12 +24,13 @@ export const GRUPO_DEPUTADOS_FEDERAIS = "Deputados Federais";
 export const GRUPO_SENADORES = "Senadores";
 export const GRUPO_GOVERNADORES = "Governadores";
 
-const fonte = (rotulo: string): GrupoPosse => ({ rotulo, fiscalizacao: "fonte" });
+const fonte = (rotulo: string, apelidos?: readonly string[]): GrupoPosse => ({ rotulo, fiscalizacao: "fonte", ...(apelidos ? { apelidos } : {}) });
 const lista = (rotulo: string): GrupoPosse => ({ rotulo, fiscalizacao: "lista" });
 const neutro = (rotulo: string): GrupoPosse => ({ rotulo, fiscalizacao: "neutro" });
 
 export const GRUPOS_POSSE: readonly GrupoPosse[] = [
-  fonte("Defensor Público Geral"),
+  // O Contatos de 27/10 ainda grava este grupo como "Defensor" (Clovis, 2026-10-30).
+  fonte("Defensor Público Geral", ["Defensor"]),
   fonte("Ministros do STF"),
   fonte("Ministros do TSE"),
   fonte("Ministros do STJ"),

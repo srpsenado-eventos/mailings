@@ -204,7 +204,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
                   </div>
                   {g.contatos.map((c, i) => {
                     const marca = etiquetaDeRepeticao(repetidas, c, g.grupo);
-                    return <LinhaContato key={`${c.contato.nome}-${i}`} c={c} g={g} retrato={retrato} eleicaoLigada={eleicaoLigada} repeticao={marca?.etiqueta} fosca={marca?.fosca} />;
+                    return <LinhaContato key={`${c.contato.nome}-${i}`} c={c} g={g} retrato={retrato} eleicaoLigada={eleicaoLigada} repeticoes={marca?.etiquetas} fosca={marca?.fosca} />;
                   })}
                   {g.novos.map((n, i) => (
                     <LinhaNovo

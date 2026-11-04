@@ -195,9 +195,9 @@ function Detalhe({ c, g, retrato, eleicaoLigada }: { c: ResultadoContato; g: Res
 }
 
 /** `fosca`: linha atenuada pela decisão do GT (spec 2026-10-30 §4.1.3); o texto continua legível e a auditoria, igual. */
-export function LinhaContato({ c, g, retrato, eleicaoLigada = false, repeticao, fosca = false }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato; eleicaoLigada?: boolean; repeticao?: EtiquetaPainel; fosca?: boolean }) {
+export function LinhaContato({ c, g, retrato, eleicaoLigada = false, repeticoes, fosca = false }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato; eleicaoLigada?: boolean; repeticoes?: readonly EtiquetaPainel[]; fosca?: boolean }) {
   const [aberto, setAberto] = useState(false);
-  const etiquetas = [...(repeticao ? [repeticao] : []), ...etiquetasDoContato(c, g), ...(eleicaoLigada ? [...etiquetasDeEleicao(c.eleicao), ...etiquetasDeGoverno(c.eleicaoGoverno)] : [])];
+  const etiquetas = [...(repeticoes ?? []), ...etiquetasDoContato(c, g), ...(eleicaoLigada ? [...etiquetasDeEleicao(c.eleicao), ...etiquetasDeGoverno(c.eleicaoGoverno)] : [])];
   const situacao = situacaoDoContato(c, g);
   const motivo = motivoDoContato(c, g);
   const subtitulo = motivo ?? [c.contato.tratamento, c.contato.enderecamento].filter(Boolean).join(" · ");

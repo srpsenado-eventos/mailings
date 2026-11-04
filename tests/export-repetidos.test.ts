@@ -141,7 +141,7 @@ describe("export das autoridades em mais de um grupo", () => {
 
     test("caso tratado e caso reaberto", () => {
       const tratado = linhasRepetidas(autoridadesRepetidas([cueva[1]], undefined, decisaoCueva));
-      expect(tratado[0]["Situação"]).toBe("Tratado no Contatos");
+      expect(tratado[0]["Situação"]).toBe("Tratado");
       expect(tratado[0]["Situação no Contatos"]).toBe("Tratado no Contatos");
       const reaberto = linhasRepetidas(autoridadesRepetidas(
         [...cueva, grupo("Ministros do STF", [linha(CUEVA, "Ministro")])], undefined, decisaoCueva,

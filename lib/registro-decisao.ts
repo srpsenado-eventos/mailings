@@ -8,7 +8,7 @@ import { casosDoEleito, GRUPOS_DA_ELEICAO_DA_CASA, GRUPOS_DA_ELEICAO_DO_GOVERNO 
 import { descreverOcorrencia } from "@/lib/export-repetidos";
 import { normalizarTexto } from "@/lib/normalize";
 import type { AutoridadeRepetida } from "@/lib/repetidos-base";
-import { equivalenteDaOcorrencia } from "@/lib/repetidos-base";
+import { equivalenteDaOcorrencia, semRepetir } from "@/lib/repetidos-base";
 import { TEXTO_TIPO, textoDecisao, textoNoContatos } from "@/lib/repetidos-decisoes";
 import type { CasaLegislativa, ContatoDoEleito, EleitoClassificado, GovernadorClassificado } from "@/lib/types";
 
@@ -125,16 +125,6 @@ export interface AlvoDeDecisao {
   /** Opções do "convidar pelo grupo". */
   convites: string[];
   ocorrencias: OcorrenciaDoCaso[];
-}
-
-function semRepetir(valores: readonly string[]): string[] {
-  const vistos = new Set<string>();
-  return valores.filter((v) => {
-    const chave = normalizarTexto(v);
-    if (chave === "" || vistos.has(chave)) return false;
-    vistos.add(chave);
-    return true;
-  });
 }
 
 /** Junta as ocorrências de mesmo `valor` (comparado por `normalizarTexto`) numa só marcação. */

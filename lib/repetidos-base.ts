@@ -1,6 +1,6 @@
 import { PRECEDENCIA, type NivelPrecedencia, type RegraPrecedencia } from "@/data/precedencia";
 import { casaSegmento, segmentarGrupo } from "@/lib/catalogo";
-import { grupoEquivalente, type CasoDecidido, type RegistroManual, type SituacaoNoContatos } from "@/lib/decisoes";
+import { grupoEquivalente, type BloqueioDoGrupo, type CasoDecidido, type Pendencia, type RegistroManual, type SituacaoNoContatos } from "@/lib/decisoes";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import type { ResultadoGrupo } from "@/lib/types";
 
@@ -98,6 +98,10 @@ export interface AutoridadeRepetida {
   decisao?: RegistroManual;
   /** Situação no Contatos, calculada ao vivo com os grupos do retrato. */
   noContatos?: SituacaoNoContatos;
+  /** O que falta bloquear, cadastrar ou desbloquear (spec 2026-11-04 §3.1.2); ausente quando nada falta. */
+  pendencias?: Pendencia[];
+  /** Estado do bloqueio no Posse em cada grupo atual a bloquear (inclusive o registrado no grupo do convite). */
+  bloqueios?: BloqueioDoGrupo[];
 }
 
 export interface Escolha {
@@ -207,6 +211,17 @@ export function entradasDoGrupo(g: ResultadoGrupo): Entrada[] {
 export function semRepeticao(ocorrencias: readonly OcorrenciaRepetida[]): OcorrenciaRepetida[] {
   return ocorrencias.filter((o, i, todas) => todas.findIndex((x) =>
     x.grupo === o.grupo && x.grupoRegra === o.grupoRegra && x.chave === o.chave && x.origem === o.origem) === i);
+}
+
+/** Valores sem repetir por `normalizarTexto`, na ordem; descarta os vazios. */
+export function semRepetir(valores: readonly string[]): string[] {
+  const vistos = new Set<string>();
+  return valores.filter((v) => {
+    const chave = normalizarTexto(v);
+    if (chave === "" || vistos.has(chave)) return false;
+    vistos.add(chave);
+    return true;
+  });
 }
 
 /** Forma equivalente do grupo da ocorrência (spec 2026-10-30 §4.1.1). */

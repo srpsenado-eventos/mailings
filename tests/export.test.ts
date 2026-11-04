@@ -217,8 +217,8 @@ describe("colunas de tratamento e endereçamento", () => {
       [
         {
           campo: "tratamento",
-          valorPlanilha: "Senhor Governador",
-          valorEsperado: "Excelentíssimo Senhor Governador",
+          valorPlanilha: "Excelentíssimo Senhor Governador",
+          valorEsperado: "Senhor Governador",
           situacao: "divergente",
           origemValor: "protocolo",
         },
@@ -230,8 +230,8 @@ describe("colunas de tratamento e endereçamento", () => {
     const linhas = resultadoParaLinhas(analise);
 
     // Assert
-    expect(linhas[0]["Tratamento (planilha)"]).toBe("Senhor Governador");
-    expect(linhas[0]["Tratamento (protocolo)"]).toBe("Excelentíssimo Senhor Governador");
+    expect(linhas[0]["Tratamento (planilha)"]).toBe("Excelentíssimo Senhor Governador");
+    expect(linhas[0]["Tratamento (protocolo)"]).toBe("Senhor Governador");
   });
 
   test("linha de coerência não ocupa o par de colunas do campo", () => {

@@ -6,6 +6,7 @@ import {
   linhaDeEnderecamento,
   formaNominal,
 } from "@/lib/tratamento";
+import { REGRAS_TRATAMENTO } from "@/data/tratamentos";
 import type { ContatoPlanilha, RegraTratamento } from "@/lib/types";
 
 function regra(cargoDestinatario: string, vocativo: string, enderecamento = ""): RegraTratamento {
@@ -20,7 +21,7 @@ const REGRAS: RegraTratamento[] = [
   ),
   regra(
     "Governador",
-    "Excelentíssimo Senhor(a) Governador(a)",
+    "Senhor(a) Governador(a)",
     "A Sua Excelência o(a) Senhor(a)\n[Nome]\nGovernador(a) do Estado",
   ),
   regra("Vereador", "Senhor(a) Vereador(a)"),
@@ -567,5 +568,21 @@ describe("resolverRegra — Governador e Vice-Governador pelo prefixo (spec 2026
       tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor",
     });
     expect(protocolo.map((c) => c.situacao)).toEqual(["confere", "confere"]);
+  });
+});
+
+describe("comparacoesProtocolo — Governador pela tabela real v02 (04/11)", () => {
+  test("tabela v02: Senhor e o endereçamento da tabela conferem, sem exigir Excelentíssimo", () => {
+    const c = contato({ cargo: "Governador do Estado do Acre", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" });
+    const comps = comparacoesProtocolo(c, REGRAS_TRATAMENTO);
+    expect(comps.find((x) => x.campo === "tratamento")?.situacao).toBe("confere");
+    expect(comps.find((x) => x.campo === "enderecamento")?.situacao).toBe("confere");
+  });
+
+  test("tabela v02: Excelentíssimo Senhor no tratamento do governador diverge, com Senhor(a) como esperado", () => {
+    const c = contato({ cargo: "Governador do Estado do Acre", tratamento: "Excelentíssimo Senhor", enderecamento: "A Sua Excelência o Senhor" });
+    const trat = comparacoesProtocolo(c, REGRAS_TRATAMENTO).find((x) => x.campo === "tratamento");
+    expect(trat?.situacao).toBe("divergente");
+    expect(trat?.valorEsperado).toBe("Senhor(a)");
   });
 });

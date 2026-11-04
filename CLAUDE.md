@@ -116,7 +116,7 @@ O e-mail do GT Gestão de Convidados fixa como o Contatos deve ser atualizado pa
 - **Nome:** usar o **nome político/parlamentar** como está no site oficial de cada órgão. STM: retirar "Dr." e "Dra." de todos. STJ: usar as partes do nome em negrito. Senadores: nome parlamentar do portal; suplentes não são convidados. Regra do GT de 04/11: o nome é exatamente o do site oficial, mesmo quando o GT conhece o nome político.
 - **Cargo:** conforme o site. Presidentes de tribunal levam "Ministro/Ministra" antes do nome e a presidência indicada no cargo.
 - **Endereço:** confirmado **por telefone**, o mais completo possível (gera etiqueta de correio). O site raramente informa; `fonte_nao_informa` é o resultado normal, não erro.
-- **Tratamento e Endereçamento:** seguem a tabela `Regras de Atualizacao/Posse2027_TabelaTratamentos.xlsx` (aba "Tratamentos Simplificado"). Gênero tem que bater com a pessoa. É o objeto do spec de 2026-08-13.
+- **Tratamento e Endereçamento:** seguem a tabela `Regras de Atualizacao/Posse2027_TabelaTratamentos.xlsx` (aba "Tratamentos Simplificado"). Gênero tem que bater com a pessoa. É o objeto do spec de 2026-08-13. Tabela v02 desde 04/11 (governadores com 'Senhor(a)').
 - **Pessoa em mais de um órgão:** atualizada em **todos** os grupos em que está; quem decide o convite único é o GT.
 - **Foto:** atual e de frente (usada no reconhecimento no dia). Fora do escopo do app.
 - **Grupo no Contatos:** marcado "Posse Presidencial: SIM". Fora do escopo do app.

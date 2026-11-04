@@ -2,6 +2,7 @@ import { coerenciasVisiveis, textoCoerencia } from "@/lib/tratamento";
 import { excessoDoNumero, LIMITE_NUMERO, rotuloAchadoEndereco } from "@/lib/endereco";
 import { colunasDaBase, textoCelula } from "@/lib/ajuste-numero";
 import { descreverMotivoDeHoje, diaMes, MIN_COLETAS_URL_CAIDA } from "@/lib/memoria-leitura";
+import { textoCurtoLimiteNome } from "@/lib/limite-nome";
 import { normalizarTexto } from "@/lib/normalize";
 import { ColunaFaltanteError } from "@/lib/planilha";
 import { ehFiltroEleicao, passaFiltroEleicao, type FiltroEleicao } from "@/lib/painel-eleicao";
@@ -113,7 +114,8 @@ export function etiquetaDoLimiteDoNome(c: ResultadoContato): Etiqueta | undefine
 
 /** A forma curta é o texto completo sem o "…: abreviar o sobrenome…" que a explicação carrega. */
 function textoCurtoDoLimite(comp: ComparacaoCampo): string {
-  return (comp.observacao ?? "").split(":")[0] || textoCoerencia(comp);
+  const m = /^Nome com (\d+) caracteres, acima do limite de (\d+) do Posse/.exec(comp.observacao ?? "");
+  return m ? textoCurtoLimiteNome(Number(m[1]), Number(m[2])) : textoCoerencia(comp);
 }
 
 /**

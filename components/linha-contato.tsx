@@ -213,7 +213,7 @@ export function LinhaContato({ c, g, retrato, eleicaoLigada = false, repeticoes,
         <div className="text-sm text-cinza">{c.contato.cargo ?? "—"}</div>
         <div>
           <div className="flex flex-wrap gap-1.5">
-            {etiquetas.map((e) => <Etiqueta key={`${e.campo}-${e.texto}`} texto={e.texto} tom={e.tom} explicacao={e.explicacao} />)}
+            {etiquetas.map((e) => <Etiqueta key={`${e.campo}-${e.texto}`} texto={e.texto} tom={e.tom} explicacao={e.explicacao} quebra={repeticoes?.includes(e)} />)}
           </div>
           {bloqueio && <MarcarBloqueio acao={bloqueio} modo={modo} />}
         </div>

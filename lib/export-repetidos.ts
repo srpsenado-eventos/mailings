@@ -1,16 +1,29 @@
 import * as XLSX from "xlsx";
 import { rotuloOrigem, type AutoridadeRepetida, type OcorrenciaRepetida } from "@/lib/repetidos";
-import { dataDaDecisao, TEXTO_SITUACAO_REPETIDA, textoDecisao, textoNoContatos } from "@/lib/repetidos-decisoes";
+import { dataDaDecisao, TEXTO_SITUACAO_REPETIDA, textoDaSituacao, textoDecisao } from "@/lib/repetidos-decisoes";
 
 export const CABECALHO_REPETIDAS = [
   "Nome", "Situação", "Convidar pelo grupo", "Cargo do convite", "Nível na Nominata", "Motivo", "Grupos em que está", "Origem", "Eleição 2026",
   "Decisão do GT", "Data da decisão", "Situação no Contatos",
+  "Grupos a bloquear no Posse", "Bloqueios registrados",
 ] as const;
 
 /** Grupo do convite: a ocorrência que convida ou, sem ela (grupo ainda fora do Contatos), o grupo decidido pelo GT. */
 function grupoDoConvite(a: AutoridadeRepetida): string {
   if (a.convidaPor) return a.convidaPor.grupoRegra;
   return a.situacao !== "conferir" && a.decisao?.tipo === "mesma_pessoa" ? a.decisao.convidaPor?.trim() ?? "" : "";
+}
+
+/** Grupos em que a pessoa ainda precisa ser bloqueada no Posse (todos menos o do convite). */
+function gruposABloquear(a: AutoridadeRepetida): string {
+  return (a.bloqueios ?? []).filter((b) => !b.grupoDoConvite).map((b) => b.grupo).join("; ");
+}
+
+/** Bloqueios já registrados, com a data. */
+function bloqueiosRegistrados(a: AutoridadeRepetida): string {
+  return (a.bloqueios ?? [])
+    .flatMap((b) => (b.bloqueado && b.data ? [`${b.grupo} (${dataDaDecisao(b.data, true)})`] : []))
+    .join("; ");
 }
 
 const ABA = "Em mais de um grupo";
@@ -34,7 +47,9 @@ export function linhasRepetidas(lista: readonly AutoridadeRepetida[]): Record<st
     "Eleição 2026": a.eleicao ? "Sim" : "",
     "Decisão do GT": a.decisao ? textoDecisao(a.decisao) : "",
     "Data da decisão": a.decisao ? dataDaDecisao(a.decisao.data, true) : "",
-    "Situação no Contatos": textoNoContatos(a.noContatos),
+    "Situação no Contatos": textoDaSituacao(a),
+    "Grupos a bloquear no Posse": gruposABloquear(a),
+    "Bloqueios registrados": bloqueiosRegistrados(a),
   }));
 }
 

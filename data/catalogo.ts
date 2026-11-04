@@ -168,8 +168,8 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailBackup: "beatriz.silveira@senado.leg.br",
     fontes: [
       // Planilha de 23/10, conferida com fetch em 23/10 (200, lista de 26 itens, sem cargo).
-      // Garibaldi: o Contatos prevalece sobre o nome da página (spec 2026-10-23 §4.2).
-      { url: "https://www25.senado.leg.br/web/senadores/nova-republica", ativo: true, nomesDoContatos: ["Garibaldi Alves Filho"] },
+      // A página traz "Garibaldi Alves" e vale a grafia do site (spec 2026-11-04 §3.3).
+      { url: "https://www25.senado.leg.br/web/senadores/nova-republica", ativo: true },
     ],
   },
   {

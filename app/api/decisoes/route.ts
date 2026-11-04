@@ -5,7 +5,7 @@ import { origemPermitida } from "@/lib/origem";
 
 /**
  * Registra uma decisão do GT em `.fiscal/decisoes.json` (spec 2026-10-30 §4.1.2). Só em modo local;
- * a web só lê a cópia publicada. Corpo: `{ nome, nomes, registro }`. A lógica está em
+ * a web só lê a cópia publicada. Corpo: `{ nome, nomes, registro }` ou, para o bloqueio no Posse, `{ nome, nomes, grupos, bloqueio }`. A lógica está em
  * `tratarRegistroDeDecisao`, testada; a rota só faz o HTTP.
  */
 export async function POST(req: NextRequest) {

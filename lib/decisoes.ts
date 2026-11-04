@@ -9,7 +9,10 @@ import { normalizarNome, normalizarTexto } from "@/lib/normalize";
  */
 
 export type TipoDecisao = "mesma_pessoa" | "pessoas_diferentes" | "nao_recebe_convite" | "ajustar_contatos";
+export const TIPOS_DECISAO: readonly TipoDecisao[] = ["mesma_pessoa", "pessoas_diferentes", "nao_recebe_convite", "ajustar_contatos"];
 export type SituacaoNoContatos = "tratado" | "pendente" | "reaberto" | "sem_efeito";
+/** O que falta fazer num caso decidido (spec 2026-11-04 §3.1); a ordem desta lista é a ordem do texto. */
+export type Pendencia = "bloqueio" | "cadastrar_convite" | "desbloquear_convite";
 
 export interface RegistroManual {
   tipo: TipoDecisao;
@@ -28,9 +31,21 @@ export interface RegistroColeta {
   data: string;
   situacao: SituacaoNoContatos;
   grupos: string[];
+  /** Ausente (e `[]`) quando não há pendência; coleta antiga não traz o campo. */
+  pendencias?: Pendencia[];
 }
 
-export type Registro = RegistroManual | RegistroColeta;
+/** Bloqueio (ou o desfazer) da pessoa num grupo do Posse. Só registra: nunca decide o convite. */
+export interface RegistroBloqueio {
+  tipo: "bloqueio" | "desbloqueio";
+  grupo: string;
+  /** AAAA-MM-DD */
+  data: string;
+  quem: string;
+  observacao: string;
+}
+
+export type Registro = RegistroManual | RegistroColeta | RegistroBloqueio;
 
 export interface CasoDecidido {
   id: string;
@@ -44,6 +59,14 @@ export interface PedidoDeDecisao {
   nome: string;
   nomes: string[];
   registro: RegistroManual;
+}
+
+/** Corpo de `POST /api/decisoes` com bloqueio: identifica o caso pelos nomes e grupos, como o de decisão. */
+export interface PedidoDeBloqueio {
+  nome: string;
+  nomes: string[];
+  grupos: string[];
+  bloqueio: RegistroBloqueio;
 }
 
 export interface HistoricoDecisoes {
@@ -100,6 +123,14 @@ export function dataDaDecisao(data: string, comAno = false): string {
   const [ano, mes, dia] = data.split("-");
   if (!ano || !mes || !dia) return data;
   return comAno ? `${dia}/${mes}/${ano}` : `${dia}/${mes}`;
+}
+
+/** Bloqueio pedido para pessoa sem decisão do GT registrada no caso. */
+export class BloqueioSemDecisaoError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BloqueioSemDecisaoError";
+  }
 }
 
 export const MOTIVO_DUAS_DECISOES = "Duas decisões do GT para a mesma pessoa: conferir";
@@ -239,7 +270,11 @@ export function registrar(
 }
 
 function ehManual(r: Registro): r is RegistroManual {
-  return r.tipo !== "coleta";
+  return (TIPOS_DECISAO as readonly string[]).includes(r.tipo);
+}
+
+function ehBloqueio(r: Registro): r is RegistroBloqueio {
+  return r.tipo === "bloqueio" || r.tipo === "desbloqueio";
 }
 
 /** Registro manual mais recente pela data; no empate, o último na ordem. */
@@ -250,29 +285,136 @@ export function vigente(c: CasoDecidido): RegistroManual | undefined {
   );
 }
 
+/** Reaberto: pessoa em grupo que a decisão não cobre (o grupo do convite nunca reabre). `atuais` já normalizados. */
+function ehReaberto(decisao: RegistroManual, atuais: readonly string[]): boolean {
+  const daDecisao = conjuntoDeGrupos(decisao.grupos);
+  const convite = conviteNormalizado(decisao);
+  return atuais.some((g) => g !== convite && !daDecisao.has(g));
+}
+
 /** Situação do caso no Contatos (spec §4.1.4); `gruposAtuais` já na forma equivalente. */
 export function situacaoDoCaso(c: CasoDecidido, gruposAtuais: readonly string[]): SituacaoNoContatos {
   const decisao = vigente(c);
   if (!decisao) return "sem_efeito";
-  const daDecisao = conjuntoDeGrupos(decisao.grupos);
   const atuais = [...conjuntoDeGrupos(gruposAtuais)];
+  if (ehReaberto(decisao, atuais)) return "reaberto";
   const convite = conviteNormalizado(decisao);
-  // O grupo do convite nunca reabre, mesmo fora dos grupos do registro (Contatos corrigido).
-  if (atuais.some((g) => g !== convite && !daDecisao.has(g))) return "reaberto";
-  const soNoConvite = convite !== undefined && atuais.every((g) => g === convite);
   switch (decisao.tipo) {
     case "mesma_pessoa":
-      return soNoConvite && atuais.length > 0 ? "tratado" : "pendente";
+      if (convite === undefined) return "pendente";
+      return quadroDeBloqueio(c, gruposAtuais).pendencias.length > 0 ? "pendente" : "tratado";
+    case "nao_recebe_convite":
+      return quadroDeBloqueio(c, gruposAtuais).pendencias.length > 0 ? "pendente" : "tratado";
     case "ajustar_contatos":
       if (convite === undefined) return atuais.length <= 1 ? "tratado" : "pendente";
-      return soNoConvite ? "tratado" : "pendente";
-    case "nao_recebe_convite":
-      return atuais.length === 0 ? "tratado" : "pendente";
-    case "pessoas_diferentes":
-      return "sem_efeito";
+      return atuais.every((g) => g === convite) ? "tratado" : "pendente";
     default:
       return "sem_efeito";
   }
+}
+
+/**
+ * Grupos atuais em que a pessoa deve ser bloqueada no Posse: em `mesma_pessoa`, todos menos o do
+ * convite; em `nao_recebe_convite`, todos; nos outros tipos (e `mesma_pessoa` sem convite), nenhum.
+ * Devolve os grupos como vieram, sem repetir por `normalizarTexto`.
+ */
+export function gruposABloquear(decisao: RegistroManual, gruposAtuais: readonly string[]): string[] {
+  if (decisao.tipo !== "mesma_pessoa" && decisao.tipo !== "nao_recebe_convite") return [];
+  // O convite só existe em mesma_pessoa; em nao_recebe_convite todos os grupos atuais são a bloquear.
+  const convite = decisao.tipo === "mesma_pessoa" ? conviteNormalizado(decisao) : undefined;
+  if (decisao.tipo === "mesma_pessoa" && convite === undefined) return [];
+  const vistos = new Set<string>();
+  return gruposAtuais.filter((g) => {
+    const chave = normalizarTexto(g);
+    if (chave.length === 0 || vistos.has(chave) || chave === convite) return false;
+    vistos.add(chave);
+    return true;
+  });
+}
+
+/** Chave do grupo para comparar bloqueios: forma equivalente do Contatos, normalizada. */
+function chaveDoGrupo(grupo: string): string {
+  return normalizarTexto(grupoEquivalente(grupo.trim(), "contatos"));
+}
+
+/**
+ * Bloqueio vigente no grupo: vale o último registro de bloqueio ou desbloqueio na ordem de gravação
+ * do caso (a data digitada é só informativa), se for `bloqueio`.
+ */
+export function bloqueioVigente(c: CasoDecidido, grupo: string): RegistroBloqueio | undefined {
+  const chave = chaveDoGrupo(grupo);
+  const ultimo = c.registros.filter(ehBloqueio).filter((r) => chaveDoGrupo(r.grupo) === chave).at(-1);
+  return ultimo?.tipo === "bloqueio" ? ultimo : undefined;
+}
+
+export interface BloqueioDoGrupo {
+  grupo: string;
+  bloqueado: boolean;
+  data?: string;
+  /** Bloqueio registrado no grupo do convite: está errado e pede desbloqueio. */
+  grupoDoConvite?: true;
+}
+
+export interface QuadroDeBloqueio {
+  aBloquear: string[];
+  bloqueios: BloqueioDoGrupo[];
+  pendencias: Pendencia[];
+}
+
+/** O que falta bloquear, cadastrar ou desbloquear no caso (spec 2026-11-04 §3.1.2). Caso reaberto não tem quadro. */
+export function quadroDeBloqueio(c: CasoDecidido, gruposAtuais: readonly string[]): QuadroDeBloqueio {
+  const vazio = (): QuadroDeBloqueio => ({ aBloquear: [], bloqueios: [], pendencias: [] });
+  const decisao = vigente(c);
+  if (!decisao || (decisao.tipo !== "mesma_pessoa" && decisao.tipo !== "nao_recebe_convite")) return vazio();
+  const atuais = [...conjuntoDeGrupos(gruposAtuais)];
+  if (ehReaberto(decisao, atuais)) return vazio();
+  const aBloquear = gruposABloquear(decisao, gruposAtuais);
+  const bloqueios: BloqueioDoGrupo[] = aBloquear.map((grupo) => {
+    const b = bloqueioVigente(c, grupo);
+    return b ? { grupo, bloqueado: true, data: b.data } : { grupo, bloqueado: false };
+  });
+  const ehMesmaPessoa = decisao.tipo === "mesma_pessoa";
+  const convite = ehMesmaPessoa ? conviteNormalizado(decisao) : undefined;
+  const grupoDoConvite = ehMesmaPessoa && decisao.convidaPor?.trim() ? grupoEquivalente(decisao.convidaPor.trim(), "contatos") : undefined;
+  const bloqueioNoConvite = grupoDoConvite ? bloqueioVigente(c, grupoDoConvite) : undefined;
+  if (grupoDoConvite && bloqueioNoConvite) {
+    bloqueios.push({ grupo: grupoDoConvite, bloqueado: true, data: bloqueioNoConvite.data, grupoDoConvite: true });
+  }
+  const pendencias: Pendencia[] = [];
+  if (bloqueios.some((b) => !b.grupoDoConvite && !b.bloqueado)) pendencias.push("bloqueio");
+  if (convite !== undefined && !atuais.includes(convite)) pendencias.push("cadastrar_convite");
+  if (bloqueioNoConvite) pendencias.push("desbloquear_convite");
+  return { aBloquear, bloqueios, pendencias };
+}
+
+export const TEXTO_PENDENCIA: Readonly<Record<Pendencia, string>> = {
+  bloqueio: "Pendente de bloqueio no Posse",
+  cadastrar_convite: "Pendente: a cadastrar no grupo do convite",
+  desbloquear_convite: "Pendente: bloqueio no grupo do convite, desbloquear",
+};
+
+export function textoDasPendencias(pendencias: readonly Pendencia[]): string {
+  return pendencias.map((p) => TEXTO_PENDENCIA[p]).join(" · ");
+}
+
+/**
+ * Acrescenta o bloqueio (ou desbloqueio) ao caso dos grupos informados, sem mexer nas chaves. Exige
+ * caso com decisão do GT: o bloqueio nunca decide nada.
+ */
+export function registrarBloqueio(
+  h: HistoricoDecisoes,
+  nome: string,
+  nomes: readonly string[],
+  grupos: readonly string[],
+  r: RegistroBloqueio,
+): HistoricoDecisoes {
+  if (r.grupo.trim().length === 0) throw new DecisaoInvalidaError("O grupo do bloqueio está vazio.");
+  const caso = acharCaso(h, [nome, ...nomes], grupos);
+  if (!caso || !vigente(caso)) {
+    throw new BloqueioSemDecisaoError("Registre a decisão do GT antes de marcar o bloqueio.");
+  }
+  const atualizado: CasoDecidido = { ...caso, registros: [...caso.registros, { ...r }] };
+  return { versao: 1, casos: h.casos.map((x) => (x === caso ? atualizado : x)) };
 }
 
 function ultimaColetaDepoisDoVigente(c: CasoDecidido, decisao: RegistroManual): RegistroColeta | undefined {
@@ -283,9 +425,15 @@ function ultimaColetaDepoisDoVigente(c: CasoDecidido, decisao: RegistroManual): 
     .at(-1);
 }
 
+function mesmasPendencias(a: readonly Pendencia[] | undefined, b: readonly Pendencia[]): boolean {
+  const antes = a ?? [];
+  return antes.length === b.length && antes.every((p, i) => p === b[i]);
+}
+
 /**
- * Acrescenta uma entrada `coleta` a cada caso com decisão vigente cuja situação mudou desde a
- * última coleta posterior à decisão. "Sem efeito" não gera entrada.
+ * Acrescenta uma entrada `coleta` a cada caso com decisão vigente cuja situação ou pendências mudaram
+ * desde a última coleta posterior à decisão. "Sem efeito" não gera entrada. Sem mudança em nenhum
+ * caso, devolve o próprio histórico.
  */
 export function registrarColetas(
   h: HistoricoDecisoes,
@@ -298,9 +446,13 @@ export function registrarColetas(
     const grupos = [...gruposPorCaso(c)];
     const situacao = situacaoDoCaso(c, grupos);
     if (situacao === "sem_efeito") return c;
-    if (ultimaColetaDepoisDoVigente(c, decisao)?.situacao === situacao) return c;
-    const entrada: RegistroColeta = { tipo: "coleta", data, situacao, grupos };
+    const pendencias = quadroDeBloqueio(c, grupos).pendencias;
+    const ultima = ultimaColetaDepoisDoVigente(c, decisao);
+    if (ultima?.situacao === situacao && mesmasPendencias(ultima.pendencias, pendencias)) return c;
+    const entrada: RegistroColeta = {
+      tipo: "coleta", data, situacao, grupos, ...(pendencias.length > 0 ? { pendencias } : {}),
+    };
     return { ...c, registros: [...c.registros, entrada] };
   });
-  return { versao: 1, casos };
+  return casos.every((c, i) => c === h.casos[i]) ? h : { versao: 1, casos };
 }

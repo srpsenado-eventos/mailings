@@ -9,6 +9,7 @@ import {
   estadoDaFonteDoGrupo,
   etiquetasDoContato,
   filtrarGrupos,
+  FILTROS,
   linhasDoEndereco,
   montarRetrato,
   motivoDoContato,
@@ -308,6 +309,11 @@ describe("filtrarGrupos", () => {
     { ...grupoSemFonte, contatos: [semFonte] },
   ];
   const nomes = (gs: ResultadoGrupo[]) => gs.flatMap((g) => g.contatos.map((c) => c.contato.nome));
+
+  test("a_bloquear está em FILTROS e não traz novos", () => {
+    expect(FILTROS).toContainEqual({ id: "a_bloquear", rotulo: "A bloquear no Posse" });
+    expect(filtrarGrupos(grupos, "a_bloquear", "").flatMap((g) => g.novos)).toEqual([]);
+  });
 
   test("tudo: devolve tudo, inclusive novos", () => {
     const r = filtrarGrupos(grupos, "tudo", "");
@@ -972,5 +978,34 @@ describe("tratamento e endereçamento pela maioria dos pares (spec 2026-10-30 §
     const c = contato({ comparacoes: [diverge("tratamento", "protocolo", "Doutor", "Senhor")] });
     expect(cartao(c, "tratamento")).toMatchObject({ origem: "Tabela de protocolo diz" });
     expect(cartao(c, "tratamento").observacao).toBeUndefined();
+  });
+});
+
+describe("nome acima do limite do Posse (STM, spec 2026-11-04 §3.5)", () => {
+  const TEXTO_COMPLETO = "Nome com 51 caracteres, acima do limite de 50 do Posse: abreviar o sobrenome, nunca a patente (regra do GT de 04/11)";
+  const limite: ComparacaoCampo = {
+    campo: "nome", valorPlanilha: "A".repeat(51), situacao: "divergente", origemValor: "coerencia",
+    achado: "nome_acima_do_limite", observacao: TEXTO_COMPLETO,
+  };
+  const c = contato({ semaforo: "amarelo", comparacoes: [confere("nome", "pagina"), limite] });
+
+  test("a etiqueta curta aparece ao lado de 'Nome confere', com o texto completo na explicação", () => {
+    const etiquetas = etiquetasDoContato(c, grupoComFonte).filter((e) => e.campo === "nome");
+    expect(etiquetas).toEqual([
+      expect.objectContaining({ texto: "Nome confere", tom: "ok" }),
+      { campo: "nome", texto: "Nome com 51 caracteres, acima do limite de 50 do Posse", tom: "atencao", explicacao: TEXTO_COMPLETO },
+    ]);
+  });
+
+  test("a situação fica em atenção e o detalhe traz o texto completo em coerencias", () => {
+    expect(situacaoDoContato(c, grupoComFonte).tom).toBe("atencao");
+    const nome = detalhesDoContato(c, grupoComFonte).find((d) => d.campo === "nome");
+    expect(nome?.coerencias).toEqual([TEXTO_COMPLETO]);
+    expect(nome?.etiqueta?.texto).toBe("Nome confere");
+  });
+
+  test("possível saída também mostra a etiqueta do limite", () => {
+    const saida = contato({ semaforo: "vermelho", possivelSaida: true, comparacoes: [limite] });
+    expect(textos(saida, grupoComFonte)).toContain("Nome com 51 caracteres, acima do limite de 50 do Posse");
   });
 });

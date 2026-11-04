@@ -70,6 +70,8 @@ Hoje a página reconhece o contato quando traz o nome igual ou mais longo (nomes
 
 ### 4.2 Nome em que o Contatos prevalece (exceção por fonte)
 
+**Adendo de 2026-11-04:** este item foi revogado pela spec `2026-11-04-bloqueio-no-posse-e-regras-do-gt-design.md` §3.3; `nomesDoContatos` não existe mais.
+
 `FonteCatalogo.nomesDoContatos?: readonly string[]`: nomes **como estão no Contatos**. Contato cujo nome normalizado está na lista e que casou alguém da composição dessa fonte sai com nome `confere` e `valorEsperado` = nome do Contatos, qualquer que seja a grafia da página. Hoje só `["Garibaldi Alves Filho"]` na fonte da Nova República (a página traz "Garibaldi Alves"). Cada exceção é fornecida pelo Clovis.
 
 ## 5. Catálogo

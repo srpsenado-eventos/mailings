@@ -23,6 +23,7 @@ import {
   temGeneroNeutro,
   type ContextoCargo,
 } from "@/lib/cargo-tribunal";
+import { comparacaoLimiteNome } from "@/lib/limite-nome";
 import {
   comparacaoPrefixoNome,
   comparacaoRegraNome,
@@ -274,6 +275,7 @@ export function comparacoesTratamento(
     ...comparacoesProtocolo(contato),
     ...comparacaoRegraNome(contato, grupoCanonico),
     ...comparacaoPrefixoNome(contato, grupoCanonico),
+    ...comparacaoLimiteNome(contato, grupoCanonico),
     ...comparacaoCargoExPresidente(contato, grupoCanonico),
   ];
 }
@@ -520,29 +522,6 @@ export function compararGrupo(
     })
     .map(comoProposta);
   return { grupo, fonteUrl: fonte.url, semFonte: false, contatos: resultados, novos };
-}
-
-/**
- * Exceção por fonte (spec 2026-10-23 §4.2): nos nomes listados (como estão no Contatos), o
- * Contatos prevalece sobre a grafia da página. Contato da lista que casou uma pessoa da
- * composição sai com o nome "confere" e o próprio nome como valor esperado; semáforo e
- * divergências são refeitos a partir das comparações. Quem não casou continua possível
- * saída: a exceção corrige a grafia, nunca a presença. Não muta a entrada.
- */
-export function aplicarNomesDoContatos(grupo: ResultadoGrupo, nomes: readonly string[]): ResultadoGrupo {
-  if (nomes.length === 0) return grupo;
-  const prevalecem = new Set(nomes.map(normalizarNome));
-  return { ...grupo, contatos: grupo.contatos.map((c) => (prevalecem.has(normalizarNome(c.contato.nome)) ? nomeDoContatosConfere(c) : c)) };
-}
-
-/** Só o contato casado (verde ou amarelo, com nome lido na composição) muda; os demais voltam iguais. */
-function nomeDoContatosConfere(c: ResultadoContato): ResultadoContato {
-  const nomeLido = (comp: ComparacaoCampo): boolean => comp.campo === "nome" && comp.valorEsperado !== undefined;
-  const casou = (c.semaforo === "verde" || c.semaforo === "amarelo") && !c.possivelSaida && c.comparacoes.some(nomeLido);
-  if (!casou) return c;
-  const comparacoes = c.comparacoes.map((comp) => (nomeLido(comp) ? { ...comp, valorEsperado: c.contato.nome, situacao: "confere" as const } : comp));
-  const camposDivergentes = divergenciasDe(comparacoes);
-  return { ...c, comparacoes, camposDivergentes, semaforo: camposDivergentes.length > 0 ? "amarelo" : "verde" };
 }
 
 // ---------------------------------------------------------------------------

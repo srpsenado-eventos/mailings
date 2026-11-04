@@ -437,3 +437,30 @@ describe("Cargo do ex-presidente com o período (Camada C) nos caminhos de Resul
     expect(cargoDivergente(g.contatos[0].comparacoes)).toBeUndefined();
   });
 });
+
+describe("Nome acima de 50 caracteres no STM (Camada C, spec 2026-11-04 §3.5)", () => {
+  const nomeDe = (n: number) => "Joaquim ".repeat(8).slice(0, n).trim().padEnd(n, "x");
+  const gerar = (n: number) => {
+    const nome = nomeDe(n);
+    const site: ConteudoFonte = { ...fonte, pessoas: [{ nome, cargo: "Ministro", origem: "pagina" }] };
+    return compararGrupo("STM", [contato({ nome })], site, GRUPO_STM).contatos[0];
+  };
+
+  test("51 caracteres com o site confirmando o nome pinta amarelo e a comparação de valor continua confere", () => {
+    // Act
+    const r = gerar(51);
+
+    // Assert
+    expect(r.semaforo).toBe("amarelo");
+    expect(r.camposDivergentes.map((d) => d.campo)).toContain("nome");
+    expect(achadosDe(r.comparacoes)).toContain("nome_acima_do_limite");
+    const valor = r.comparacoes.find((c) => c.campo === "nome" && c.origemValor !== "coerencia");
+    expect(valor?.situacao).toBe("confere");
+  });
+
+  test("50 caracteres com o site confirmando o nome fica verde", () => {
+    const r = gerar(50);
+    expect(r.semaforo).toBe("verde");
+    expect(achadosDe(r.comparacoes)).not.toContain("nome_acima_do_limite");
+  });
+});

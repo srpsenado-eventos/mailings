@@ -2,6 +2,7 @@ import { coerenciasVisiveis, textoCoerencia } from "@/lib/tratamento";
 import { excessoDoNumero, LIMITE_NUMERO, rotuloAchadoEndereco } from "@/lib/endereco";
 import { colunasDaBase, textoCelula } from "@/lib/ajuste-numero";
 import { descreverMotivoDeHoje, diaMes, MIN_COLETAS_URL_CAIDA } from "@/lib/memoria-leitura";
+import { textoCurtoLimiteNome } from "@/lib/limite-nome";
 import { normalizarTexto } from "@/lib/normalize";
 import { ColunaFaltanteError } from "@/lib/planilha";
 import { ehFiltroEleicao, passaFiltroEleicao, type FiltroEleicao } from "@/lib/painel-eleicao";
@@ -97,6 +98,26 @@ function coerenciasDo(c: ResultadoContato, campo: CampoComparado): ComparacaoCam
   return coerenciasVisiveis(c.comparacoes).filter((x) => x.campo === campo);
 }
 
+/** O limite de caracteres tem etiqueta própria: não faz o nome "divergir" do cadastro ou do site. */
+const ACHADO_DO_LIMITE = "nome_acima_do_limite";
+
+function comparacaoDoLimite(c: ResultadoContato): ComparacaoCampo | undefined {
+  return coerenciasDo(c, "nome").find((x) => x.achado === ACHADO_DO_LIMITE);
+}
+
+/** Etiqueta do nome acima do limite do Posse: forma curta na linha, texto completo na explicação. */
+export function etiquetaDoLimiteDoNome(c: ResultadoContato): Etiqueta | undefined {
+  const comp = comparacaoDoLimite(c);
+  if (!comp) return undefined;
+  return { campo: "nome", texto: textoCurtoDoLimite(comp), tom: "atencao", explicacao: textoCoerencia(comp) };
+}
+
+/** A forma curta é o texto completo sem o "…: abreviar o sobrenome…" que a explicação carrega. */
+function textoCurtoDoLimite(comp: ComparacaoCampo): string {
+  const m = /^Nome com (\d+) caracteres, acima do limite de (\d+) do Posse/.exec(comp.observacao ?? "");
+  return m ? textoCurtoLimiteNome(Number(m[1]), Number(m[2])) : textoCoerencia(comp);
+}
+
 /**
  * Etiqueta de um campo comparado. Coerência divergente (Camadas A e C) e valor divergente
  * (Camada 1 ou B) viram o mesmo "diverge": para quem lê a linha, o campo precisa de revisão.
@@ -108,7 +129,7 @@ function etiquetaDoCampo(c: ResultadoContato, campo: CampoComparado): Etiqueta |
   const comp = comparacaoDeValor(c, campo);
   // A regra dos pares explica a si mesma: "Pela maioria dos pares: N de M no grupo usam …".
   const dosPares = comp?.origemValor === "pares" ? comp.observacao : undefined;
-  if (coerenciasDo(c, campo).length > 0 || comp?.situacao === "divergente") {
+  if (coerenciasDo(c, campo).some((x) => x.achado !== ACHADO_DO_LIMITE) || comp?.situacao === "divergente") {
     const explicacao = comp?.situacao === "divergente" && dosPares ? dosPares : doSite ? EXPLICACAO.divergeSite : EXPLICACAO.divergeProtocolo;
     return { campo, texto: `${rotulo} diverge`, tom: "atencao", explicacao };
   }
@@ -138,10 +159,16 @@ export function etiquetasDoContato(c: ResultadoContato, _g: ResultadoGrupo): Eti
     for (const campo of ["nome", "cargo"] as const) {
       const e = etiquetaDoCampo(c, campo);
       if (e?.tom === "atencao") lista.push(e);
+      if (campo === "nome") {
+        const limite = etiquetaDoLimiteDoNome(c);
+        if (limite) lista.push(limite);
+      }
     }
   } else {
     const nome = etiquetaDoCampo(c, "nome");
     if (nome) lista.push(nome);
+    const limite = etiquetaDoLimiteDoNome(c);
+    if (limite) lista.push(limite);
     if (!semCargo) {
       const cargo = etiquetaDoCampo(c, "cargo");
       if (cargo) lista.push(cargo);
@@ -305,7 +332,7 @@ export function detalhesDoContato(c: ResultadoContato, _g: ResultadoGrupo): Deta
   return cartoes;
 }
 
-export type Filtro = "tudo" | "ressalva" | "endereco" | "numero" | "saida" | "inclusao" | FiltroEleicao;
+export type Filtro = "tudo" | "ressalva" | "endereco" | "numero" | "saida" | "inclusao" | "a_bloquear" | FiltroEleicao;
 
 export const FILTROS: readonly { id: Filtro; rotulo: string }[] = [
   { id: "tudo", rotulo: "Tudo" },
@@ -314,6 +341,7 @@ export const FILTROS: readonly { id: Filtro; rotulo: string }[] = [
   { id: "numero", rotulo: `Número acima de ${LIMITE_NUMERO} caracteres` },
   { id: "saida", rotulo: "Possível saída" },
   { id: "inclusao", rotulo: "Propostas de inclusão" },
+  { id: "a_bloquear", rotulo: "A bloquear no Posse" },
 ];
 
 /** Ressalva: tudo que não é verde com o endereço em ordem (completo, a completar ou sem base). */
@@ -331,6 +359,7 @@ function passaFiltro(c: ResultadoContato, filtro: Filtro): boolean {
     case "numero": return numeroAcimaDoLimite(c);
     case "saida": return c.possivelSaida === true;
     case "inclusao": return false;
+    case "a_bloquear": return false;
   }
 }
 
@@ -348,14 +377,17 @@ function novoCasaBusca(n: PessoaSite, busca: string): boolean {
   return busca === "" || casa(n.nome, busca) || casa(n.cargo, busca);
 }
 
+/** Predicado de linha para filtros que dependem de dados de fora do retrato (ex.: bloqueio no Posse). */
+export type PredicadoDeLinha = (c: ResultadoContato, g: ResultadoGrupo) => boolean;
+
 /** Filtro e busca no navegador. Grupo que fica sem linha some. Não muta a entrada. */
-export function filtrarGrupos(grupos: readonly ResultadoGrupo[], filtro: Filtro, busca: string, grupo?: string): ResultadoGrupo[] {
+export function filtrarGrupos(grupos: readonly ResultadoGrupo[], filtro: Filtro, busca: string, grupo?: string, aBloquear?: PredicadoDeLinha): ResultadoGrupo[] {
   const b = normalizarTexto(busca.trim());
   return grupos
     .filter((g) => !grupo || g.grupo === grupo)
     .map((g) => ({
       ...g,
-      contatos: g.contatos.filter((c) => passaFiltro(c, filtro) && contatoCasaBusca(c, b)),
+      contatos: g.contatos.filter((c) => (filtro === "a_bloquear" ? aBloquear?.(c, g) === true : passaFiltro(c, filtro)) && contatoCasaBusca(c, b)),
       novos: FILTROS_COM_NOVOS.includes(filtro) ? g.novos.filter((n) => novoCasaBusca(n, b)) : [],
     }))
     .filter((g) => g.contatos.length > 0 || g.novos.length > 0);

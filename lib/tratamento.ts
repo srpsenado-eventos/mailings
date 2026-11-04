@@ -481,6 +481,8 @@ export function rotuloAchado(achado: AchadoCoerencia): string {
       return "Nome sem o prefixo do cargo";
     case "cargo_ex_presidente":
       return "Cargo de ex-presidente fora do formato do GT";
+    case "nome_acima_do_limite":
+      return "Nome acima do limite do Posse";
   }
 }
 
@@ -523,6 +525,7 @@ export function textoCoerencia(c: ComparacaoCampo): string {
   if (c.achado === "cargo_ex_presidente") {
     return c.observacao ? `${rotulo} (${c.valorEsperado ?? ""}). ${c.observacao}` : `${rotulo} (${c.valorEsperado ?? ""})`;
   }
+  if (c.achado === "nome_acima_do_limite") return c.observacao ?? rotulo;
   const nome = ROTULOS_CAMPO_TRATAMENTO[c.campo] ?? c.campo;
   return `${rotulo} (${nome})`;
 }

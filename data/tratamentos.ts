@@ -90,8 +90,8 @@ export const REGRAS_TRATAMENTO: readonly RegraTratamento[] = [
   },
   {
     cargoDestinatario: "Presidente da Assembleia Legislativa / Câmara Legislativa",
-    nominata: "Excelentíssimo Senhor(a) Presidente da Assembleia Legislativa de [UF] / Presidente da Câmara Legislativa do Distrito Federal, \nDeputado(a) Estadual / Deputado(a) Distrital [Nome]",
-    vocativo: "Excelentíssimo Senhor(a) Presidente",
+    nominata: "Senhor(a) Presidente da Assembleia Legislativa de [UF] / Presidente da Câmara Legislativa do Distrito Federal, \nDeputado(a) Estadual / Deputado(a) Distrital [Nome]",
+    vocativo: "Senhor(a) Presidente",
     pronome: "Vossa Excelência",
     enderecamento: "A Sua Excelência o(a) Senhor(a)\nDeputado(a) Estadual / Deputado(a) Distrital [Nome]\nPresidente\nAssembleia Legislativa de [UF] / Câmara Legislativa do Distrito Federal",
   },
@@ -118,8 +118,8 @@ export const REGRAS_TRATAMENTO: readonly RegraTratamento[] = [
   },
   {
     cargoDestinatario: "Presidente de Câmara Municipal",
-    nominata: "Excelentíssimo Senhor(a) Presidente da Câmara Municipal \nde [Nome do município], \nVereador(a) [Nome]",
-    vocativo: "Excelentíssimo Senhor(a) Presidente",
+    nominata: "Senhor(a) Presidente da Câmara Municipal \nde [Nome do município], \nVereador(a) [Nome]",
+    vocativo: "Senhor(a) Presidente",
     pronome: "Vossa Excelência",
     enderecamento: "A Sua Excelência o(a) Senhor(a) \nVereador(a) [Nome]\nPresidente\nCâmara Municipal de [Nome do município]",
   },
@@ -160,8 +160,8 @@ export const REGRAS_TRATAMENTO: readonly RegraTratamento[] = [
   },
   {
     cargoDestinatario: "Governador",
-    nominata: "Excelentíssimo Senhor(a) Governador(a) do estado de [UF] / Governador(a) do Distrito Federal, \n[Nome]",
-    vocativo: "Excelentíssimo Senhor(a) Governador(a)",
+    nominata: "Senhor(a) Governador(a) do estado de [UF] / Governador(a) do Distrito Federal, \n[Nome]",
+    vocativo: "Senhor(a) Governador(a)",
     pronome: "Vossa Excelência",
     enderecamento: "A Sua Excelência o(a) Senhor(a)\n[Nome]\nGovernador(a)\nGoverno do estado de [UF] / Governo do Distrito Federal",
   },
@@ -174,8 +174,8 @@ export const REGRAS_TRATAMENTO: readonly RegraTratamento[] = [
   },
   {
     cargoDestinatario: "Prefeito",
-    nominata: "Excelentíssimo Senhor(a) Prefeito(a) do município \nde [Nome do município], \n[Nome]",
-    vocativo: "Excelentíssimo Senhor(a) Prefeito(a)",
+    nominata: "Senhor(a) Prefeito(a) do município \nde [Nome do município], \n[Nome]",
+    vocativo: "Senhor(a) Prefeito(a)",
     pronome: "Vossa Excelência",
     enderecamento: "A Sua Excelência o(a) Senhor(a)\n[Nome]\nPrefeito(a)\nPrefeitura do município de [Nome do município]",
   },

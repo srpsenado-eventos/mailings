@@ -20,7 +20,6 @@ import type {
 import { agruparPorGrupo } from "@/lib/planilha";
 import { modoDoGrupo } from "@/lib/agrupador";
 import {
-  aplicarNomesDoContatos,
   compararContatoIndividual,
   compararContatoSemFonteOficial,
   compararContatoSemIndividual,
@@ -476,11 +475,7 @@ async function analisarGrupo(
   };
   // Leitura parcial: parte da composição oficial ficou de fora, então ninguém deste grupo
   // pode ser dado como saída — e o usuário precisa saber disso, na tela e no export.
-  // Nomes em que o Contatos prevalece sobre a grafia da página (spec 2026-10-23 §4.2).
-  const r = aplicarNomesDoContatos(
-    compararGrupo(grupo, contatos, fonte, resolvida.grupoCanonico, resolvida.ufs, leituraParcial),
-    resolvida.fontes.flatMap((f) => f.nomesDoContatos ?? []),
-  );
+  const r = compararGrupo(grupo, contatos, fonte, resolvida.grupoCanonico, resolvida.ufs, leituraParcial);
   // LEITURA SUSPEITA: composição real (página, memória e/ou IA) que não casa nenhum contato de
   // um grupo com 2+ contatos é, na prática, página que não montou, layout que mudou ou página
   // errada, nunca um grupo inteiro que saiu. Não se confia nela: o grupo fica indeterminado,

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { baixar, MIME_XLSX } from "@/components/baixar";
 import { Etiqueta } from "@/components/etiqueta";
+import { MarcarBloqueio } from "@/components/marcar-bloqueio";
 import { RegistroDecisao } from "@/components/registro-decisao";
 import { descreverOcorrencia, gerarXlsxRepetidas } from "@/lib/export-repetidos";
 import { textoDataHora } from "@/lib/painel";
@@ -10,14 +11,17 @@ import {
   filtrarRepetidas, separarRepetidas, textoLinkRepetidas, type AutoridadeRepetida, type FiltroRepetidas,
 } from "@/lib/repetidos";
 import { alvoDoRepetido, registrosDoMaisRecente } from "@/lib/registro-decisao";
-import { dataDaDecisao, TEXTO_SITUACAO_REPETIDA, textoDecisao, textoNoContatos } from "@/lib/repetidos-decisoes";
+import {
+  alvoDeBloqueio, dataDaDecisao, TEXTO_SITUACAO_REPETIDA, textoDaSituacao, textoDecisao, textoDoBloqueio,
+} from "@/lib/repetidos-decisoes";
 
 const FILTROS: readonly { id: FiltroRepetidas; rotulo: string }[] = [
   { id: "todas", rotulo: "Todas" },
   { id: "conferir", rotulo: "A conferir" },
   { id: "decidido", rotulo: "Decididas pela regra" },
   { id: "decidido_gt", rotulo: "Decididas pelo GT" },
-  { id: "tratado", rotulo: "Tratadas no Contatos" },
+  { id: "tratado", rotulo: "Tratadas" },
+  { id: "a_bloquear", rotulo: "A bloquear no Posse" },
 ];
 
 function SituacaoDaAutoridade({ a }: { a: AutoridadeRepetida }) {
@@ -121,9 +125,10 @@ function TabelaRepetidas({ lista, modo }: { lista: readonly AutoridadeRepetida[]
                   <>
                     <span className="block text-tinta">{textoDecisao(a.decisao)}</span>
                     <span className="block text-xs">Decisão de {dataDaDecisao(a.decisao.data)}</span>
-                    {textoNoContatos(a.noContatos) && <span className="block text-xs">{textoNoContatos(a.noContatos)}</span>}
+                    {textoDaSituacao(a) && <span className="block text-xs">{textoDaSituacao(a)}</span>}
                   </>
                 ) : "—"}
+                <BloqueiosDoCaso a={a} modo={modo} />
                 <RegistroDecisao alvo={alvoDoRepetido(a)} registros={registrosDoMaisRecente(a.caso?.registros ?? [])} modo={modo} />
               </td>
               <td className="px-4 py-3">
@@ -134,5 +139,25 @@ function TabelaRepetidas({ lista, modo }: { lista: readonly AutoridadeRepetida[]
         </tbody>
       </table>
     </div>
+  );
+}
+
+/** Um item por grupo com bloqueio a marcar ou registrado, cada um com o botão (só local). */
+function BloqueiosDoCaso({ a, modo }: { a: AutoridadeRepetida; modo: "local" | "web" }) {
+  const alvo = alvoDeBloqueio(a);
+  const bloqueios = a.bloqueios ?? [];
+  if (!alvo || bloqueios.length === 0) return null;
+  return (
+    <ul className="mt-2 space-y-1 text-xs">
+      {bloqueios.map((b) => (
+        <li key={b.grupo}>
+          <span className="block">{textoDoBloqueio(b)}</span>
+          <MarcarBloqueio
+            acao={{ alvo, grupo: b.grupo, bloqueado: b.bloqueado, ...(b.grupoDoConvite ? { grupoDoConvite: true } : {}) }}
+            modo={modo}
+          />
+        </li>
+      ))}
+    </ul>
   );
 }

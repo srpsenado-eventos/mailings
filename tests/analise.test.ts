@@ -1146,13 +1146,15 @@ describe("mudança de composição (spec 2026-10-23 §3.4; decisões 1 e 2 do pl
   });
 });
 
-test("nomesDoContatos da fonte do grupo faz o nome conferir (spec 2026-10-23 §4.2)", async () => {
+test("nome diferente na página sai divergente com o nome da página, sem exceção por fonte (spec 2026-11-04 §3.3)", async () => {
   const r = await analisar("c.xlsx", [{ nome: "Garibaldi Alves Filho", grupo: "ORG", ...CADASTRO_OK }], {
     ...deps,
-    resolverFonte: () => ({ grupoCanonico: "ORG", fontes: [{ url: "https://orgao.gov.br", ativo: true, nomesDoContatos: ["Garibaldi Alves Filho"] }], fontesIndividuais: [], sugestoes: [] }),
+    resolverFonte: () => ({ grupoCanonico: "ORG", fontes: [{ url: "https://orgao.gov.br", ativo: true }], fontesIndividuais: [], sugestoes: [] }),
     raspar: async () => ({ ...fonte, pessoas: [{ nome: "Garibaldi Alves" }] }),
   });
-  expect(r.grupos[0].contatos[0].semaforo).toBe("verde");
+  const c = r.grupos[0].contatos[0];
+  expect(c.semaforo).toBe("amarelo");
+  expect(c.comparacoes.find((x) => x.campo === "nome")).toMatchObject({ situacao: "divergente", valorEsperado: "Garibaldi Alves" });
 });
 
 describe("analisar: grupos de modo lista e neutro (spec 2026-10-30 §4.5 e §4.6)", () => {

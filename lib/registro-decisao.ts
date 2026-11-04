@@ -1,15 +1,15 @@
 import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_DEPUTADOS_FEDERAIS, GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
 import {
-  dataDaDecisao, grupoEquivalente, vigente,
-  type HistoricoDecisoes, type PedidoDeDecisao, type Registro, type RegistroManual, type TipoDecisao,
+  dataDaDecisao, grupoEquivalente, textoDasPendencias, vigente,
+  type HistoricoDecisoes, type PedidoDeBloqueio, type PedidoDeDecisao, type Registro, type RegistroManual, type TipoDecisao,
 } from "@/lib/decisoes";
 import { diaDaColeta } from "@/lib/decisoes-coleta";
 import { casosDoEleito, GRUPOS_DA_ELEICAO_DA_CASA, GRUPOS_DA_ELEICAO_DO_GOVERNO } from "@/lib/eleitos-decisoes";
 import { descreverOcorrencia } from "@/lib/export-repetidos";
 import { normalizarTexto } from "@/lib/normalize";
 import type { AutoridadeRepetida } from "@/lib/repetidos-base";
-import { equivalenteDaOcorrencia } from "@/lib/repetidos-base";
-import { TEXTO_TIPO, textoDecisao, textoNoContatos } from "@/lib/repetidos-decisoes";
+import { equivalenteDaOcorrencia, semRepetir } from "@/lib/repetidos-base";
+import { TEXTO_TIPO, type AlvoDeBloqueio, textoDecisao, textoNoContatos } from "@/lib/repetidos-decisoes";
 import type { CasaLegislativa, ContatoDoEleito, EleitoClassificado, GovernadorClassificado } from "@/lib/types";
 
 /**
@@ -76,7 +76,15 @@ const TEXTO_VALIDACAO: Record<RegistroManual["validacao"], string> = { validado:
  */
 export function textoDoRegistro(r: Registro): string {
   const dia = dataDaDecisao(r.data);
-  if (r.tipo === "coleta") return `${dia} · Coleta: ${textoNoContatos(r.situacao) || "Sem efeito"}`;
+  if (r.tipo === "coleta") {
+    const pendencias = textoDasPendencias(r.pendencias ?? []);
+    return `${dia} · Coleta: ${pendencias || textoNoContatos(r.situacao) || "Sem efeito"}`;
+  }
+  if ("grupo" in r) {
+    const rotulo = r.tipo === "bloqueio" ? "Bloqueio" : "Desbloqueio";
+    const obs = r.observacao.trim();
+    return `${dia} · ${rotulo} no Posse em ${r.grupo} (${r.quem})${obs ? ` · ${obs}` : ""}`;
+  }
   const outras = (r.outraPessoa ?? []).filter((g) => g.trim());
   const observacao = r.observacao.trim();
   return [
@@ -117,16 +125,6 @@ export interface AlvoDeDecisao {
   /** Opções do "convidar pelo grupo". */
   convites: string[];
   ocorrencias: OcorrenciaDoCaso[];
-}
-
-function semRepetir(valores: readonly string[]): string[] {
-  const vistos = new Set<string>();
-  return valores.filter((v) => {
-    const chave = normalizarTexto(v);
-    if (chave === "" || vistos.has(chave)) return false;
-    vistos.add(chave);
-    return true;
-  });
 }
 
 /** Junta as ocorrências de mesmo `valor` (comparado por `normalizarTexto`) numa só marcação. */
@@ -239,5 +237,37 @@ export function corpoDoPedido(alvo: AlvoDeDecisao, f: FormularioDecisao, hoje: s
     nome: alvo.nome,
     nomes: alvo.nomes.filter((n) => !deOutraPessoa.has(n)),
     registro: paraRegistro(f, alvo.grupos, hoje),
+  };
+}
+
+/** Formulário de "Marcar bloqueio no Posse" / "Desfazer bloqueio" (spec 2026-11-04 §3.1.4). `data` é AAAA-MM-DD. */
+export interface FormularioBloqueio {
+  data: string;
+  quem: string;
+  observacao: string;
+}
+
+export function formularioBloqueioVazio(hoje: string): FormularioBloqueio {
+  return { data: hoje, quem: "", observacao: "" };
+}
+
+export function errosDoFormularioBloqueio(f: FormularioBloqueio): string[] {
+  return [
+    ...(!f.data.trim() ? ["Informe a data (AAAA-MM-DD)."] : []),
+    ...(!f.quem.trim() ? ["Informe quem marcou."] : []),
+  ];
+}
+
+/** Corpo de `POST /api/decisoes` para o bloqueio (ou desbloqueio) de um grupo. Formulário com erro lança. */
+export function corpoDoBloqueio(
+  alvo: AlvoDeBloqueio, grupo: string, tipo: "bloqueio" | "desbloqueio", f: FormularioBloqueio,
+): PedidoDeBloqueio {
+  const erros = errosDoFormularioBloqueio(f);
+  if (erros.length > 0) throw new Error(`Formulário incompleto: ${erros.join(" ")}`);
+  return {
+    nome: alvo.nome,
+    nomes: [...alvo.nomes],
+    grupos: [...alvo.grupos],
+    bloqueio: { tipo, grupo, data: f.data.trim(), quem: f.quem.trim(), observacao: f.observacao.trim() },
   };
 }

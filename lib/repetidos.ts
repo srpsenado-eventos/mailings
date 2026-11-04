@@ -3,7 +3,7 @@ import { grupoEquivalente, type HistoricoDecisoes } from "@/lib/decisoes";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import type { Etiqueta } from "@/lib/painel";
 import { NOME_GRUPO_DEPUTADOS, temGrupoDeputados } from "@/lib/painel-deputados";
-import { aplicarDecisoes, marcaDaDecisao, type MarcaDeRepeticao } from "@/lib/repetidos-decisoes";
+import { aplicarDecisoes, marcaDaDecisao, temGrupoABloquear, type MarcaDeRepeticao } from "@/lib/repetidos-decisoes";
 import {
   entradasDoGrupo, escolherComEleito, escolherGrupo, MOTIVO_PARCIAL, semRepeticao,
   type AutoridadeRepetida, type Entrada, type OcorrenciaRepetida, type OrigemOcorrencia, type SituacaoRepetida,
@@ -296,14 +296,20 @@ export function etiquetaDeRepeticao(
   if (!a) return undefined;
   if (a.decisao && (a.situacao === "decidido_gt" || a.situacao === "tratado")) return marcaDaDecisao(a, a.decisao, grupo);
   const etiqueta = etiquetaDaRegra(a, grupo);
-  return etiqueta ? { etiqueta, fosca: false } : undefined;
+  return etiqueta ? { etiquetas: [etiqueta], fosca: false } : undefined;
 }
 
-export type FiltroRepetidas = "todas" | "conferir" | "decidido" | "decidido_gt" | "tratado";
+export type FiltroRepetidas = "todas" | "conferir" | "decidido" | "decidido_gt" | "tratado" | "a_bloquear";
+
+function passaNoFiltro(a: AutoridadeRepetida, filtro: FiltroRepetidas): boolean {
+  if (filtro === "todas") return true;
+  if (filtro === "a_bloquear") return a.situacao !== "conferir" && temGrupoABloquear(a);
+  return a.situacao === filtro;
+}
 
 export function filtrarRepetidas(lista: readonly AutoridadeRepetida[], busca: string, filtro: FiltroRepetidas): AutoridadeRepetida[] {
   const termo = normalizarTexto(busca);
-  return lista.filter((a) => (filtro === "todas" || a.situacao === filtro) && (!termo || normalizarTexto(a.nome).includes(termo)));
+  return lista.filter((a) => passaNoFiltro(a, filtro) && (!termo || normalizarTexto(a.nome).includes(termo)));
 }
 
 /** Texto do link; `n` conta só as autoridades sem `eleicao` (as de eleito vão em `textoEleitosRepetidos`). */

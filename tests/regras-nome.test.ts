@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { comparacaoPrefixoNome, comparacaoRegraNome, contatoEhFeminino, nomeEsperadoComPrefixo, rotuloAchado, textoCoerencia } from "@/lib/tratamento";
+import { comparacaoLimiteNome, tamanhoDoNome } from "@/lib/limite-nome";
 import type { RegraNome } from "@/data/regras-nome";
 import type { ContatoPlanilha } from "@/lib/types";
 
@@ -504,5 +505,28 @@ describe("nomeEsperadoComPrefixo", () => {
     expect(nomeEsperadoComPrefixo(ministro, "Ministros do STF", "Joaquim Bezerra Vilaça")).toBe("Joaquim Bezerra Vilaça");
     expect(nomeEsperadoComPrefixo(ministro, "Senadores", "Senador Joaquim Vilaça")).toBe("Senador Joaquim Vilaça");
     expect(nomeEsperadoComPrefixo(ministro, undefined, "Joaquim Vilaça")).toBe("Joaquim Vilaça");
+  });
+});
+
+describe("comparacaoLimiteNome — STM, nome acima de 50 caracteres (spec 2026-11-04 §3.5)", () => {
+  const stm = (nome: string): ContatoPlanilha => ({ nome, grupo: "Ministros do STM", cargo: "Ministro do Superior Tribunal Militar", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" });
+  const de = (n: number) => "A".repeat(n);
+  test("51 caracteres acusa com o texto da regra; 50 não; espaços nas pontas não contam", () => {
+    const [c] = comparacaoLimiteNome(stm(de(51)), "Ministros do STM");
+    expect(c).toEqual({ campo: "nome", valorPlanilha: de(51), situacao: "divergente", origemValor: "coerencia", achado: "nome_acima_do_limite",
+      observacao: "Nome com 51 caracteres, acima do limite de 50 do Posse: abreviar o sobrenome, nunca a patente (regra do GT de 04/11)" });
+    expect(c.valorEsperado).toBeUndefined();
+    expect(comparacaoLimiteNome(stm(de(50)), "Ministros do STM")).toEqual([]);
+    expect(comparacaoLimiteNome(stm(`  ${de(50)}  `), "Ministros do STM")).toEqual([]);
+  });
+  test("acento conta um caractere; só o STM tem a regra", () => {
+    expect(tamanhoDoNome("Á".repeat(51))).toBe(51);
+    expect(comparacaoLimiteNome(stm(de(60)), "Ministros do STF")).toEqual([]);
+    expect(comparacaoLimiteNome(stm(de(60)), undefined)).toEqual([]);
+  });
+  test("rotuloAchado e textoCoerencia", () => {
+    expect(rotuloAchado("nome_acima_do_limite")).toBe("Nome acima do limite do Posse");
+    const [c] = comparacaoLimiteNome(stm(de(51)), "Ministros do STM");
+    expect(textoCoerencia(c)).toBe(c.observacao);
   });
 });

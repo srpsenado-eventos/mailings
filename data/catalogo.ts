@@ -159,7 +159,8 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     fontes: [],
   },
   {
-    nome: "Ex-Presidentes do Senado",
+    // Rótulo do Contatos desde 04/11; até 29/10 era "Ex-Presidentes do Senado".
+    nome: "Ex-Presidentes do Congresso",
     responsavel1: "Cleria Juliana Alves Pires Rosa",
     responsavel2: "Maria Ines Nepomuceno",
     backup: "Beatriz da Conceição Silveira",

@@ -129,7 +129,7 @@ describe("etiquetasDoContato", () => {
   test("possível saída com achado da Camada C no cargo (ex-presidente) mostra 'Cargo diverge'", () => {
     const c = contato({
       semaforo: "vermelho", possivelSaida: true,
-      contato: { nome: "Rui Fictício", grupo: "Ex-Presidentes do Senado", cargo: "Ex-Presidente do Senado Federal" },
+      contato: { nome: "Rui Fictício", grupo: "Ex-Presidentes do Congresso", cargo: "Ex-Presidente do Senado Federal" },
       comparacoes: [{
         campo: "cargo", valorPlanilha: "Ex-Presidente do Senado Federal", valorEsperado: "Presidente do Senado Federal de AAAA a AAAA",
         situacao: "divergente", origemValor: "coerencia", achado: "cargo_ex_presidente", observacao: "Informar o período da presidência",

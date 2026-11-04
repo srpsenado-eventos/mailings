@@ -34,7 +34,7 @@ export const GRUPOS_POSSE: readonly GrupoPosse[] = [
   fonte("Ministros do STF"),
   fonte("Ministros do TSE"),
   fonte("Ministros do STJ"),
-  fonte("Ex-Presidentes do Senado"),
+  fonte("Ex-Presidentes do Congresso", ["Ex-Presidentes do Senado"]),
   fonte(GRUPO_GOVERNADORES),
   fonte("Ministros do STM"),
   fonte("Ministros do TST"),

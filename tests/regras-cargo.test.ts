@@ -4,7 +4,7 @@ import { REGRAS_NOME } from "@/data/regras-nome";
 import { rotuloAchado, textoCoerencia } from "@/lib/tratamento";
 import type { ContatoPlanilha } from "@/lib/types";
 
-const SENADO = "Ex-Presidentes do Senado";
+const SENADO = "Ex-Presidentes do Congresso";
 const REPUBLICA = "Ex-Presidentes da República";
 
 const exPresidente = (cargo: string, grupo = SENADO): ContatoPlanilha => ({ nome: "Rui Fictício", grupo, cargo });

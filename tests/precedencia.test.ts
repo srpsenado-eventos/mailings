@@ -38,13 +38,19 @@ describe("dados da precedência", () => {
 });
 
 describe("regraDoSegmento", () => {
+  test("Ex-Presidentes do Congresso é ex, nível 3.5", () => {
+    const regra = regraDoSegmento(normalizarTexto("Ex-Presidentes do Congresso"));
+    expect(regra?.ex).toBe(true);
+    expect(regra?.nivel?.nivel).toBe("3.5");
+  });
+
   test.each([
     ["ministros do stf", "Ministros do STF"],
     ["senadores", "Senadores"],
     ["senadores (acre a goias)", "Senadores"],
     ["presidente do senado federal", "Presidente do Senado"],
     ["defensor", "Defensor Público Geral da União"],
-    ["ex-presidentes do senado", "Ex-Presidentes do Senado"],
+    ["ex-presidentes do congresso", "Ex-Presidentes do Congresso"],
     ["embaixadores (africa do sul ate eua)", "Embaixadores"],
   ])("%s casa %s", (seg, grupo) => {
     expect(regraDoSegmento(seg)?.grupo).toBe(grupo);

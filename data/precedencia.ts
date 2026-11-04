@@ -42,7 +42,7 @@ export const PRECEDENCIA: readonly RegraPrecedencia[] = [
     nivel: n("4.9", "Ministros do Supremo Tribunal Federal"),
   },
   { grupo: "Ex-Presidentes da República", ex: true, nivel: n("3.4", "Ex-Presidentes da República Federativa do Brasil") },
-  { grupo: "Ex-Presidentes do Senado", ex: true, nivel: n("3.5", "Ex-Presidentes do Congresso Nacional") },
+  { grupo: "Ex-Presidentes do Congresso", ex: true, nivel: n("3.5", "Ex-Presidentes do Congresso Nacional") },
   { grupo: "Ministros de Estado", ex: false, nivel: n("4.1", "Ministros de Estado") },
   {
     grupo: "Ministros do TSE", ex: false,

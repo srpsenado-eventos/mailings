@@ -140,7 +140,9 @@ function chavesDe(nomes: readonly string[]): string[] {
 }
 
 function conjuntoDeGrupos(grupos: readonly string[]): Set<string> {
-  return new Set(grupos.map(normalizarTexto).filter((g) => g.length > 0));
+  // Pela forma equivalente, para que o apelido de um grupo renomeado (Ex-Presidentes do Senado)
+  // continue valendo para a decisão gravada com o nome antigo.
+  return new Set(grupos.map((g) => normalizarTexto(grupoEquivalente(g, "contatos"))).filter((g) => g.length > 0));
 }
 
 /** Grupos do caso: os do registro manual vigente. */
@@ -223,7 +225,7 @@ export function gruposAtuaisParaOCaso(
 }
 
 function idDoCaso(nome: string, grupos: readonly string[]): string {
-  return `${normalizarNome(nome)}#${[...conjuntoDeGrupos(grupos)].sort().join("|")}`;
+  return `${normalizarNome(nome)}#${[...new Set(grupos.map(normalizarTexto).filter((g) => g.length > 0))].sort().join("|")}`;
 }
 
 function copiarRegistro(r: RegistroManual): RegistroManual {

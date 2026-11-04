@@ -13,7 +13,7 @@ const grupo = (nome: string, contatos: ResultadoContato[]): ResultadoGrupo => ({
 const lista = autoridadesRepetidas([
   grupo("Ministros do STF", [linha("Ana Fictícia", "Ministra do Supremo Tribunal Federal")]),
   grupo("Ministros do TSE", [linha("Ana Fictícia", "Ministra do Tribunal Superior Eleitoral")]),
-  grupo("Ex-Presidentes do Senado", [linha("Rui Fictício", "")]),
+  grupo("Ex-Presidentes do Congresso", [linha("Rui Fictício", "")]),
   grupo("Senadores", [linha("Rui Fictício", "Senador")]),
 ]);
 
@@ -21,7 +21,7 @@ describe("export das autoridades em mais de um grupo", () => {
   test("descreve cada ocorrência com cargo e nível", () => {
     const rui = lista.find((a) => a.nome === "Rui Fictício");
     expect(rui?.ocorrencias.map(descreverOcorrencia)).toEqual([
-      "Ex-Presidentes do Senado: cargo vazio (3.5, ex-)",
+      "Ex-Presidentes do Congresso: cargo vazio (3.5, ex-)",
       "Senadores: Senador (4.13)",
     ]);
   });
@@ -80,7 +80,7 @@ describe("export das autoridades em mais de um grupo", () => {
     };
     const eleicao: ResultadoEleicao = { arquivos: [], eleitos: [eleitoSenado], camaraNoContatos: false };
     const deFora = autoridadesRepetidas(
-      [grupo("Senadores", [linha("Rui Fictício", "Senador")]), grupo("Ex-Presidentes do Senado", [linha("Rui Fictício", "Ex-Presidente do Senado Federal")])],
+      [grupo("Senadores", [linha("Rui Fictício", "Senador")]), grupo("Ex-Presidentes do Congresso", [linha("Rui Fictício", "Ex-Presidente do Senado Federal")])],
       eleicao,
     );
 

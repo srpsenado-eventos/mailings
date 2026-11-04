@@ -23,6 +23,7 @@ import {
   temGeneroNeutro,
   type ContextoCargo,
 } from "@/lib/cargo-tribunal";
+import { comparacaoLimiteNome } from "@/lib/limite-nome";
 import {
   comparacaoPrefixoNome,
   comparacaoRegraNome,
@@ -274,6 +275,7 @@ export function comparacoesTratamento(
     ...comparacoesProtocolo(contato),
     ...comparacaoRegraNome(contato, grupoCanonico),
     ...comparacaoPrefixoNome(contato, grupoCanonico),
+    ...comparacaoLimiteNome(contato, grupoCanonico),
     ...comparacaoCargoExPresidente(contato, grupoCanonico),
   ];
 }

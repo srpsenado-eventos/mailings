@@ -97,6 +97,25 @@ function coerenciasDo(c: ResultadoContato, campo: CampoComparado): ComparacaoCam
   return coerenciasVisiveis(c.comparacoes).filter((x) => x.campo === campo);
 }
 
+/** O limite de caracteres tem etiqueta própria: não faz o nome "divergir" do cadastro ou do site. */
+const ACHADO_DO_LIMITE = "nome_acima_do_limite";
+
+function comparacaoDoLimite(c: ResultadoContato): ComparacaoCampo | undefined {
+  return coerenciasDo(c, "nome").find((x) => x.achado === ACHADO_DO_LIMITE);
+}
+
+/** Etiqueta do nome acima do limite do Posse: forma curta na linha, texto completo na explicação. */
+export function etiquetaDoLimiteDoNome(c: ResultadoContato): Etiqueta | undefined {
+  const comp = comparacaoDoLimite(c);
+  if (!comp) return undefined;
+  return { campo: "nome", texto: textoCurtoDoLimite(comp), tom: "atencao", explicacao: textoCoerencia(comp) };
+}
+
+/** A forma curta é o texto completo sem o "…: abreviar o sobrenome…" que a explicação carrega. */
+function textoCurtoDoLimite(comp: ComparacaoCampo): string {
+  return (comp.observacao ?? "").split(":")[0] || textoCoerencia(comp);
+}
+
 /**
  * Etiqueta de um campo comparado. Coerência divergente (Camadas A e C) e valor divergente
  * (Camada 1 ou B) viram o mesmo "diverge": para quem lê a linha, o campo precisa de revisão.
@@ -108,7 +127,7 @@ function etiquetaDoCampo(c: ResultadoContato, campo: CampoComparado): Etiqueta |
   const comp = comparacaoDeValor(c, campo);
   // A regra dos pares explica a si mesma: "Pela maioria dos pares: N de M no grupo usam …".
   const dosPares = comp?.origemValor === "pares" ? comp.observacao : undefined;
-  if (coerenciasDo(c, campo).length > 0 || comp?.situacao === "divergente") {
+  if (coerenciasDo(c, campo).some((x) => x.achado !== ACHADO_DO_LIMITE) || comp?.situacao === "divergente") {
     const explicacao = comp?.situacao === "divergente" && dosPares ? dosPares : doSite ? EXPLICACAO.divergeSite : EXPLICACAO.divergeProtocolo;
     return { campo, texto: `${rotulo} diverge`, tom: "atencao", explicacao };
   }
@@ -138,10 +157,16 @@ export function etiquetasDoContato(c: ResultadoContato, _g: ResultadoGrupo): Eti
     for (const campo of ["nome", "cargo"] as const) {
       const e = etiquetaDoCampo(c, campo);
       if (e?.tom === "atencao") lista.push(e);
+      if (campo === "nome") {
+        const limite = etiquetaDoLimiteDoNome(c);
+        if (limite) lista.push(limite);
+      }
     }
   } else {
     const nome = etiquetaDoCampo(c, "nome");
     if (nome) lista.push(nome);
+    const limite = etiquetaDoLimiteDoNome(c);
+    if (limite) lista.push(limite);
     if (!semCargo) {
       const cargo = etiquetaDoCampo(c, "cargo");
       if (cargo) lista.push(cargo);

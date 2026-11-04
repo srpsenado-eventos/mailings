@@ -47,6 +47,8 @@ export interface RegraNome {
    * Regra do campo `Cargo`, aplicada por `comparacaoCargoExPresidente` (`lib/regras-cargo.ts`).
    */
   cargoComPeriodo?: string;
+  /** Máximo de caracteres do campo Nome no Posse (spec 2026-11-04 §3.5), contando só o nome aparado. */
+  limiteCaracteres?: number;
 }
 
 /** Os 6 grupos de tribunal: o Presidente leva "Ministro(a)" no nome. */
@@ -59,6 +61,7 @@ export const REGRAS_NOME: Readonly<Record<string, RegraNome>> = {
   "Ministros do STM": {
     tratamentosProibidos: ["dr", "dra", "doutor", "doutora"],
     prefixoDoPresidente: "ministro",
+    limiteCaracteres: 50,
   },
   // O nome é "Presidente Luís Inácio Lula da Silva": o prefixo é regra, não erro (GT, 2026-10-30).
   "Presidente da República": { prefixoDoPresidente: "presidente" },

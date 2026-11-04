@@ -191,6 +191,15 @@ describe("textoDoRegistro", () => {
     expect(textoDoRegistro(ajuste)).toBe("26/10 · Ajustar no Contatos (Marina e Clóvis) · Validado");
   });
 
+  it("bloqueio e desbloqueio no histórico", () => {
+    expect(textoDoRegistro({ tipo: "bloqueio", grupo: "Ministros do STJ", data: "2026-11-05", quem: "Marina", observacao: "na autorização" }))
+      .toBe("05/11 · Bloqueio no Posse em Ministros do STJ (Marina) · na autorização");
+    expect(textoDoRegistro({ tipo: "desbloqueio", grupo: "Ministros do STJ", data: "2026-11-06", quem: "Marina", observacao: "" }))
+      .toBe("06/11 · Desbloqueio no Posse em Ministros do STJ (Marina)");
+    expect(textoDoRegistro({ tipo: "coleta", data: "2026-11-05", situacao: "pendente", grupos: ["A"], pendencias: ["bloqueio", "cadastrar_convite"] }))
+      .toBe("05/11 · Coleta: Pendente de bloqueio no Posse · Pendente: a cadastrar no grupo do convite");
+  });
+
   it("descreve a reabertura pela coleta", () => {
     // Arrange
     const r: RegistroColeta = { tipo: "coleta", data: "2026-10-31", situacao: "reaberto", grupos: [] };

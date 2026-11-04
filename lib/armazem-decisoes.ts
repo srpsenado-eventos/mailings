@@ -4,7 +4,7 @@ import { ehArquivoAusente, gravarArquivoAtomico } from "@/lib/armazem";
 import { CAMINHO_DECISOES_BLOB, type ClienteBlob } from "@/lib/armazem-blob";
 import {
   DecisaoInvalidaError, HISTORICO_VAZIO, registrar,
-  type CasoDecidido, type HistoricoDecisoes, type PedidoDeDecisao, type Registro, type RegistroColeta, type RegistroManual,
+  type CasoDecidido, type HistoricoDecisoes, type Pendencia, type PedidoDeDecisao, type Registro, type RegistroBloqueio, type RegistroColeta, type RegistroManual,
   type SituacaoNoContatos, type TipoDecisao,
 } from "@/lib/decisoes";
 
@@ -88,16 +88,37 @@ export function lerRegistroManual(valor: unknown): Leitura<RegistroManual> {
   };
 }
 
+const PENDENCIAS: readonly Pendencia[] = ["bloqueio", "cadastrar_convite", "desbloquear_convite"];
+
 function lerRegistroColeta(o: Record<string, unknown>): Leitura<RegistroColeta> {
   if (!ehData(o.data)) return falha("coleta sem data válida no formato AAAA-MM-DD");
   if (!ehUm(SITUACOES, o.situacao)) return falha("coleta sem situação válida");
   if (!ehTextos(o.grupos)) return falha("coleta sem grupos (lista de textos)");
-  return { ok: true, valor: { tipo: "coleta", data: o.data, situacao: o.situacao, grupos: [...o.grupos] } };
+  const pendencias = Array.isArray(o.pendencias)
+    ? o.pendencias.filter((p): p is Pendencia => PENDENCIAS.includes(p as Pendencia))
+    : [];
+  return {
+    ok: true,
+    valor: {
+      tipo: "coleta", data: o.data, situacao: o.situacao, grupos: [...o.grupos],
+      ...(pendencias.length > 0 ? { pendencias } : {}),
+    },
+  };
+}
+
+/** Leitura mínima do bloqueio; a Tarefa 2 completa a validação. */
+function lerRegistroBloqueio(o: Record<string, unknown>): Leitura<RegistroBloqueio> {
+  if (o.tipo !== "bloqueio" && o.tipo !== "desbloqueio") return falha("bloqueio com tipo inválido");
+  if (typeof o.grupo !== "string" || o.grupo.trim() === "") return falha("bloqueio sem grupo");
+  if (!ehData(o.data)) return falha("bloqueio sem data válida no formato AAAA-MM-DD");
+  if (typeof o.quem !== "string" || typeof o.observacao !== "string") return falha("bloqueio sem quem ou observação");
+  return { ok: true, valor: { tipo: o.tipo, grupo: o.grupo, data: o.data, quem: o.quem, observacao: o.observacao } };
 }
 
 function lerRegistro(valor: unknown): Leitura<Registro> {
   const o = objeto(valor);
   if (o?.tipo === "coleta") return lerRegistroColeta(o);
+  if (o?.tipo === "bloqueio" || o?.tipo === "desbloqueio") return lerRegistroBloqueio(o);
   return lerRegistroManual(valor);
 }
 

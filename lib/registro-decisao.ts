@@ -1,6 +1,6 @@
 import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_DEPUTADOS_FEDERAIS, GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
 import {
-  dataDaDecisao, grupoEquivalente, vigente,
+  dataDaDecisao, grupoEquivalente, textoDasPendencias, vigente,
   type HistoricoDecisoes, type PedidoDeDecisao, type Registro, type RegistroManual, type TipoDecisao,
 } from "@/lib/decisoes";
 import { diaDaColeta } from "@/lib/decisoes-coleta";
@@ -76,7 +76,15 @@ const TEXTO_VALIDACAO: Record<RegistroManual["validacao"], string> = { validado:
  */
 export function textoDoRegistro(r: Registro): string {
   const dia = dataDaDecisao(r.data);
-  if (r.tipo === "coleta") return `${dia} · Coleta: ${textoNoContatos(r.situacao) || "Sem efeito"}`;
+  if (r.tipo === "coleta") {
+    const pendencias = textoDasPendencias(r.pendencias ?? []);
+    return `${dia} · Coleta: ${pendencias || textoNoContatos(r.situacao) || "Sem efeito"}`;
+  }
+  if ("grupo" in r) {
+    const rotulo = r.tipo === "bloqueio" ? "Bloqueio" : "Desbloqueio";
+    const obs = r.observacao.trim();
+    return `${dia} · ${rotulo} no Posse em ${r.grupo} (${r.quem})${obs ? ` · ${obs}` : ""}`;
+  }
   const outras = (r.outraPessoa ?? []).filter((g) => g.trim());
   const observacao = r.observacao.trim();
   return [

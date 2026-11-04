@@ -9,6 +9,10 @@ import { SecaoGoverno } from "@/components/secao-governo";
 import { linhasDoAgrupador } from "@/lib/agrupador";
 import { grupoDeputados, NOME_GRUPO_DEPUTADOS, temGrupoDeputados } from "@/lib/painel-deputados";
 import { avisoDaEleicao, ehFiltroEleicao, esperadosDoAgrupador, FILTROS_ELEICAO, secoesDeEleicao, secoesDeGoverno } from "@/lib/painel-eleicao";
+import { RegrasGt } from "@/components/regras-gt";
+import { REGRAS_GT } from "@/data/regras-gt";
+import { regrasDoGrupo, textoCurto } from "@/lib/regras-gt";
+import { Etiqueta } from "@/components/etiqueta";
 import { PublicarButton } from "@/components/publicar-button";
 import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-contato";
 import { contarBloqueiosDoGrupo, ehLinhaABloquear, ROTULO_CARTAO_BLOQUEIO, textosDeBloqueioDoGrupo, totalABloquear } from "@/lib/painel-bloqueio";
@@ -121,6 +125,8 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
 
       {aviso && <p className="mt-4 rounded-lg border border-atencao-borda bg-atencao-fundo p-3 text-sm text-atencao">{aviso}</p>}
 
+      <RegrasGt regras={REGRAS_GT} />
+
       <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7">
         {[...cartoesDoResumo(retrato.resumo), { rotulo: ROTULO_CARTAO_BLOQUEIO, valor: totalABloquear(repetidas, retrato.grupos) }].map((c) => (
           <div key={c.rotulo} className="rounded-lg border border-borda bg-cartao px-4 py-3">
@@ -198,6 +204,9 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
                     <span key={t.texto} className={`text-xs ${t.tom === "atencao" ? "text-atencao" : "text-cinza"}`}>{t.texto}</span>
                   ))}
                 </button>
+                {regrasDoGrupo(g.grupo).map((r) => (
+                  <Etiqueta key={`${r.data}-${r.titulo}`} tom="neutro" texto={textoCurto(r)} explicacao={r.texto} />
+                ))}
                 <div className="grow" />
                 <EstadoDaFonte g={g} falhas={retrato.falhas} />
               </div>

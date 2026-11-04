@@ -1,0 +1,43 @@
+/**
+ * Regras do GT em vigor (spec 2026-11-04 §3.2). Cada entrada nova é decisão do Clovis, como no
+ * catálogo: nenhuma regra entra por inferência.
+ */
+export interface RegraGt {
+  /** AAAA-MM-DD da decisão. */
+  data: string;
+  titulo: string;
+  texto: string;
+  /** Grupos canônicos em que a regra também aparece no cabeçalho do grupo. */
+  grupos?: readonly string[];
+}
+
+export const REGRAS_GT: readonly RegraGt[] = [
+  {
+    data: "2026-11-04",
+    titulo: "Nome",
+    texto: "O nome é exatamente como está no site oficial do órgão, inclusive quando o GT conhece o nome político (ex.: Rodrigo Pacheco). A equipe não tem como fazer essa análise para 100% das pessoas.",
+  },
+  {
+    data: "2026-11-04",
+    titulo: "Pessoa em mais de um grupo",
+    texto: "A pessoa fica em todos os grupos no Contatos. No Sistema Posse ela é bloqueada, por pessoa em cada grupo, no grupo que não convida, no momento em que o grupo for autorizado. O Fiscal mostra em qual grupo bloquear e registra o bloqueio feito.",
+  },
+  {
+    data: "2026-11-04",
+    titulo: "STM: patentes",
+    texto: "As patentes serão pesquisadas pelo Daniel no site do STM. Se não encontrar, o GT consulta a ASPAR do Exército. Até lá, o Fiscal não audita patente.",
+    grupos: ["Ministros do STM"],
+  },
+  {
+    data: "2026-11-04",
+    titulo: "STM: abreviação",
+    texto: "Quando for preciso abreviar o nome, abreviar o sobrenome, nunca a patente.",
+    grupos: ["Ministros do STM"],
+  },
+  {
+    data: "2026-11-04",
+    titulo: "Tratamento",
+    texto: "Tabela de tratamentos v02 (REGRA GERAL): Governador, Prefeito, Presidente de Assembleia Legislativa / Câmara Legislativa e Presidente de Câmara Municipal passam a Senhor(a); o endereçamento não muda.",
+    grupos: ["Governadores"],
+  },
+];

@@ -4,7 +4,7 @@ import {
 } from "@/data/grupos-posse";
 import { registrar, HISTORICO_VAZIO, type RegistroColeta, type RegistroManual } from "@/lib/decisoes";
 import {
-  alvoDoEleito, alvoDoGovernador, alvoDoRepetido, corpoDoPedido, errosDoFormulario, FORMULARIO_VAZIO, historicoDoEleito,
+  alvoDoEleito, alvoDoGovernador, alvoDoRepetido, corpoDoBloqueio, corpoDoPedido, errosDoFormulario, errosDoFormularioBloqueio, formularioBloqueioVazio, FORMULARIO_VAZIO, historicoDoEleito,
   historicoDoGovernador, hojeEmBrasilia, paraRegistro, pedeConvite, registrosDoMaisRecente, textoDoRegistro, type FormularioDecisao,
 } from "@/lib/registro-decisao";
 import type { AutoridadeRepetida, OcorrenciaRepetida } from "@/lib/repetidos-base";
@@ -469,5 +469,24 @@ describe("historicoDoGovernador", () => {
 
     // Assert
     expect(registros).toHaveLength(1);
+  });
+});
+
+describe("formulário de bloqueio (spec 2026-11-04 §3.1.4)", () => {
+  const alvo = { nome: "Ana Fictícia", nomes: ["Ana Fictícia", "ana ficticia"], grupos: ["A", "B"] };
+  it("começa com a data de hoje e exige data e quem", () => {
+    expect(formularioBloqueioVazio("2026-11-05")).toEqual({ data: "2026-11-05", quem: "", observacao: "" });
+    expect(errosDoFormularioBloqueio({ data: "", quem: " ", observacao: "" })).toEqual(["Informe a data (AAAA-MM-DD).", "Informe quem marcou."]);
+    expect(errosDoFormularioBloqueio({ data: "2026-11-05", quem: "Marina", observacao: "" })).toEqual([]);
+  });
+  it("monta o corpo do bloqueio e do desbloqueio com os campos aparados", () => {
+    expect(corpoDoBloqueio(alvo, "A", "bloqueio", { data: "2026-11-05", quem: " Marina ", observacao: " na autorização " })).toEqual({
+      nome: "Ana Fictícia", nomes: ["Ana Fictícia", "ana ficticia"], grupos: ["A", "B"],
+      bloqueio: { tipo: "bloqueio", grupo: "A", data: "2026-11-05", quem: "Marina", observacao: "na autorização" },
+    });
+    expect(corpoDoBloqueio(alvo, "A", "desbloqueio", { data: "2026-11-06", quem: "Marina", observacao: "" }).bloqueio.tipo).toBe("desbloqueio");
+  });
+  it("formulário com erro lança", () => {
+    expect(() => corpoDoBloqueio(alvo, "A", "bloqueio", { data: "", quem: "", observacao: "" })).toThrow();
   });
 });

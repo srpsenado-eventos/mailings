@@ -319,8 +319,10 @@ export function situacaoDoCaso(c: CasoDecidido, gruposAtuais: readonly string[])
  * Devolve os grupos como vieram, sem repetir por `normalizarTexto`.
  */
 export function gruposABloquear(decisao: RegistroManual, gruposAtuais: readonly string[]): string[] {
-  const convite = conviteNormalizado(decisao);
-  if (decisao.tipo !== "nao_recebe_convite" && !(decisao.tipo === "mesma_pessoa" && convite !== undefined)) return [];
+  if (decisao.tipo !== "mesma_pessoa" && decisao.tipo !== "nao_recebe_convite") return [];
+  // O convite só existe em mesma_pessoa; em nao_recebe_convite todos os grupos atuais são a bloquear.
+  const convite = decisao.tipo === "mesma_pessoa" ? conviteNormalizado(decisao) : undefined;
+  if (decisao.tipo === "mesma_pessoa" && convite === undefined) return [];
   const vistos = new Set<string>();
   return gruposAtuais.filter((g) => {
     const chave = normalizarTexto(g);
@@ -364,15 +366,16 @@ export function quadroDeBloqueio(c: CasoDecidido, gruposAtuais: readonly string[
     const b = bloqueioVigente(c, grupo);
     return b ? { grupo, bloqueado: true, data: b.data } : { grupo, bloqueado: false };
   });
-  const convite = conviteNormalizado(decisao);
-  const grupoDoConvite = decisao.convidaPor?.trim();
+  const ehMesmaPessoa = decisao.tipo === "mesma_pessoa";
+  const convite = ehMesmaPessoa ? conviteNormalizado(decisao) : undefined;
+  const grupoDoConvite = ehMesmaPessoa ? decisao.convidaPor?.trim() : undefined;
   const bloqueioNoConvite = grupoDoConvite ? bloqueioVigente(c, grupoDoConvite) : undefined;
   if (grupoDoConvite && bloqueioNoConvite) {
     bloqueios.push({ grupo: grupoDoConvite, bloqueado: true, data: bloqueioNoConvite.data, grupoDoConvite: true });
   }
   const pendencias: Pendencia[] = [];
   if (bloqueios.some((b) => !b.grupoDoConvite && !b.bloqueado)) pendencias.push("bloqueio");
-  if (decisao.tipo === "mesma_pessoa" && convite !== undefined && !atuais.includes(convite)) pendencias.push("cadastrar_convite");
+  if (convite !== undefined && !atuais.includes(convite)) pendencias.push("cadastrar_convite");
   if (bloqueioNoConvite) pendencias.push("desbloquear_convite");
   return { aBloquear, bloqueios, pendencias };
 }

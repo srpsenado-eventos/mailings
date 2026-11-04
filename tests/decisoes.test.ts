@@ -520,4 +520,14 @@ describe("bloqueio no Posse (spec 2026-11-04 §3.1)", () => {
     expect(quadroDeBloqueio(novo.casos[0], atuais).pendencias).toEqual([]);
     expect(h.casos[0].registros).toHaveLength(1);
   });
+  it("nao_recebe_convite ignora convidaPor: todos os grupos atuais são a bloquear e só há a pendência de bloqueio", () => {
+    const d = manual({ tipo: "nao_recebe_convite", convidaPor: "B", grupos: ["A", "B"] });
+    expect(gruposABloquear(d, ["A", "B"])).toEqual(["A", "B"]);
+    const caso = registrar(HISTORICO_VAZIO, "Rui Fictício", [], d).casos[0];
+    const soB = { ...caso, registros: [...caso.registros, bloqueio("B", "2026-11-05")] };
+    expect(quadroDeBloqueio(soB, ["A", "B"]).bloqueios).toEqual([{ grupo: "A", bloqueado: false }, { grupo: "B", bloqueado: true, data: "2026-11-05" }]);
+    expect(quadroDeBloqueio(soB, ["A", "B"]).pendencias).toEqual(["bloqueio"]);
+    const ambos = { ...soB, registros: [...soB.registros, bloqueio("A", "2026-11-05")] };
+    expect(quadroDeBloqueio(ambos, ["A", "B"]).pendencias).toEqual([]);
+  });
 });

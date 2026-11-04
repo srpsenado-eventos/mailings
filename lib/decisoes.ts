@@ -61,7 +61,7 @@ export interface PedidoDeDecisao {
   registro: RegistroManual;
 }
 
-/** Corpo de `POST /api/decisoes/bloqueio`: identifica o caso pelos nomes e grupos, como o de decisão. */
+/** Corpo de `POST /api/decisoes` com bloqueio: identifica o caso pelos nomes e grupos, como o de decisão. */
 export interface PedidoDeBloqueio {
   nome: string;
   nomes: string[];
@@ -332,11 +332,18 @@ export function gruposABloquear(decisao: RegistroManual, gruposAtuais: readonly 
   });
 }
 
-/** Bloqueio vigente no grupo: vale o registro mais recente (empate: o último gravado), se for `bloqueio`. */
+/** Chave do grupo para comparar bloqueios: forma equivalente do Contatos, normalizada. */
+function chaveDoGrupo(grupo: string): string {
+  return normalizarTexto(grupoEquivalente(grupo.trim(), "contatos"));
+}
+
+/**
+ * Bloqueio vigente no grupo: vale o último registro de bloqueio ou desbloqueio na ordem de gravação
+ * do caso (a data digitada é só informativa), se for `bloqueio`.
+ */
 export function bloqueioVigente(c: CasoDecidido, grupo: string): RegistroBloqueio | undefined {
-  const chave = normalizarTexto(grupo);
-  const ultimo = c.registros.filter(ehBloqueio).filter((r) => normalizarTexto(r.grupo) === chave)
-    .reduce<RegistroBloqueio | undefined>((melhor, r) => (melhor === undefined || r.data >= melhor.data ? r : melhor), undefined);
+  const chave = chaveDoGrupo(grupo);
+  const ultimo = c.registros.filter(ehBloqueio).filter((r) => chaveDoGrupo(r.grupo) === chave).at(-1);
   return ultimo?.tipo === "bloqueio" ? ultimo : undefined;
 }
 
@@ -368,7 +375,7 @@ export function quadroDeBloqueio(c: CasoDecidido, gruposAtuais: readonly string[
   });
   const ehMesmaPessoa = decisao.tipo === "mesma_pessoa";
   const convite = ehMesmaPessoa ? conviteNormalizado(decisao) : undefined;
-  const grupoDoConvite = ehMesmaPessoa ? decisao.convidaPor?.trim() : undefined;
+  const grupoDoConvite = ehMesmaPessoa && decisao.convidaPor?.trim() ? grupoEquivalente(decisao.convidaPor.trim(), "contatos") : undefined;
   const bloqueioNoConvite = grupoDoConvite ? bloqueioVigente(c, grupoDoConvite) : undefined;
   if (grupoDoConvite && bloqueioNoConvite) {
     bloqueios.push({ grupo: grupoDoConvite, bloqueado: true, data: bloqueioNoConvite.data, grupoDoConvite: true });

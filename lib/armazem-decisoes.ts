@@ -5,7 +5,7 @@ import { CAMINHO_DECISOES_BLOB, type ClienteBlob } from "@/lib/armazem-blob";
 import {
   BloqueioSemDecisaoError, DecisaoInvalidaError, HISTORICO_VAZIO, registrar, registrarBloqueio,
   type CasoDecidido, type HistoricoDecisoes, type Pendencia, type PedidoDeBloqueio, type PedidoDeDecisao, type Registro, type RegistroBloqueio, type RegistroColeta, type RegistroManual,
-  type SituacaoNoContatos, type TipoDecisao,
+  TIPOS_DECISAO, grupoEquivalente, type SituacaoNoContatos,
 } from "@/lib/decisoes";
 
 /**
@@ -32,7 +32,6 @@ export class DecisoesIlegiveisError extends Error {
   }
 }
 
-const TIPOS: readonly TipoDecisao[] = ["mesma_pessoa", "pessoas_diferentes", "nao_recebe_convite", "ajustar_contatos"];
 const SITUACOES: readonly SituacaoNoContatos[] = ["tratado", "pendente", "reaberto", "sem_efeito"];
 const VALIDACOES: readonly RegistroManual["validacao"][] = ["validado", "a_validar"];
 const DATA = /^\d{4}-\d{2}-\d{2}$/;
@@ -69,7 +68,7 @@ function ehUm<T extends string>(opcoes: readonly T[], v: unknown): v is T {
 export function lerRegistroManual(valor: unknown): Leitura<RegistroManual> {
   const o = objeto(valor);
   if (!o) return falha("o registro não é um objeto");
-  if (!ehUm(TIPOS, o.tipo)) return falha(`registro sem tipo válido (${TIPOS.join(", ")})`);
+  if (!ehUm(TIPOS_DECISAO, o.tipo)) return falha(`registro sem tipo válido (${TIPOS_DECISAO.join(", ")})`);
   if (!ehData(o.data)) return falha("registro sem data válida no formato AAAA-MM-DD");
   // Como no formulário: quem decidiu é obrigatório, e só espaços não conta.
   if (typeof o.quem !== "string" || o.quem.trim() === "") return falha("registro sem quem (texto não vazio)");
@@ -124,7 +123,7 @@ export function lerRegistroBloqueio(valor: unknown): Leitura<RegistroBloqueio> {
   if (!ehData(o.data)) return falha("bloqueio sem data válida no formato AAAA-MM-DD");
   if (typeof o.quem !== "string" || o.quem.trim() === "") return falha("bloqueio sem quem (texto não vazio)");
   if (typeof o.observacao !== "string") return falha("bloqueio sem observacao (texto)");
-  return { ok: true, valor: { tipo: o.tipo, grupo: o.grupo, data: o.data, quem: o.quem, observacao: o.observacao } };
+  return { ok: true, valor: { tipo: o.tipo, grupo: grupoEquivalente(o.grupo.trim(), "contatos"), data: o.data, quem: o.quem, observacao: o.observacao } };
 }
 
 function lerRegistro(valor: unknown): Leitura<Registro> {

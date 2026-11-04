@@ -411,7 +411,7 @@ describe("bloqueio no Posse (spec 2026-11-04 §3.1)", () => {
     expect(gruposABloquear(manual({ tipo: "pessoas_diferentes", grupos: ["A", "B"] }), ["A", "B"])).toEqual([]);
     expect(gruposABloquear(manual({ tipo: "ajustar_contatos", grupos: ["A", "B"] }), ["A", "B"])).toEqual([]);
   });
-  it("bloqueioVigente: vale o mais recente do grupo; desbloqueio no mesmo dia gravado depois desfaz; outro grupo não conta", () => {
+  it("bloqueioVigente: vale o último gravado do grupo, não a data; desbloqueio gravado depois desfaz; outro grupo não conta", () => {
     const caso = registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "B", grupos: ["A", "B"] })).casos[0];
     const comBloqueio = { ...caso, registros: [...caso.registros, bloqueio("A", "2026-11-05")] };
     expect(bloqueioVigente(comBloqueio, "a ")?.data).toBe("2026-11-05");
@@ -420,6 +420,20 @@ describe("bloqueio no Posse (spec 2026-11-04 §3.1)", () => {
     expect(bloqueioVigente(desfeito, "A")).toBeUndefined();
     const refeito = { ...desfeito, registros: [...desfeito.registros, bloqueio("A", "2026-11-06")] };
     expect(bloqueioVigente(refeito, "A")?.data).toBe("2026-11-06");
+  });
+  it("bloqueioVigente: a ordem de gravação vence a data digitada nos dois sentidos", () => {
+    const caso = registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "B", grupos: ["A", "B"] })).casos[0];
+    const futuroDesfeito = { ...caso, registros: [...caso.registros, bloqueio("A", "2026-12-01"), bloqueio("A", "2026-11-05", "desbloqueio")] };
+    expect(bloqueioVigente(futuroDesfeito, "A")).toBeUndefined();
+    const refeitoComDataAnterior = { ...caso, registros: [...caso.registros, bloqueio("A", "2026-12-01", "desbloqueio"), bloqueio("A", "2026-11-05")] };
+    expect(bloqueioVigente(refeitoComDataAnterior, "A")?.data).toBe("2026-11-05");
+  });
+  it("grupo do convite gravado em variante é reconhecido pelo bloqueio na forma equivalente", () => {
+    const caso = registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "ministros do tse ", grupos: ["Ministros do STJ", "Ministros do TSE"] })).casos[0];
+    const comBloqueioNoConvite = { ...caso, registros: [...caso.registros, bloqueio("Ministros do TSE", "2026-11-05")] };
+    const quadro = quadroDeBloqueio(comBloqueioNoConvite, ["Ministros do STJ", "Ministros do TSE"]);
+    expect(quadro.bloqueios.some((b) => b.grupoDoConvite)).toBe(true);
+    expect(quadro.pendencias).toContain("desbloquear_convite");
   });
   it("quadroDeBloqueio: a bloquear sem bloqueio é pendência; bloqueado fecha; falta no convite é outra pendência", () => {
     const caso = registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "B", grupos: ["A", "B"] })).casos[0];

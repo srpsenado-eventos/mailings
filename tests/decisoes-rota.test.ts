@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { armazemDecisoesEmArquivo, armazemDecisoesEmMemoria, tratarRegistroDeDecisao } from "@/lib/armazem-decisoes";
-import type { HistoricoDecisoes } from "@/lib/decisoes";
+import { bloqueioVigente, type HistoricoDecisoes } from "@/lib/decisoes";
 
 const registro = (extra: Record<string, unknown> = {}) => ({
   tipo: "mesma_pessoa", data: "2026-10-26", quem: "Marina e Clóvis", observacao: "Convidar pelo TSE",
@@ -146,6 +146,18 @@ describe("tratarRegistroDeDecisao", () => {
     expect((await tratarRegistroDeDecisao({ nome: "Ana", nomes: [], bloqueio: b }, armazem)).status).toBe(400);
     expect((await tratarRegistroDeDecisao({ nome: "Ana", nomes: [], grupos: ["A"], bloqueio: { ...b, tipo: "bloquear" } }, armazem)).status).toBe(400);
     expect((await tratarRegistroDeDecisao({ nome: "Ana", nomes: [], grupos: ["A"], bloqueio: { ...b, quem: " " } }, armazem)).status).toBe(400);
+  });
+
+  test("desbloqueio depois do bloqueio, mesmo com data anterior, deixa o caso sem bloqueio vigente", async () => {
+    const armazem = armazemDecisoesEmMemoria();
+    await tratarRegistroDeDecisao(corpo(), armazem);
+    const base = { nome: "Ana Fictícia", nomes: [], grupos: ["Ministros do STJ", "Ministros do TSE"] };
+    const reg = { grupo: "Ministros do STJ", quem: "Marina", observacao: "" };
+    await tratarRegistroDeDecisao({ ...base, bloqueio: { ...reg, tipo: "bloqueio", data: "2026-12-01" } }, armazem);
+    const r = await tratarRegistroDeDecisao({ ...base, bloqueio: { ...reg, tipo: "desbloqueio", data: "2026-11-05" } }, armazem);
+    expect(r.status).toBe(200);
+    const caso = r.corpo.historico?.casos[0];
+    expect(caso && bloqueioVigente(caso, "Ministros do STJ")).toBeUndefined();
   });
 
   test("pessoa com dois casos: o bloqueio vai ao caso dos grupos informados", async () => {

@@ -317,7 +317,7 @@ export function marcaDaDecisao(a: AutoridadeRepetida, d: RegistroManual, grupo: 
       if (!convite) return undefined;
       if (!mesmoGrupo(daLinha, convite)) {
         const marca = aBloquear(`convite pelo grupo ${convite} (decisão do GT de ${dia})`);
-        if (a.convidaPor) return marca;
+        if (!a.pendencias?.includes("cadastrar_convite")) return marca;
         return { ...marca, etiquetas: [...marca.etiquetas, etiqueta("atencao", `Grupo do convite ${convite} sem a pessoa no Contatos`)] };
       }
       const outros = [...new Set(a.ocorrencias

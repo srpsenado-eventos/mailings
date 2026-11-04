@@ -981,7 +981,7 @@ describe("decisões do GT nos repetidos (spec 2026-10-30 §4.1.3)", () => {
       });
     });
 
-    test("com a planilha da Câmara, a ocorrência da Câmara vale como grupo do convite", () => {
+    test("com a planilha da Câmara, a ocorrência da Câmara vale como grupo do convite, mas falta no Contatos: duas etiquetas e duas pendências (Eunício)", () => {
       // Arrange / Act
       const repetidas = autoridadesRepetidas(
         [exPresidenteSenado("Ciro Fictício")],
@@ -991,8 +991,13 @@ describe("decisões do GT nos repetidos (spec 2026-10-30 §4.1.3)", () => {
       // Assert
       expect(repetidas[0].convidaPor?.origem).toBe("camara");
       expect(etiquetaDeRepeticao(repetidas, linha("Ciro Fictício", "x"), "Ex-Presidentes do Senado")).toMatchObject({
-        fosca: false, etiquetas: [{ tom: "atencao", texto: "Bloquear no Posse neste grupo ao autorizar · convite pelo grupo Deputados Federais (decisão do GT de 26/10)" }],
+        fosca: false,
+        etiquetas: [
+          { tom: "atencao", texto: "Bloquear no Posse neste grupo ao autorizar · convite pelo grupo Deputados Federais (decisão do GT de 26/10)" },
+          { tom: "atencao", texto: "Grupo do convite Deputados Federais sem a pessoa no Contatos" },
+        ],
       });
+      expect(textoDaSituacao(repetidas[0])).toBe("Pendente de bloqueio no Posse · Pendente: a cadastrar no grupo do convite");
     });
 
     test("Deltan decidido para Senadores eleitos, só ligado pelo eixo: a linha do Contatos fica em atenção, sem fosco", () => {

@@ -47,16 +47,16 @@ describe("catálogo real (data/catalogo.ts)", () => {
       expect(stj.fontes[1]).toMatchObject({ url: "https://www.stj.jus.br/sites/portalp/SiteAssets/Paginas/Institucional/Composicao/Composicao-do-STJ.pdf", ativo: true, tipo: "pdf", rotulo: "convocado", propoeInclusao: true, marcador: { textos: ["**"] } });
     });
 
-    test("PGR e Ex-Presidentes do Senado ganharam fonte; Garibaldi é exceção de nome", () => {
+    test("PGR e Ex-Presidentes do Senado ganharam fonte", () => {
       expect(CATALOGO.find((g) => g.nome === "Procurador-Geral da República")?.fontes).toEqual([{ url: "https://www.mpf.mp.br/o-mpf/o-mpf/membros/procurador-geral-da-republica", ativo: true }]);
-      expect(CATALOGO.find((g) => g.nome === "Ex-Presidentes do Senado")?.fontes).toEqual([{ url: "https://www25.senado.leg.br/web/senadores/nova-republica", ativo: true, nomesDoContatos: ["Garibaldi Alves Filho"] }]);
+      expect(CATALOGO.find((g) => g.nome === "Ex-Presidentes do Senado")?.fontes).toEqual([{ url: "https://www25.senado.leg.br/web/senadores/nova-republica", ativo: true }]);
     });
 
-    test("tipo pdf, marcador, nomesDoContatos e urlAlternativa só onde a spec manda; alternativas em domínio oficial", () => {
+    test("tipo pdf, marcador e urlAlternativa só onde a spec manda; alternativas em domínio oficial", () => {
       const fontes = CATALOGO.flatMap((g) => g.fontes);
       expect(fontes.filter((f) => f.tipo === "pdf")).toHaveLength(1);
       expect(fontes.filter((f) => f.marcador)).toHaveLength(2);
-      expect(fontes.filter((f) => f.nomesDoContatos)).toHaveLength(1);
+      expect(fontes.some((f) => "nomesDoContatos" in f)).toBe(false);
       const alternativas = CATALOGO.flatMap((g) => [...g.fontes, ...(g.fontesIndividuais ?? [])]).flatMap((f) => (f.urlAlternativa ? [f.urlAlternativa] : []));
       expect(alternativas).toHaveLength(6);
       expect(alternativas.every((u) => /^https:\/\/[a-z0-9.-]+\.gov\.br\//.test(u))).toBe(true);

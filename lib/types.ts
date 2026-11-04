@@ -382,8 +382,6 @@ export interface FonteCatalogo {
   casamento?: "pessoa" | "cargo";
   /** Lida só quando a principal falha; o que casar é comparado contra ela (spec 2026-10-23 §3.3). Mesmo domínio oficial. */
   urlAlternativa?: string;
-  /** Nomes, como estão no Contatos, em que o Contatos prevalece sobre a grafia da página (spec 2026-10-23 §4.2). */
-  nomesDoContatos?: readonly string[];
   /** Ausente = HTML. "pdf": o corpo é lido por `extrairConteudoPdf` (spec 2026-10-23 §5.1). */
   tipo?: "html" | "pdf";
   /** Extração por marcador: só as pessoas cujo nome é seguido de um destes textos (spec 2026-10-23 §5.2). */

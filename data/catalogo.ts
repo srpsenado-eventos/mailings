@@ -169,7 +169,7 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     fontes: [
       // Planilha de 23/10, conferida com fetch em 23/10 (200, lista de 26 itens, sem cargo).
       // Garibaldi: o Contatos prevalece sobre o nome da página (spec 2026-10-23 §4.2).
-      { url: "https://www25.senado.leg.br/web/senadores/nova-republica", ativo: true, nomesDoContatos: ["Garibaldi Alves Filho"] },
+      { url: "https://www25.senado.leg.br/web/senadores/nova-republica", ativo: true },
     ],
   },
   {

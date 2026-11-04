@@ -9,6 +9,7 @@ import {
   estadoDaFonteDoGrupo,
   etiquetasDoContato,
   filtrarGrupos,
+  FILTROS,
   linhasDoEndereco,
   montarRetrato,
   motivoDoContato,
@@ -308,6 +309,11 @@ describe("filtrarGrupos", () => {
     { ...grupoSemFonte, contatos: [semFonte] },
   ];
   const nomes = (gs: ResultadoGrupo[]) => gs.flatMap((g) => g.contatos.map((c) => c.contato.nome));
+
+  test("a_bloquear está em FILTROS e não traz novos", () => {
+    expect(FILTROS).toContainEqual({ id: "a_bloquear", rotulo: "A bloquear no Posse" });
+    expect(filtrarGrupos(grupos, "a_bloquear", "").flatMap((g) => g.novos)).toEqual([]);
+  });
 
   test("tudo: devolve tudo, inclusive novos", () => {
     const r = filtrarGrupos(grupos, "tudo", "");

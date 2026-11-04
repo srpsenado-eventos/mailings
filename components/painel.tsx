@@ -11,6 +11,7 @@ import { grupoDeputados, NOME_GRUPO_DEPUTADOS, temGrupoDeputados } from "@/lib/p
 import { avisoDaEleicao, ehFiltroEleicao, esperadosDoAgrupador, FILTROS_ELEICAO, secoesDeEleicao, secoesDeGoverno } from "@/lib/painel-eleicao";
 import { PublicarButton } from "@/components/publicar-button";
 import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-contato";
+import { contarBloqueiosDoGrupo, ehLinhaABloquear, ROTULO_CARTAO_BLOQUEIO, textosDeBloqueioDoGrupo, totalABloquear } from "@/lib/painel-bloqueio";
 import { avisoUrlCaida, cartoesDoResumo, estadoDaFonteDoGrupo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoAlternativa, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoMudanca, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, textosProvisorias, type Filtro } from "@/lib/painel";
 import type { HistoricoDecisoes } from "@/lib/decisoes";
 import { autoridadesRepetidas, etiquetaDeRepeticao, textoDoLinkDoPainel } from "@/lib/repetidos";
@@ -66,8 +67,8 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
   const agrupador = useMemo(() => linhasDoAgrupador(retrato.grupos, esperadosDoAgrupador(retrato.eleicao)), [retrato]);
   const secoesGov = useMemo(() => (eleicaoLigada ? secoesDeGoverno(retrato.eleicao, filtro, busca) : []), [eleicaoLigada, retrato, filtro, busca]);
   const avisoEleicao = eleicaoLigada ? avisoDaEleicao(retrato.eleicao) : undefined;
-  const grupos = useMemo(() => filtrarGrupos(retrato.grupos, filtro, busca, grupo), [retrato, filtro, busca, grupo]);
   const repetidas = useMemo(() => autoridadesRepetidas(retrato.grupos, retrato.eleicao, decisoes), [retrato, decisoes]);
+  const grupos = useMemo(() => filtrarGrupos(retrato.grupos, filtro, busca, grupo, ehLinhaABloquear(repetidas)), [retrato, filtro, busca, grupo, repetidas]);
   const linkRepetidas = textoDoLinkDoPainel(repetidas);
   const deputados = useMemo(() => grupoDeputados(retrato.eleicao, { busca, filtro, grupo }), [retrato, busca, filtro, grupo]);
   const total = retrato.resumo.total;
@@ -120,8 +121,8 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
 
       {aviso && <p className="mt-4 rounded-lg border border-atencao-borda bg-atencao-fundo p-3 text-sm text-atencao">{aviso}</p>}
 
-      <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        {cartoesDoResumo(retrato.resumo).map((c) => (
+      <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-7">
+        {[...cartoesDoResumo(retrato.resumo), { rotulo: ROTULO_CARTAO_BLOQUEIO, valor: totalABloquear(repetidas, retrato.grupos) }].map((c) => (
           <div key={c.rotulo} className="rounded-lg border border-borda bg-cartao px-4 py-3">
             <div className="font-serif text-3xl font-semibold">{c.valor}</div>
             <div className="text-xs text-cinza">{c.rotulo}</div>
@@ -193,6 +194,9 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
                   <span className="text-xs text-cinza">
                     {resumoDoGrupo(g)}{g.responsavel ? ` · responsável ${g.responsavel}` : ""}
                   </span>
+                  {textosDeBloqueioDoGrupo(contarBloqueiosDoGrupo(repetidas, g)).map((t) => (
+                    <span key={t.texto} className={`text-xs ${t.tom === "atencao" ? "text-atencao" : "text-cinza"}`}>{t.texto}</span>
+                  ))}
                 </button>
                 <div className="grow" />
                 <EstadoDaFonte g={g} falhas={retrato.falhas} />
@@ -204,7 +208,7 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
                   </div>
                   {g.contatos.map((c, i) => {
                     const marca = etiquetaDeRepeticao(repetidas, c, g.grupo);
-                    return <LinhaContato key={`${c.contato.nome}-${i}`} c={c} g={g} retrato={retrato} eleicaoLigada={eleicaoLigada} repeticoes={marca?.etiquetas} fosca={marca?.fosca} />;
+                    return <LinhaContato key={`${c.contato.nome}-${i}`} c={c} g={g} retrato={retrato} eleicaoLigada={eleicaoLigada} repeticoes={marca?.etiquetas} fosca={marca?.fosca} bloqueio={marca?.acao} modo={modo} />;
                   })}
                   {g.novos.map((n, i) => (
                     <LinhaNovo

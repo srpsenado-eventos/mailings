@@ -305,7 +305,7 @@ export function detalhesDoContato(c: ResultadoContato, _g: ResultadoGrupo): Deta
   return cartoes;
 }
 
-export type Filtro = "tudo" | "ressalva" | "endereco" | "numero" | "saida" | "inclusao" | FiltroEleicao;
+export type Filtro = "tudo" | "ressalva" | "endereco" | "numero" | "saida" | "inclusao" | "a_bloquear" | FiltroEleicao;
 
 export const FILTROS: readonly { id: Filtro; rotulo: string }[] = [
   { id: "tudo", rotulo: "Tudo" },
@@ -314,6 +314,7 @@ export const FILTROS: readonly { id: Filtro; rotulo: string }[] = [
   { id: "numero", rotulo: `Número acima de ${LIMITE_NUMERO} caracteres` },
   { id: "saida", rotulo: "Possível saída" },
   { id: "inclusao", rotulo: "Propostas de inclusão" },
+  { id: "a_bloquear", rotulo: "A bloquear no Posse" },
 ];
 
 /** Ressalva: tudo que não é verde com o endereço em ordem (completo, a completar ou sem base). */
@@ -331,6 +332,7 @@ function passaFiltro(c: ResultadoContato, filtro: Filtro): boolean {
     case "numero": return numeroAcimaDoLimite(c);
     case "saida": return c.possivelSaida === true;
     case "inclusao": return false;
+    case "a_bloquear": return false;
   }
 }
 
@@ -348,14 +350,17 @@ function novoCasaBusca(n: PessoaSite, busca: string): boolean {
   return busca === "" || casa(n.nome, busca) || casa(n.cargo, busca);
 }
 
+/** Predicado de linha para filtros que dependem de dados de fora do retrato (ex.: bloqueio no Posse). */
+export type PredicadoDeLinha = (c: ResultadoContato, g: ResultadoGrupo) => boolean;
+
 /** Filtro e busca no navegador. Grupo que fica sem linha some. Não muta a entrada. */
-export function filtrarGrupos(grupos: readonly ResultadoGrupo[], filtro: Filtro, busca: string, grupo?: string): ResultadoGrupo[] {
+export function filtrarGrupos(grupos: readonly ResultadoGrupo[], filtro: Filtro, busca: string, grupo?: string, aBloquear?: PredicadoDeLinha): ResultadoGrupo[] {
   const b = normalizarTexto(busca.trim());
   return grupos
     .filter((g) => !grupo || g.grupo === grupo)
     .map((g) => ({
       ...g,
-      contatos: g.contatos.filter((c) => passaFiltro(c, filtro) && contatoCasaBusca(c, b)),
+      contatos: g.contatos.filter((c) => (filtro === "a_bloquear" ? aBloquear?.(c, g) === true : passaFiltro(c, filtro)) && contatoCasaBusca(c, b)),
       novos: FILTROS_COM_NOVOS.includes(filtro) ? g.novos.filter((n) => novoCasaBusca(n, b)) : [],
     }))
     .filter((g) => g.contatos.length > 0 || g.novos.length > 0);

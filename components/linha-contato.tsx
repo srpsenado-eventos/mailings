@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Etiqueta } from "@/components/etiqueta";
+import { MarcarBloqueio } from "@/components/marcar-bloqueio";
 import { rotuloAchadoEndereco } from "@/lib/endereco";
 import { diaMes } from "@/lib/memoria-leitura";
 import {
@@ -19,6 +20,7 @@ import {
   type Etiqueta as EtiquetaPainel,
 } from "@/lib/painel";
 import { destacaLinha, detalheDaEleicao, detalheDoGoverno, etiquetasDeEleicao, etiquetasDeGoverno } from "@/lib/painel-eleicao";
+import type { AcaoBloqueio } from "@/lib/repetidos-decisoes";
 import type { EleicaoContato, EleicaoGovernoContato, ResultadoContato, ResultadoGrupo, Retrato } from "@/lib/types";
 
 const COLUNAS = "grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_minmax(0,2.6fr)_minmax(0,1fr)] items-start gap-4 px-4 py-3";
@@ -195,7 +197,7 @@ function Detalhe({ c, g, retrato, eleicaoLigada }: { c: ResultadoContato; g: Res
 }
 
 /** `fosca`: linha atenuada pela decisão do GT (spec 2026-10-30 §4.1.3); o texto continua legível e a auditoria, igual. */
-export function LinhaContato({ c, g, retrato, eleicaoLigada = false, repeticoes, fosca = false }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato; eleicaoLigada?: boolean; repeticoes?: readonly EtiquetaPainel[]; fosca?: boolean }) {
+export function LinhaContato({ c, g, retrato, eleicaoLigada = false, repeticoes, fosca = false, bloqueio, modo = "local" }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato; eleicaoLigada?: boolean; repeticoes?: readonly EtiquetaPainel[]; fosca?: boolean; bloqueio?: AcaoBloqueio; modo?: "local" | "web" }) {
   const [aberto, setAberto] = useState(false);
   const etiquetas = [...(repeticoes ?? []), ...etiquetasDoContato(c, g), ...(eleicaoLigada ? [...etiquetasDeEleicao(c.eleicao), ...etiquetasDeGoverno(c.eleicaoGoverno)] : [])];
   const situacao = situacaoDoContato(c, g);
@@ -209,8 +211,11 @@ export function LinhaContato({ c, g, retrato, eleicaoLigada = false, repeticoes,
           {subtitulo && <span className={`block text-xs ${motivo ? "text-atencao" : "text-cinza"}`}>{subtitulo}</span>}
         </button>
         <div className="text-sm text-cinza">{c.contato.cargo ?? "—"}</div>
-        <div className="flex flex-wrap gap-1.5">
-          {etiquetas.map((e) => <Etiqueta key={`${e.campo}-${e.texto}`} texto={e.texto} tom={e.tom} explicacao={e.explicacao} />)}
+        <div>
+          <div className="flex flex-wrap gap-1.5">
+            {etiquetas.map((e) => <Etiqueta key={`${e.campo}-${e.texto}`} texto={e.texto} tom={e.tom} explicacao={e.explicacao} />)}
+          </div>
+          {bloqueio && <MarcarBloqueio acao={bloqueio} modo={modo} />}
         </div>
         <div><Etiqueta texto={situacao.texto} tom={situacao.tom} explicacao={situacao.explicacao} /></div>
       </div>

@@ -162,10 +162,10 @@ describe("tratarRegistroDeDecisao", () => {
 
   test("pessoa com dois casos: o bloqueio vai ao caso dos grupos informados", async () => {
     const armazem = armazemDecisoesEmMemoria();
-    await tratarRegistroDeDecisao({ nome: "Jader Fictício", nomes: [], registro: registro({ convidaPor: "Senadores", grupos: ["Senadores", "Ex-Presidentes do Senado"] }) }, armazem);
+    await tratarRegistroDeDecisao({ nome: "Jader Fictício", nomes: [], registro: registro({ convidaPor: "Senadores", grupos: ["Senadores", "Ex-Presidentes do Congresso"] }) }, armazem);
     await tratarRegistroDeDecisao({ nome: "Jader Fictício", nomes: [], registro: registro({ tipo: "pessoas_diferentes", convidaPor: undefined, grupos: ["Senadores", "Deputados Federais"] }) }, armazem);
-    const r = await tratarRegistroDeDecisao({ nome: "Jader Fictício", nomes: [], grupos: ["Senadores", "Ex-Presidentes do Senado"],
-      bloqueio: { tipo: "bloqueio", grupo: "Ex-Presidentes do Senado", data: "2026-11-05", quem: "Marina", observacao: "" } }, armazem);
+    const r = await tratarRegistroDeDecisao({ nome: "Jader Fictício", nomes: [], grupos: ["Senadores", "Ex-Presidentes do Congresso"],
+      bloqueio: { tipo: "bloqueio", grupo: "Ex-Presidentes do Congresso", data: "2026-11-05", quem: "Marina", observacao: "" } }, armazem);
     expect(r.corpo.historico?.casos.map((c) => c.registros.length)).toEqual([2, 1]);
   });
 });

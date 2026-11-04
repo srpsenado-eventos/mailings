@@ -66,6 +66,6 @@ export const REGRAS_NOME: Readonly<Record<string, RegraNome>> = {
   // O nome é "Presidente Luís Inácio Lula da Silva": o prefixo é regra, não erro (GT, 2026-10-30).
   "Presidente da República": { prefixoDoPresidente: "presidente" },
   // O cargo é o da presidência com o período, nunca "Ex-Presidente…" (GT, 2026-10-30).
-  "Ex-Presidentes do Senado": { cargoComPeriodo: "Presidente do Senado Federal" },
+  "Ex-Presidentes do Congresso": { cargoComPeriodo: "Presidente do Senado Federal" },
   "Ex-Presidentes da República": { cargoComPeriodo: "Presidente da República Federativa do Brasil" },
 };

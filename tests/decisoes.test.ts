@@ -57,6 +57,10 @@ function casoCom(...registros: RegistroManual[]): CasoDecidido {
 const NUNES_MARQUES = manual({ tipo: "mesma_pessoa", convidaPor: TSE, grupos: [STF, TSE] });
 
 describe("grupoEquivalente", () => {
+  it("apelido: o nome antigo Ex-Presidentes do Senado devolve Ex-Presidentes do Congresso", () => {
+    expect(grupoEquivalente("Ex-Presidentes do Senado", "contatos")).toBe("Ex-Presidentes do Congresso");
+  });
+
   it("rótulo do Contatos com espaço e caixa diferentes vira o rótulo oficial do agrupador", () => {
     // Arrange
     const rotulo = "  governadores ELEITOS - Posse Presidencial 2027 ";
@@ -115,7 +119,7 @@ describe("registrar e acharCaso", () => {
 
   it("mesmo nome com grupos diferentes cria dois casos, cada um com o seu vigente", () => {
     // Arrange
-    const exPresidente = manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Ex-Presidentes do Senado", "Senadores"] });
+    const exPresidente = manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Ex-Presidentes do Congresso", "Senadores"] });
     const filho = manual({ tipo: "pessoas_diferentes", grupos: ["Senadores", GRUPO_DEPUTADOS_ELEITOS] });
     // Act
     const h1 = registrar(HISTORICO_VAZIO, "Jader Barbalho", ["Jader Barbalho"], exPresidente);
@@ -125,7 +129,7 @@ describe("registrar e acharCaso", () => {
     expect(vigente(h2.casos[0])?.tipo).toBe("mesma_pessoa");
     expect(vigente(h2.casos[1])?.tipo).toBe("pessoas_diferentes");
     expect(h2.casos[0].id).not.toBe(h2.casos[1].id);
-    expect(acharCaso(h2, ["Jader Barbalho"], ["Senadores", "Ex-Presidentes do Senado"])).toBe(h2.casos[0]);
+    expect(acharCaso(h2, ["Jader Barbalho"], ["Senadores", "Ex-Presidentes do Congresso"])).toBe(h2.casos[0]);
     expect(acharCaso(h2, ["Jader Barbalho"], [GRUPO_DEPUTADOS_ELEITOS])).toBe(h2.casos[1]);
   });
 
@@ -141,12 +145,12 @@ describe("registrar e acharCaso", () => {
 
   it("casosDaPessoa devolve todos os casos da pessoa com algum grupo em comum", () => {
     // Arrange
-    const h1 = registrar(HISTORICO_VAZIO, "Jader Barbalho", [], manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Ex-Presidentes do Senado", "Senadores"] }));
+    const h1 = registrar(HISTORICO_VAZIO, "Jader Barbalho", [], manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Ex-Presidentes do Congresso", "Senadores"] }));
     const h2 = registrar(h1, "Jader Barbalho", [], manual({ tipo: "pessoas_diferentes", grupos: ["Senadores", GRUPO_DEPUTADOS_ELEITOS] }));
-    const todos = ["senadores", "Ex-Presidentes do Senado", GRUPO_DEPUTADOS_ELEITOS];
+    const todos = ["senadores", "Ex-Presidentes do Congresso", GRUPO_DEPUTADOS_ELEITOS];
     // Act / Assert
     expect(casosDaPessoa(h2, ["Jader Barbalho"], todos)).toEqual(h2.casos);
-    expect(casosDaPessoa(h2, ["Jader Barbalho"], ["Ex-Presidentes do Senado", "Ministros do STF"])).toEqual([h2.casos[0]]);
+    expect(casosDaPessoa(h2, ["Jader Barbalho"], ["Ex-Presidentes do Congresso", "Ministros do STF"])).toEqual([h2.casos[0]]);
     expect(casosDaPessoa(h2, ["Jader Barbalho"], ["Senadores"])).toEqual(h2.casos);
     expect(casosDaPessoa(h2, ["Outra Pessoa"], todos)).toEqual([]);
     expect(casosDaPessoa(h2, ["Jader Barbalho"], ["Ministros do STF"])).toEqual([]);
@@ -154,11 +158,11 @@ describe("registrar e acharCaso", () => {
 
   it("gruposAtuaisParaOCaso tira o grupo que só outro caso da mesma pessoa cobre", () => {
     // Arrange
-    const h1 = registrar(HISTORICO_VAZIO, "Jader Barbalho", [], manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Ex-Presidentes do Senado", "Senadores"] }));
+    const h1 = registrar(HISTORICO_VAZIO, "Jader Barbalho", [], manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Ex-Presidentes do Congresso", "Senadores"] }));
     const h2 = registrar(h1, "Jader Barbalho", [], manual({ tipo: "pessoas_diferentes", outraPessoa: [GRUPO_DEPUTADOS_ELEITOS], grupos: ["Senadores", GRUPO_DEPUTADOS_ELEITOS] }));
-    const outro = registrar(HISTORICO_VAZIO, "Outra Pessoa", [], manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Ex-Presidentes do Senado", "Senadores"] })).casos[0];
+    const outro = registrar(HISTORICO_VAZIO, "Outra Pessoa", [], manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Ex-Presidentes do Congresso", "Senadores"] })).casos[0];
     const [exPresidente, filho] = h2.casos;
-    const atuais = ["Senadores", "Ex-Presidentes do Senado"];
+    const atuais = ["Senadores", "Ex-Presidentes do Congresso"];
     // Act / Assert
     expect(gruposAtuaisParaOCaso(exPresidente, atuais, h2.casos)).toEqual(atuais);
     expect(gruposAtuaisParaOCaso(filho, atuais, h2.casos)).toEqual(["Senadores"]);
@@ -257,6 +261,16 @@ describe("situacaoDoCaso", () => {
     expect(situacaoDoCaso(variante, [TSE])).toBe("tratado");
     expect(situacaoDoCaso(variante, [STF, TSE])).toBe("pendente");
     expect(situacaoDoCaso(eleito, ["Senadores eleitos - Posse Presidencial 2027"])).toBe("tratado");
+  });
+
+  it("decisão gravada com o nome antigo Ex-Presidentes do Senado não reabre com o nome novo", () => {
+    // Arrange
+    const caso = casoCom(manual({
+      tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Senadores", "Ex-Presidentes do Senado"],
+    }));
+    // Act / Assert
+    expect(situacaoDoCaso(caso, ["Senadores", "Ex-Presidentes do Congresso"])).toBe("pendente");
+    expect(situacaoDoCaso(caso, ["Senadores"])).toBe("tratado");
   });
 
   it("mesma_pessoa num grupo que não constava na decisão: reaberto", () => {
@@ -407,7 +421,7 @@ describe("bloqueio no Posse (spec 2026-11-04 §3.1)", () => {
   it("gruposABloquear: mesma_pessoa tira o grupo do convite; nao_recebe_convite leva todos; os outros, nenhum", () => {
     const d = manual({ tipo: "mesma_pessoa", convidaPor: "Ministros do TSE", grupos: ["Ministros do STJ", "Ministros do TSE"] });
     expect(gruposABloquear(d, ["Ministros do STJ", "Ministros do TSE"])).toEqual(["Ministros do STJ"]);
-    expect(gruposABloquear(manual({ tipo: "nao_recebe_convite", grupos: ["Senadores"] }), ["Senadores", "Ex-Presidentes do Senado"])).toEqual(["Senadores", "Ex-Presidentes do Senado"]);
+    expect(gruposABloquear(manual({ tipo: "nao_recebe_convite", grupos: ["Senadores"] }), ["Senadores", "Ex-Presidentes do Congresso"])).toEqual(["Senadores", "Ex-Presidentes do Congresso"]);
     expect(gruposABloquear(manual({ tipo: "pessoas_diferentes", grupos: ["A", "B"] }), ["A", "B"])).toEqual([]);
     expect(gruposABloquear(manual({ tipo: "ajustar_contatos", grupos: ["A", "B"] }), ["A", "B"])).toEqual([]);
   });
@@ -517,10 +531,10 @@ describe("bloqueio no Posse (spec 2026-11-04 §3.1)", () => {
   });
   it("registrarBloqueio com dois casos da mesma pessoa vai ao caso dos grupos", () => {
     const h = registrar(
-      registrar(HISTORICO_VAZIO, "Jader Fictício", [], manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Senadores", "Ex-Presidentes do Senado"] })),
+      registrar(HISTORICO_VAZIO, "Jader Fictício", [], manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Senadores", "Ex-Presidentes do Congresso"] })),
       "Jader Fictício", [], manual({ tipo: "pessoas_diferentes", grupos: ["Senadores", "Deputados Federais"] }),
     );
-    const novo = registrarBloqueio(h, "Jader Fictício", [], ["Senadores", "Ex-Presidentes do Senado"], bloqueio("Ex-Presidentes do Senado", "2026-11-05"));
+    const novo = registrarBloqueio(h, "Jader Fictício", [], ["Senadores", "Ex-Presidentes do Congresso"], bloqueio("Ex-Presidentes do Congresso", "2026-11-05"));
     expect(novo.casos.map((c) => c.registros.length)).toEqual([2, 1]);
   });
   it("textoDasPendencias junta na ordem fixa com ' · '", () => {

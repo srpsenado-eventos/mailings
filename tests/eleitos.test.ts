@@ -564,7 +564,7 @@ describe("classificarEleitos: a decisão do GT vence a regra (spec 2026-10-30 §
 
   test("duas decisões que decidem para a mesma pessoa deixam o eleito a conferir", () => {
     // Arrange
-    const h1 = registrar(HISTORICO_VAZIO, "Joana Fictícia", [], manual({ convidaPor: "Senadores", grupos: ["Senadores", "Ex-Presidentes do Senado"] }));
+    const h1 = registrar(HISTORICO_VAZIO, "Joana Fictícia", [], manual({ convidaPor: "Senadores", grupos: ["Senadores", "Ex-Presidentes do Congresso"] }));
     const h2 = registrar(h1, "Joana Fictícia", [], manual({ convidaPor: GRUPO_SENADORES_ELEITOS, grupos: [GRUPO_SENADORES_ELEITOS], data: "2026-10-30" }));
     // Act
     const [r] = classificarEleitos([eleito()], [senadores(joana)], foraDaLista, h2);
@@ -575,9 +575,9 @@ describe("classificarEleitos: a decisão do GT vence a regra (spec 2026-10-30 §
   });
 
   test("pessoas diferentes de uma duplicidade do Contatos, sem grupo de eleitos, não corta a ligação do eleito", () => {
-    // Arrange: caso Ex-Presidentes do Senado × Deputados Federais (sem outraPessoa); o eleito é deputado reeleito
+    // Arrange: caso Ex-Presidentes do Congresso × Deputados Federais (sem outraPessoa); o eleito é deputado reeleito
     const lista: DeputadoAtual[] = [{ uf: "MA", nomeParlamentar: "Joana Fictícia", nomeCivil: "JOANA MARIA FICTICIA SOUZA" }];
-    const h = registrar(HISTORICO_VAZIO, "Joana Fictícia", [], manual({ tipo: "pessoas_diferentes", grupos: ["Ex-Presidentes do Senado", "Deputados Federais"] }));
+    const h = registrar(HISTORICO_VAZIO, "Joana Fictícia", [], manual({ tipo: "pessoas_diferentes", grupos: ["Ex-Presidentes do Congresso", "Deputados Federais"] }));
     // Act
     const [r] = classificarEleitos([camara({ statusMandato: "Mandato novo" })], [], lista, h);
     // Assert
@@ -588,7 +588,7 @@ describe("classificarEleitos: a decisão do GT vence a regra (spec 2026-10-30 §
 
   test("duas decisões com o mesmo grupo do convite não são conflito", () => {
     // Arrange
-    const h1 = registrar(HISTORICO_VAZIO, "Joana Fictícia", [], manual({ convidaPor: "Senadores", grupos: ["Senadores", "Ex-Presidentes do Senado"] }));
+    const h1 = registrar(HISTORICO_VAZIO, "Joana Fictícia", [], manual({ convidaPor: "Senadores", grupos: ["Senadores", "Ex-Presidentes do Congresso"] }));
     const h2 = registrar(h1, "Joana Fictícia", [], manual({ tipo: "ajustar_contatos", convidaPor: "Senadores", grupos: ["Senadores", GRUPO_SENADORES_ELEITOS], data: "2026-10-30" }));
     // Act
     const [r] = classificarEleitos([eleito()], [senadores(joana)], foraDaLista, h2);

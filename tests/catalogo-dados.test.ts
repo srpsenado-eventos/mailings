@@ -12,7 +12,7 @@ describe("catálogo real (data/catalogo.ts)", () => {
     expect(CATALOGO).toHaveLength(35);
   });
 
-  test("tem as 26 fontes de grupo (24 − 3 de fora de exercício nos Senadores + grupo novo, TST /orgaos, STJ PDF, PGR e Ex-Presidentes do Senado)", () => {
+  test("tem as 26 fontes de grupo (24 − 3 de fora de exercício nos Senadores + grupo novo, TST /orgaos, STJ PDF, PGR e Ex-Presidentes do Congresso)", () => {
     const total = CATALOGO.reduce((n, g) => n + g.fontes.length, 0);
     expect(total).toBe(26);
   });
@@ -27,6 +27,16 @@ describe("catálogo real (data/catalogo.ts)", () => {
       const r = resolverGrupoEFonte("Senadores titulares fora de exercício - Posse 2027");
       expect(r.grupoCanonico).toBe("Senadores titulares fora de exercício");
       expect(r.fontes.map((f) => f.url)).toEqual(["https://www25.senado.leg.br/web/senadores/fora-de-exercicio/-/f/por-tipo"]);
+    });
+
+    test("Ex-Presidentes do Congresso resolve o grupo canônico com a fonte nova-republica; o nome antigo não resolve mais", () => {
+      const novo = resolverGrupoEFonte("Ex-Presidentes do Congresso");
+      expect(novo.grupoCanonico).toBe("Ex-Presidentes do Congresso");
+      expect(novo.fontes.map((f) => f.url)).toEqual(["https://www25.senado.leg.br/web/senadores/nova-republica"]);
+      const antigo = resolverGrupoEFonte("Ex-Presidentes do Senado");
+      expect(antigo.grupoCanonico).not.toBe("Ex-Presidentes do Congresso");
+      expect(antigo.fontes).toEqual([]);
+      expect(antigo.sugestoes).toContain("Ex-Presidentes do Congresso");
     });
 
     test("TST: /ministros primária e /orgaos por marcador propondo convocados", () => {
@@ -47,9 +57,9 @@ describe("catálogo real (data/catalogo.ts)", () => {
       expect(stj.fontes[1]).toMatchObject({ url: "https://www.stj.jus.br/sites/portalp/SiteAssets/Paginas/Institucional/Composicao/Composicao-do-STJ.pdf", ativo: true, tipo: "pdf", rotulo: "convocado", propoeInclusao: true, marcador: { textos: ["**"] } });
     });
 
-    test("PGR e Ex-Presidentes do Senado ganharam fonte", () => {
+    test("PGR e Ex-Presidentes do Congresso ganharam fonte", () => {
       expect(CATALOGO.find((g) => g.nome === "Procurador-Geral da República")?.fontes).toEqual([{ url: "https://www.mpf.mp.br/o-mpf/o-mpf/membros/procurador-geral-da-republica", ativo: true }]);
-      expect(CATALOGO.find((g) => g.nome === "Ex-Presidentes do Senado")?.fontes).toEqual([{ url: "https://www25.senado.leg.br/web/senadores/nova-republica", ativo: true }]);
+      expect(CATALOGO.find((g) => g.nome === "Ex-Presidentes do Congresso")?.fontes).toEqual([{ url: "https://www25.senado.leg.br/web/senadores/nova-republica", ativo: true }]);
     });
 
     test("tipo pdf, marcador e urlAlternativa só onde a spec manda; alternativas em domínio oficial", () => {

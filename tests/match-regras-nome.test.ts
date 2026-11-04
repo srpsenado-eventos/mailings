@@ -333,7 +333,7 @@ describe("Nome da página com o prefixo do presidente: o esperado copiável nunc
 });
 
 describe("Cargo do ex-presidente com o período (Camada C) nos caminhos de ResultadoContato", () => {
-  const GRUPO_EX = "Ex-Presidentes do Senado";
+  const GRUPO_EX = "Ex-Presidentes do Congresso";
   const ex = (cargo = "Ex-Presidente do Senado Federal"): ContatoPlanilha => ({
     nome: "Rui Fictício Barbosa",
     grupo: GRUPO_EX,

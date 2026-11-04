@@ -176,17 +176,17 @@ describe("registrarColetasDoRetrato", () => {
     expect(registrarColetasDoRetrato(uma, retrato)).toBe(uma);
   });
 
-  test("Jader Barbalho: Ex-Presidentes do Senado, só do outro caso dele, não reabre o caso Senadores × Jader Filho", () => {
+  test("Jader Barbalho: Ex-Presidentes do Congresso, só do outro caso dele, não reabre o caso Senadores × Jader Filho", () => {
     // Arrange
     const h1 = registrar(HISTORICO_VAZIO, "Jader Barbalho", [], decisao({
-      convidaPor: GRUPO_SENADORES, grupos: ["Ex-Presidentes do Senado", GRUPO_SENADORES],
+      convidaPor: GRUPO_SENADORES, grupos: ["Ex-Presidentes do Congresso", GRUPO_SENADORES],
     }));
     const h = registrar(h1, "Jader Barbalho", [], decisao({
       tipo: "pessoas_diferentes", convidaPor: undefined, outraPessoa: [GRUPO_DEPUTADOS_ELEITOS], grupos: [GRUPO_SENADORES, GRUPO_DEPUTADOS_ELEITOS],
     }));
     const retrato = {
       geradoEm: "2026-10-31T01:00:00.000Z",
-      grupos: [grupo("Ex-Presidentes do Senado", ["Jader Barbalho"]), grupo(GRUPO_SENADORES, ["Jader Barbalho"])],
+      grupos: [grupo("Ex-Presidentes do Congresso", ["Jader Barbalho"]), grupo(GRUPO_SENADORES, ["Jader Barbalho"])],
     };
     // Act
     const novo = registrarColetasDoRetrato(h, retrato);

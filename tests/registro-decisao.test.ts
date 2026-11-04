@@ -276,14 +276,14 @@ describe("alvoDoRepetido", () => {
 
   it("autoridade tratada sem ocorrência registra com os grupos do caso", () => {
     // Arrange
-    const h = registrar(HISTORICO_VAZIO, "Davi", [], manual({ grupos: ["Senadores", "Ex-Presidentes do Senado"], convidaPor: "Senadores" }));
+    const h = registrar(HISTORICO_VAZIO, "Davi", [], manual({ grupos: ["Senadores", "Ex-Presidentes do Congresso"], convidaPor: "Senadores" }));
     const a: AutoridadeRepetida = { nome: "Davi", situacao: "tratado", motivo: "", ocorrencias: [], caso: h.casos[0] };
 
     // Act
     const alvo = alvoDoRepetido(a);
 
     // Assert
-    expect(alvo.grupos).toEqual(["Senadores", "Ex-Presidentes do Senado"]);
+    expect(alvo.grupos).toEqual(["Senadores", "Ex-Presidentes do Congresso"]);
   });
 
   it("pessoa que saiu de um grupo do caso registra no mesmo caso", () => {
@@ -340,15 +340,15 @@ const eleito = (parcial: Partial<EleitoClassificado>): EleitoClassificado => ({
 describe("alvoDoEleito", () => {
   it("grava o grupo de eleitos da Casa e os grupos dos contatos ligados quando não há destino", () => {
     // Arrange
-    const x = eleito({ contatos: [{ grupo: "Ex-Presidentes do Senado", nome: "Eunício Oliveira" }] });
+    const x = eleito({ contatos: [{ grupo: "Ex-Presidentes do Congresso", nome: "Eunício Oliveira" }] });
 
     // Act
     const alvo = alvoDoEleito(x);
 
     // Assert
-    expect(alvo.grupos).toEqual([GRUPO_SENADORES_ELEITOS, "Ex-Presidentes do Senado"]);
+    expect(alvo.grupos).toEqual([GRUPO_SENADORES_ELEITOS, "Ex-Presidentes do Congresso"]);
     expect(alvo.nomes).toEqual(["Eunício Lopes de Oliveira", "Eunício Oliveira"]);
-    expect(alvo.ocorrencias).toEqual([{ valor: "Ex-Presidentes do Senado", rotulo: "Ex-Presidentes do Senado: Eunício Oliveira", nomes: ["Eunício Oliveira"] }]);
+    expect(alvo.ocorrencias).toEqual([{ valor: "Ex-Presidentes do Congresso", rotulo: "Ex-Presidentes do Congresso: Eunício Oliveira", nomes: ["Eunício Oliveira"] }]);
   });
 
   it("usa o grupo de destino calculado e oferece os convites da Casa", () => {
@@ -397,9 +397,9 @@ describe("alvoDoGovernador", () => {
 describe("historicoDoEleito", () => {
   it("acha os registros do caso do eleito, do mais recente para o mais antigo", () => {
     // Arrange
-    const x = eleito({ contatos: [{ grupo: "Ex-Presidentes do Senado", nome: "Eunício Oliveira" }] });
-    const r1 = manual({ data: "2026-10-26", tipo: "ajustar_contatos", convidaPor: undefined, grupos: [GRUPO_SENADORES_ELEITOS, "Ex-Presidentes do Senado"] });
-    const r2 = manual({ data: "2026-10-29", convidaPor: GRUPO_SENADORES_ELEITOS, grupos: [GRUPO_SENADORES_ELEITOS, "Ex-Presidentes do Senado"] });
+    const x = eleito({ contatos: [{ grupo: "Ex-Presidentes do Congresso", nome: "Eunício Oliveira" }] });
+    const r1 = manual({ data: "2026-10-26", tipo: "ajustar_contatos", convidaPor: undefined, grupos: [GRUPO_SENADORES_ELEITOS, "Ex-Presidentes do Congresso"] });
+    const r2 = manual({ data: "2026-10-29", convidaPor: GRUPO_SENADORES_ELEITOS, grupos: [GRUPO_SENADORES_ELEITOS, "Ex-Presidentes do Congresso"] });
     const h = registrar(registrar(HISTORICO_VAZIO, "Eunício", ["Eunício Lopes de Oliveira"], r1), "Eunício", [], r2);
 
     // Act
@@ -427,7 +427,7 @@ describe("historicoDoEleito", () => {
 
   it("não mostra a decisão do homônimo ligado por nome (Jader Filho e o pai)", () => {
     // Arrange
-    const pai = manual({ grupos: ["Ex-Presidentes do Senado", GRUPO_SENADORES], convidaPor: GRUPO_SENADORES });
+    const pai = manual({ grupos: ["Ex-Presidentes do Congresso", GRUPO_SENADORES], convidaPor: GRUPO_SENADORES });
     const h = registrar(HISTORICO_VAZIO, "Jader Barbalho", [], pai);
     const filho = eleito({
       eleito: { casa: "senado", uf: "PA", nomeUrna: "Jader Filho", nomeCompleto: "Jader Fontenelle Barbalho Filho", situacaoTse: "Eleito", statusMandato: "Novo" },

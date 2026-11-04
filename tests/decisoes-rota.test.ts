@@ -121,4 +121,39 @@ describe("tratarRegistroDeDecisao", () => {
     const r = await tratarRegistroDeDecisao(corpo("Ana Fictícia", { tipo: "pessoas_diferentes", convidaPor: undefined }), armazemDecisoesEmMemoria());
     expect(r.status).toBe(200);
   });
+
+  test("bloqueio em caso decidido grava o registro no caso e responde 200", async () => {
+    const armazem = armazemDecisoesEmArquivo(caminho);
+    await tratarRegistroDeDecisao(corpo(), armazem);
+    const r = await tratarRegistroDeDecisao({ nome: "Ana Fictícia", nomes: [], grupos: ["Ministros do STJ", "Ministros do TSE"],
+      bloqueio: { tipo: "bloqueio", grupo: "Ministros do STJ", data: "2026-11-05", quem: "Marina", observacao: "" } }, armazem);
+    expect(r.status).toBe(200);
+    expect(r.corpo.historico?.casos[0].registros.at(-1)).toEqual({ tipo: "bloqueio", grupo: "Ministros do STJ", data: "2026-11-05", quem: "Marina", observacao: "" });
+  });
+
+  test("bloqueio sem decisão registrada responde 422 e não grava", async () => {
+    const armazem = armazemDecisoesEmMemoria();
+    const r = await tratarRegistroDeDecisao({ nome: "Rui Fictício", nomes: [], grupos: ["A", "B"],
+      bloqueio: { tipo: "bloqueio", grupo: "A", data: "2026-11-05", quem: "Marina", observacao: "" } }, armazem);
+    expect(r.status).toBe(422);
+    expect(r.corpo.message).toBe("Registre a decisão do GT antes de marcar o bloqueio.");
+    expect((await armazem.ler()).casos).toHaveLength(0);
+  });
+
+  test("bloqueio com corpo inválido (sem grupos, tipo errado, quem vazio) responde 400", async () => {
+    const armazem = armazemDecisoesEmMemoria();
+    const b = { tipo: "bloqueio", grupo: "A", data: "2026-11-05", quem: "Marina", observacao: "" };
+    expect((await tratarRegistroDeDecisao({ nome: "Ana", nomes: [], bloqueio: b }, armazem)).status).toBe(400);
+    expect((await tratarRegistroDeDecisao({ nome: "Ana", nomes: [], grupos: ["A"], bloqueio: { ...b, tipo: "bloquear" } }, armazem)).status).toBe(400);
+    expect((await tratarRegistroDeDecisao({ nome: "Ana", nomes: [], grupos: ["A"], bloqueio: { ...b, quem: " " } }, armazem)).status).toBe(400);
+  });
+
+  test("pessoa com dois casos: o bloqueio vai ao caso dos grupos informados", async () => {
+    const armazem = armazemDecisoesEmMemoria();
+    await tratarRegistroDeDecisao({ nome: "Jader Fictício", nomes: [], registro: registro({ convidaPor: "Senadores", grupos: ["Senadores", "Ex-Presidentes do Senado"] }) }, armazem);
+    await tratarRegistroDeDecisao({ nome: "Jader Fictício", nomes: [], registro: registro({ tipo: "pessoas_diferentes", convidaPor: undefined, grupos: ["Senadores", "Deputados Federais"] }) }, armazem);
+    const r = await tratarRegistroDeDecisao({ nome: "Jader Fictício", nomes: [], grupos: ["Senadores", "Ex-Presidentes do Senado"],
+      bloqueio: { tipo: "bloqueio", grupo: "Ex-Presidentes do Senado", data: "2026-11-05", quem: "Marina", observacao: "" } }, armazem);
+    expect(r.corpo.historico?.casos.map((c) => c.registros.length)).toEqual([2, 1]);
+  });
 });

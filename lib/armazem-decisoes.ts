@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { ehArquivoAusente, gravarArquivoAtomico } from "@/lib/armazem";
 import { CAMINHO_DECISOES_BLOB, type ClienteBlob } from "@/lib/armazem-blob";
 import {
-  DecisaoInvalidaError, HISTORICO_VAZIO, registrar,
-  type CasoDecidido, type HistoricoDecisoes, type Pendencia, type PedidoDeDecisao, type Registro, type RegistroBloqueio, type RegistroColeta, type RegistroManual,
+  BloqueioSemDecisaoError, DecisaoInvalidaError, HISTORICO_VAZIO, registrar, registrarBloqueio,
+  type CasoDecidido, type HistoricoDecisoes, type Pendencia, type PedidoDeBloqueio, type PedidoDeDecisao, type Registro, type RegistroBloqueio, type RegistroColeta, type RegistroManual,
   type SituacaoNoContatos, type TipoDecisao,
 } from "@/lib/decisoes";
 
@@ -94,24 +94,36 @@ function lerRegistroColeta(o: Record<string, unknown>): Leitura<RegistroColeta> 
   if (!ehData(o.data)) return falha("coleta sem data válida no formato AAAA-MM-DD");
   if (!ehUm(SITUACOES, o.situacao)) return falha("coleta sem situação válida");
   if (!ehTextos(o.grupos)) return falha("coleta sem grupos (lista de textos)");
-  const pendencias = Array.isArray(o.pendencias)
-    ? o.pendencias.filter((p): p is Pendencia => PENDENCIAS.includes(p as Pendencia))
-    : [];
+  let pendencias: Pendencia[] | undefined;
+  if (o.pendencias !== undefined) {
+    if (!Array.isArray(o.pendencias) || !o.pendencias.every((p) => ehUm(PENDENCIAS, p))) {
+      return falha(`coleta com pendência desconhecida (${PENDENCIAS.join(", ")})`);
+    }
+    pendencias = [...(o.pendencias as Pendencia[])];
+  }
   return {
     ok: true,
     valor: {
       tipo: "coleta", data: o.data, situacao: o.situacao, grupos: [...o.grupos],
-      ...(pendencias.length > 0 ? { pendencias } : {}),
+      ...(pendencias && pendencias.length > 0 ? { pendencias } : {}),
     },
   };
 }
 
-/** Leitura mínima do bloqueio; a Tarefa 2 completa a validação. */
-function lerRegistroBloqueio(o: Record<string, unknown>): Leitura<RegistroBloqueio> {
-  if (o.tipo !== "bloqueio" && o.tipo !== "desbloqueio") return falha("bloqueio com tipo inválido");
-  if (typeof o.grupo !== "string" || o.grupo.trim() === "") return falha("bloqueio sem grupo");
+const TIPOS_BLOQUEIO: readonly RegistroBloqueio["tipo"][] = ["bloqueio", "desbloqueio"];
+
+/**
+ * Registro de bloqueio (ou desbloqueio) no Posse a partir de um valor externo. Devolve um objeto
+ * novo só com os campos do registro: o que vier a mais não é guardado.
+ */
+export function lerRegistroBloqueio(valor: unknown): Leitura<RegistroBloqueio> {
+  const o = objeto(valor);
+  if (!o) return falha("o bloqueio não é um objeto");
+  if (!ehUm(TIPOS_BLOQUEIO, o.tipo)) return falha(`bloqueio sem tipo válido (${TIPOS_BLOQUEIO.join(" ou ")})`);
+  if (typeof o.grupo !== "string" || o.grupo.trim() === "") return falha("bloqueio sem grupo (texto não vazio)");
   if (!ehData(o.data)) return falha("bloqueio sem data válida no formato AAAA-MM-DD");
-  if (typeof o.quem !== "string" || typeof o.observacao !== "string") return falha("bloqueio sem quem ou observação");
+  if (typeof o.quem !== "string" || o.quem.trim() === "") return falha("bloqueio sem quem (texto não vazio)");
+  if (typeof o.observacao !== "string") return falha("bloqueio sem observacao (texto)");
   return { ok: true, valor: { tipo: o.tipo, grupo: o.grupo, data: o.data, quem: o.quem, observacao: o.observacao } };
 }
 
@@ -233,11 +245,16 @@ export interface RespostaDecisao {
   corpo: { ok: boolean; message?: string; historico?: HistoricoDecisoes };
 }
 
-function lerPedido(corpo: unknown): Leitura<PedidoDeDecisao> {
+type PedidoLido =
+  | { tipo: "decisao"; pedido: PedidoDeDecisao }
+  | { tipo: "bloqueio"; pedido: PedidoDeBloqueio };
+
+function lerPedido(corpo: unknown): Leitura<PedidoLido> {
   const o = objeto(corpo);
-  if (!o) return falha("Corpo inválido: esperado { nome, nomes, registro }.");
+  if (!o) return falha("Corpo inválido: esperado { nome, nomes, registro } ou { nome, nomes, grupos, bloqueio }.");
   if (typeof o.nome !== "string" || o.nome.trim() === "") return falha("Falta o nome da pessoa do caso.");
   if (!ehTextos(o.nomes)) return falha("nomes deve ser uma lista de textos.");
+  if (o.bloqueio !== undefined) return lerPedidoDeBloqueio(o, o.nome, o.nomes);
   const registro = lerRegistroManual(o.registro);
   if (!registro.ok) return falha(`Registro inválido: ${registro.motivo}.`);
   if (registro.valor.grupos.every((g) => g.trim() === "")) {
@@ -246,7 +263,19 @@ function lerPedido(corpo: unknown): Leitura<PedidoDeDecisao> {
   if (registro.valor.tipo === "mesma_pessoa" && !registro.valor.convidaPor?.trim()) {
     return falha("Registro inválido: mesma_pessoa exige convidaPor (o grupo do convite).");
   }
-  return { ok: true, valor: { nome: o.nome, nomes: [...o.nomes], registro: registro.valor } };
+  return { ok: true, valor: { tipo: "decisao", pedido: { nome: o.nome, nomes: [...o.nomes], registro: registro.valor } } };
+}
+
+function lerPedidoDeBloqueio(o: Record<string, unknown>, nome: string, nomes: string[]): Leitura<PedidoLido> {
+  if (!ehTextos(o.grupos) || o.grupos.every((g) => g.trim() === "")) {
+    return falha("Bloqueio inválido: grupos deve ser uma lista de textos com ao menos um grupo (os do caso).");
+  }
+  const bloqueio = lerRegistroBloqueio(o.bloqueio);
+  if (!bloqueio.ok) return falha(`Bloqueio inválido: ${bloqueio.motivo}.`);
+  return {
+    ok: true,
+    valor: { tipo: "bloqueio", pedido: { nome, nomes: [...nomes], grupos: [...o.grupos], bloqueio: bloqueio.valor } },
+  };
 }
 
 const MENSAGEM_ILEGIVEL =
@@ -259,11 +288,19 @@ const MENSAGEM_ILEGIVEL =
 export async function tratarRegistroDeDecisao(corpo: unknown, armazem: ArmazemDecisoes): Promise<RespostaDecisao> {
   const pedido = lerPedido(corpo);
   if (!pedido.ok) return { status: 400, corpo: { ok: false, message: pedido.motivo } };
-  const { nome, nomes, registro } = pedido.valor;
+  const lido = pedido.valor;
   try {
-    const historico = await atualizarDecisoes(armazem, (h) => registrar(h, nome, nomes, registro));
+    const historico = await atualizarDecisoes(armazem, (h) => {
+      if (lido.tipo === "bloqueio") {
+        const { nome, nomes, grupos, bloqueio } = lido.pedido;
+        return registrarBloqueio(h, nome, nomes, grupos, bloqueio);
+      }
+      const { nome, nomes, registro } = lido.pedido;
+      return registrar(h, nome, nomes, registro);
+    });
     return { status: 200, corpo: { ok: true, historico } };
   } catch (err) {
+    if (err instanceof BloqueioSemDecisaoError) return { status: 422, corpo: { ok: false, message: err.message } };
     if (err instanceof DecisaoInvalidaError) return { status: 400, corpo: { ok: false, message: err.message } };
     if (err instanceof DecisoesIlegiveisError) return { status: 500, corpo: { ok: false, message: MENSAGEM_ILEGIVEL } };
     throw err;

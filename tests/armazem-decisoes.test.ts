@@ -52,6 +52,25 @@ describe("validarHistorico", () => {
   ])("%s lança DecisoesIlegiveisError", (_nome, valor) => {
     expect(() => validarHistorico(valor)).toThrow(DecisoesIlegiveisError);
   });
+
+  test("validarHistorico aceita bloqueio, desbloqueio e coleta com pendencias; recusa bloqueio sem grupo e pendência desconhecida", () => {
+    // Arrange
+    const base = { id: "ana#a|b", nome: "Ana Fictícia", chaves: ["ana ficticia"], registros: [
+      { tipo: "mesma_pessoa", data: "2026-10-26", quem: "GT", observacao: "", validacao: "validado", convidaPor: "B", grupos: ["A", "B"] },
+      { tipo: "coleta", data: "2026-10-30", situacao: "pendente", grupos: ["A", "B"] },
+      { tipo: "coleta", data: "2026-11-05", situacao: "pendente", grupos: ["A", "B"], pendencias: ["bloqueio"] },
+      { tipo: "bloqueio", grupo: "A", data: "2026-11-06", quem: "Marina", observacao: "feito na autorização", telefone: "x" },
+      { tipo: "desbloqueio", grupo: "A", data: "2026-11-06", quem: "Marina", observacao: "" },
+    ] };
+    // Act
+    const h = validarHistorico({ versao: 1, casos: [base] });
+    // Assert
+    expect(h.casos[0].registros[3]).toEqual({ tipo: "bloqueio", grupo: "A", data: "2026-11-06", quem: "Marina", observacao: "feito na autorização" });
+    expect(h.casos[0].registros[1]).not.toHaveProperty("pendencias");
+    expect(h.casos[0].registros[2]).toMatchObject({ pendencias: ["bloqueio"] });
+    expect(() => validarHistorico({ versao: 1, casos: [{ ...base, registros: [{ tipo: "bloqueio", grupo: " ", data: "2026-11-06", quem: "M", observacao: "" }] }] })).toThrow(DecisoesIlegiveisError);
+    expect(() => validarHistorico({ versao: 1, casos: [{ ...base, registros: [{ tipo: "coleta", data: "2026-11-05", situacao: "pendente", grupos: [], pendencias: ["x"] }] }] })).toThrow(DecisoesIlegiveisError);
+  });
 });
 
 describe("armazemDecisoesEmMemoria", () => {

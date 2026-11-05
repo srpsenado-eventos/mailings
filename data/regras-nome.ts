@@ -47,6 +47,13 @@ export interface RegraNome {
    * Regra do campo `Cargo`, aplicada por `comparacaoCargoExPresidente` (`lib/regras-cargo.ts`).
    */
   cargoComPeriodo?: string;
+  /**
+   * Forma do período depois de `cargoComPeriodo`. Ausente: "de AAAA a AAAA" (Ex-Presidentes da
+   * República). `"no_periodo_ou_em_ano"` (Ex-Presidentes do Congresso, decisão do Clovis de
+   * 05/11, spec 2026-11-05 §7.2): "no período de AAAA a AAAA", com um ou mais períodos, ou "em
+   * AAAA" para um único ano.
+   */
+  formaDoPeriodo?: "no_periodo_ou_em_ano";
   /** Máximo de caracteres do campo Nome no Posse (spec 2026-11-04 §3.5), contando só o nome aparado. */
   limiteCaracteres?: number;
 }
@@ -66,6 +73,10 @@ export const REGRAS_NOME: Readonly<Record<string, RegraNome>> = {
   // O nome é "Presidente Luís Inácio Lula da Silva": o prefixo é regra, não erro (GT, 2026-10-30).
   "Presidente da República": { prefixoDoPresidente: "presidente" },
   // O cargo é o da presidência com o período, nunca "Ex-Presidente…" (GT, 2026-10-30).
-  "Ex-Presidentes do Congresso": { cargoComPeriodo: "Presidente do Senado Federal" },
+  // Desde 05/11 o cargo é o do Contatos: "Presidente do Congresso Nacional no período de AAAA a AAAA".
+  "Ex-Presidentes do Congresso": {
+    cargoComPeriodo: "Presidente do Congresso Nacional",
+    formaDoPeriodo: "no_periodo_ou_em_ano",
+  },
   "Ex-Presidentes da República": { cargoComPeriodo: "Presidente da República Federativa do Brasil" },
 };

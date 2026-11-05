@@ -13,6 +13,9 @@ export const OBSERVACAO_PERIODO = "Informar o período da presidência";
 
 /** Marcador dos anos que o usuário completa, no lugar do período desconhecido. */
 const PERIODO_DESCONHECIDO = "de AAAA a AAAA";
+const PERIODO_DESCONHECIDO_NO_PERIODO = "no período de AAAA a AAAA";
+const PREFIXO_NO_PERIODO = "no periodo ";
+const SO_UM_ANO = /^em \d{4}$/;
 
 /**
  * Período da presidência, já normalizado (`normalizarTexto`): "de 2019 a 2021", ou mais de um
@@ -28,6 +31,12 @@ const ANOS_DO_PERIODO = /de (\d{4}) a (\d{4})/g;
 function periodoValido(periodo: string): boolean {
   if (!PERIODO_PRESIDENCIA.test(periodo)) return false;
   return [...periodo.matchAll(ANOS_DO_PERIODO)].every(([, inicio, fim]) => Number(fim) >= Number(inicio));
+}
+
+/** Forma do Congresso (05/11): "no período de 2017 a 2019" (um ou mais períodos) ou "em 2001". */
+function periodoNoPeriodoValido(resto: string): boolean {
+  if (SO_UM_ANO.test(resto)) return true;
+  return resto.startsWith(PREFIXO_NO_PERIODO) && periodoValido(resto.slice(PREFIXO_NO_PERIODO.length));
 }
 
 /**
@@ -51,14 +60,16 @@ export function comparacaoCargoExPresidente(
   const normalizado = normalizarTexto(cargo);
   const base = `${normalizarTexto(cargoComPeriodo)} `;
   if (normalizado.length === 0) return [];
-  const noFormato = normalizado.startsWith(base) && periodoValido(normalizado.slice(base.length));
+  const noPeriodo = regras[grupoCanonico ?? ""]?.formaDoPeriodo === "no_periodo_ou_em_ano";
+  const resto = normalizado.startsWith(base) ? normalizado.slice(base.length) : undefined;
+  const noFormato = resto !== undefined && (noPeriodo ? periodoNoPeriodoValido(resto) : periodoValido(resto));
   if (noFormato) return [];
 
   return [
     {
       campo: "cargo",
       valorPlanilha: cargo,
-      valorEsperado: `${cargoComPeriodo} ${PERIODO_DESCONHECIDO}`,
+      valorEsperado: `${cargoComPeriodo} ${noPeriodo ? PERIODO_DESCONHECIDO_NO_PERIODO : PERIODO_DESCONHECIDO}`,
       situacao: "divergente",
       origemValor: "coerencia",
       achado: "cargo_ex_presidente",

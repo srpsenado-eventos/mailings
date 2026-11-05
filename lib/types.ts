@@ -252,6 +252,14 @@ export interface ResultadoGrupo {
   contatos: ResultadoContato[];
   /** Pessoas no site sem correspondência na planilha. */
   novos: PessoaSite[];
+  /** Propostas de inclusão dispensadas por decisão do GT (só informativo, sem botão). */
+  dispensados?: PropostaDispensada[];
+}
+
+/** Proposta de inclusão que o GT decidiu não convidar; `texto` já vem pronto para a linha informativa. */
+export interface PropostaDispensada {
+  nome: string;
+  texto: string;
 }
 
 export interface ResumoAnalise {

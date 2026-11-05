@@ -18,6 +18,7 @@ import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-con
 import { contarBloqueiosDoGrupo, ehLinhaABloquear, ROTULO_CARTAO_BLOQUEIO, textosDeBloqueioDoGrupo, totalABloquear } from "@/lib/painel-bloqueio";
 import { avisoUrlCaida, cartoesDoResumo, estadoDaFonteDoGrupo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoAlternativa, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoMudanca, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, textosProvisorias, type Filtro } from "@/lib/painel";
 import type { HistoricoDecisoes } from "@/lib/decisoes";
+import { retratoComPropostasDecididas } from "@/lib/propostas-decisoes";
 import { autoridadesRepetidas, etiquetaDeRepeticao, textoDoLinkDoPainel } from "@/lib/repetidos";
 import type { FalhasPorUrl, ResultadoGrupo, Retrato } from "@/lib/types";
 
@@ -61,7 +62,8 @@ function EstadoDaFonte({ g, falhas }: { g: ResultadoGrupo; falhas?: FalhasPorUrl
   );
 }
 
-export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePublicar = false, decisoes }: { retrato: Retrato; aviso?: string; onNovaVarredura?: () => void; modo?: "local" | "web"; podePublicar?: boolean; decisoes?: HistoricoDecisoes }) {
+export function Painel({ retrato: retratoBruto, aviso, onNovaVarredura, modo = "local", podePublicar = false, decisoes }: { retrato: Retrato; aviso?: string; onNovaVarredura?: () => void; modo?: "local" | "web"; podePublicar?: boolean; decisoes?: HistoricoDecisoes }) {
+  const retrato = useMemo(() => retratoComPropostasDecididas(retratoBruto, decisoes), [retratoBruto, decisoes]);
   const [filtro, setFiltro] = useState<Filtro>("tudo");
   const [busca, setBusca] = useState("");
   const [grupo, setGrupo] = useState("");
@@ -227,6 +229,9 @@ export function Painel({ retrato, aviso, onNovaVarredura, modo = "local", podePu
                       viaIa={n.origem === "conhecimento"}
                       nota={n.rotuloFonte ? [n.rotuloFonte, n.contexto].filter(Boolean).join(": ") : undefined}
                     />
+                  ))}
+                  {g.dispensados?.map((d, i) => (
+                    <p key={`dispensado-${i}`} className="px-4 py-2 text-xs text-cinza-claro">{d.nome}: {d.texto}</p>
                   ))}
                 </>
               )}

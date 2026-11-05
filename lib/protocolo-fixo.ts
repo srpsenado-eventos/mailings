@@ -1,3 +1,4 @@
+import { neutralizarGenero } from "@/lib/cargos";
 import { normalizarTexto } from "@/lib/normalize";
 import { contatoEhFeminino } from "@/lib/tratamento";
 import type { ComparacaoCampo, ContatoPlanilha } from "@/lib/types";
@@ -18,7 +19,7 @@ export interface ProtocoloFixo {
 }
 
 function ativo(cargo: string | undefined): boolean {
-  return CARGO_ATIVO.test(normalizarTexto(cargo ?? ""));
+  return CARGO_ATIVO.test(neutralizarGenero(normalizarTexto(cargo ?? "")));
 }
 
 /**

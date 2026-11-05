@@ -29,6 +29,17 @@ describe("protocoloFixo (spec 2026-11-05 §7.3)", () => {
     expect(fixo).toEqual({ tratamento: "Excelentíssima Senhora", enderecamento: "A Sua Excelência a Senhora" });
   });
 
+  test('"Presidenta da Câmara dos Deputados" é cargo ativo e confere com Excelentíssima Senhora', () => {
+    // Arrange
+    const c = contato({ cargo: "Presidenta da Câmara dos Deputados", tratamento: "Excelentíssima Senhora", enderecamento: "A Sua Excelência a Senhora" });
+
+    // Act
+    const comparacoes = comparacoesProtocoloFixo(c, "Presidente da Câmara dos Deputados");
+
+    // Assert
+    expect(comparacoes?.map((x) => x.situacao)).toEqual(["confere", "confere"]);
+  });
+
   test("Ex-Presidentes do Congresso é sempre inativo, seja qual for o cargo", () => {
     // Act + Assert
     expect(protocoloFixo(contato({ cargo: "Presidente do Congresso Nacional no período de 2017 a 2019" }), EX)).toEqual({

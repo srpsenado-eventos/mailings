@@ -152,3 +152,26 @@ Entram em `data/regras-gt.ts`, com data de 05/11: "Presidentes do Congresso e da
 2. Os 8 cargos de Ex-Presidentes do Congresso no formato conferem; "1991- 1993" continua apontado.
 3. Davi e o Presidente da Câmara sem divergência de tratamento; os ex-presidentes seguem a tabela acima.
 4. Linha do Presidente da República com o motivo; propostas de inclusão só as 2 do TST.
+
+## 8. Adendo de 05/11, noite: lista de grupos, grupos ainda não cadastrados e filtro
+
+Pedido do Clovis ao ver o painel publicado. Base: `main` em `e3e5976` (PR #31). Branch: `fix/painel-grupos-nao-cadastrados`. Tudo aqui é de tela: não pede coleta nova nem muda o retrato gravado.
+
+### 8.1 Causa do quadro branco com a faixa azul
+
+A lista "Grupo" do painel é um `<select>` nativo. A opção do grupo combinado tem 483 caracteres, cerca de 2.670 px, e o Chrome abre a lista com essa largura: ela ocupa a tela e sai em branco, com a linha selecionada em azul. É também a provável causa do item 1 das orientações de 05/11 ("não consigo encontrá-los"), que tinha ficado sem mudança. Duas medidas: o grupo combinado deixa de existir na lista (§8.2), e nenhum texto de opção passa de 60 caracteres (corta com "…", e o valor da opção continua o rótulo inteiro).
+
+### 8.2 Grupos ainda não cadastrados, avulsos
+
+O contato "Teste novos grupos" (Id 54214) foi usado para criar os grupos no Contatos e está numa célula só com os 10 rótulos juntos. O app leu isso como um grupo único, e não é a ideia.
+
+- Contato de teste: rótulo com 2 ou mais grupos e todos os contatos com nome começando com "Teste" (reconhecido por nome e rótulo combinado, sem exigir o agrupador). Grupo citado nele fora dos 28 também aparece avulso, depois dos do agrupador (hoje "EMCFA indicados - Posse Presidencial 2027"), sem entrar nos 28. Sai do painel, dos cartões (`total` e `indeterminado`), dos filtros e da contagem do agrupador. Não é apagado do retrato gravado. O export da tela herda o filtro.
+- Todo grupo do agrupador com 0 contatos ganha uma linha própria na lista de grupos, na ordem do agrupador e depois dos grupos com contatos, com o nome do grupo e "Grupo ainda não cadastrado no Contatos". Sem linhas internas e sem fonte.
+- Grupo vazio com decisão `nao_recebe_convite` mostra o motivo no lugar desse texto (Presidente da República).
+- "Deputados Federais" não ganha essa linha quando o grupo virtual da Câmara existe.
+- As linhas aparecem no filtro "Tudo" sem busca, e o grupo também pode ser escolhido na lista "Grupo", que mostra só ele.
+- Não contam em cartão nenhum, nunca são vermelhas nem "sem fonte".
+
+### 8.3 Filtro "Com divergência"
+
+Novo botão "Com divergência", logo depois de "Tudo": mostra só os contatos amarelos, o mesmo número do cartão. Sem propostas de inclusão.

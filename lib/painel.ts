@@ -333,10 +333,11 @@ export function detalhesDoContato(c: ResultadoContato, _g: ResultadoGrupo): Deta
   return cartoes;
 }
 
-export type Filtro = "tudo" | "ressalva" | "endereco" | "numero" | "saida" | "inclusao" | "a_bloquear" | FiltroEleicao;
+export type Filtro = "tudo" | "divergencia" | "ressalva" | "endereco" | "numero" | "saida" | "inclusao" | "a_bloquear" | FiltroEleicao;
 
 export const FILTROS: readonly { id: Filtro; rotulo: string }[] = [
   { id: "tudo", rotulo: "Tudo" },
+  { id: "divergencia", rotulo: "Com divergência" },
   { id: "ressalva", rotulo: "Só o que tem ressalva" },
   { id: "endereco", rotulo: "Endereço a confirmar" },
   { id: "numero", rotulo: `Número acima de ${LIMITE_NUMERO} caracteres` },
@@ -355,6 +356,7 @@ function passaFiltro(c: ResultadoContato, filtro: Filtro): boolean {
   if (ehFiltroEleicao(filtro)) return passaFiltroEleicao(c, filtro);
   switch (filtro) {
     case "tudo": return true;
+    case "divergencia": return c.semaforo === "amarelo";
     case "ressalva": return temRessalva(c);
     case "endereco": return c.endereco?.situacao === "pendente";
     case "numero": return numeroAcimaDoLimite(c);

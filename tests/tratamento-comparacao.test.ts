@@ -627,3 +627,21 @@ describe("presidente de tribunal aceita Excelentíssimo(a) Senhor(a) (spec 2026-
     expect(tratamentoDe(c, "Ministros do STJ")?.situacao).toBe("sem_regra");
   });
 });
+
+describe("comparacoesProtocolo — convocados seguem o critério dos ministros", () => {
+  test.each([
+    ["Desembargador convocado do Superior Tribunal de Justiça", "Senhor", "A Sua Excelência o Senhor"],
+    ["Desembargadora convocada do Tribunal Superior do Trabalho", "Senhora", "A Sua Excelência a Senhora"],
+  ])("%s confere tratamento e endereçamento", (cargo, tratamento, enderecamento) => {
+    const [t, e] = comparacoesProtocolo(contato({ cargo, tratamento, enderecamento }));
+    expect(t.situacao).toBe("confere");
+    expect(e.situacao).toBe("confere");
+  });
+
+  test("tratamento Doutor no convocado diverge", () => {
+    const [t] = comparacoesProtocolo(
+      contato({ cargo: "Desembargador convocado do Superior Tribunal de Justiça", tratamento: "Doutor" }),
+    );
+    expect(t.situacao).toBe("divergente");
+  });
+});

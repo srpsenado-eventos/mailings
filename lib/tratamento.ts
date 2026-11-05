@@ -1,5 +1,6 @@
 import stringSimilarity from "string-similarity";
 import { chaveToken, normalizarTexto } from "@/lib/normalize";
+import { cargoDeMinistroDoConvocado } from "@/lib/cargo-convocado";
 import { REGRAS_TRATAMENTO } from "@/data/tratamentos";
 import { EXCECOES_CARGO } from "@/data/cargos-tratamento";
 import { REGRAS_NOME, type RegraNome } from "@/data/regras-nome";
@@ -395,7 +396,7 @@ export function comparacoesProtocolo(
   contato: ContatoPlanilha,
   regras: readonly RegraTratamento[] = REGRAS_TRATAMENTO,
 ): ComparacaoCampo[] {
-  const regra = resolverRegra(contato.cargo, regras);
+  const regra = resolverRegra(cargoDeMinistroDoConvocado(contato.cargo ?? "") ?? contato.cargo, regras);
   const linha = linhaDeEnderecamento(regra?.enderecamento);
   const alternativas = linha === undefined ? undefined : alternativasDaLinha(linha).join("\nou\n");
   return [

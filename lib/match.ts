@@ -24,6 +24,7 @@ import {
   tratamentoAceitoDoPresidente,
   type ContextoCargo,
 } from "@/lib/cargo-tribunal";
+import { comparacoesProtocoloFixo } from "@/lib/protocolo-fixo";
 import { ehItemInstitucional } from "@/lib/proposta-inclusao";
 import { comparacaoLimiteNome } from "@/lib/limite-nome";
 import {
@@ -275,11 +276,11 @@ export function comparacoesTratamento(
   const aceitaPresidente = tratamentoAceitoDoPresidente(contato, grupoCanonico);
   return [
     ...comparacoesCoerencia(contato),
-    ...comparacoesProtocolo(contato).map((c) =>
+    ...(comparacoesProtocoloFixo(contato, grupoCanonico) ?? comparacoesProtocolo(contato).map((c) =>
       aceitaPresidente && c.campo === "tratamento" && c.situacao === "divergente"
         ? { ...c, situacao: "confere" as const }
         : c,
-    ),
+    )),
     ...comparacaoRegraNome(contato, grupoCanonico),
     ...comparacaoPrefixoNome(contato, grupoCanonico),
     ...comparacaoLimiteNome(contato, grupoCanonico),

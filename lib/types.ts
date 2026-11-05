@@ -458,6 +458,8 @@ export interface GrupoCatalogo {
    * composição inteira vale, senão contato arquivado na faixa errada viraria "saída".
    */
   ufs?: readonly string[];
+  /** Regra do GT de 05/11: o grupo nunca recebe proposta de inclusão (`novos` sai vazio). */
+  semInclusao?: true;
 }
 
 /**

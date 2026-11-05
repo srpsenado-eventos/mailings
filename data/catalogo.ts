@@ -109,6 +109,7 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
   },
   {
     nome: "Embaixadores ( África do Sul até EUA)",
+    semInclusao: true,
     responsavel1: "Agatha Marcondes Viana de Assis",
     responsavel2: "Thiago Sabino",
     backup: "Sarah Rachel Vieira Caldeira da Costa",
@@ -122,6 +123,7 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
   },
   {
     nome: "Embaixadores (Filipinas até Noruega)",
+    semInclusao: true,
     responsavel1: "Adriana da Conceição Santos",
     responsavel2: "Beatriz Zama",
     backup: "Jaciara Brito dos Santos",
@@ -135,6 +137,7 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
   },
   {
     nome: "Embaixadores (Nova Zelândia até Zimbábue)",
+    semInclusao: true,
     responsavel1: "Beatriz Zama",
     responsavel2: "Cynara Putencio da Silva",
     backup: "Fernanda Carolina Gonçalves Silva",

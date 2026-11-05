@@ -355,7 +355,31 @@ function comResponsavel(grupo: ResultadoGrupo, responsavel?: string): ResultadoG
   return responsavel ? { ...grupo, responsavel } : grupo;
 }
 
+/**
+ * Ponto único da regra "sem proposta de inclusão" (GT de 05/11): a marca do grupo do catálogo,
+ * lida de `resolverFonte`, zera `novos` no resultado de qualquer caminho (fonte lida, leitura
+ * reaproveitada, Camada 2). Só `novos` muda: contatos, composição e "possível saída" ficam.
+ */
 async function analisarGrupo(
+  grupo: string,
+  contatos: ContatoPlanilha[],
+  deps: Dependencias,
+  agora: Date,
+): Promise<AnaliseDoGrupo> {
+  let semInclusao = false;
+  const depsComMarca: Dependencias = {
+    ...deps,
+    resolverFonte: (g) => {
+      const resolvida = deps.resolverFonte(g);
+      if (resolvida.semInclusao) semInclusao = true;
+      return resolvida;
+    },
+  };
+  const analise = await analisarGrupoResolvendo(grupo, contatos, depsComMarca, agora);
+  return semInclusao ? { ...analise, grupo: { ...analise.grupo, novos: [] } } : analise;
+}
+
+async function analisarGrupoResolvendo(
   grupo: string,
   contatos: ContatoPlanilha[],
   deps: Dependencias,

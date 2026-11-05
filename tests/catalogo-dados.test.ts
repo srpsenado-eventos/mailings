@@ -265,4 +265,13 @@ describe("fontes que clicam antes de ler (GT de 05/11)", () => {
     expect(comClique.length).toBeGreaterThan(0);
     expect(comClique.every((f) => f.navegador === "janela")).toBe(true);
   });
+
+  test("só os grupos de Embaixadores não recebem proposta de inclusão (regra do GT de 05/11)", () => {
+    const marcados = CATALOGO.filter((g) => g.semInclusao).map((g) => g.nome);
+    expect(marcados).toHaveLength(3);
+    expect(marcados.every((n) => n.startsWith("Embaixadores"))).toBe(true);
+    expect(CATALOGO.filter((g) => g.nome.startsWith("Embaixadores")).every((g) => g.semInclusao === true)).toBe(true);
+    expect(resolverGrupoEFonte("Embaixadores (Filipinas até Noruega)").semInclusao).toBe(true);
+    expect(resolverGrupoEFonte("Ministros do STF").semInclusao).toBeUndefined();
+  });
 });

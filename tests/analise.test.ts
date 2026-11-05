@@ -1305,3 +1305,72 @@ describe("tratamento e endereçamento pela maioria dos pares (spec 2026-10-30 §
     expect(r.resumo.amarelo).toBe(1);
   });
 });
+
+describe("grupo sem proposta de inclusão (spec 2026-11-05 §2.5)", () => {
+  const AGORA = new Date("2026-11-05T12:00:00.000Z");
+  const URL = "https://orgao.gov.br";
+  const aMais = { nome: "Carla Pessoa Nova", cargo: "Embaixadora" };
+  const paginaComAMais: ConteudoFonte = {
+    url: URL,
+    textoLimpo: "Ana Maria Política Completa, Presidente. Carla Pessoa Nova, Embaixadora.",
+    destaques: [],
+    pessoas: [{ nome: "Ana Maria Política Completa", cargo: "Presidente", origem: "pagina" }, aMais],
+  };
+  const resolver = (semInclusao: boolean): Dependencias["resolverFonte"] => () => ({
+    grupoCanonico: "ORG",
+    fontes: [{ url: URL, ativo: true }],
+    fontesIndividuais: [],
+    sugestoes: [],
+    ...(semInclusao ? { semInclusao: true as const } : {}),
+  });
+  const depsCom = (semInclusao: boolean, extra: Partial<Dependencias> = {}): Dependencias => ({
+    ...deps,
+    resolverFonte: resolver(semInclusao),
+    raspar: async () => paginaComAMais,
+    agora: () => AGORA,
+    ...extra,
+  });
+
+  test("grupo sem a marca mantém a proposta de inclusão", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], depsCom(false));
+    expect(r.grupos[0].novos.map((n) => n.nome)).toEqual(["Carla Pessoa Nova"]);
+    expect(r.resumo.novo).toBe(1);
+  });
+
+  test("grupo com semInclusao sai com novos vazio e o resumo não conta", async () => {
+    const r = await analisar("c.xlsx", [contatos[0]], depsCom(true));
+    expect(r.grupos[0].novos).toEqual([]);
+    expect(r.resumo.novo).toBe(0);
+    expect(r.grupos[0].contatos[0].semaforo).toBe("verde");
+  });
+
+  test("contato ausente da página continua possível saída", async () => {
+    const ausente = { nome: "Beatriz Sousa Ausente", grupo: "ORG", ...CADASTRO_OK };
+    const r = await analisar("c.xlsx", [contatos[0], ausente], depsCom(true));
+    const b = r.grupos[0].contatos.find((c) => c.contato.nome === "Beatriz Sousa Ausente");
+    expect(r.grupos[0].novos).toEqual([]);
+    expect(b?.possivelSaida).toBe(true);
+  });
+
+  test("leitura reaproveitada pela memória também sai sem novos", async () => {
+    const memoria: LeiturasGuardadas = { [URL]: { url: URL, lidaEm: "2026-11-03T10:00:00.000Z", conteudo: paginaComAMais } };
+    const d = depsCom(true, { raspar: async () => { throw new Error("HTTP 403"); }, leiturasAnteriores: memoria });
+    const r = await analisar("c.xlsx", [contatos[0]], d);
+    expect(r.grupos[0].reaproveitada).toBeDefined();
+    expect(r.grupos[0].novos).toEqual([]);
+    expect(r.resumo.novo).toBe(0);
+  });
+
+  test("composição só pela Camada 2 também sai sem novos", async () => {
+    const d = depsCom(true, {
+      raspar: async () => { throw new Error("HTTP 403"); },
+      extrairComposicao: async () => [
+        { nome: "Ana Maria Política Completa", cargo: "Presidente", origem: "conhecimento" },
+        { ...aMais, origem: "conhecimento" },
+      ],
+    });
+    const r = await analisar("c.xlsx", [contatos[0]], d);
+    expect(r.grupos[0].viaPesquisaAmpla).toBe(true);
+    expect(r.grupos[0].novos).toEqual([]);
+  });
+});

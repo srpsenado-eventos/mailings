@@ -361,7 +361,7 @@ describe("Cargo do ex-presidente com o período (Camada C) nos caminhos de Resul
     expect(r.camposDivergentes.map((d) => d.campo)).toContain("cargo");
   });
 
-  test('pessoa casada com "Presidente do Senado Federal" sem período pinta amarelo no cargo', () => {
+  test('pessoa casada com "Presidente do Congresso Nacional" sem período pinta amarelo no cargo', () => {
     // Act
     const g = compararGrupo(GRUPO_EX, [ex("Presidente do Congresso Nacional")], paginaSemCargo, GRUPO_EX);
 

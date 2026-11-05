@@ -58,4 +58,16 @@ export const REGRAS_GT: readonly RegraGt[] = [
     texto: "Tratamento e endereçamento seguem o mesmo critério dos ministros do grupo.",
     grupos: ["Ministros do STJ", "Ministros do TST"],
   },
+  {
+    data: "2026-11-05",
+    titulo: "Presidentes do Congresso e da Câmara",
+    texto: "Ativos: tratamento Excelentíssimo Senhor e endereçamento A Sua Excelência o Senhor.",
+    grupos: ["Presidente da Câmara dos Deputados", "Presidente do Senado", "Senadores (Acre a Goiás)", "Senadores (Maranhão ao Piauí)", "Senadores (Rio a Tocantins)"],
+  },
+  {
+    data: "2026-11-05",
+    titulo: "Ex-Presidentes do Congresso",
+    texto: "Cargo: Presidente do Congresso Nacional no período de AAAA a AAAA, ou em AAAA para um único ano. Tratamento Senhor e endereçamento A Sua Excelência o Senhor.",
+    grupos: ["Ex-Presidentes do Congresso"],
+  },
 ];

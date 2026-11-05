@@ -10,7 +10,7 @@ const COLUNAS = "grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)_minmax(0,1fr)_minma
  * Federais, o esperado pela eleição ou pela Câmara; os grupos fora do agrupador vêm no fim.
  * Recolhido ao abrir o painel. Só renderiza.
  */
-export function Agrupador({ linhas }: { linhas: readonly LinhaAgrupador[] }) {
+export function Agrupador({ linhas, motivos = {} }: { linhas: readonly LinhaAgrupador[]; motivos?: Readonly<Record<string, readonly string[]>> }) {
   const [aberto, setAberto] = useState(false);
   return (
     <section className="mt-5 overflow-clip rounded-xl border border-borda bg-cartao">
@@ -28,6 +28,7 @@ export function Agrupador({ linhas }: { linhas: readonly LinhaAgrupador[] }) {
               <div className="font-medium">
                 {l.rotulo}
                 {l.foraDoAgrupador && <span className="ml-2 text-xs font-normal text-atencao">fora do agrupador</span>}
+                {motivos[l.rotulo]?.map((m) => <div key={m} className="text-xs font-normal text-cinza">{m}</div>)}
               </div>
               <div className="text-cinza">{ROTULO_FISCALIZACAO[l.fiscalizacao]}</div>
               <div>{l.noContatos}</div>

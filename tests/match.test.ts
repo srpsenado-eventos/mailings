@@ -805,3 +805,71 @@ describe("item institucional não é proposta de inclusão (spec 2026-11-05 §2.
     expect(r.novos).toEqual([]);
   });
 });
+
+describe("Embaixadores: prefixo SE Sr. não é nome (spec 2026-11-05 §7.1)", () => {
+  const f: ConteudoFonte = {
+    url: "https://x",
+    textoLimpo: "",
+    destaques: [],
+    pessoas: [
+      { nome: "SE Sr. Noguchi Yasushi", cargo: "Embaixador" },
+      { nome: "SE Sra. Tonika Thompson", cargo: "Embaixadora" },
+    ],
+  };
+
+  test("nome do contato igual ao da página sem o prefixo confere, e o esperado não leva o prefixo", () => {
+    // Arrange
+    const contatos = [contato({ nome: "Noguchi Yasushi", cargo: "Embaixador" }), contato({ nome: "Tonika Thompson", cargo: "Embaixadora" })];
+
+    // Act
+    const r = compararGrupo("ORG", contatos, f);
+
+    // Assert
+    const nomes = r.contatos.map((c) => c.comparacoes.find((x) => x.campo === "nome"));
+    expect(nomes.map((n) => n?.situacao)).toEqual(["confere", "confere"]);
+    expect(nomes.map((n) => n?.valorEsperado)).toEqual(["Noguchi Yasushi", "Tonika Thompson"]);
+  });
+
+  test("diferença real de nome continua divergindo, com o esperado sem o prefixo", () => {
+    // Act
+    const r = compararGrupo("ORG", [contato({ nome: "Noguchi Yasushi Junior", cargo: "Embaixador" })], f);
+
+    // Assert
+    const nome = r.contatos[0].comparacoes.find((x) => x.campo === "nome");
+    expect(nome?.situacao).toBe("divergente");
+    expect(nome?.valorEsperado).toBe("Noguchi Yasushi");
+  });
+});
+
+describe("IA não propõe inclusão (spec 2026-11-05 §7.5)", () => {
+  const f: ConteudoFonte = {
+    url: "https://x",
+    textoLimpo: "",
+    destaques: [],
+    pessoas: [
+      { nome: "Lula Imaginado Silva", cargo: "Presidente", origem: "conhecimento" },
+      { nome: "Ana Oficial Souza", cargo: "Diretora", origem: "pagina" },
+    ],
+  };
+
+  test("pessoa só do conhecimento da IA não vira novo, a da página vira", () => {
+    // Act
+    const r = compararGrupo("ORG", [contato({ nome: "Zzz Inexistente Pessoa" })], f);
+
+    // Assert
+    expect(r.novos.map((n) => n.nome)).toEqual(["Ana Oficial Souza"]);
+  });
+
+  test("novosForaDaPlanilha também descarta a pessoa da IA", () => {
+    // Act + Assert
+    expect(novosForaDaPlanilha(f.pessoas, []).map((n) => n.nome)).toEqual(["Ana Oficial Souza"]);
+  });
+
+  test("a composição via IA continua conferindo quem está cadastrado", () => {
+    // Act
+    const r = compararGrupo("ORG", [contato({ nome: "Lula Imaginado Silva", cargo: "Presidente" })], f);
+
+    // Assert
+    expect(r.contatos[0].semaforo).not.toBe("vermelho");
+  });
+});

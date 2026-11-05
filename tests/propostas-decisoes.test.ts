@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { retratoComPropostasDecididas } from "@/lib/propostas-decisoes";
+import { motivosDosGruposVazios, retratoComPropostasDecididas } from "@/lib/propostas-decisoes";
 import { quadroDeBloqueio, registrar, situacaoDoCaso, HISTORICO_VAZIO, type HistoricoDecisoes, type RegistroManual } from "@/lib/decisoes";
 import { filtrarGrupos, resumoDoGrupo } from "@/lib/painel";
 import type { ResultadoGrupo } from "@/lib/types";
@@ -88,5 +88,39 @@ describe("painel com propostas dispensadas", () => {
 
   test("resumoDoGrupo não conta dispensado como a incluir", () => {
     expect(resumoDoGrupo({ ...g, novos: [] })).not.toContain("a incluir");
+  });
+});
+
+describe("motivo do grupo vazio no agrupador (spec 2026-11-05 §7.4)", () => {
+  const GRUPO_VAZIO = "Presidente da República";
+  const vazio = (rotulo: string, noContatos = 0) => ({ rotulo, fiscalizacao: "fonte" as const, noContatos });
+  const lula = (extra: Partial<RegistroManual> = {}) =>
+    registrar(HISTORICO_VAZIO, "Luís Inácio Lula da Silva", ["Luís Inácio Lula da Silva"], registro({ grupos: [GRUPO_VAZIO], observacao: "", ...extra }));
+
+  test("grupo com 0 contatos e nao_recebe_convite mostra o motivo, sem observação quando vazia", () => {
+    // Act
+    const m = motivosDosGruposVazios([vazio(GRUPO_VAZIO)], lula());
+
+    // Assert
+    expect(m).toEqual({ [GRUPO_VAZIO]: ["Luís Inácio Lula da Silva: não será convidado (decisão do GT de 05/11)"] });
+  });
+
+  test("nome sem prefixo de tratamento e observação acrescentada só se houver", () => {
+    // Act
+    const m = motivosDosGruposVazios(
+      [vazio(GRUPO_VAZIO)],
+      registrar(HISTORICO_VAZIO, "Presidente Luís Inácio Lula", ["Presidente Luís Inácio Lula"], registro({ grupos: [GRUPO_VAZIO], observacao: "Saiu da base." })),
+    );
+
+    // Assert
+    expect(m[GRUPO_VAZIO]).toEqual(["Luís Inácio Lula: não será convidado (decisão do GT de 05/11). Saiu da base."]);
+  });
+
+  test("grupo com contatos, outro tipo de decisão ou outro grupo não mostra nada", () => {
+    // Assert
+    expect(motivosDosGruposVazios([vazio(GRUPO_VAZIO, 1)], lula())).toEqual({});
+    expect(motivosDosGruposVazios([vazio(GRUPO_VAZIO)], lula({ tipo: "pessoas_diferentes" }))).toEqual({});
+    expect(motivosDosGruposVazios([vazio("Ministros do STF")], lula())).toEqual({});
+    expect(motivosDosGruposVazios([vazio(GRUPO_VAZIO)], HISTORICO_VAZIO)).toEqual({});
   });
 });

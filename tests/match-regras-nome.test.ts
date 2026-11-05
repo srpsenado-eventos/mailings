@@ -357,23 +357,23 @@ describe("Cargo do ex-presidente com o período (Camada C) nos caminhos de Resul
     // Assert
     const r = g.contatos[0];
     expect(r.semaforo).toBe("amarelo");
-    expect(cargoDivergente(r.comparacoes)?.valorEsperado).toBe("Presidente do Senado Federal de AAAA a AAAA");
+    expect(cargoDivergente(r.comparacoes)?.valorEsperado).toBe("Presidente do Congresso Nacional no período de AAAA a AAAA");
     expect(r.camposDivergentes.map((d) => d.campo)).toContain("cargo");
   });
 
-  test('pessoa casada com "Presidente do Senado Federal" sem período pinta amarelo no cargo', () => {
+  test('pessoa casada com "Presidente do Congresso Nacional" sem período pinta amarelo no cargo', () => {
     // Act
-    const g = compararGrupo(GRUPO_EX, [ex("Presidente do Senado Federal")], paginaSemCargo, GRUPO_EX);
+    const g = compararGrupo(GRUPO_EX, [ex("Presidente do Congresso Nacional")], paginaSemCargo, GRUPO_EX);
 
     // Assert
     const r = g.contatos[0];
     expect(r.semaforo).toBe("amarelo");
-    expect(cargoDivergente(r.comparacoes)?.valorEsperado).toBe("Presidente do Senado Federal de AAAA a AAAA");
+    expect(cargoDivergente(r.comparacoes)?.valorEsperado).toBe("Presidente do Congresso Nacional no período de AAAA a AAAA");
   });
 
   test("pessoa casada com o cargo no formato do GT: cargo sem achado", () => {
     // Act
-    const g = compararGrupo(GRUPO_EX, [ex("Presidente do Senado Federal de 2019 a 2021")], paginaSemCargo, GRUPO_EX);
+    const g = compararGrupo(GRUPO_EX, [ex("Presidente do Congresso Nacional no período de 2019 a 2021")], paginaSemCargo, GRUPO_EX);
 
     // Assert
     expect(cargoDivergente(g.contatos[0].comparacoes)).toBeUndefined();
@@ -388,7 +388,7 @@ describe("Cargo do ex-presidente com o período (Camada C) nos caminhos de Resul
     };
 
     // Act
-    const g = compararGrupo(GRUPO_EX, [ex("Presidente do Senado Federal de 2019 a 2021")], pagina, GRUPO_EX);
+    const g = compararGrupo(GRUPO_EX, [ex("Presidente do Congresso Nacional no período de 2019 a 2021")], pagina, GRUPO_EX);
 
     // Assert
     const cargo = g.contatos[0].comparacoes.find((c) => c.campo === "cargo" && c.origemValor !== "coerencia");

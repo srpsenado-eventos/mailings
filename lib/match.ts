@@ -13,7 +13,7 @@ import type {
   OrigemVeredito,
   Semaforo,
 } from "@/lib/types";
-import { normalizarNome, normalizarTexto } from "@/lib/normalize";
+import { normalizarNome, normalizarTexto, semTratamentoDeEmbaixada } from "@/lib/normalize";
 import { CARGOS, PREFIXOS_NEGANTES, tokensSignificativos } from "@/lib/cargos";
 import {
   cargoEsperadoNoTribunal,
@@ -24,6 +24,7 @@ import {
   tratamentoAceitoDoPresidente,
   type ContextoCargo,
 } from "@/lib/cargo-tribunal";
+import { comparacoesProtocoloFixo } from "@/lib/protocolo-fixo";
 import { ehItemInstitucional } from "@/lib/proposta-inclusao";
 import { comparacaoLimiteNome } from "@/lib/limite-nome";
 import {
@@ -109,7 +110,7 @@ function pontuarContraPessoa(nomePlanilha: string, pessoa: PessoaSite): number {
 
 /** O nome que o Contatos deve ter: o destaque da página, quando há; senão, o nome completo. */
 function nomeEsperado(pessoa: PessoaSite): string {
-  return pessoa.nomeDestaque ?? pessoa.nome;
+  return semTratamentoDeEmbaixada(pessoa.nomeDestaque ?? pessoa.nome);
 }
 
 /**
@@ -275,11 +276,11 @@ export function comparacoesTratamento(
   const aceitaPresidente = tratamentoAceitoDoPresidente(contato, grupoCanonico);
   return [
     ...comparacoesCoerencia(contato),
-    ...comparacoesProtocolo(contato).map((c) =>
+    ...(comparacoesProtocoloFixo(contato, grupoCanonico) ?? comparacoesProtocolo(contato).map((c) =>
       aceitaPresidente && c.campo === "tratamento" && c.situacao === "divergente"
         ? { ...c, situacao: "confere" as const }
         : c,
-    ),
+    )),
     ...comparacaoRegraNome(contato, grupoCanonico),
     ...comparacaoPrefixoNome(contato, grupoCanonico),
     ...comparacaoLimiteNome(contato, grupoCanonico),
@@ -519,12 +520,13 @@ export function compararGrupo(
       leituraParcial,
     );
   });
-  // "novos": de fonte que propõe inclusão, só quem está na faixa de UF do grupo. Das
+  // "novos": pessoa que veio só do conhecimento da IA nunca vira proposta (spec 2026-11-05 §7.5).
+  // De fonte que propõe inclusão, só quem está na faixa de UF do grupo. Das
   // demais fontes, mantém a regra antiga — só pessoa com cargo, que corta item de menu
   // do texto achatado. Numa fonte tabular toda linha já é pessoa.
   const novos = fonte.pessoas
     .filter((p, i) => {
-      if (usados.has(i) || ehItemInstitucional(p.nome)) return false;
+      if (usados.has(i) || ehItemInstitucional(p.nome) || p.origem === "conhecimento") return false;
       return p.propoeInclusao ? naFaixaDeUf(p, ufsDoGrupo) : Boolean(p.cargo);
     })
     .map(comoProposta);
@@ -946,6 +948,6 @@ export function compararContatoSemIndividual(
  */
 export function novosForaDaPlanilha(pessoas: PessoaSite[], contatos: ContatoPlanilha[]): PessoaSite[] {
   return pessoas
-    .filter((p) => Boolean(p.cargo) && !ehItemInstitucional(p.nome) && !contatos.some((c) => pontuarContraPessoa(c.nome, p) >= LIMIAR_PESSOA))
+    .filter((p) => Boolean(p.cargo) && p.origem !== "conhecimento" && !ehItemInstitucional(p.nome) && !contatos.some((c) => pontuarContraPessoa(c.nome, p) >= LIMIAR_PESSOA))
     .map(comoProposta);
 }

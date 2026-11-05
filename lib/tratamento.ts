@@ -550,7 +550,7 @@ export function coerenciasVisiveis(
     comparacoes.some(
       (c) =>
         c.campo === campo &&
-        (c.origemValor === "protocolo" || c.origemValor === "pares") &&
+        ["protocolo", "pares", "regra_gt"].includes(c.origemValor ?? "") &&
         c.situacao === "divergente" &&
         (c.valorEsperado ?? "").trim().length > 0,
     );

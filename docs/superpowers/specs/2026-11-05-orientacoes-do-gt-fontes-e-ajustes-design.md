@@ -110,3 +110,45 @@ Conferidos na coleta nova, com a base de 04 NOV, comparando com o retrato de 04/
 - Endereçamento dos governadores: o Contatos traz "Ao Senhor" (ou "À Senhora") e a tabela "A Sua Excelência o(a) Senhor(a)" em 26 dos 27. Foi visto no levantamento e não fez parte das orientações.
 - Formato do cargo de quem teve mais de um mandato nos Ex-Presidentes.
 - Propostas de inclusão vindas só do conhecimento da IA.
+
+## 7. Adendo de 05/11, tarde: respostas do Clovis depois da coleta das 15h47
+
+Base: `main` em `0a3505b` (PR #30). Branch: `fix/adendo-gt-05-11`.
+
+### 7.1 Embaixadores: "SE Sr." não é nome
+
+A página de Embaixadores escreve "SE Sr. Noguchi Yasushi" e "SE Sra. Tonika Maria Sealy Thompson", e o app trata o prefixo como parte do nome: 91 dos 93 amarelos do grupo acusam "nome diverge", pelo menos 76 só por isso. `SE Sr.` e `SE Sra.` passam a ser prefixo de tratamento removível, em qualquer caixa, com ou sem ponto ("S.E. Sr." também). `SE` sozinho não é prefixo. O valor esperado mostrado e copiado não leva o prefixo. Vale também para a leitura guardada de Embaixadores, sem nova leitura da página. Diferença real de nome (hífen, nome a mais) continua divergindo: o nome é o do site.
+
+### 7.2 Ex-Presidentes do Congresso: o cargo é o do Contatos
+
+Decisão do Clovis, que substitui o formato de 30/10 só neste grupo: o cargo certo é "Presidente do Congresso Nacional no período de AAAA a AAAA", com um ou mais períodos, ou "Presidente do Congresso Nacional em AAAA" para um único ano. Fora disso continua acusado (ex.: "no período de 1991- 1993"), com "Presidente do Congresso Nacional no período de AAAA a AAAA" como esperado. "Ex-Presidentes da República" não muda.
+
+### 7.3 Protocolo fixo dos presidentes do Congresso e da Câmara
+
+Decisão do Clovis, por cima da tabela nesses cargos:
+
+| Quem | Tratamento | Endereçamento |
+|---|---|---|
+| Presidente do Congresso e Presidente da Câmara, ativos | Excelentíssimo Senhor | A Sua Excelência o Senhor |
+| Ex-Presidentes do Congresso | Senhor | A Sua Excelência o Senhor |
+
+No feminino: "Excelentíssima Senhora", "Senhora", "A Sua Excelência a Senhora". Ativo é reconhecido pelo cargo do Contatos ("Presidente do Congresso Nacional", "Presidente do Senado Federal", "Presidente da Câmara dos Deputados"), em qualquer grupo, inclusive em Senadores. Quem está no grupo "Ex-Presidentes do Congresso" é sempre inativo, seja qual for o cargo escrito. Vale nos dois campos e substitui tabela e pares nesses contatos. O que não bate diverge, com o valor acima como esperado.
+
+### 7.4 Presidente da República: grupo vazio com o motivo
+
+O contato saiu da base por decisão do GT. O grupo fica vazio, e a linha dele no bloco "Grupos da Posse 2027" mostra o motivo, vindo de uma decisão `nao_recebe_convite`: "Luís Inácio Lula da Silva: não será convidado (decisão do GT de 05/11)". O caso entra uma vez por `POST /api/decisoes`, depois do deploy, sem observação obrigatória. Vale para qualquer grupo do agrupador com 0 contatos e decisão vigente desse tipo. Texto aparece nos dois modos, sem botão, e nada muda no semáforo.
+
+### 7.5 IA não propõe inclusão
+
+Pessoa que vem só do conhecimento da IA (`origem: "conhecimento"`) nunca vira proposta de inclusão, em nenhum grupo. Saíram Lula e Itamar Franco, e a regra evita que nomes novos apareçam a cada coleta. A composição via IA continua conferindo quem está cadastrado.
+
+### 7.6 Quadro do GT
+
+Entram em `data/regras-gt.ts`, com data de 05/11: "Presidentes do Congresso e da Câmara" (§7.3), grupo do Presidente da Câmara e Senadores; e "Ex-Presidentes do Congresso" (§7.2 e §7.3).
+
+### 7.7 Critérios de aceite, na coleta nova
+
+1. Embaixadores sem "nome diverge" por prefixo; o relatório diz quantos restam e por quê.
+2. Os 8 cargos de Ex-Presidentes do Congresso no formato conferem; "1991- 1993" continua apontado.
+3. Davi e o Presidente da Câmara sem divergência de tratamento; os ex-presidentes seguem a tabela acima.
+4. Linha do Presidente da República com o motivo; propostas de inclusão só as 2 do TST.

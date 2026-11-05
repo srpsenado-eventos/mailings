@@ -794,6 +794,33 @@ describe("memória de leitura por página (spec 2026-10-20 §5.1)", () => {
     expect(r.resumo.gruposFonteInacessivel).toBe(0);
   });
 
+  test('leitura guardada de Embaixadores: "SE Sr." não entra no nome; diferença real continua divergindo, com o esperado sem o prefixo (spec 2026-11-05 §7.1)', async () => {
+    // Arrange
+    const pagina: ConteudoFonte = {
+      url: URL,
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [
+        { nome: "SE Sr. Noguchi Yasushi", cargo: "Embaixador", origem: "pagina" },
+        { nome: "SE Sra. Tonika Maria-Sealy Thompson", cargo: "Embaixadora", origem: "pagina" },
+      ],
+    };
+    const embaixadores: ContatoPlanilha[] = [
+      { nome: "Noguchi Yasushi", grupo: "ORG", cargo: "Embaixador", ...CADASTRO_OK },
+      { nome: "Tonika Maria Sealy Thompson", grupo: "ORG", cargo: "Embaixadora", tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" },
+    ];
+
+    // Act
+    const r = await analisar("c.xlsx", embaixadores, comMemoria(erro403, { [URL]: guardada(pagina) }));
+
+    // Assert
+    const g = r.grupos[0];
+    expect(g.reaproveitada).toMatchObject({ url: URL, motivo: "HTTP 403" });
+    const nomeDe = (i: number) => g.contatos[i].comparacoes.find((c) => c.campo === "nome");
+    expect(nomeDe(0)?.situacao).toBe("confere");
+    expect(nomeDe(1)).toMatchObject({ situacao: "divergente", valorEsperado: "Tonika Maria-Sealy Thompson" });
+  });
+
   test("primária com erro e memória vencida (8 dias) → comportamento de hoje: IA sozinha e via IA; sem IA, inacessível", async () => {
     const vencida = { [URL]: guardada(fonte, "2026-10-12T11:00:00.000Z") };
     const comIa = await analisar("c.xlsx", [contatos[0]], comMemoria(erro403, vencida, { extrairComposicao: async () => [{ nome: "Ana Maria Política Completa", cargo: "Presidente", origem: "conhecimento" }] }));

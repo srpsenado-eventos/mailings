@@ -12,6 +12,8 @@ export function normalizarTexto(valor: string): string {
 const TRATAMENTOS = [
   "exmo.", "exma.", "excelentíssimo", "excelentíssima",
   "sr.", "sra.", "dr.", "dra.",
+  // Embaixadores: "SE Sr." e "S.E. Sra." (chaveToken tira os pontos). "SE" sozinho nunca é prefixo.
+  "se sr.", "se sra.",
   "senador", "senadora", "deputado", "deputada",
   "ministro", "ministra", "presidente", "governador", "governadora",
   "vereador", "vereadora", "prefeito", "prefeita", "desembargador", "desembargadora",
@@ -61,6 +63,14 @@ export function removerTratamentos(nome: string): string {
     }
   }
   return tokens.join(" ");
+}
+
+/** Só o prefixo de embaixada ("SE Sr.", "S.E. Sra."), sem tocar em "Ministro", "Dr." etc. */
+export function semTratamentoDeEmbaixada(nome: string): string {
+  const compacto = nome.replace(/\s+/g, " ").trim();
+  const tokens = compacto.split(" ");
+  if (tokens.length < 3 || chaveToken(tokens[0]) !== "se") return compacto;
+  return ["sr", "sra"].includes(chaveToken(tokens[1])) ? tokens.slice(2).join(" ") : compacto;
 }
 
 /**

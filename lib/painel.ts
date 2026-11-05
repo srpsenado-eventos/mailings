@@ -296,6 +296,7 @@ const SUFIXO_VIA_IA = " (via IA — confira)";
 
 function origemDe(campo: CampoComparado, comp: ComparacaoCampo | undefined): string {
   if (comp?.origemValor === "pares") return "Maioria dos pares diz";
+  if (comp?.origemValor === "regra_gt") return "Regra do GT diz";
   return campo === "nome" || campo === "cargo" ? "Site do órgão diz" : "Tabela de protocolo diz";
 }
 

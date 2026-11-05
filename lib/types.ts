@@ -28,7 +28,7 @@ export interface ContatoPlanilha {
  * não tem valor esperado externo nenhum — ou `pares`: a maioria dos contatos do mesmo grupo
  * com o mesmo núcleo de cargo, quando a tabela de protocolo não tem regra (spec 2026-10-30 §3.4).
  */
-export type OrigemDado = "pagina" | "conhecimento" | "protocolo" | "coerencia" | "pares";
+export type OrigemDado = "pagina" | "conhecimento" | "protocolo" | "coerencia" | "pares" | "regra_gt";
 
 /**
  * Achado da Camada A (coerência interna de `Tratamento`, `Endereçamento` e `Cargo`) ou
@@ -151,7 +151,7 @@ export interface ComparacaoCampo {
   /** Valor correto — do site, da IA ou da tabela de protocolo. Ausente quando não há referência. */
   valorEsperado?: string;
   situacao: SituacaoCampo;
-  /** Procedência do valor esperado (página oficial, conhecimento da IA ou tabela de protocolo). */
+  /** Procedência do valor esperado (página oficial, conhecimento da IA, tabela de protocolo, maioria dos pares ou regra fixa do GT). */
   origemValor?: OrigemDado;
   /**
    * Só nas Camadas A e C (`origemValor: "coerencia"`): qual verificação apontou. Na

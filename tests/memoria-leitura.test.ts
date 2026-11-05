@@ -91,6 +91,10 @@ describe("podarLeituras", () => {
 const colhida = (l: LeituraGuardada, chave: string = l.url) => ({ chave, leitura: l });
 
 describe("chaveDaLeitura (memória por forma de extração)", () => {
+  test("clicarAntes entra na chave e a leitura sem clique tem outra chave", () => {
+    expect(chaveDaLeitura(URL_A, { clicarAntes: "X" })).toBe(URL_A + "#clique:\"X\"");
+    expect(chaveDaLeitura(URL_A, {})).not.toBe(chaveDaLeitura(URL_A, { clicarAntes: "X" }));
+  });
   const TABELA = { indice: 1, colunas: { nome: 0, uf: 2 } };
   test("fonte padrão: a URL pura", () => {
     expect(chaveDaLeitura(URL_A, {})).toBe(URL_A);

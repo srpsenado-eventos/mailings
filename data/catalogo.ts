@@ -207,13 +207,15 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     // (fornecida em 26/10) fica como alternativa.
     // DF: o portal df.gov.br (fornecido em 26/10) não traz o nome da governadora no texto e
     // geraria possível saída falsa; fica a notícia da CLDF.
+    // RR: o nome do governador só aparece depois de clicar no título "Governador do Estado de Roraima"
+    // ("Ocupado por: …"; medido em 05/11), o que supera a decisão de 30/10 de deixá-lo "não consta".
     fontesIndividuais: [
       { url: "https://estado.ac.gov.br/orgao-entidades/governadoria/", ativo: true, urlAlternativa: "https://agencia.ac.gov.br/governadora/", chave: { uf: "AC" }, campos: ["nome", "cargo"] },
       { url: "https://amapa.gov.br/gestores", ativo: true, chave: { uf: "AP" }, campos: ["nome", "cargo"] },
       { url: "https://www.transparencia.am.gov.br/estrutura-organizacional/", ativo: true, chave: { uf: "AM" }, campos: ["nome", "cargo"], navegador: "janela" },
       { url: "https://www.pa.gov.br/orgao?id_orgao=2", ativo: true, chave: { uf: "PA" }, campos: ["nome", "cargo"] },
       { url: "https://rondonia.ro.gov.br/?page_id=1207", ativo: true, chave: { uf: "RO" }, campos: ["nome", "cargo"] },
-      { url: "https://transparencia.rr.gov.br/principaiscargos", ativo: true, chave: { uf: "RR" }, campos: ["nome", "cargo"], navegador: "janela" },
+      { url: "https://transparencia.rr.gov.br/principaiscargos", ativo: true, chave: { uf: "RR" }, campos: ["nome", "cargo"], navegador: "janela", clicarAntes: "Governador do Estado de Roraima" },
       { url: "https://www.to.gov.br/governo", ativo: true, chave: { uf: "TO" }, campos: ["nome", "cargo"] },
       { url: "https://alagoas.al.gov.br/governo/governador-de-alagoas", ativo: true, chave: { uf: "AL" }, campos: ["nome", "cargo"] },
       { url: "https://www.ba.gov.br/comunicacao/equipe-de-governo", ativo: true, chave: { uf: "BA" }, campos: ["nome", "cargo"] },

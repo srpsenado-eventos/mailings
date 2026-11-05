@@ -252,3 +252,17 @@ describe("Presidente da Câmara (2026-10-27)", () => {
     expect(g.fontes).toEqual([{ url: "https://www.camara.leg.br/deputados/160674", ativo: true }]);
   });
 });
+
+describe("fontes que clicam antes de ler (GT de 05/11)", () => {
+  const individuais = CATALOGO.flatMap((g) => g.fontesIndividuais ?? []);
+  test("Roraima clica no título do governador e vai pela janela", () => {
+    const rr = individuais.find((f) => "uf" in f.chave && f.chave.uf === "RR")!;
+    expect(rr.clicarAntes).toBe("Governador do Estado de Roraima");
+    expect(rr.navegador).toBe("janela");
+  });
+  test("toda fonte com clicarAntes é lida pela janela", () => {
+    const comClique = individuais.filter((f) => f.clicarAntes !== undefined);
+    expect(comClique.length).toBeGreaterThan(0);
+    expect(comClique.every((f) => f.navegador === "janela")).toBe(true);
+  });
+});

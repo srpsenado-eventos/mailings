@@ -17,6 +17,7 @@ import {
   paginaComConteudo,
 } from "@/lib/match";
 import { extrairConteudo } from "@/lib/scrape";
+import { MOTIVO_CLIQUE_SEM_EFEITO } from "@/lib/navegador";
 import type { ContatoPlanilha, ConteudoFonte, FonteIndividual } from "@/lib/types";
 
 const fixture = (nome: string) => readFileSync(resolve(__dirname, `fixtures/${nome}`), "utf-8");
@@ -417,6 +418,26 @@ describe("governadores de SC e MT com página individual (GT de 05/11)", () => {
     const v = compararContatoIndividual({ contato: contato({ nome, cargo, tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" }), fonte, lida: { conteudo }, grupoCanonico: "Governadores" });
     expect(v.resultado.comparacoes.find((c) => c.campo === "nome")?.situacao).toBe("confere");
     expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("confere");
+    expect(v.resultado.possivelSaida).toBeFalsy();
+  });
+});
+
+describe("governador de Roraima depois do clique (GT de 05/11)", () => {
+  const url = "https://transparencia.rr.gov.br/principaiscargos";
+  const fonte: FonteIndividual = { url, ativo: true, chave: { uf: "RR" }, campos: ["nome", "cargo"], navegador: "janela", clicarAntes: "Governador do Estado de Roraima" };
+  const governadorRR = contato({ nome: "Francisco dos Santos Sampaio", cargo: "Governador do Estado de Roraima", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" });
+
+  test("nome depois do rótulo Ocupado por confere e não vira possível saída", () => {
+    const conteudo = extrairConteudo(fixture("governador-rr-apos-clique.html"), url);
+    expect(paginaComConteudo(conteudo)).toBe(true);
+    const v = compararContatoIndividual({ contato: governadorRR, fonte, lida: { conteudo }, grupoCanonico: "Governadores" });
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")?.situacao).toBe("confere");
+    expect(v.resultado.possivelSaida).toBeFalsy();
+  });
+
+  test("clique sem efeito deixa o contato indeterminado, nunca possível saída", () => {
+    const v = compararContatoIndividual({ contato: governadorRR, fonte, lida: { erro: MOTIVO_CLIQUE_SEM_EFEITO }, grupoCanonico: "Governadores" });
+    expect(v.resultado.semaforo).toBe("indeterminado");
     expect(v.resultado.possivelSaida).toBeFalsy();
   });
 });

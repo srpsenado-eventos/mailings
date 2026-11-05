@@ -748,6 +748,8 @@ export interface OpcoesRaspagem {
   tipo?: "html" | "pdf";
   /** O nome esperado é a parte em negrito (spec 2026-10-30 §3.1). Só vale na extração de texto. */
   nomeEmDestaque?: boolean;
+  /** Só a sessão com janela usa: texto do elemento a clicar antes de ler (GT de 05/11). `fetch` ignora. */
+  clicarAntes?: string;
   timeoutMs?: number;
 }
 

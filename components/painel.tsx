@@ -18,7 +18,7 @@ import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-con
 import { contarBloqueiosDoGrupo, ehLinhaABloquear, ROTULO_CARTAO_BLOQUEIO, textosDeBloqueioDoGrupo, totalABloquear } from "@/lib/painel-bloqueio";
 import { avisoUrlCaida, cartoesDoResumo, estadoDaFonteDoGrupo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoAlternativa, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoMudanca, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, textosProvisorias, type Filtro } from "@/lib/painel";
 import type { HistoricoDecisoes } from "@/lib/decisoes";
-import { retratoComPropostasDecididas } from "@/lib/propostas-decisoes";
+import { motivosDosGruposVazios, retratoComPropostasDecididas } from "@/lib/propostas-decisoes";
 import { autoridadesRepetidas, etiquetaDeRepeticao, textoDoLinkDoPainel } from "@/lib/repetidos";
 import type { FalhasPorUrl, ResultadoGrupo, Retrato } from "@/lib/types";
 
@@ -71,6 +71,7 @@ export function Painel({ retrato: retratoBruto, aviso, onNovaVarredura, modo = "
   const [eleicaoLigada, setEleicaoLigada] = useState(false);
   const secoes = useMemo(() => (eleicaoLigada ? secoesDeEleicao(retrato.eleicao, retrato.grupos, filtro, busca) : []), [eleicaoLigada, retrato, filtro, busca]);
   const agrupador = useMemo(() => linhasDoAgrupador(retrato.grupos, esperadosDoAgrupador(retrato.eleicao)), [retrato]);
+  const motivosVazios = useMemo(() => motivosDosGruposVazios(agrupador, decisoes), [agrupador, decisoes]);
   const secoesGov = useMemo(() => (eleicaoLigada ? secoesDeGoverno(retrato.eleicao, filtro, busca) : []), [eleicaoLigada, retrato, filtro, busca]);
   const avisoEleicao = eleicaoLigada ? avisoDaEleicao(retrato.eleicao) : undefined;
   const repetidas = useMemo(() => autoridadesRepetidas(retrato.grupos, retrato.eleicao, decisoes), [retrato, decisoes]);
@@ -139,7 +140,7 @@ export function Painel({ retrato: retratoBruto, aviso, onNovaVarredura, modo = "
       </div>
       {textoSituacaoDosGrupos(retrato.resumo) && <p className="mt-2 text-xs text-cinza">{textoSituacaoDosGrupos(retrato.resumo)}</p>}
 
-      <Agrupador linhas={agrupador} />
+      <Agrupador linhas={agrupador} motivos={motivosVazios} />
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <span className="text-xs text-cinza-claro">Mostrar</span>

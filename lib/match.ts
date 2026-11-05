@@ -520,12 +520,13 @@ export function compararGrupo(
       leituraParcial,
     );
   });
-  // "novos": de fonte que propõe inclusão, só quem está na faixa de UF do grupo. Das
+  // "novos": pessoa que veio só do conhecimento da IA nunca vira proposta (spec 2026-11-05 §7.5).
+  // De fonte que propõe inclusão, só quem está na faixa de UF do grupo. Das
   // demais fontes, mantém a regra antiga — só pessoa com cargo, que corta item de menu
   // do texto achatado. Numa fonte tabular toda linha já é pessoa.
   const novos = fonte.pessoas
     .filter((p, i) => {
-      if (usados.has(i) || ehItemInstitucional(p.nome)) return false;
+      if (usados.has(i) || ehItemInstitucional(p.nome) || p.origem === "conhecimento") return false;
       return p.propoeInclusao ? naFaixaDeUf(p, ufsDoGrupo) : Boolean(p.cargo);
     })
     .map(comoProposta);
@@ -947,6 +948,6 @@ export function compararContatoSemIndividual(
  */
 export function novosForaDaPlanilha(pessoas: PessoaSite[], contatos: ContatoPlanilha[]): PessoaSite[] {
   return pessoas
-    .filter((p) => Boolean(p.cargo) && !ehItemInstitucional(p.nome) && !contatos.some((c) => pontuarContraPessoa(c.nome, p) >= LIMIAR_PESSOA))
+    .filter((p) => Boolean(p.cargo) && p.origem !== "conhecimento" && !ehItemInstitucional(p.nome) && !contatos.some((c) => pontuarContraPessoa(c.nome, p) >= LIMIAR_PESSOA))
     .map(comoProposta);
 }

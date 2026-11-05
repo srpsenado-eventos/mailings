@@ -840,3 +840,36 @@ describe("Embaixadores: prefixo SE Sr. não é nome (spec 2026-11-05 §7.1)", ()
     expect(nome?.valorEsperado).toBe("Noguchi Yasushi");
   });
 });
+
+describe("IA não propõe inclusão (spec 2026-11-05 §7.5)", () => {
+  const f: ConteudoFonte = {
+    url: "https://x",
+    textoLimpo: "",
+    destaques: [],
+    pessoas: [
+      { nome: "Lula Imaginado Silva", cargo: "Presidente", origem: "conhecimento" },
+      { nome: "Ana Oficial Souza", cargo: "Diretora", origem: "pagina" },
+    ],
+  };
+
+  test("pessoa só do conhecimento da IA não vira novo, a da página vira", () => {
+    // Act
+    const r = compararGrupo("ORG", [contato({ nome: "Zzz Inexistente Pessoa" })], f);
+
+    // Assert
+    expect(r.novos.map((n) => n.nome)).toEqual(["Ana Oficial Souza"]);
+  });
+
+  test("novosForaDaPlanilha também descarta a pessoa da IA", () => {
+    // Act + Assert
+    expect(novosForaDaPlanilha(f.pessoas, []).map((n) => n.nome)).toEqual(["Ana Oficial Souza"]);
+  });
+
+  test("a composição via IA continua conferindo quem está cadastrado", () => {
+    // Act
+    const r = compararGrupo("ORG", [contato({ nome: "Lula Imaginado Silva", cargo: "Presidente" })], f);
+
+    // Assert
+    expect(r.contatos[0].semaforo).not.toBe("vermelho");
+  });
+});

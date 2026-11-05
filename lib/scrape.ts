@@ -350,6 +350,7 @@ function orientacaoDoCargo(linhas: string[], titulos: ReadonlySet<number>): Leit
       proxima < linhas.length &&
       !titulos.has(proxima) &&
       ehCargo(linhas[proxima]) &&
+      !linhaRotuladaComOutraPessoa(linhas[proxima]) &&
       !cargoEntreNomes(linhas, proxima)
     ) {
       depois++;
@@ -358,6 +359,14 @@ function orientacaoDoCargo(linhas: string[], titulos: ReadonlySet<number>): Leit
   const tituloEhCargo = paresDeTitulo >= MIN_PARES_TITULO_CARGO;
   const totalAntes = tituloEhCargo ? antes + antesPorTitulo : antes;
   return { orientacao: totalAntes > depois ? "antes" : "depois", tituloEhCargo };
+}
+
+/**
+ * Linha "Rótulo: Fulano" (Sergipe: "Secretário Especial de Gabinete: Tiago ..."): o cargo
+ * pertence à pessoa que vem depois dos dois-pontos, nunca ao nome de cima.
+ */
+function linhaRotuladaComOutraPessoa(linha: string): boolean {
+  return /^[^:]{1,80}:\s*\S/.test(linha);
 }
 
 /** Janela curta para frente: o cargo vem logo abaixo do nome. */
@@ -369,7 +378,7 @@ function indiceDoCargoDepois(linhas: string[], i: number, titulos: ReadonlySet<n
     // a linha da PRÓXIMA pessoa encerra a janela: no STJ ela cita um cargo
     // ("Fulano - Diretor-Geral da ENFAM") e era adotada como cargo desta.
     if (pessoaEmLinhaUnica(linhas[j]) !== undefined || ehNome(linhas[j])) break;
-    if (ehCargo(linhas[j])) return j;
+    if (ehCargo(linhas[j]) && !linhaRotuladaComOutraPessoa(linhas[j])) return j;
   }
   return undefined;
 }

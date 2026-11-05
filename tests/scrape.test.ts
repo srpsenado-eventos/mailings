@@ -841,3 +841,18 @@ test("o próprio main nunca é moldura, mesmo com classe de off-canvas (página 
   expect(c.pessoas.map((p) => p.nome)).toContain("Fulano Exemplo Pereira");
   expect(c.textoLimpo).toContain("Procurador-Geral da República");
 });
+
+describe("cargo em linha antes do nome (Sergipe)", () => {
+  test("cargo em linha antes do nome vence a linha rotulada 'Cargo: Pessoa' de depois", () => {
+    // Arrange
+    const pagina = readFileSync(resolve(__dirname, "fixtures/governador-se.html"), "utf-8");
+
+    // Act
+    const { pessoas } = extrairConteudo(pagina, "https://www.se.gov.br/governador");
+
+    // Assert
+    const governador = pessoas.find((p) => p.nome === "Fábio Mitidieri");
+    expect(governador?.cargo).toBe("Governador");
+    expect(pessoas.some((p) => p.cargo?.startsWith("Secretário Especial de Gabinete: Tiago"))).toBe(false);
+  });
+});

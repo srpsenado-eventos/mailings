@@ -51,6 +51,12 @@ describe("nucleoDoCargo", () => {
     expect(nucleoDoCargo("Presidente do Supremo Tribunal Federal")).not.toBe(nucleoDoCargo(CARGO));
   });
 
+  test("o convocado é par do ministro do mesmo tribunal, e o presidente não", () => {
+    const ministro = nucleoDoCargo("Ministra do Superior Tribunal de Justiça");
+    expect(nucleoDoCargo("Desembargador convocado do Superior Tribunal de Justiça")).toBe(ministro);
+    expect(nucleoDoCargo("Presidente do Superior Tribunal de Justiça")).not.toBe(ministro);
+  });
+
   test("o período do ex-presidente não separa os pares", () => {
     expect(nucleoDoCargo("Presidente do Senado Federal de 2019 a 2021")).toBe("presidente do senado federal");
   });

@@ -3,7 +3,7 @@ import { Agent } from "undici";
 import { PDFParse } from "pdf-parse";
 import { normalizarNome, normalizarTexto, nucleoDeNome } from "@/lib/normalize";
 import { CARGOS } from "@/lib/cargos";
-import type { ConteudoFonte, PessoaSite, ExtracaoTabela } from "@/lib/types";
+import type { ConteudoFonte, PessoaSite, ExtracaoTabela, CliqueAntes } from "@/lib/types";
 import { colherDestaquesPorLinha, comDestaque, type DestaquesPorLinha } from "@/lib/scrape-destaque";
 
 export class ScrapeError extends Error {
@@ -149,11 +149,21 @@ function ehTrechoDeCargo(valor: string): boolean {
   return ehCargoCurto(valor) || ehCargoPorInteiro(valor);
 }
 
+/**
+ * Linha de chamada de link ("Ver Galeria de Governadores", "Saiba mais", "Clique aqui"): abre com
+ * verbo no imperativo e cita um cargo só como assunto do link. Nunca é cargo nem nome de pessoa.
+ */
+const VERBOS_DE_CHAMADA = new Set(["ver", "veja", "acesse", "saiba", "conheca", "clique"]);
+function ehLinhaDeChamada(valor: string): boolean {
+  const primeiro = normalizarTexto(valor).split(" ")[0] ?? "";
+  return VERBOS_DE_CHAMADA.has(primeiro);
+}
+
 /** Trecho com cara de nome próprio: 2+ tokens significativos, todos capitalizados. */
 function pareceNome(valor: string): boolean {
   if (valor.length < 5 || valor.length > 70) return false;
   if (valor.includes(":") || /\d/.test(valor)) return false;
-  if (ehRotulo(valor) || ehTrechoDeCargo(valor)) return false;
+  if (ehRotulo(valor) || ehTrechoDeCargo(valor) || ehLinhaDeChamada(valor)) return false;
   const tokens = valor.split(" ").filter(Boolean);
   if (tokens.length < 2) return false;
   if (ABERTURAS_DE_CARGO.has(normalizarTexto(tokens[0]))) return false;
@@ -203,7 +213,7 @@ function ehNome(linha: string): boolean {
  * Fulano de Tal" contém "Ministro" e mesmo assim é a linha do nome.
  */
 function ehCargo(linha: string): boolean {
-  return ehTrechoDeCargo(linha) && !ehNome(linha);
+  return ehTrechoDeCargo(linha) && !ehLinhaDeChamada(linha) && !ehNome(linha);
 }
 
 /**
@@ -350,6 +360,7 @@ function orientacaoDoCargo(linhas: string[], titulos: ReadonlySet<number>): Leit
       proxima < linhas.length &&
       !titulos.has(proxima) &&
       ehCargo(linhas[proxima]) &&
+      !linhaRotuladaComOutraPessoa(linhas[proxima]) &&
       !cargoEntreNomes(linhas, proxima)
     ) {
       depois++;
@@ -358,6 +369,16 @@ function orientacaoDoCargo(linhas: string[], titulos: ReadonlySet<number>): Leit
   const tituloEhCargo = paresDeTitulo >= MIN_PARES_TITULO_CARGO;
   const totalAntes = tituloEhCargo ? antes + antesPorTitulo : antes;
   return { orientacao: totalAntes > depois ? "antes" : "depois", tituloEhCargo };
+}
+
+/**
+ * Linha "Rótulo: Fulano" (Sergipe: "Secretário Especial de Gabinete: Tiago ..."): o cargo
+ * pertence à pessoa que vem depois dos dois-pontos, nunca ao nome de cima. Só vale quando o resto
+ * é mesmo um nome: "Cargo: Ministro do Tribunal" ou "Endereço: ..." não deslocam cargo de ninguém.
+ */
+function linhaRotuladaComOutraPessoa(linha: string): boolean {
+  const resto = /^[^:]{1,80}:\s*(\S.*)$/.exec(linha)?.[1]?.trim();
+  return resto !== undefined && pareceNome(resto) && !ehTrechoDeCargo(resto);
 }
 
 /** Janela curta para frente: o cargo vem logo abaixo do nome. */
@@ -369,7 +390,7 @@ function indiceDoCargoDepois(linhas: string[], i: number, titulos: ReadonlySet<n
     // a linha da PRÓXIMA pessoa encerra a janela: no STJ ela cita um cargo
     // ("Fulano - Diretor-Geral da ENFAM") e era adotada como cargo desta.
     if (pessoaEmLinhaUnica(linhas[j]) !== undefined || ehNome(linhas[j])) break;
-    if (ehCargo(linhas[j])) return j;
+    if (ehCargo(linhas[j])) return linhaRotuladaComOutraPessoa(linhas[j]) ? undefined : j;
   }
   return undefined;
 }
@@ -389,7 +410,7 @@ function indiceDoCargoAntes(
   const j = i - 1;
   if (j < 0 || consumidas.has(j)) return undefined;
   if (titulos.has(j) && !tituloEhCargo) return undefined;
-  return ehCargo(linhas[j]) ? j : undefined;
+  return ehCargo(linhas[j]) && !linhaRotuladaComOutraPessoa(linhas[j]) ? j : undefined;
 }
 
 /**
@@ -748,6 +769,8 @@ export interface OpcoesRaspagem {
   tipo?: "html" | "pdf";
   /** O nome esperado é a parte em negrito (spec 2026-10-30 §3.1). Só vale na extração de texto. */
   nomeEmDestaque?: boolean;
+  /** Só a sessão com janela usa: texto do elemento a clicar antes de ler (GT de 05/11). `fetch` ignora. */
+  clicarAntes?: CliqueAntes;
   timeoutMs?: number;
 }
 

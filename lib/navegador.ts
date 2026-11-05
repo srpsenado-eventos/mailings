@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
-import puppeteer from "puppeteer-core";
+import puppeteer, { type Page } from "puppeteer-core";
 import { extrairConteudo, extrairTabela, ScrapeError, type OpcoesRaspagem } from "@/lib/scrape";
 import { paginaComConteudo } from "@/lib/match";
-import type { ConteudoFonte, ExtracaoTabela } from "@/lib/types";
+import type { ConteudoFonte, ExtracaoTabela, CliqueAntes } from "@/lib/types";
 
 /**
  * Leitura de fonte do catálogo marcada `navegador: true` (spec 2026-10-02, §5): abre o
@@ -17,6 +17,10 @@ import type { ConteudoFonte, ExtracaoTabela } from "@/lib/types";
 
 export const MOTIVO_NAVEGADOR_AUSENTE = "navegador não encontrado";
 export const MOTIVO_NAVEGADOR_TEMPO = "navegador: tempo esgotado";
+/** O clique de `clicarAntes` não achou o elemento ou a prova não apareceu na página. */
+export const MOTIVO_CLIQUE_SEM_EFEITO = "navegador: clique não revelou conteúdo";
+/** Quanto esperar a prova aparecer na página depois do clique. */
+const ESPERA_APOS_CLIQUE_MS = 5_000;
 /** Teto por página. A do TCU carrega em poucos segundos; 30 s cobre rede lenta sem travar a varredura. */
 export const TETO_NAVEGADOR_MS = 30_000;
 /** Pausa depois do carregamento na sessão com janela, para o DOM assentar antes de ler o HTML. */
@@ -42,7 +46,7 @@ const CAMINHOS_PADRAO = [
 
 /** Uma página aberta num navegador lançado: lê uma URL e fecha o navegador. */
 export interface PaginaNavegador {
-  conteudo(url: string, timeoutMs: number): Promise<string>;
+  conteudo(url: string, timeoutMs: number, clicarAntes?: CliqueAntes): Promise<string>;
   fechar(): Promise<void>;
 }
 
@@ -54,7 +58,7 @@ export interface ModoLancamento {
 export type Lancador = (caminhoChrome: string, modo?: ModoLancamento) => Promise<PaginaNavegador>;
 
 /** O que a leitura pelo Chrome aplica da fonte: a tabela e o nome em destaque (spec 2026-10-30 §3.1). */
-export type OpcoesExtracaoNavegador = Pick<OpcoesRaspagem, "tabela" | "nomeEmDestaque">;
+export type OpcoesExtracaoNavegador = Pick<OpcoesRaspagem, "tabela" | "nomeEmDestaque" | "clicarAntes">;
 
 /** O HTML montado pelo Chrome passa pelo MESMO extrator das outras fontes. */
 function extrairDoNavegador(html: string, url: string, opcoes: OpcoesExtracaoNavegador): ConteudoFonte {
@@ -96,6 +100,33 @@ function comTeto<T>(promessa: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promessa, teto]).finally(() => clearTimeout(timer));
 }
 
+/**
+ * Clica no primeiro título, botão, link ou resumo cujo texto (espaços colapsados, sem diferenciar
+ * caixa) é igual a `clique.texto` e espera o corpo da página conter `clique.prova`. Texto que só
+ * cresceu não basta ("Carregando..."): sem a prova, `MOTIVO_CLIQUE_SEM_EFEITO`.
+ * Não coberto por teste (abre navegador).
+ */
+async function clicarEEsperar(page: Page, clique: CliqueAntes): Promise<void> {
+  const clicou = await page.evaluate((alvo: string) => {
+    const colapsar = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
+    const el = Array.from(document.querySelectorAll<HTMLElement>("h1,h2,h3,h4,h5,h6,button,a,summary")).find(
+      (e) => colapsar(e.innerText ?? "") === colapsar(alvo),
+    );
+    el?.click();
+    return Boolean(el);
+  }, clique.texto);
+  if (!clicou) throw new Error(MOTIVO_CLIQUE_SEM_EFEITO);
+  try {
+    await page.waitForFunction(
+      (prova: string) => document.body.innerText.includes(prova),
+      { timeout: ESPERA_APOS_CLIQUE_MS, polling: 200 },
+      clique.prova,
+    );
+  } catch {
+    throw new Error(MOTIVO_CLIQUE_SEM_EFEITO);
+  }
+}
+
 /** Lançador real via puppeteer-core. Não coberto por teste (abre navegador). */
 export const lancarChrome: Lancador = async (caminhoChrome, modo = {}) => {
   const browser = await puppeteer.launch({
@@ -107,7 +138,7 @@ export const lancarChrome: Lancador = async (caminhoChrome, modo = {}) => {
   // uma aba por página deixaria o Chrome com dezenas de abas abertas até o fim da varredura.
   let page: Awaited<ReturnType<typeof browser.newPage>> | undefined;
   return {
-    async conteudo(url, timeoutMs) {
+    async conteudo(url, timeoutMs, clicarAntes) {
       page ??= await browser.newPage();
       // Mesmo valor do teto de `comTeto`, cujo timer é armado antes e dispara primeiro: o motivo fica exato.
       // Headless (TCU): `networkidle0`, a lista chega por XHR e com `networkidle2` vinha pela metade.
@@ -122,6 +153,7 @@ export const lancarChrome: Lancador = async (caminhoChrome, modo = {}) => {
       // Sem resposta (navegação no mesmo documento), segue normalmente.
       if (resposta && !resposta.ok()) throw new Error(`HTTP ${resposta.status()}`);
       if (modo.janela) await new Promise((r) => setTimeout(r, PAUSA_APOS_CARREGAR_MS));
+      if (clicarAntes) await clicarEEsperar(page, clicarAntes);
       return page.content();
     },
     async fechar() {
@@ -209,7 +241,7 @@ export function abrirSessao(opcoes: OpcoesSessao = {}): SessaoNavegador {
   const lerUma = async (url: string, extracao: OpcoesExtracaoNavegador): Promise<ConteudoFonte> => {
     try {
       const p = await pagina(url);
-      const html = await comTeto(p.conteudo(url, timeoutMs), timeoutMs);
+      const html = await comTeto(p.conteudo(url, timeoutMs, extracao.clicarAntes), timeoutMs);
       if (!html.trim()) throw new ScrapeError(url, "HTML vazio");
       return extrairDoNavegador(html, url, extracao);
     } catch (err) {

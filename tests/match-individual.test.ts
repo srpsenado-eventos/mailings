@@ -17,6 +17,7 @@ import {
   paginaComConteudo,
 } from "@/lib/match";
 import { extrairConteudo } from "@/lib/scrape";
+import { MOTIVO_CLIQUE_SEM_EFEITO } from "@/lib/navegador";
 import type { ContatoPlanilha, ConteudoFonte, FonteIndividual } from "@/lib/types";
 
 const fixture = (nome: string) => readFileSync(resolve(__dirname, `fixtures/${nome}`), "utf-8");
@@ -403,5 +404,58 @@ describe("troca de presidência no tribunal (spec 2026-10-30 §3.2)", () => {
     expect(compararCargoNaLista("Ministra do Tribunal Superior Eleitoral", lista, "https://x")).toMatchObject({
       valorEsperado: "Presidente - Tribunal Superior Eleitoral",
     });
+  });
+});
+
+describe("governadores de SC e MT com página individual (GT de 05/11)", () => {
+  const casos = [
+    { uf: "SC", html: "governador-sc-maiusculas.html", url: "https://agenda.scc.sc.gov.br/site/colegiado-de-governo", nome: "Jorginho Mello", cargo: "Governador do Estado de Santa Catarina" },
+    { uf: "MT", html: "governador-mt.html", url: "https://portal.mt.gov.br/conheca-mato-grosso/governo", nome: "Otaviano Pivetta", cargo: "Governador do Estado de Mato Grosso" },
+  ];
+  test.each(casos)("nome na página individual confirma o governador de $uf e o cargo confere", ({ uf, html, url, nome, cargo }) => {
+    const conteudo = extrairConteudo(fixture(html), url);
+    const fonte: FonteIndividual = { url, ativo: true, chave: { uf }, campos: ["nome", "cargo"] };
+    const v = compararContatoIndividual({ contato: contato({ nome, cargo, tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" }), fonte, lida: { conteudo }, grupoCanonico: "Governadores" });
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")?.situacao).toBe("confere");
+    expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("confere");
+    expect(v.resultado.possivelSaida).toBeFalsy();
+  });
+});
+
+describe("governador de Roraima depois do clique (GT de 05/11)", () => {
+  const url = "https://transparencia.rr.gov.br/principaiscargos";
+  const fonte: FonteIndividual = { url, ativo: true, chave: { uf: "RR" }, campos: ["nome", "cargo"], navegador: "janela", clicarAntes: { texto: "Governador do Estado de Roraima", prova: "Ocupado por" } };
+  const governadorRR = contato({ nome: "Francisco dos Santos Sampaio", cargo: "Governador do Estado de Roraima", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" });
+
+  test("nome depois do rótulo Ocupado por confere e não vira possível saída", () => {
+    const conteudo = extrairConteudo(fixture("governador-rr-apos-clique.html"), url);
+    expect(paginaComConteudo(conteudo)).toBe(true);
+    const v = compararContatoIndividual({ contato: governadorRR, fonte, lida: { conteudo }, grupoCanonico: "Governadores" });
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")?.situacao).toBe("confere");
+    expect(v.resultado.possivelSaida).toBeFalsy();
+  });
+
+  test("clique sem efeito deixa o contato indeterminado, nunca possível saída", () => {
+    const v = compararContatoIndividual({ contato: governadorRR, fonte, lida: { erro: MOTIVO_CLIQUE_SEM_EFEITO }, grupoCanonico: "Governadores" });
+    expect(v.resultado.semaforo).toBe("indeterminado");
+    expect(v.resultado.possivelSaida).toBeFalsy();
+  });
+});
+
+describe("governador de Minas Gerais: linha de chamada não gera 'cargo diverge'", () => {
+  const url = "https://www.mg.gov.br/governador";
+  const fonte: FonteIndividual = { url, ativo: true, chave: { uf: "MG" }, campos: ["nome", "cargo"] };
+  const governadorMG = contato({ nome: "Mateus Simões de Almeida", cargo: "Governador do Estado de Minas Gerais", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" });
+
+  test("o nome confere e o cargo não é divergente", () => {
+    // Arrange
+    const conteudo = extrairConteudo(fixture("governador-mg.html"), url);
+
+    // Act
+    const v = compararContatoIndividual({ contato: governadorMG, fonte, lida: { conteudo }, grupoCanonico: "Governadores" });
+
+    // Assert
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")?.situacao).toBe("confere");
+    expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")?.situacao).not.toBe("divergente");
   });
 });

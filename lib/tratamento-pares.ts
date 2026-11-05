@@ -1,5 +1,6 @@
 import { normalizarTexto } from "@/lib/normalize";
 import { MARCADOR_GENERICO, neutralizarGenero } from "@/lib/cargos";
+import { cargoDeMinistroDoConvocado } from "@/lib/cargo-convocado";
 import { divergenciasDe } from "@/lib/match";
 import { contatoEhFeminino } from "@/lib/tratamento";
 import type { ComparacaoCampo, ResultadoContato, ResultadoGrupo } from "@/lib/types";
@@ -27,11 +28,11 @@ const CABECA_DIPLOMATICA = /^(embaixador|encarregado de negocios|consul-geral|co
  * Núcleo do cargo do Contatos para achar os pares: normalizado, gênero neutralizado, sem a UF
  * ("Governador do Estado de Sergipe" → "governador do estado"; o Distrito Federal conta como
  * estado), sem o país dos diplomatas e sem o período ("… de 2019 a 2021"). O resto fica
- * inteiro, para que "Presidente do Supremo Tribunal Federal" e os convocados nunca sejam pares
- * de "Ministro do Supremo Tribunal Federal".
+ * inteiro, para que "Presidente do Supremo Tribunal Federal" nunca seja par de "Ministro do Supremo
+ * Tribunal Federal". Convocado de tribunal é par dos ministros (spec 2026-11-05 §2.7).
  */
 export function nucleoDoCargo(cargo: string): string {
-  const texto = neutralizarGenero(normalizarTexto(cargo)).replace(/[.,;:]+$/, "").trim();
+  const texto = neutralizarGenero(normalizarTexto(cargoDeMinistroDoConvocado(cargo) ?? cargo)).replace(/[.,;:]+$/, "").trim();
   const diplomatico = texto.match(CABECA_DIPLOMATICA);
   if (diplomatico) return diplomatico[1];
   return texto

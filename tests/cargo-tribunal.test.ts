@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { cargoEsperadoNoTribunal, contextoCargoDoGrupo } from "@/lib/cargo-tribunal";
+import { cargoEsperadoNoTribunal, contextoCargoDoGrupo, tratamentoAceitoDoPresidente } from "@/lib/cargo-tribunal";
 
 describe("cargoEsperadoNoTribunal (spec 2026-10-30 §3.2)", () => {
   const TRIBUNAL = { tribunal: true };
@@ -26,5 +26,17 @@ describe("cargoEsperadoNoTribunal (spec 2026-10-30 §3.2)", () => {
   test("o contexto do grupo marca só os tribunais", () => {
     expect(contextoCargoDoGrupo("Ministros do TCU")).toEqual({ tribunal: true });
     expect(contextoCargoDoGrupo(undefined)).toEqual({ tribunal: false });
+  });
+});
+
+describe("tratamentoAceitoDoPresidente (spec 2026-11-05 §2.4)", () => {
+  const base = { nome: "Fulano", grupo: "Ministros do STF" };
+  test("aceita a forma masculina do presidente de tribunal", () => {
+    expect(tratamentoAceitoDoPresidente({ ...base, cargo: "Presidente do STF", tratamento: "Excelentíssimo Senhor" }, "Ministros do STF")).toBe(true);
+  });
+  test("recusa vice-presidente, grupo fora de tribunal e gênero trocado", () => {
+    expect(tratamentoAceitoDoPresidente({ ...base, cargo: "Vice-Presidente do STF", tratamento: "Excelentíssimo Senhor" }, "Ministros do STF")).toBe(false);
+    expect(tratamentoAceitoDoPresidente({ ...base, cargo: "Presidente da República", tratamento: "Excelentíssimo Senhor" }, "Presidentes")).toBe(false);
+    expect(tratamentoAceitoDoPresidente({ ...base, cargo: "Presidente do STM", tratamento: "Excelentíssimo Senhor", enderecamento: "À Excelentíssima Senhora" }, "Ministros do STM")).toBe(false);
   });
 });

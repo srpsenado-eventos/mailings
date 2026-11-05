@@ -841,3 +841,92 @@ test("o próprio main nunca é moldura, mesmo com classe de off-canvas (página 
   expect(c.pessoas.map((p) => p.nome)).toContain("Fulano Exemplo Pereira");
   expect(c.textoLimpo).toContain("Procurador-Geral da República");
 });
+
+describe("cargo em linha antes do nome (Sergipe)", () => {
+  test("cargo em linha antes do nome vence a linha rotulada 'Cargo: Pessoa' de depois", () => {
+    // Arrange
+    const pagina = readFileSync(resolve(__dirname, "fixtures/governador-se.html"), "utf-8");
+
+    // Act
+    const { pessoas } = extrairConteudo(pagina, "https://www.se.gov.br/governador");
+
+    // Assert
+    const governador = pessoas.find((p) => p.nome === "Fábio Mitidieri");
+    expect(governador?.cargo).toBe("Governador");
+    expect(pessoas.some((p) => p.cargo?.startsWith("Secretário Especial de Gabinete: Tiago"))).toBe(false);
+  });
+});
+
+describe("linha rotulada só vale quando o resto é um nome", () => {
+  const pagina = (corpo: string) => `<!doctype html><html><body><main>${corpo}</main></body></html>`;
+  const div = (...linhas: string[]) => linhas.map((l) => `<div>${l}</div>`).join("");
+
+  test("'Cargo: <cargo>' depois do nome continua sendo o cargo de cada um", () => {
+    // Arrange
+    const html = pagina(div("Fulano de Tal", "Cargo: Ministro do Tribunal", "Beltrano de Tal", "Cargo: Ministra do Tribunal"));
+
+    // Act
+    const { pessoas } = extrairConteudo(html, "https://orgao.gov.br/x");
+
+    // Assert
+    expect(pessoas.map((p) => [p.nome, p.cargo])).toEqual([
+      ["Fulano de Tal", "Cargo: Ministro do Tribunal"],
+      ["Beltrano de Tal", "Cargo: Ministra do Tribunal"],
+    ]);
+  });
+
+  test("cargo antes do nome seguido de 'Cargo: <cargo>' não perde o cargo", () => {
+    // Arrange
+    const html = pagina(div("Secretário de Estado da Casa Civil", "Fulano de Tal", "Cargo: Secretário da Fazenda"));
+
+    // Act
+    const { pessoas } = extrairConteudo(html, "https://orgao.gov.br/x");
+
+    // Assert
+    expect(pessoas.find((p) => p.nome === "Fulano de Tal")?.cargo).toBeDefined();
+  });
+
+  test("linha 'Rótulo: Pessoa' encerra a janela e o cargo seguinte não é adotado", () => {
+    // Arrange
+    const html = pagina(div("Fulano de Tal", "Secretário Especial de Gabinete: Tiago Andrade Araújo", "Secretário da Fazenda"));
+
+    // Act
+    const { pessoas } = extrairConteudo(html, "https://orgao.gov.br/x");
+
+    // Assert
+    expect(pessoas.find((p) => p.nome === "Fulano de Tal")?.cargo).toBeUndefined();
+  });
+});
+
+describe("linha de chamada não é cargo (Minas Gerais)", () => {
+  const MG = "https://www.mg.gov.br/governador";
+
+  test("'Ver Galeria de Governadores' não vira cargo do governador", () => {
+    // Arrange
+    const pagina = readFileSync(resolve(__dirname, "fixtures/governador-mg.html"), "utf-8");
+
+    // Act
+    const { pessoas } = extrairConteudo(pagina, MG);
+
+    // Assert
+    expect(pessoas.some((p) => p.cargo?.startsWith("Ver"))).toBe(false);
+    expect(pessoas.find((p) => p.nome === "Mateus Simões de Almeida")).toBeDefined();
+  });
+
+  test.each([
+    "Veja a Galeria de Governadores",
+    "Acesse a Galeria de Governadores",
+    "Saiba mais sobre os Governadores",
+    "Conheça os Governadores",
+    "Clique para ver os Governadores",
+  ])("linha '%s' nunca é cargo", (linha) => {
+    // Arrange
+    const html = `<!doctype html><html><body><main><h1>Mateus Simões de Almeida</h1><p><a href="/x">${linha}</a></p></main></body></html>`;
+
+    // Act
+    const { pessoas } = extrairConteudo(html, MG);
+
+    // Assert
+    expect(pessoas.some((p) => p.cargo === linha)).toBe(false);
+  });
+});

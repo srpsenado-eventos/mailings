@@ -7,6 +7,7 @@ import {
   formaNominal,
 } from "@/lib/tratamento";
 import { REGRAS_TRATAMENTO } from "@/data/tratamentos";
+import { comparacoesTratamento } from "@/lib/match";
 import type { ContatoPlanilha, RegraTratamento } from "@/lib/types";
 
 function regra(cargoDestinatario: string, vocativo: string, enderecamento = ""): RegraTratamento {
@@ -584,5 +585,63 @@ describe("comparacoesProtocolo — Governador pela tabela real v02 (04/11)", () 
     const trat = comparacoesProtocolo(c, REGRAS_TRATAMENTO).find((x) => x.campo === "tratamento");
     expect(trat?.situacao).toBe("divergente");
     expect(trat?.valorEsperado).toBe("Senhor(a)");
+  });
+});
+
+describe("presidente de tribunal aceita Excelentíssimo(a) Senhor(a) (spec 2026-11-05 §2.4)", () => {
+  function contatoDe(cargo: string, tratamento: string, grupo: string): ContatoPlanilha {
+    return { nome: "Fulano de Tal", cargo, tratamento, grupo };
+  }
+  function tratamentoDe(c: ContatoPlanilha, grupo: string) {
+    return comparacoesTratamento(c, grupo).find((x) => x.campo === "tratamento");
+  }
+
+  test("presidente do STF com 'Excelentíssimo Senhor' confere", () => {
+    const c = contatoDe("Presidente do Supremo Tribunal Federal", "Excelentíssimo Senhor", "Ministros do STF");
+    expect(tratamentoDe(c, "Ministros do STF")?.situacao).toBe("confere");
+  });
+
+  test("presidente do STM mulher com 'Excelentíssima Senhora' confere", () => {
+    const c = contatoDe("Presidente do Superior Tribunal Militar", "Excelentíssima Senhora", "Ministros do STM");
+    expect(tratamentoDe(c, "Ministros do STM")?.situacao).toBe("confere");
+  });
+
+  test("presidente do STM mulher com 'Excelentíssimo Senhor' continua divergente", () => {
+    const c = contatoDe("Presidente do Superior Tribunal Militar", "Excelentíssimo Senhor", "Ministros do STM");
+    c.enderecamento = "À Excelentíssima Senhora";
+    expect(tratamentoDe(c, "Ministros do STM")?.situacao).toBe("divergente");
+  });
+
+  test("vice-presidente do STF com 'Excelentíssimo Senhor' não vira confere por esta regra", () => {
+    const c = contatoDe("Vice-Presidente do Supremo Tribunal Federal", "Excelentíssimo Senhor", "Ministros do STF");
+    expect(tratamentoDe(c, "Ministros do STF")?.situacao).not.toBe("confere");
+  });
+
+  test("presidente do STF com 'Doutor' continua divergente", () => {
+    const c = contatoDe("Presidente do Supremo Tribunal Federal", "Doutor", "Ministros do STF");
+    expect(tratamentoDe(c, "Ministros do STF")?.situacao).toBe("divergente");
+  });
+
+  test("presidente do STJ com 'Excelentíssimo Senhor' continua sem_regra", () => {
+    const c = contatoDe("Presidente do Superior Tribunal de Justiça", "Excelentíssimo Senhor", "Ministros do STJ");
+    expect(tratamentoDe(c, "Ministros do STJ")?.situacao).toBe("sem_regra");
+  });
+});
+
+describe("comparacoesProtocolo — convocados seguem o critério dos ministros", () => {
+  test.each([
+    ["Desembargador convocado do Superior Tribunal de Justiça", "Senhor", "A Sua Excelência o Senhor"],
+    ["Desembargadora convocada do Tribunal Superior do Trabalho", "Senhora", "A Sua Excelência a Senhora"],
+  ])("%s confere tratamento e endereçamento", (cargo, tratamento, enderecamento) => {
+    const [t, e] = comparacoesProtocolo(contato({ cargo, tratamento, enderecamento }));
+    expect(t.situacao).toBe("confere");
+    expect(e.situacao).toBe("confere");
+  });
+
+  test("tratamento Doutor no convocado diverge", () => {
+    const [t] = comparacoesProtocolo(
+      contato({ cargo: "Desembargador convocado do Superior Tribunal de Justiça", tratamento: "Doutor" }),
+    );
+    expect(t.situacao).toBe("divergente");
   });
 });

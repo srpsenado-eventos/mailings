@@ -69,6 +69,8 @@ export interface FonteResolvida {
   fontesIndividuais: readonly FonteIndividual[];
   /** Faixa de UFs do grupo casado, quando cadastrada. Filtra proposta de inclusão. */
   ufs?: readonly string[];
+  /** O grupo casado não recebe proposta de inclusão (regra do GT de 05/11). */
+  semInclusao?: true;
   /** `responsavel1` do grupo casado, quando cadastrado. Só o nome. */
   responsavel?: string;
   /** Quando nada casa: nomes cadastrados mais próximos, para orientar o usuário. */
@@ -123,6 +125,7 @@ export function resolverGrupoEFonte(
     fontes,
     fontesIndividuais: (grupo.fontesIndividuais ?? []).filter((f) => f.ativo),
     ...(grupo.ufs ? { ufs: grupo.ufs } : {}),
+    ...(grupo.semInclusao ? { semInclusao: true as const } : {}),
     ...(grupo.responsavel1 ? { responsavel: grupo.responsavel1 } : {}),
     sugestoes: [],
   };

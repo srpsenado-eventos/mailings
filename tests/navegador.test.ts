@@ -6,6 +6,7 @@ import {
   rasparComNavegador,
   MOTIVO_NAVEGADOR_AUSENTE,
   MOTIVO_NAVEGADOR_TEMPO,
+  MOTIVO_CLIQUE_SEM_EFEITO,
   PAUSA_ENTRE_PAGINAS_MS,
   ESPERA_ANTES_DE_REPETIR_MS,
   type Lancador,
@@ -332,5 +333,54 @@ describe("abrirSessao (Chrome com janela, spec 2026-10-15 §4.2)", () => {
       expect(chamadas).toBe(1);
       await sessao.fechar();
     });
+  });
+});
+
+describe("clicar antes de ler (GT de 05/11, Roraima)", () => {
+  const URL_RR = "https://transparencia.rr.gov.br/principaiscargos";
+  const TITULO = { texto: "Governador do Estado de Roraima", prova: "Ocupado por" };
+  const abrir = (lancar: Lancador) => abrirSessao({ esperar: async () => {}, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+
+  test("a sessão repassa clicarAntes ao lançador", async () => {
+    // Arrange
+    const recebidos: Array<{ texto: string; prova: string } | undefined> = [];
+    const lancar: Lancador = async () => ({
+      async conteudo(_url, _timeout, clicarAntes) {
+        recebidos.push(clicarAntes);
+        return HTML;
+      },
+      async fechar() {},
+    });
+    const sessao = abrir(lancar);
+
+    // Act
+    await sessao.raspar(URL_RR, { clicarAntes: TITULO });
+    await sessao.fechar();
+
+    // Assert
+    expect(recebidos.length).toBeGreaterThan(0);
+    expect(recebidos.every((t) => t === TITULO)).toBe(true);
+  });
+
+  test("clique sem efeito vira ScrapeError e não repete", async () => {
+    // Arrange
+    let chamadas = 0;
+    const lancar: Lancador = async () => ({
+      async conteudo() {
+        chamadas += 1;
+        throw new Error(MOTIVO_CLIQUE_SEM_EFEITO);
+      },
+      async fechar() {},
+    });
+    const sessao = abrir(lancar);
+
+    // Act
+    const erro = await sessao.raspar(URL_RR, { clicarAntes: TITULO }).catch((e: unknown) => e);
+    await sessao.fechar();
+
+    // Assert
+    expect(erro).toBeInstanceOf(ScrapeError);
+    expect((erro as ScrapeError).motivo).toBe(MOTIVO_CLIQUE_SEM_EFEITO);
+    expect(chamadas).toBe(1);
   });
 });

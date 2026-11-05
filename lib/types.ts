@@ -252,6 +252,14 @@ export interface ResultadoGrupo {
   contatos: ResultadoContato[];
   /** Pessoas no site sem correspondência na planilha. */
   novos: PessoaSite[];
+  /** Propostas de inclusão dispensadas por decisão do GT (só informativo, sem botão). */
+  dispensados?: PropostaDispensada[];
+}
+
+/** Proposta de inclusão que o GT decidiu não convidar; `texto` já vem pronto para a linha informativa. */
+export interface PropostaDispensada {
+  nome: string;
+  texto: string;
 }
 
 export interface ResumoAnalise {
@@ -419,6 +427,21 @@ export interface FonteIndividual {
    * §3.3). Depois dele a fonte é ignorada, como se estivesse inativa.
    */
   validaAte?: string;
+  /**
+   * Texto exato de um título, botão ou link a clicar antes de ler a página (GT de 05/11, Roraima:
+   * o nome do governador só aparece depois do clique). Só vale com `navegador: "janela"`.
+   */
+  clicarAntes?: CliqueAntes;
+}
+
+/**
+ * Clique antes da leitura: `texto` é o do elemento a clicar (comparado sem diferenciar caixa e com
+ * espaços colapsados); `prova` é o trecho que deve aparecer no corpo da página depois do clique,
+ * senão o clique não revelou nada e a leitura falha.
+ */
+export interface CliqueAntes {
+  texto: string;
+  prova: string;
 }
 
 /** Tipo da fonte individual provisória (spec 2026-10-26 §3.1). */
@@ -428,7 +451,8 @@ export type TipoFonteProvisoria = "noticia" | "campanha";
 export type FonteLegivel = Pick<
   FonteCatalogo,
   "url" | "tabela" | "navegador" | "urlAlternativa" | "tipo" | "marcador" | "nomeEmDestaque"
->;
+> &
+  Pick<FonteIndividual, "clicarAntes">;
 
 /**
  * Grupo no catálogo versionado (`data/catalogo.ts`), com responsáveis internos
@@ -452,6 +476,8 @@ export interface GrupoCatalogo {
    * composição inteira vale, senão contato arquivado na faixa errada viraria "saída".
    */
   ufs?: readonly string[];
+  /** Regra do GT de 05/11: o grupo nunca recebe proposta de inclusão (`novos` sai vazio). */
+  semInclusao?: true;
 }
 
 /**

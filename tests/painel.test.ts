@@ -974,6 +974,11 @@ describe("tratamento e endereçamento pela maioria dos pares (spec 2026-10-30 §
     expect(cartao(c, "tratamento").copiavel).toBeUndefined();
   });
 
+  test("protocolo fixo do GT: o cartão diz 'Regra do GT diz' e não 'Tabela de protocolo diz'", () => {
+    const c = contato({ comparacoes: [diverge("tratamento", "regra_gt", "Senhor", "Excelentíssimo Senhor")] });
+    expect(cartao(c, "tratamento")).toMatchObject({ origem: "Regra do GT diz", valorReferencia: "Excelentíssimo Senhor", copiavel: "Excelentíssimo Senhor" });
+  });
+
   test("comparação da tabela de protocolo não ganha observação no cartão", () => {
     const c = contato({ comparacoes: [diverge("tratamento", "protocolo", "Doutor", "Senhor")] });
     expect(cartao(c, "tratamento")).toMatchObject({ origem: "Tabela de protocolo diz" });

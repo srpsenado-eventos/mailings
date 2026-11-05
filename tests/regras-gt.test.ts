@@ -34,6 +34,7 @@ describe("regras do GT em vigor (spec 2026-11-04 §3.2)", () => {
     ]);
     expect(regrasDoGrupo("Presidente da Câmara dos Deputados").map((r) => r.titulo)).toEqual(["Presidentes do Congresso e da Câmara"]);
     expect(regrasDoGrupo("Senadores (Rio a Tocantins)").map((r) => r.titulo)).toEqual(["Presidentes do Congresso e da Câmara"]);
+    expect(regrasDoGrupo("Presidente do Senado").map((r) => r.titulo)).toEqual(["Presidentes do Congresso e da Câmara"]);
     expect(regrasDoGrupo("Ex-Presidentes do Congresso").map((r) => r.titulo)).toEqual(["Ex-Presidentes do Congresso"]);
   });
   test("regras por grupo: STM tem três, Governadores uma, Senadores a dos presidentes do Congresso; rótulo com variação casa pelo catálogo", () => {

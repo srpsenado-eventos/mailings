@@ -62,7 +62,7 @@ export const REGRAS_GT: readonly RegraGt[] = [
     data: "2026-11-05",
     titulo: "Presidentes do Congresso e da Câmara",
     texto: "Ativos: tratamento Excelentíssimo Senhor e endereçamento A Sua Excelência o Senhor.",
-    grupos: ["Presidente da Câmara dos Deputados", "Senadores (Acre a Goiás)", "Senadores (Maranhão ao Piauí)", "Senadores (Rio a Tocantins)"],
+    grupos: ["Presidente da Câmara dos Deputados", "Presidente do Senado", "Senadores (Acre a Goiás)", "Senadores (Maranhão ao Piauí)", "Senadores (Rio a Tocantins)"],
   },
   {
     data: "2026-11-05",

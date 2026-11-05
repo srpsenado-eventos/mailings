@@ -40,6 +40,14 @@ describe("protocoloFixo (spec 2026-11-05 §7.3)", () => {
     expect(comparacoes?.map((x) => x.situacao)).toEqual(["confere", "confere"]);
   });
 
+  test("a comparação do protocolo fixo carrega a origem 'regra_gt', não a da tabela", () => {
+    // Act
+    const comparacoes = comparacoesProtocoloFixo(contato({ cargo: "Presidente do Senado Federal" }), "Senadores");
+
+    // Assert
+    expect(comparacoes?.map((x) => x.origemValor)).toEqual(["regra_gt", "regra_gt"]);
+  });
+
   test("Ex-Presidentes do Congresso é sempre inativo, seja qual for o cargo", () => {
     // Act + Assert
     expect(protocoloFixo(contato({ cargo: "Presidente do Congresso Nacional no período de 2017 a 2019" }), EX)).toEqual({
@@ -82,8 +90,8 @@ describe("comparacoesProtocoloFixo", () => {
 
     // Assert
     expect(r?.map((x) => [x.campo, x.situacao, x.origemValor])).toEqual([
-      ["tratamento", "confere", "protocolo"],
-      ["enderecamento", "confere", "protocolo"],
+      ["tratamento", "confere", "regra_gt"],
+      ["enderecamento", "confere", "regra_gt"],
     ]);
   });
 

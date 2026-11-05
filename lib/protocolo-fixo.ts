@@ -44,7 +44,7 @@ function comparar(campo: "tratamento" | "enderecamento", valorPlanilha: string, 
     valorPlanilha,
     valorEsperado: fixo,
     situacao: normalizarTexto(valorPlanilha) === normalizarTexto(fixo) ? "confere" : "divergente",
-    origemValor: "protocolo",
+    origemValor: "regra_gt",
   };
 }
 

@@ -13,7 +13,7 @@ import type {
   OrigemVeredito,
   Semaforo,
 } from "@/lib/types";
-import { normalizarNome, normalizarTexto } from "@/lib/normalize";
+import { normalizarNome, normalizarTexto, semTratamentoDeEmbaixada } from "@/lib/normalize";
 import { CARGOS, PREFIXOS_NEGANTES, tokensSignificativos } from "@/lib/cargos";
 import {
   cargoEsperadoNoTribunal,
@@ -109,7 +109,7 @@ function pontuarContraPessoa(nomePlanilha: string, pessoa: PessoaSite): number {
 
 /** O nome que o Contatos deve ter: o destaque da página, quando há; senão, o nome completo. */
 function nomeEsperado(pessoa: PessoaSite): string {
-  return pessoa.nomeDestaque ?? pessoa.nome;
+  return semTratamentoDeEmbaixada(pessoa.nomeDestaque ?? pessoa.nome);
 }
 
 /**

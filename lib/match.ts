@@ -24,6 +24,7 @@ import {
   tratamentoAceitoDoPresidente,
   type ContextoCargo,
 } from "@/lib/cargo-tribunal";
+import { ehItemInstitucional } from "@/lib/proposta-inclusao";
 import { comparacaoLimiteNome } from "@/lib/limite-nome";
 import {
   comparacaoPrefixoNome,
@@ -523,7 +524,7 @@ export function compararGrupo(
   // do texto achatado. Numa fonte tabular toda linha já é pessoa.
   const novos = fonte.pessoas
     .filter((p, i) => {
-      if (usados.has(i)) return false;
+      if (usados.has(i) || ehItemInstitucional(p.nome)) return false;
       return p.propoeInclusao ? naFaixaDeUf(p, ufsDoGrupo) : Boolean(p.cargo);
     })
     .map(comoProposta);
@@ -945,6 +946,6 @@ export function compararContatoSemIndividual(
  */
 export function novosForaDaPlanilha(pessoas: PessoaSite[], contatos: ContatoPlanilha[]): PessoaSite[] {
   return pessoas
-    .filter((p) => Boolean(p.cargo) && !contatos.some((c) => pontuarContraPessoa(c.nome, p) >= LIMIAR_PESSOA))
+    .filter((p) => Boolean(p.cargo) && !ehItemInstitucional(p.nome) && !contatos.some((c) => pontuarContraPessoa(c.nome, p) >= LIMIAR_PESSOA))
     .map(comoProposta);
 }

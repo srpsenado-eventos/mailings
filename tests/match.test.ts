@@ -778,3 +778,30 @@ describe("cargo do ex-presidente com o período (spec 2026-10-30 §3.5)", () => 
     expect(situacaoCampo("Presidente do Senado Federal de 2019 a 2021", "1º Vice-Presidente")).toBe("divergente");
   });
 });
+
+describe("item institucional não é proposta de inclusão (spec 2026-11-05 §2.6)", () => {
+  const f: ConteudoFonte = {
+    url: "https://x",
+    textoLimpo: "",
+    destaques: [],
+    pessoas: [
+      { nome: "Câmara de Direito Público", cargo: "Presidente" },
+      { nome: "Ana Câmara", cargo: "Desembargadora" },
+    ],
+  };
+
+  test("rótulo institucional com cargo não gera novos", () => {
+    const r = compararGrupo("ORG", [contato({ nome: "Zzz Inexistente Pessoa" })], f);
+    expect(r.novos.map((n) => n.nome)).toEqual(["Ana Câmara"]);
+  });
+
+  test("novosForaDaPlanilha também descarta o rótulo", () => {
+    expect(novosForaDaPlanilha(f.pessoas, []).map((n) => n.nome)).toEqual(["Ana Câmara"]);
+  });
+
+  test("contato Ana Câmara continua casando", () => {
+    const r = compararGrupo("ORG", [contato({ nome: "Ana Câmara", cargo: "Desembargadora" })], f);
+    expect(r.contatos[0].semaforo).not.toBe("vermelho");
+    expect(r.novos).toEqual([]);
+  });
+});

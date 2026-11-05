@@ -363,10 +363,12 @@ function orientacaoDoCargo(linhas: string[], titulos: ReadonlySet<number>): Leit
 
 /**
  * Linha "Rótulo: Fulano" (Sergipe: "Secretário Especial de Gabinete: Tiago ..."): o cargo
- * pertence à pessoa que vem depois dos dois-pontos, nunca ao nome de cima.
+ * pertence à pessoa que vem depois dos dois-pontos, nunca ao nome de cima. Só vale quando o resto
+ * é mesmo um nome: "Cargo: Ministro do Tribunal" ou "Endereço: ..." não deslocam cargo de ninguém.
  */
 function linhaRotuladaComOutraPessoa(linha: string): boolean {
-  return /^[^:]{1,80}:\s*\S/.test(linha);
+  const resto = /^[^:]{1,80}:\s*(\S.*)$/.exec(linha)?.[1]?.trim();
+  return resto !== undefined && pareceNome(resto) && !ehTrechoDeCargo(resto);
 }
 
 /** Janela curta para frente: o cargo vem logo abaixo do nome. */
@@ -378,7 +380,7 @@ function indiceDoCargoDepois(linhas: string[], i: number, titulos: ReadonlySet<n
     // a linha da PRÓXIMA pessoa encerra a janela: no STJ ela cita um cargo
     // ("Fulano - Diretor-Geral da ENFAM") e era adotada como cargo desta.
     if (pessoaEmLinhaUnica(linhas[j]) !== undefined || ehNome(linhas[j])) break;
-    if (ehCargo(linhas[j]) && !linhaRotuladaComOutraPessoa(linhas[j])) return j;
+    if (ehCargo(linhas[j])) return linhaRotuladaComOutraPessoa(linhas[j]) ? undefined : j;
   }
   return undefined;
 }
@@ -398,7 +400,7 @@ function indiceDoCargoAntes(
   const j = i - 1;
   if (j < 0 || consumidas.has(j)) return undefined;
   if (titulos.has(j) && !tituloEhCargo) return undefined;
-  return ehCargo(linhas[j]) ? j : undefined;
+  return ehCargo(linhas[j]) && !linhaRotuladaComOutraPessoa(linhas[j]) ? j : undefined;
 }
 
 /**

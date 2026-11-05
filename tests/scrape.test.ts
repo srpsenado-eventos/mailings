@@ -856,3 +856,44 @@ describe("cargo em linha antes do nome (Sergipe)", () => {
     expect(pessoas.some((p) => p.cargo?.startsWith("Secretário Especial de Gabinete: Tiago"))).toBe(false);
   });
 });
+
+describe("linha rotulada só vale quando o resto é um nome", () => {
+  const pagina = (corpo: string) => `<!doctype html><html><body><main>${corpo}</main></body></html>`;
+  const div = (...linhas: string[]) => linhas.map((l) => `<div>${l}</div>`).join("");
+
+  test("'Cargo: <cargo>' depois do nome continua sendo o cargo de cada um", () => {
+    // Arrange
+    const html = pagina(div("Fulano de Tal", "Cargo: Ministro do Tribunal", "Beltrano de Tal", "Cargo: Ministra do Tribunal"));
+
+    // Act
+    const { pessoas } = extrairConteudo(html, "https://orgao.gov.br/x");
+
+    // Assert
+    expect(pessoas.map((p) => [p.nome, p.cargo])).toEqual([
+      ["Fulano de Tal", "Cargo: Ministro do Tribunal"],
+      ["Beltrano de Tal", "Cargo: Ministra do Tribunal"],
+    ]);
+  });
+
+  test("cargo antes do nome seguido de 'Cargo: <cargo>' não perde o cargo", () => {
+    // Arrange
+    const html = pagina(div("Secretário de Estado da Casa Civil", "Fulano de Tal", "Cargo: Secretário da Fazenda"));
+
+    // Act
+    const { pessoas } = extrairConteudo(html, "https://orgao.gov.br/x");
+
+    // Assert
+    expect(pessoas.find((p) => p.nome === "Fulano de Tal")?.cargo).toBeDefined();
+  });
+
+  test("linha 'Rótulo: Pessoa' encerra a janela e o cargo seguinte não é adotado", () => {
+    // Arrange
+    const html = pagina(div("Fulano de Tal", "Secretário Especial de Gabinete: Tiago Andrade Araújo", "Secretário da Fazenda"));
+
+    // Act
+    const { pessoas } = extrairConteudo(html, "https://orgao.gov.br/x");
+
+    // Assert
+    expect(pessoas.find((p) => p.nome === "Fulano de Tal")?.cargo).toBeUndefined();
+  });
+});

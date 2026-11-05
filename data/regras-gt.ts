@@ -40,4 +40,22 @@ export const REGRAS_GT: readonly RegraGt[] = [
     texto: "Tabela de tratamentos v02 (REGRA GERAL): Governador, Prefeito, Presidente de Assembleia Legislativa / Câmara Legislativa e Presidente de Câmara Municipal passam a Senhor(a); o endereçamento não muda.",
     grupos: ["Governadores"],
   },
+  {
+    data: "2026-11-05",
+    titulo: "Embaixadores",
+    texto: "A análise parte da lista cadastrada no Contatos: a página confere quem está cadastrado e não gera proposta de inclusão.",
+    grupos: ["Embaixadores ( África do Sul até EUA)", "Embaixadores (Filipinas até Noruega)", "Embaixadores (Nova Zelândia até Zimbábue)"],
+  },
+  {
+    data: "2026-11-05",
+    titulo: "Presidentes de tribunal",
+    texto: "No tratamento, \"Excelentíssimo(a) Senhor(a)\" e \"Senhor(a)\" conferem. O nome leva \"Ministro(a)\" e o cargo traz a presidência.",
+    grupos: ["Ministros do STF", "Ministros do STJ", "Ministros do TSE", "Ministros do TST", "Ministros do STM", "Ministros do TCU"],
+  },
+  {
+    data: "2026-11-05",
+    titulo: "Desembargadores convocados",
+    texto: "Tratamento e endereçamento seguem o mesmo critério dos ministros do grupo.",
+    grupos: ["Ministros do STJ", "Ministros do TST"],
+  },
 ];

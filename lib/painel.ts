@@ -396,6 +396,13 @@ export function filtrarGrupos(grupos: readonly ResultadoGrupo[], filtro: Filtro,
     .filter((g) => g.contatos.length > 0 || g.novos.length > 0);
 }
 
+const LIMITE_ROTULO_OPCAO = 60;
+
+/** Texto da opção da lista "Grupo": no máximo 60 caracteres, cortado com "…". O valor da opção segue o rótulo inteiro. */
+export function rotuloDaOpcaoDeGrupo(rotulo: string): string {
+  return rotulo.length <= LIMITE_ROTULO_OPCAO ? rotulo : `${rotulo.slice(0, LIMITE_ROTULO_OPCAO - 1)}…`;
+}
+
 function plural(n: number, um: string, varios: string): string {
   return `${n} ${n === 1 ? um : varios}`;
 }

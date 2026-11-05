@@ -16,7 +16,7 @@ import { Etiqueta } from "@/components/etiqueta";
 import { PublicarButton } from "@/components/publicar-button";
 import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-contato";
 import { contarBloqueiosDoGrupo, ehLinhaABloquear, ROTULO_CARTAO_BLOQUEIO, textosDeBloqueioDoGrupo, totalABloquear } from "@/lib/painel-bloqueio";
-import { avisoUrlCaida, cartoesDoResumo, estadoDaFonteDoGrupo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, textoAlternativa, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoMudanca, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, textosProvisorias, type Filtro } from "@/lib/painel";
+import { avisoUrlCaida, cartoesDoResumo, estadoDaFonteDoGrupo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, rotuloDaOpcaoDeGrupo, textoAlternativa, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoMudanca, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, textosProvisorias, type Filtro } from "@/lib/painel";
 import type { HistoricoDecisoes } from "@/lib/decisoes";
 import { motivosDosGruposVazios, retratoComPropostasDecididas } from "@/lib/propostas-decisoes";
 import { autoridadesRepetidas, etiquetaDeRepeticao, textoDoLinkDoPainel } from "@/lib/repetidos";
@@ -168,7 +168,7 @@ export function Painel({ retrato: retratoBruto, aviso, onNovaVarredura, modo = "
           className="max-w-72 rounded-md border border-borda-forte bg-cartao px-2 py-1 text-xs"
         >
           <option value="">Todos os grupos</option>
-          {retrato.grupos.map((g) => <option key={g.grupo} value={g.grupo}>{g.grupo}</option>)}
+          {retrato.grupos.map((g) => <option key={g.grupo} value={g.grupo}>{rotuloDaOpcaoDeGrupo(g.grupo)}</option>)}
           {temGrupoDeputados(retrato.eleicao) && <option value={NOME_GRUPO_DEPUTADOS}>{NOME_GRUPO_DEPUTADOS}</option>}
         </select>
         <div className="grow" />

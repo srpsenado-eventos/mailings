@@ -196,20 +196,19 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     // do GT (Referencia 2/Conferencia contatos 06_10.xlsx, aba "Sites Governo Estados").
     // Planilha de 23/10 (spec 2026-10-23 §5): PE e DF entram por notícia de órgão oficial, só
     // como `provisoria: "noticia"` (até a posse de 2027), conferidas com fetch em 23/10. MT, MG e SC
-    // continuam sem individual (conferência manual pelo Diário Oficial: IOMAT, Jornal Minas
-    // Gerais, DOE/SC) e saem "cadastrar fonte". RO, TO e ES mantêm a URL atual, a rever após 25/10.
+    // têm individual desde 05/11 (orientação do GT); MT é montada por JavaScript (o `fetch` traz
+    // 70 caracteres) e por isso lida pelo Chrome. RO, TO e ES mantêm a URL atual, a rever após 25/10.
     // MS: a URL tem fragmento "#/QuemEQuem" e a página é montada por JavaScript: o fetch
     // traz só a casca do SPA, e o Chrome headless monta a página com "GOVERNADOR:"
     // (medido em 2026-10-15). Por isso é lida pelo navegador (`navegador: true`).
     // AM, RR e RJ: o fetch falhava ("fetch failed" no AM; RR e RJ só com a casca da página)
     // e o Chrome com janela traz a página inteira (medido em 2026-10-16): `navegador: "janela"`.
-    // AC (2026-10-26, fornecida pelo Clovis): a página institucional da governadora na agência
-    // oficial do Acre passa a primária (fetch 200, nome e "governadora" no texto); a antiga
-    // `orgao-entidades`, que vinha sem conteúdo legível, fica como alternativa.
+    // AC (GT de 05/11): volta à página `orgao-entidades/governadoria/`; a da agência oficial
+    // (fornecida em 26/10) fica como alternativa.
     // DF: o portal df.gov.br (fornecido em 26/10) não traz o nome da governadora no texto e
     // geraria possível saída falsa; fica a notícia da CLDF.
     fontesIndividuais: [
-      { url: "https://agencia.ac.gov.br/governadora/", ativo: true, urlAlternativa: "https://estado.ac.gov.br/orgao-entidades/", chave: { uf: "AC" }, campos: ["nome", "cargo"] },
+      { url: "https://estado.ac.gov.br/orgao-entidades/governadoria/", ativo: true, urlAlternativa: "https://agencia.ac.gov.br/governadora/", chave: { uf: "AC" }, campos: ["nome", "cargo"] },
       { url: "https://amapa.gov.br/gestores", ativo: true, chave: { uf: "AP" }, campos: ["nome", "cargo"] },
       { url: "https://www.transparencia.am.gov.br/estrutura-organizacional/", ativo: true, chave: { uf: "AM" }, campos: ["nome", "cargo"], navegador: "janela" },
       { url: "https://www.pa.gov.br/orgao?id_orgao=2", ativo: true, chave: { uf: "PA" }, campos: ["nome", "cargo"] },
@@ -234,7 +233,11 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       { url: "https://www.rj.gov.br/pagina/sobre-o-governo9806", ativo: true, chave: { uf: "RJ" }, campos: ["nome", "cargo"], navegador: "janela" },
       { url: "https://www.sp.gov.br/sp/institucional/estrutura/!ut/p/z1/04_Sj9CPykssy0xPLMnMz0vMAfIjo8ziDSzMTIyM3Q2MPYyDnQ3MXB3DzJ2NQg0M_Y31wyEKcABHA_0oovTjVhCF3_hw_ShUKwKCg4Am-BpaOvtauhk7-pvhV-DpbAxTgNuSgtzQCINMT0UAo-8oDA!!/", ativo: true, chave: { uf: "SP" }, campos: ["nome", "cargo"] },
       { url: "https://www.parana.pr.gov.br/Pagina/Quemequem", ativo: true, chave: { uf: "PR" }, campos: ["nome", "cargo"] },
-      { url: "https://www.estado.rs.gov.br/governadoria", ativo: true, chave: { uf: "RS" }, campos: ["nome", "cargo"] },
+      { url: "https://www.estado.rs.gov.br/governador", ativo: true, chave: { uf: "RS" }, campos: ["nome", "cargo"] },
+      // GT de 05/11. MT é montada por JavaScript (o fetch traz 70 caracteres): lida pelo Chrome.
+      { url: "https://portal.mt.gov.br/conheca-mato-grosso/governo", ativo: true, chave: { uf: "MT" }, campos: ["nome", "cargo"], navegador: true },
+      { url: "https://www.mg.gov.br/governador/mateus-simoes-de-almeida", ativo: true, chave: { uf: "MG" }, campos: ["nome", "cargo"] },
+      { url: "https://agenda.scc.sc.gov.br/site/colegiado-de-governo", ativo: true, chave: { uf: "SC" }, campos: ["nome", "cargo"] },
     ],
   },
   {

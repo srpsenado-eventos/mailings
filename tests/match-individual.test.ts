@@ -405,3 +405,18 @@ describe("troca de presidência no tribunal (spec 2026-10-30 §3.2)", () => {
     });
   });
 });
+
+describe("governadores de SC e MT com página individual (GT de 05/11)", () => {
+  const casos = [
+    { uf: "SC", html: "governador-sc-maiusculas.html", url: "https://agenda.scc.sc.gov.br/site/colegiado-de-governo", nome: "Jorginho Mello", cargo: "Governador do Estado de Santa Catarina" },
+    { uf: "MT", html: "governador-mt.html", url: "https://portal.mt.gov.br/conheca-mato-grosso/governo", nome: "Otaviano Pivetta", cargo: "Governador do Estado de Mato Grosso" },
+  ];
+  test.each(casos)("nome na página individual confirma o governador de $uf e o cargo confere", ({ uf, html, url, nome, cargo }) => {
+    const conteudo = extrairConteudo(fixture(html), url);
+    const fonte: FonteIndividual = { url, ativo: true, chave: { uf }, campos: ["nome", "cargo"] };
+    const v = compararContatoIndividual({ contato: contato({ nome, cargo, tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" }), fonte, lida: { conteudo }, grupoCanonico: "Governadores" });
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")?.situacao).toBe("confere");
+    expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")?.situacao).toBe("confere");
+    expect(v.resultado.possivelSaida).toBeFalsy();
+  });
+});

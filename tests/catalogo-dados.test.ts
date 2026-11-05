@@ -72,7 +72,7 @@ describe("catálogo real (data/catalogo.ts)", () => {
       expect(alternativas.every((u) => /^https:\/\/[a-z0-9.-]+\.gov\.br\//.test(u))).toBe(true);
     });
 
-    test("ajuste de 26/10: link da planilha de 23/10 é a principal nos quatro ministérios; AC lê a página da governadora", () => {
+    test("ajuste de 26/10: link da planilha de 23/10 é a principal nos quatro ministérios; AC lê a página da governadoria (GT de 05/11)", () => {
       const ind = CATALOGO.flatMap((g) => g.fontesIndividuais ?? []);
       const principalDe = (nome: string) => ind.find((f) => "nome" in f.chave && f.chave.nome === nome);
       expect(principalDe("Miriam Belchior")?.url).toBe("https://www.gov.br/casacivil/pt-br/composicao/gabinete-do-ministro/quem-e-quem-1");
@@ -80,16 +80,16 @@ describe("catálogo real (data/catalogo.ts)", () => {
       expect(principalDe("José Mucio Monteiro Filho")?.url).toBe("https://www.gov.br/defesa/pt-br/composicao/gabinete-do-ministro/jose-mucio-monteiro-filho");
       expect(principalDe("Rachel Barros de Oliveira")?.url).toBe("https://www.gov.br/igualdaderacial/pt-br/composicao/gabinete-da-ministra/rachel-barros-de-oliveira");
       const ac = ind.find((f) => "uf" in f.chave && f.chave.uf === "AC");
-      expect(ac).toMatchObject({ url: "https://agencia.ac.gov.br/governadora/", urlAlternativa: "https://estado.ac.gov.br/orgao-entidades/" });
+      expect(ac).toMatchObject({ url: "https://estado.ac.gov.br/orgao-entidades/governadoria/", urlAlternativa: "https://agencia.ac.gov.br/governadora/" });
     });
   });
 
-  test("navegador headless só no MS (governador) e no TCU; 'janela' no gov.br federal e em AM, RR e RJ", () => {
+  test("navegador headless só no MS e no MT (governadores) e no TCU; 'janela' no gov.br federal e em AM, RR e RJ", () => {
     const headless = CATALOGO.flatMap((g) => [
       ...g.fontes.filter((f) => f.navegador === true).map((f) => f.url),
       ...(g.fontesIndividuais ?? []).filter((f) => f.navegador === true).map((f) => f.url),
     ]);
-    expect(headless).toEqual(["https://www.transparencia.ms.gov.br/#/QuemEQuem", "https://portal.tcu.gov.br/autoridades"]);
+    expect(headless).toEqual(["https://www.transparencia.ms.gov.br/#/QuemEQuem", "https://portal.mt.gov.br/conheca-mato-grosso/governo", "https://portal.tcu.gov.br/autoridades"]);
     const janela = CATALOGO.flatMap((g) => [
       ...g.fontes.filter((f) => f.navegador === "janela").map((f) => f.url),
       ...(g.fontesIndividuais ?? []).filter((f) => f.navegador === "janela").map((f) => f.url),
@@ -132,14 +132,28 @@ describe("catálogo real (data/catalogo.ts)", () => {
       expect(individuais.filter((f) => f.validaAte).map((f) => f.url)).toEqual(campanha.map((f) => f.url));
     });
 
-    test("Governadores: 24 individuais ativas, por UF, nome e cargo, sem fonte de grupo", () => {
+    test("Governadores: 27 individuais ativas, por UF, nome e cargo, sem fonte de grupo", () => {
       const g = CATALOGO.find((x) => x.nome === "Governadores")!;
       expect(g.fontes).toEqual([]);
       const ind = g.fontesIndividuais ?? [];
-      expect(ind).toHaveLength(24);
+      expect(ind).toHaveLength(27);
       expect(ind.every((f) => f.ativo && "uf" in f.chave && f.campos.length === 2)).toBe(true);
       const ufs = ind.map((f) => ("uf" in f.chave ? f.chave.uf : "")).sort();
-      expect(ufs).toEqual(["AC","AL","AM","AP","BA","CE","DF","ES","GO","MA","MS","PA","PB","PE","PI","PR","RJ","RN","RO","RR","RS","SE","SP","TO"]);
+      expect(ufs).toEqual(["AC","AL","AM","AP","BA","CE","DF","ES","GO","MA","MG","MS","MT","PA","PB","PE","PI","PR","RJ","RN","RO","RR","RS","SC","SE","SP","TO"]);
+    });
+
+    test("Governadores têm fonte individual em AC, MT, MG, RS e SC com a URL do GT de 05/11", () => {
+      const ind = CATALOGO.find((x) => x.nome === "Governadores")!.fontesIndividuais ?? [];
+      const da = (uf: string) => ind.find((f) => "uf" in f.chave && f.chave.uf === uf);
+      expect(da("AC")).toMatchObject({ url: "https://estado.ac.gov.br/orgao-entidades/governadoria/", urlAlternativa: "https://agencia.ac.gov.br/governadora/" });
+      expect(da("MT")).toMatchObject({ url: "https://portal.mt.gov.br/conheca-mato-grosso/governo", navegador: true });
+      expect(da("MG")?.url).toBe("https://www.mg.gov.br/governador/mateus-simoes-de-almeida");
+      expect(da("RS")?.url).toBe("https://www.estado.rs.gov.br/governador");
+      expect(da("SC")?.url).toBe("https://agenda.scc.sc.gov.br/site/colegiado-de-governo");
+      for (const uf of ["AC", "MT", "MG", "RS", "SC"]) {
+        expect(da(uf)?.ativo).toBe(true);
+        expect(da(uf)?.campos).toEqual(["nome", "cargo"]);
+      }
     });
 
     test("Governadores: provisórias (notícia) só em PE e DF, com nome e cargo, sem validade", () => {

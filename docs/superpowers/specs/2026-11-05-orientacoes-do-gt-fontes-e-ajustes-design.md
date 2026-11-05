@@ -165,7 +165,7 @@ A lista "Grupo" do painel é um `<select>` nativo. A opção do grupo combinado 
 
 O contato "Teste novos grupos" (Id 54214) foi usado para criar os grupos no Contatos e está numa célula só com os 10 rótulos juntos. O app leu isso como um grupo único, e não é a ideia.
 
-- Contato de teste: rótulo com 2 ou mais grupos, todos do agrupador, e nome começando com "Teste". Sai do painel, dos cartões (`total` e `indeterminado`), dos filtros e da contagem do agrupador. Não é apagado do retrato gravado. O export da tela herda o filtro.
+- Contato de teste: rótulo com 2 ou mais grupos e todos os contatos com nome começando com "Teste" (reconhecido por nome e rótulo combinado, sem exigir o agrupador). Grupo citado nele fora dos 28 também aparece avulso, depois dos do agrupador (hoje "EMCFA indicados - Posse Presidencial 2027"), sem entrar nos 28. Sai do painel, dos cartões (`total` e `indeterminado`), dos filtros e da contagem do agrupador. Não é apagado do retrato gravado. O export da tela herda o filtro.
 - Todo grupo do agrupador com 0 contatos ganha uma linha própria na lista de grupos, na ordem do agrupador e depois dos grupos com contatos, com o nome do grupo e "Grupo ainda não cadastrado no Contatos". Sem linhas internas e sem fonte.
 - Grupo vazio com decisão `nao_recebe_convite` mostra o motivo no lugar desse texto (Presidente da República).
 - "Deputados Federais" não ganha essa linha quando o grupo virtual da Câmara existe.

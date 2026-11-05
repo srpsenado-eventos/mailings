@@ -18,7 +18,7 @@ import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-con
 import { contarBloqueiosDoGrupo, ehLinhaABloquear, ROTULO_CARTAO_BLOQUEIO, textosDeBloqueioDoGrupo, totalABloquear } from "@/lib/painel-bloqueio";
 import { avisoUrlCaida, cartoesDoResumo, estadoDaFonteDoGrupo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, rotuloDaOpcaoDeGrupo, textoAlternativa, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoMudanca, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, textosProvisorias, type Filtro } from "@/lib/painel";
 import type { HistoricoDecisoes } from "@/lib/decisoes";
-import { gruposNaoCadastrados, gruposVaziosVisiveis, retratoSemGruposDeTeste } from "@/lib/painel-grupos-vazios";
+import { gruposNaoCadastrados, gruposVaziosVisiveis, retratoSemGruposDeTeste, rotulosDeTesteForaDoAgrupador } from "@/lib/painel-grupos-vazios";
 import { motivosDosGruposVazios, retratoComPropostasDecididas } from "@/lib/propostas-decisoes";
 import { autoridadesRepetidas, etiquetaDeRepeticao, textoDoLinkDoPainel } from "@/lib/repetidos";
 import type { FalhasPorUrl, ResultadoGrupo, Retrato } from "@/lib/types";
@@ -65,6 +65,7 @@ function EstadoDaFonte({ g, falhas }: { g: ResultadoGrupo; falhas?: FalhasPorUrl
 
 export function Painel({ retrato: retratoBruto, aviso, onNovaVarredura, modo = "local", podePublicar = false, decisoes }: { retrato: Retrato; aviso?: string; onNovaVarredura?: () => void; modo?: "local" | "web"; podePublicar?: boolean; decisoes?: HistoricoDecisoes }) {
   const retrato = useMemo(() => retratoSemGruposDeTeste(retratoComPropostasDecididas(retratoBruto, decisoes)), [retratoBruto, decisoes]);
+  const rotulosExtras = useMemo(() => rotulosDeTesteForaDoAgrupador(retratoBruto.grupos), [retratoBruto]);
   const [filtro, setFiltro] = useState<Filtro>("tudo");
   const [busca, setBusca] = useState("");
   const [grupo, setGrupo] = useState("");
@@ -73,7 +74,7 @@ export function Painel({ retrato: retratoBruto, aviso, onNovaVarredura, modo = "
   const secoes = useMemo(() => (eleicaoLigada ? secoesDeEleicao(retrato.eleicao, retrato.grupos, filtro, busca) : []), [eleicaoLigada, retrato, filtro, busca]);
   const agrupador = useMemo(() => linhasDoAgrupador(retrato.grupos, esperadosDoAgrupador(retrato.eleicao)), [retrato]);
   const motivosVazios = useMemo(() => motivosDosGruposVazios(agrupador, decisoes), [agrupador, decisoes]);
-  const vazios = useMemo(() => gruposNaoCadastrados(agrupador, motivosVazios, temGrupoDeputados(retrato.eleicao)), [agrupador, motivosVazios, retrato]);
+  const vazios = useMemo(() => gruposNaoCadastrados(agrupador, motivosVazios, temGrupoDeputados(retrato.eleicao), rotulosExtras), [agrupador, motivosVazios, retrato, rotulosExtras]);
   const secoesGov = useMemo(() => (eleicaoLigada ? secoesDeGoverno(retrato.eleicao, filtro, busca) : []), [eleicaoLigada, retrato, filtro, busca]);
   const avisoEleicao = eleicaoLigada ? avisoDaEleicao(retrato.eleicao) : undefined;
   const repetidas = useMemo(() => autoridadesRepetidas(retrato.grupos, retrato.eleicao, decisoes), [retrato, decisoes]);

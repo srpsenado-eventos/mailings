@@ -3,6 +3,7 @@ import {
   ehGrupoDeTeste,
   gruposNaoCadastrados,
   gruposVaziosVisiveis,
+  rotulosDeTesteForaDoAgrupador,
   retratoSemGruposDeTeste,
   TEXTO_GRUPO_NAO_CADASTRADO,
 } from "@/lib/painel-grupos-vazios";
@@ -31,14 +32,28 @@ describe("ehGrupoDeTeste", () => {
   test("rótulo de um grupo só não é de teste", () => {
     expect(ehGrupoDeTeste(grupo("Ministros do STF", [contato("Teste", "verde")]))).toBe(false);
   });
-  test("segmento que não é do agrupador não é de teste", () => {
-    expect(ehGrupoDeTeste(grupo("Ministros do STF;Qualquer coisa", [contato("Teste", "verde")]))).toBe(false);
+  test("segmento fora do agrupador não impede o grupo de ser de teste", () => {
+    expect(ehGrupoDeTeste(grupo("Ministros do STF;EMCFA indicados - Posse Presidencial 2027", [contato("Teste", "verde")]))).toBe(true);
+  });
+  test("pessoa real em rótulo combinado continua fora da regra", () => {
+    expect(ehGrupoDeTeste(grupo("Presidente do Senado Federal; Senadores", [contato("Davi Alcolumbre", "verde")]))).toBe(false);
   });
   test("contato real no rótulo combinado desqualifica", () => {
     expect(ehGrupoDeTeste(grupo(COMBINADO, [contato("Teste A", "verde"), contato("Maria", "verde")]))).toBe(false);
   });
   test("grupo sem contatos não é de teste", () => {
     expect(ehGrupoDeTeste(grupo(COMBINADO, []))).toBe(false);
+  });
+});
+
+describe("rotulosDeTesteForaDoAgrupador", () => {
+  test("lista os segmentos aparados que o agrupador não reconhece, sem repetir", () => {
+    const grupos = [
+      grupo("Ministros do STF; EMCFA indicados - Posse Presidencial 2027 ;Outro fora", [contato("Teste a", "verde")]),
+      grupo("Embaixadores;Outro fora", [contato("Teste b", "verde")]),
+      grupo("Ministros do STF;Fora de teste real", [contato("Maria", "verde")]),
+    ];
+    expect(rotulosDeTesteForaDoAgrupador(grupos)).toEqual(["EMCFA indicados - Posse Presidencial 2027", "Outro fora"]);
   });
 });
 
@@ -81,6 +96,11 @@ describe("gruposNaoCadastrados", () => {
       { rotulo: "B", texto: "m1 · m2" },
       { rotulo: "C", texto: TEXTO_GRUPO_NAO_CADASTRADO },
     ]);
+  });
+  test("rótulos extras entram depois das linhas do agrupador, com o texto padrão", () => {
+    const out = gruposNaoCadastrados(linhas, {}, true, ["Extra"]);
+    expect(out.map((g) => g.rotulo)).toEqual(["B", "C", "Extra"]);
+    expect(out[2].texto).toBe(TEXTO_GRUPO_NAO_CADASTRADO);
   });
   test("texto padrão", () => {
     expect(TEXTO_GRUPO_NAO_CADASTRADO).toBe("Grupo ainda não cadastrado no Contatos");

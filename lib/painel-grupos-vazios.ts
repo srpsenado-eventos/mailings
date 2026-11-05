@@ -14,13 +14,21 @@ export interface GrupoNaoCadastrado {
 
 /**
  * Contato criado só para abrir os grupos no Contatos (spec 2026-11-05 §8.2): rótulo com dois ou mais
- * grupos, todos do agrupador, e todos os contatos com nome começando por "Teste".
+ * segmentos e todos os contatos com nome começando por "Teste".
  */
+function segmentosDoRotulo(g: ResultadoGrupo): string[] {
+  return g.grupo.split(";").map((s) => s.trim()).filter((s) => s !== "");
+}
+
 export function ehGrupoDeTeste(g: ResultadoGrupo): boolean {
-  const segmentos = g.grupo.split(";").map((s) => s.trim()).filter((s) => s !== "");
-  if (segmentos.length < 2 || g.contatos.length === 0) return false;
-  if (!segmentos.every((s) => grupoDoAgrupador(s) !== undefined)) return false;
+  if (segmentosDoRotulo(g).length < 2 || g.contatos.length === 0) return false;
   return g.contatos.every((c) => c.contato.nome.trim().toLowerCase().startsWith(PREFIXO_CONTATO_DE_TESTE));
+}
+
+/** Segmentos dos grupos de teste que o agrupador não reconhece, aparados e sem repetição. */
+export function rotulosDeTesteForaDoAgrupador(grupos: readonly ResultadoGrupo[]): string[] {
+  const segmentos = grupos.filter(ehGrupoDeTeste).flatMap(segmentosDoRotulo);
+  return [...new Set(segmentos)].filter((s) => grupoDoAgrupador(s) === undefined);
 }
 
 const CONTADORES_DO_SEMAFORO = ["verde", "amarelo", "vermelho", "indeterminado"] as const;
@@ -43,14 +51,17 @@ export function gruposNaoCadastrados(
   linhas: readonly LinhaAgrupador[],
   motivos: Readonly<Record<string, readonly string[]>>,
   temDeputadosVirtual: boolean,
+  rotulosExtras: readonly string[] = [],
 ): GrupoNaoCadastrado[] {
-  return linhas
+  const doAgrupador = linhas
     .filter((l) => l.noContatos === 0 && !l.foraDoAgrupador)
     .filter((l) => !(temDeputadosVirtual && l.rotulo === GRUPO_DEPUTADOS_FEDERAIS))
     .map((l) => {
       const dos = motivos[l.rotulo] ?? [];
       return { rotulo: l.rotulo, texto: dos.length > 0 ? dos.join(" · ") : TEXTO_GRUPO_NAO_CADASTRADO };
     });
+  const extras = rotulosExtras.map((rotulo) => ({ rotulo, texto: TEXTO_GRUPO_NAO_CADASTRADO }));
+  return [...doAgrupador, ...extras];
 }
 
 /** Com grupo escolhido, só a linha dele; sem grupo, todas, mas apenas no filtro "tudo" e sem busca. */

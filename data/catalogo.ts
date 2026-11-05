@@ -218,7 +218,7 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       { url: "https://www.transparencia.am.gov.br/estrutura-organizacional/", ativo: true, chave: { uf: "AM" }, campos: ["nome", "cargo"], navegador: "janela" },
       { url: "https://www.pa.gov.br/orgao?id_orgao=2", ativo: true, chave: { uf: "PA" }, campos: ["nome", "cargo"] },
       { url: "https://rondonia.ro.gov.br/?page_id=1207", ativo: true, chave: { uf: "RO" }, campos: ["nome", "cargo"] },
-      { url: "https://transparencia.rr.gov.br/principaiscargos", ativo: true, chave: { uf: "RR" }, campos: ["nome", "cargo"], navegador: "janela", clicarAntes: "Governador do Estado de Roraima" },
+      { url: "https://transparencia.rr.gov.br/principaiscargos", ativo: true, chave: { uf: "RR" }, campos: ["nome", "cargo"], navegador: "janela", clicarAntes: { texto: "Governador do Estado de Roraima", prova: "Ocupado por" } },
       { url: "https://www.to.gov.br/governo", ativo: true, chave: { uf: "TO" }, campos: ["nome", "cargo"] },
       { url: "https://alagoas.al.gov.br/governo/governador-de-alagoas", ativo: true, chave: { uf: "AL" }, campos: ["nome", "cargo"] },
       { url: "https://www.ba.gov.br/comunicacao/equipe-de-governo", ativo: true, chave: { uf: "BA" }, campos: ["nome", "cargo"] },

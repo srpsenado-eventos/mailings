@@ -3,7 +3,7 @@ import { Agent } from "undici";
 import { PDFParse } from "pdf-parse";
 import { normalizarNome, normalizarTexto, nucleoDeNome } from "@/lib/normalize";
 import { CARGOS } from "@/lib/cargos";
-import type { ConteudoFonte, PessoaSite, ExtracaoTabela } from "@/lib/types";
+import type { ConteudoFonte, PessoaSite, ExtracaoTabela, CliqueAntes } from "@/lib/types";
 import { colherDestaquesPorLinha, comDestaque, type DestaquesPorLinha } from "@/lib/scrape-destaque";
 
 export class ScrapeError extends Error {
@@ -758,7 +758,7 @@ export interface OpcoesRaspagem {
   /** O nome esperado é a parte em negrito (spec 2026-10-30 §3.1). Só vale na extração de texto. */
   nomeEmDestaque?: boolean;
   /** Só a sessão com janela usa: texto do elemento a clicar antes de ler (GT de 05/11). `fetch` ignora. */
-  clicarAntes?: string;
+  clicarAntes?: CliqueAntes;
   timeoutMs?: number;
 }
 

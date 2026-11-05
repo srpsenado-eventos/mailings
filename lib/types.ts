@@ -431,7 +431,17 @@ export interface FonteIndividual {
    * Texto exato de um título, botão ou link a clicar antes de ler a página (GT de 05/11, Roraima:
    * o nome do governador só aparece depois do clique). Só vale com `navegador: "janela"`.
    */
-  clicarAntes?: string;
+  clicarAntes?: CliqueAntes;
+}
+
+/**
+ * Clique antes da leitura: `texto` é o do elemento a clicar (comparado sem diferenciar caixa e com
+ * espaços colapsados); `prova` é o trecho que deve aparecer no corpo da página depois do clique,
+ * senão o clique não revelou nada e a leitura falha.
+ */
+export interface CliqueAntes {
+  texto: string;
+  prova: string;
 }
 
 /** Tipo da fonte individual provisória (spec 2026-10-26 §3.1). */

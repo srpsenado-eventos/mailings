@@ -4,6 +4,8 @@ import { describe, expect, test, vi } from "vitest";
 import { analisar, MOTIVO_LEITURA_SUSPEITA, type Dependencias } from "@/lib/analise";
 import { MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO, OBSERVACAO_SEM_INDIVIDUAL } from "@/lib/match";
 import { extrairConteudo } from "@/lib/scrape";
+import { MOTIVO_CLIQUE_SEM_EFEITO } from "@/lib/navegador";
+import { chaveDaLeitura } from "@/lib/memoria-leitura";
 import type { ContatoPlanilha, ConteudoFonte, FonteIndividual, FonteCatalogo } from "@/lib/types";
 import type { FonteResolvida } from "@/lib/catalogo";
 import type { LeiturasGuardadas } from "@/lib/types";
@@ -371,5 +373,50 @@ describe("Governadores Eleitos: site de campanha com validade (spec 2026-10-26)"
     expect(g.fonteInacessivel).toBeUndefined();
     expect(g.individuais).toEqual({ lidas: 0, caidas: 0 });
     expect(r.falhas?.[URL_ES]).toBeUndefined();
+  });
+});
+
+
+describe("clique que não revelou o trecho (GT de 05/11, Roraima)", () => {
+  const URL_RR = "https://transparencia.rr.gov.br/principaiscargos";
+  const clique = { texto: "Governador do Estado de Roraima", prova: "Ocupado por" };
+  const fonteRR: FonteIndividual = { url: URL_RR, ativo: true, chave: { uf: "RR" }, campos: ["nome", "cargo"], navegador: "janela", clicarAntes: clique };
+  const govRR: ContatoPlanilha = { nome: "Francisco dos Santos Sampaio", cargo: "Governador do Estado de Roraima", grupo: "Governadores", ...PROTOCOLO_M };
+  const resolvida: FonteResolvida = { ...RESOLVIDA_GOV, fontesIndividuais: [fonteRR] };
+  const AGORA = new Date("2026-11-06T12:00:00.000Z");
+  const guardada: ConteudoFonte = {
+    url: URL_RR,
+    textoLimpo: `Governador do Estado de Roraima Ocupado por: Francisco dos Santos Sampaio ${"Principais cargos do governo do estado. ".repeat(12)}`,
+    destaques: [],
+    pessoas: [{ nome: "Francisco dos Santos Sampaio", cargo: "Governador do Estado de Roraima" }],
+  };
+  const montar = (leituras: LeiturasGuardadas) =>
+    deps({ [URL_RR]: MOTIVO_CLIQUE_SEM_EFEITO }, { resolverFonte: resolver(RESOLVIDA_MIN, resolvida), leiturasAnteriores: leituras, agora: () => AGORA });
+
+  test("sem leitura guardada o governador sai indeterminado, nunca possível saída", async () => {
+    // Act
+    const r = await analisar("c.xlsx", [govRR], montar({}));
+
+    // Assert
+    const c = r.grupos[0].contatos[0];
+    expect(c.semaforo).toBe("indeterminado");
+    expect(c.possivelSaida).toBeFalsy();
+    expect(r.leituras).toEqual({});
+  });
+
+  test("com leitura guardada sob a chave do clique o contato sai reaproveitado e verde", async () => {
+    // Arrange
+    const chave = chaveDaLeitura(URL_RR, { clicarAntes: clique });
+    const leituras: LeiturasGuardadas = { [chave]: { url: URL_RR, lidaEm: "2026-11-04T15:00:00.000Z", conteudo: guardada } };
+
+    // Act
+    const r = await analisar("c.xlsx", [govRR], montar(leituras));
+
+    // Assert
+    const c = r.grupos[0].contatos[0];
+    expect(chave).toBe(`${URL_RR}#clique:"Governador do Estado de Roraima"`);
+    expect(c.possivelSaida).toBeFalsy();
+    expect(c.semaforo).toBe("verde");
+    expect(c.leituraDe).toBe("2026-11-04T15:00:00.000Z");
   });
 });

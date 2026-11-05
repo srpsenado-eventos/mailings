@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import puppeteer, { type Page } from "puppeteer-core";
 import { extrairConteudo, extrairTabela, ScrapeError, type OpcoesRaspagem } from "@/lib/scrape";
 import { paginaComConteudo } from "@/lib/match";
-import type { ConteudoFonte, ExtracaoTabela } from "@/lib/types";
+import type { ConteudoFonte, ExtracaoTabela, CliqueAntes } from "@/lib/types";
 
 /**
  * Leitura de fonte do catálogo marcada `navegador: true` (spec 2026-10-02, §5): abre o
@@ -17,9 +17,9 @@ import type { ConteudoFonte, ExtracaoTabela } from "@/lib/types";
 
 export const MOTIVO_NAVEGADOR_AUSENTE = "navegador não encontrado";
 export const MOTIVO_NAVEGADOR_TEMPO = "navegador: tempo esgotado";
-/** O clique de `clicarAntes` não achou o elemento ou não fez o texto da página crescer. */
+/** O clique de `clicarAntes` não achou o elemento ou a prova não apareceu na página. */
 export const MOTIVO_CLIQUE_SEM_EFEITO = "navegador: clique não revelou conteúdo";
-/** Quanto esperar o texto da página crescer depois do clique. */
+/** Quanto esperar a prova aparecer na página depois do clique. */
 const ESPERA_APOS_CLIQUE_MS = 5_000;
 /** Teto por página. A do TCU carrega em poucos segundos; 30 s cobre rede lenta sem travar a varredura. */
 export const TETO_NAVEGADOR_MS = 30_000;
@@ -46,7 +46,7 @@ const CAMINHOS_PADRAO = [
 
 /** Uma página aberta num navegador lançado: lê uma URL e fecha o navegador. */
 export interface PaginaNavegador {
-  conteudo(url: string, timeoutMs: number, clicarAntes?: string): Promise<string>;
+  conteudo(url: string, timeoutMs: number, clicarAntes?: CliqueAntes): Promise<string>;
   fechar(): Promise<void>;
 }
 
@@ -101,22 +101,27 @@ function comTeto<T>(promessa: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
- * Clica no primeiro título, botão, link ou resumo cujo texto aparado é igual a `texto` e espera o
- * texto do corpo crescer. Elemento ausente ou texto que não cresceu: `MOTIVO_CLIQUE_SEM_EFEITO`.
+ * Clica no primeiro título, botão, link ou resumo cujo texto (espaços colapsados, sem diferenciar
+ * caixa) é igual a `clique.texto` e espera o corpo da página conter `clique.prova`. Texto que só
+ * cresceu não basta ("Carregando..."): sem a prova, `MOTIVO_CLIQUE_SEM_EFEITO`.
  * Não coberto por teste (abre navegador).
  */
-async function clicarEEsperar(page: Page, texto: string): Promise<void> {
-  const antes = await page.evaluate(() => document.body.innerText.length);
-  const clicou = await page.evaluate((alvo) => {
+async function clicarEEsperar(page: Page, clique: CliqueAntes): Promise<void> {
+  const clicou = await page.evaluate((alvo: string) => {
+    const colapsar = (t: string) => t.replace(/\s+/g, " ").trim().toLowerCase();
     const el = Array.from(document.querySelectorAll<HTMLElement>("h1,h2,h3,h4,h5,h6,button,a,summary")).find(
-      (e) => (e.innerText ?? "").trim() === alvo,
+      (e) => colapsar(e.innerText ?? "") === colapsar(alvo),
     );
     el?.click();
     return Boolean(el);
-  }, texto);
+  }, clique.texto);
   if (!clicou) throw new Error(MOTIVO_CLIQUE_SEM_EFEITO);
   try {
-    await page.waitForFunction((n: number) => document.body.innerText.length > n, { timeout: ESPERA_APOS_CLIQUE_MS }, antes);
+    await page.waitForFunction(
+      (prova: string) => document.body.innerText.includes(prova),
+      { timeout: ESPERA_APOS_CLIQUE_MS, polling: 200 },
+      clique.prova,
+    );
   } catch {
     throw new Error(MOTIVO_CLIQUE_SEM_EFEITO);
   }

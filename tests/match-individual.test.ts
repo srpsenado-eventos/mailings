@@ -424,7 +424,7 @@ describe("governadores de SC e MT com página individual (GT de 05/11)", () => {
 
 describe("governador de Roraima depois do clique (GT de 05/11)", () => {
   const url = "https://transparencia.rr.gov.br/principaiscargos";
-  const fonte: FonteIndividual = { url, ativo: true, chave: { uf: "RR" }, campos: ["nome", "cargo"], navegador: "janela", clicarAntes: "Governador do Estado de Roraima" };
+  const fonte: FonteIndividual = { url, ativo: true, chave: { uf: "RR" }, campos: ["nome", "cargo"], navegador: "janela", clicarAntes: { texto: "Governador do Estado de Roraima", prova: "Ocupado por" } };
   const governadorRR = contato({ nome: "Francisco dos Santos Sampaio", cargo: "Governador do Estado de Roraima", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" });
 
   test("nome depois do rótulo Ocupado por confere e não vira possível saída", () => {

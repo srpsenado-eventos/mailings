@@ -338,12 +338,12 @@ describe("abrirSessao (Chrome com janela, spec 2026-10-15 §4.2)", () => {
 
 describe("clicar antes de ler (GT de 05/11, Roraima)", () => {
   const URL_RR = "https://transparencia.rr.gov.br/principaiscargos";
-  const TITULO = "Governador do Estado de Roraima";
+  const TITULO = { texto: "Governador do Estado de Roraima", prova: "Ocupado por" };
   const abrir = (lancar: Lancador) => abrirSessao({ esperar: async () => {}, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
 
   test("a sessão repassa clicarAntes ao lançador", async () => {
     // Arrange
-    const recebidos: Array<string | undefined> = [];
+    const recebidos: Array<{ texto: string; prova: string } | undefined> = [];
     const lancar: Lancador = async () => ({
       async conteudo(_url, _timeout, clicarAntes) {
         recebidos.push(clicarAntes);

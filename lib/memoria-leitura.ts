@@ -91,7 +91,7 @@ export function chaveDaLeitura(
     ...(fonte.marcador ? [`#marcador:${JSON.stringify(fonte.marcador.textos)}`] : []),
     ...(fonte.tipo === "pdf" ? ["#pdf"] : []),
     ...(fonte.nomeEmDestaque ? ["#destaque"] : []),
-    ...(fonte.clicarAntes ? [`#clique:${JSON.stringify(fonte.clicarAntes)}`] : []),
+    ...(fonte.clicarAntes ? [`#clique:${JSON.stringify(fonte.clicarAntes.texto)}`] : []),
   ];
   return `${url}${sufixos.join("")}`;
 }

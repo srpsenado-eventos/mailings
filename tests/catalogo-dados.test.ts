@@ -257,7 +257,7 @@ describe("fontes que clicam antes de ler (GT de 05/11)", () => {
   const individuais = CATALOGO.flatMap((g) => g.fontesIndividuais ?? []);
   test("Roraima clica no título do governador e vai pela janela", () => {
     const rr = individuais.find((f) => "uf" in f.chave && f.chave.uf === "RR")!;
-    expect(rr.clicarAntes).toBe("Governador do Estado de Roraima");
+    expect(rr.clicarAntes).toEqual({ texto: "Governador do Estado de Roraima", prova: "Ocupado por" });
     expect(rr.navegador).toBe("janela");
   });
   test("toda fonte com clicarAntes é lida pela janela", () => {

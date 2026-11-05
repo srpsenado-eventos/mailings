@@ -102,8 +102,8 @@ describe("HTTP 403 ao fetch vai para a janela (spec 2026-10-23 §3.1)", () => {
     const r = raspadoresFalsos();
     const url = "https://transparencia.rr.gov.br/principaiscargos";
     r.porJanela.mockResolvedValue(comConteudo(url));
-    await rasparFonte({ url, navegador: "janela", clicarAntes: "Governador do Estado de Roraima" }, r);
-    expect(r.porJanela).toHaveBeenCalledWith(url, { clicarAntes: "Governador do Estado de Roraima" });
+    await rasparFonte({ url, navegador: "janela", clicarAntes: { texto: "Governador do Estado de Roraima", prova: "Ocupado por" } }, r);
+    expect(r.porJanela).toHaveBeenCalledWith(url, { clicarAntes: { texto: "Governador do Estado de Roraima", prova: "Ocupado por" } });
   });
   test("fetch 401 também vai para a janela; 404 e 500 não", async () => {
     for (const [motivo, vaiParaJanela] of [["HTTP 401", true], ["HTTP 404", false], ["HTTP 500", false]] as const) {

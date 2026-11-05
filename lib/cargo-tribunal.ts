@@ -1,7 +1,8 @@
 import { normalizarTexto } from "@/lib/normalize";
 import { generoDoCargo, neutralizarGenero, PREFIXOS_NEGANTES, tokensSignificativos } from "@/lib/cargos";
 import { ehGrupoDeTribunal, FUNCOES_DE_TRIBUNAL } from "@/data/cargos-tribunal";
-import type { SituacaoCampo } from "@/lib/types";
+import { contatoEhFeminino } from "@/lib/tratamento";
+import type { ContatoPlanilha, SituacaoCampo } from "@/lib/types";
 
 /**
  * Cargo nos tribunais e gênero neutro da página (spec 2026-10-30 §3.2). Funções puras usadas
@@ -104,4 +105,19 @@ export function cargoEsperadoNoTribunal(
   if (!ehMinistroSemPresidencia(semGenero(cargoContato))) return cargoPagina;
   if (!temPresidenciaPropria(semGenero(cargoPagina))) return cargoPagina;
   return cargoContato.replace(REGEX_MINISTRO_NO_CARGO, "Presidente");
+}
+
+/**
+ * Presidente de tribunal aceita "Excelentíssimo Senhor" / "Excelentíssima Senhora" no
+ * tratamento (spec 2026-11-05 §2.4). Só a presidência própria, nunca a vice, e o gênero
+ * da forma tem que ser o da pessoa.
+ */
+export function tratamentoAceitoDoPresidente(
+  contato: ContatoPlanilha,
+  grupoCanonico: string | undefined,
+): boolean {
+  if (!ehGrupoDeTribunal(grupoCanonico)) return false;
+  if (!normalizarTexto(contato.cargo ?? "").startsWith("presidente")) return false;
+  const forma = contatoEhFeminino(contato) ? "excelentissima senhora" : "excelentissimo senhor";
+  return normalizarTexto(contato.tratamento ?? "") === forma;
 }

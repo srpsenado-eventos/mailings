@@ -21,6 +21,7 @@ import {
   semGenero,
   situacaoCargoTribunal,
   temGeneroNeutro,
+  tratamentoAceitoDoPresidente,
   type ContextoCargo,
 } from "@/lib/cargo-tribunal";
 import { comparacaoLimiteNome } from "@/lib/limite-nome";
@@ -270,9 +271,14 @@ export function comparacoesTratamento(
   contato: ContatoPlanilha,
   grupoCanonico: string | undefined,
 ): ComparacaoCampo[] {
+  const aceitaPresidente = tratamentoAceitoDoPresidente(contato, grupoCanonico);
   return [
     ...comparacoesCoerencia(contato),
-    ...comparacoesProtocolo(contato),
+    ...comparacoesProtocolo(contato).map((c) =>
+      aceitaPresidente && c.campo === "tratamento" && c.situacao === "divergente"
+        ? { ...c, situacao: "confere" as const }
+        : c,
+    ),
     ...comparacaoRegraNome(contato, grupoCanonico),
     ...comparacaoPrefixoNome(contato, grupoCanonico),
     ...comparacaoLimiteNome(contato, grupoCanonico),

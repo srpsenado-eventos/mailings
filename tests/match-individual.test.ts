@@ -441,3 +441,21 @@ describe("governador de Roraima depois do clique (GT de 05/11)", () => {
     expect(v.resultado.possivelSaida).toBeFalsy();
   });
 });
+
+describe("governador de Minas Gerais: linha de chamada não gera 'cargo diverge'", () => {
+  const url = "https://www.mg.gov.br/governador";
+  const fonte: FonteIndividual = { url, ativo: true, chave: { uf: "MG" }, campos: ["nome", "cargo"] };
+  const governadorMG = contato({ nome: "Mateus Simões de Almeida", cargo: "Governador do Estado de Minas Gerais", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" });
+
+  test("o nome confere e o cargo não é divergente", () => {
+    // Arrange
+    const conteudo = extrairConteudo(fixture("governador-mg.html"), url);
+
+    // Act
+    const v = compararContatoIndividual({ contato: governadorMG, fonte, lida: { conteudo }, grupoCanonico: "Governadores" });
+
+    // Assert
+    expect(v.resultado.comparacoes.find((c) => c.campo === "nome")?.situacao).toBe("confere");
+    expect(v.resultado.comparacoes.find((c) => c.campo === "cargo")?.situacao).not.toBe("divergente");
+  });
+});

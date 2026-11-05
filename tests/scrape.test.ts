@@ -897,3 +897,36 @@ describe("linha rotulada só vale quando o resto é um nome", () => {
     expect(pessoas.find((p) => p.nome === "Fulano de Tal")?.cargo).toBeUndefined();
   });
 });
+
+describe("linha de chamada não é cargo (Minas Gerais)", () => {
+  const MG = "https://www.mg.gov.br/governador";
+
+  test("'Ver Galeria de Governadores' não vira cargo do governador", () => {
+    // Arrange
+    const pagina = readFileSync(resolve(__dirname, "fixtures/governador-mg.html"), "utf-8");
+
+    // Act
+    const { pessoas } = extrairConteudo(pagina, MG);
+
+    // Assert
+    expect(pessoas.some((p) => p.cargo?.startsWith("Ver"))).toBe(false);
+    expect(pessoas.find((p) => p.nome === "Mateus Simões de Almeida")).toBeDefined();
+  });
+
+  test.each([
+    "Veja a Galeria de Governadores",
+    "Acesse a Galeria de Governadores",
+    "Saiba mais sobre os Governadores",
+    "Conheça os Governadores",
+    "Clique para ver os Governadores",
+  ])("linha '%s' nunca é cargo", (linha) => {
+    // Arrange
+    const html = `<!doctype html><html><body><main><h1>Mateus Simões de Almeida</h1><p><a href="/x">${linha}</a></p></main></body></html>`;
+
+    // Act
+    const { pessoas } = extrairConteudo(html, MG);
+
+    // Assert
+    expect(pessoas.some((p) => p.cargo === linha)).toBe(false);
+  });
+});

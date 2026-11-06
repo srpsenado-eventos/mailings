@@ -13,7 +13,14 @@ import type {
   OrigemVeredito,
   Semaforo,
 } from "@/lib/types";
-import { normalizarNome, normalizarTexto, semTratamentoDeEmbaixada } from "@/lib/normalize";
+import {
+  mesmaGrafiaDeNome,
+  mesmosAcentos,
+  normalizarNome,
+  normalizarTexto,
+  semTratamentoDeEmbaixada,
+  soAcentoDiverge,
+} from "@/lib/normalize";
 import { CARGOS, PREFIXOS_NEGANTES, tokensSignificativos } from "@/lib/cargos";
 import {
   cargoEsperadoNoTribunal,
@@ -253,8 +260,14 @@ function situacaoPorPapel(valorPlanilha: string, valorEsperado: string): Situaca
  * (STJ), o esperado é o destaque: o nome completo da página diverge (spec 2026-10-30 §3.1).
  */
 function situacaoNome(planilha: string, pessoa: PessoaSite): SituacaoCampo {
-  return normalizarNome(planilha) === normalizarNome(nomeEsperado(pessoa)) ? "confere" : "divergente";
+  const esperado = nomeEsperado(pessoa);
+  // A grafia lembrada pela IA não é fonte: o acento só conta quando o nome veio de uma página.
+  const igual = pessoa.origem === "conhecimento" ? normalizarNome(planilha) === normalizarNome(esperado) : mesmaGrafiaDeNome(planilha, esperado);
+  return igual ? "confere" : "divergente";
 }
+
+/** Observação do nome que só difere da fonte no acento: à vista, os dois parecem iguais. */
+export const OBSERVACAO_ACENTO_NOME = "Diferença de acento em relação à fonte";
 
 /**
  * Auditoria de Tratamento, Endereçamento e Nome — Camada A (coerência interna do
@@ -358,6 +371,7 @@ function montarResultado(
       valorEsperado: nomeEsperadoComPrefixo(contato, grupoCanonico, nomeEsperado(pessoa)),
       origemValor: ov,
       situacao: situacaoNome(contato.nome, pessoa),
+      ...(pessoa.origem !== "conhecimento" && soAcentoDiverge(contato.nome, nomeEsperado(pessoa)) ? { observacao: OBSERVACAO_ACENTO_NOME } : {}),
     },
   ];
   if (contato.cargo) {
@@ -599,6 +613,21 @@ function trechoOriginal(janela: readonly PalavraPagina[]): string {
   return originais.join(" ").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
 }
 
+/**
+ * Como o texto da página escreve o nome (`trecho` já normalizado), uma entrada por ocorrência. Só
+ * letras e números: o que está colado ao nome ("Governador:João", "João/PB") nunca entra na grafia.
+ */
+function grafiasNoTexto(trecho: string, texto: string): string[] {
+  const alvo = trecho.split(" ");
+  const palavras = (texto.match(/[\p{L}\p{M}\p{N}]+/gu) ?? []).map((original) => ({ original, norma: soPalavras(original) }));
+  return palavras.flatMap((p, i) => {
+    if (p.norma !== alvo[0]) return [];
+    const janela = palavras.slice(i, i + alvo.length);
+    const casou = janela.length === alvo.length && janela.every((q, k) => q.norma === alvo[k]);
+    return casou ? [janela.map((q) => q.original).join(" ")] : [];
+  });
+}
+
 /** Resultado de `nomeNaPagina`: `exato` falso quando a página traz o nome mais longo (R9). */
 export interface NomeAchado {
   pessoa?: PessoaSite;
@@ -619,11 +648,15 @@ export interface NomeAchado {
 export function nomeNaPagina(nome: string, c: ConteudoFonte): NomeAchado | undefined {
   const alvo = normalizarNome(nome);
   if (!alvo) return undefined;
-  const pessoa = c.pessoas.find((p) => normalizarNome(p.nome) === alvo);
-  if (pessoa) return { pessoa, nomeNaPagina: pessoa.nome, exato: true };
   const trecho = soPalavras(alvo);
+  // A página pode citar a mesma pessoa de dois jeitos: vale a ocorrência com os acentos do Contatos.
+  const grafias = trecho ? grafiasNoTexto(trecho, c.textoLimpo) : [];
+  const grafiaIgual = grafias.find((g) => mesmosAcentos(g, nome));
+  const pessoas = c.pessoas.filter((p) => normalizarNome(p.nome) === alvo);
+  const pessoa = pessoas.find((p) => mesmosAcentos(p.nome, nome)) ?? pessoas[0];
+  if (pessoa) return { pessoa, nomeNaPagina: mesmosAcentos(pessoa.nome, nome) ? pessoa.nome : (grafiaIgual ?? pessoa.nome), exato: true };
   if (!trecho) return undefined;
-  if (` ${soPalavras(c.textoLimpo)} `.includes(` ${trecho} `)) return { nomeNaPagina: nome, exato: true };
+  if (` ${soPalavras(c.textoLimpo)} `.includes(` ${trecho} `)) return { nomeNaPagina: grafiaIgual ?? grafias[0] ?? nome, exato: true };
 
   const tokens = trecho.split(" ").filter((t) => !CONECTIVOS_NOME.has(t));
   if (tokens.length < 2) return undefined;
@@ -876,12 +909,21 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
         }
       : comparacaoCargoPelaLista(contato.cargo, listaCargos, contextoCargo)
     : undefined;
+  const nomeDaPagina = achado.nomeNaPagina ?? contato.nome;
   const comparacoes: ComparacaoCampo[] = [
-    // Nome mais longo na página (R9): a pessoa está lá, mas o GT quer o nome como o site o
-    // escreve; sai "divergente" (amarelo) com o nome da página para copiar.
-    achado.exato
-      ? { campo: "nome", valorPlanilha: contato.nome, valorEsperado: nomeEsperadoComPrefixo(contato, grupoCanonico, achado.pessoa?.nome ?? contato.nome), origemValor: "pagina", situacao: "confere", fonteUrl: url }
-      : { campo: "nome", valorPlanilha: contato.nome, valorEsperado: achado.nomeNaPagina && nomeEsperadoComPrefixo(contato, grupoCanonico, achado.nomeNaPagina), origemValor: "pagina", situacao: "divergente", fonteUrl: url },
+    // Nome mais longo na página (R9) ou com outro acento: a pessoa está lá, mas o GT quer o nome
+    // como o site o escreve; sai "divergente" (amarelo) com o nome da página para copiar.
+    achado.exato && mesmosAcentos(contato.nome, nomeDaPagina)
+      ? { campo: "nome", valorPlanilha: contato.nome, valorEsperado: nomeEsperadoComPrefixo(contato, grupoCanonico, nomeDaPagina), origemValor: "pagina", situacao: "confere", fonteUrl: url }
+      : {
+          campo: "nome",
+          valorPlanilha: contato.nome,
+          valorEsperado: achado.nomeNaPagina && nomeEsperadoComPrefixo(contato, grupoCanonico, achado.nomeNaPagina),
+          origemValor: "pagina",
+          situacao: "divergente",
+          fonteUrl: url,
+          ...(achado.exato ? { observacao: OBSERVACAO_ACENTO_NOME } : {}),
+        },
     ...cargoDe(cargo),
     ...comparacoesSemSite(contato),
     ...protocolo,

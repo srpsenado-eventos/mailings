@@ -39,6 +39,15 @@ function periodoNoPeriodoValido(resto: string): boolean {
   return resto.startsWith(PREFIXO_NO_PERIODO) && periodoValido(resto.slice(PREFIXO_NO_PERIODO.length));
 }
 
+/** Traço entre dois anos, em qualquer variante: "1991-1993", "1991- 1993", "1991 – 1993". */
+const TRACO_ENTRE_ANOS = /(\d{4})\s*[-\u2010-\u2015]\s*(\d{4})/g;
+
+/** Observação do período com traço: cita o trecho do cadastro e como ele deve ficar. */
+function observacaoDoTraco(trechos: readonly string[]): string {
+  const corrigidos = trechos.map((t) => t.replace(TRACO_ENTRE_ANOS, "$1 a $2"));
+  return `Período com traço (${trechos.join(", ")}): usar "a" entre os anos (${corrigidos.join(", ")})`;
+}
+
 /**
  * Cargo do ex-presidente fora do formato do GT (spec 2026-10-30 §3.5; decisão do Clovis de
  * 30/10: todo cargo fora do formato é acusado). Nos grupos com `cargoComPeriodo` em
@@ -47,8 +56,10 @@ function periodoNoPeriodoValido(resto: string): boolean {
  * (adendo de 05/11), "no período de AAAA a AAAA" (um ou mais períodos) e "em AAAA" (um só ano).
  * Qualquer outra forma diverge: "Ex-Presidente...", o cargo sem período, sem "Federal", "Senador", o marcador
  * "AAAA" copiado sem preencher. O esperado é o cargo da regra com "AAAA" no lugar dos anos, e a
- * observação pede o período. Cargo vazio fica fora: o painel já o acusa como "Cargo vazio", e
- * acusar duas vezes só repetiria o aviso. Fora desses grupos nada muda.
+ * observação pede o período. Período com traço no lugar do "a" (adendo de 06/11) diz isso na
+ * observação e, quando trocar o traço basta para o formato, leva os anos do cadastro ao esperado.
+ * Cargo vazio fica fora: o painel já o acusa como "Cargo vazio", e acusar duas vezes só repetiria
+ * o aviso. Fora desses grupos nada muda.
  */
 export function comparacaoCargoExPresidente(
   contato: ContatoPlanilha,
@@ -58,23 +69,29 @@ export function comparacaoCargoExPresidente(
   const cargoComPeriodo = grupoCanonico ? regras[grupoCanonico]?.cargoComPeriodo : undefined;
   if (!cargoComPeriodo) return [];
   const cargo = contato.cargo ?? "";
-  const normalizado = normalizarTexto(cargo);
+  if (normalizarTexto(cargo).length === 0) return [];
   const base = `${normalizarTexto(cargoComPeriodo)} `;
-  if (normalizado.length === 0) return [];
   const noPeriodo = regras[grupoCanonico ?? ""]?.formaDoPeriodo === "no_periodo_ou_em_ano";
-  const resto = normalizado.startsWith(base) ? normalizado.slice(base.length) : undefined;
-  const noFormato = resto !== undefined && (noPeriodo ? periodoNoPeriodoValido(resto) : periodoValido(resto));
-  if (noFormato) return [];
+  const noFormato = (valor: string): boolean => {
+    const normalizado = normalizarTexto(valor);
+    if (!normalizado.startsWith(base)) return false;
+    const resto = normalizado.slice(base.length);
+    return noPeriodo ? periodoNoPeriodoValido(resto) : periodoValido(resto);
+  };
+  if (noFormato(cargo)) return [];
 
+  const tracos = [...cargo.matchAll(TRACO_ENTRE_ANOS)].map(([trecho]) => trecho);
+  const semTraco = cargo.replace(TRACO_ENTRE_ANOS, "$1 a $2").replace(/\s+/g, " ").trim();
+  const marcador = `${cargoComPeriodo} ${noPeriodo ? PERIODO_DESCONHECIDO_NO_PERIODO : PERIODO_DESCONHECIDO}`;
   return [
     {
       campo: "cargo",
       valorPlanilha: cargo,
-      valorEsperado: `${cargoComPeriodo} ${noPeriodo ? PERIODO_DESCONHECIDO_NO_PERIODO : PERIODO_DESCONHECIDO}`,
+      valorEsperado: tracos.length > 0 && noFormato(semTraco) ? semTraco : marcador,
       situacao: "divergente",
       origemValor: "coerencia",
       achado: "cargo_ex_presidente",
-      observacao: OBSERVACAO_PERIODO,
+      observacao: tracos.length > 0 ? observacaoDoTraco(tracos) : OBSERVACAO_PERIODO,
     },
   ];
 }

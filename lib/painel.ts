@@ -316,7 +316,9 @@ export function detalhesDoContato(c: ResultadoContato, _g: ResultadoGrupo): Deta
     const comp = comparacaoDeValor(c, campo);
     const coerencias = coerenciasDo(c, campo);
     const valorPlanilha = campo === "nome" ? c.contato.nome : (comp?.valorPlanilha ?? coerencias[0]?.valorPlanilha ?? c.contato[campo] ?? "");
-    const copiavel = comp?.situacao === "divergente" && comp.valorEsperado ? comp.valorEsperado : undefined;
+    // O achado do período traz o cargo pronto quando os anos são conhecidos; com "AAAA" não há o que copiar.
+    const cargoCorrigido = coerencias.find((x) => x.achado === "cargo_ex_presidente" && !x.valorEsperado?.includes("AAAA"))?.valorEsperado;
+    const copiavel = comp?.situacao === "divergente" && comp.valorEsperado ? comp.valorEsperado : cargoCorrigido;
     cartoes.push({
       campo,
       rotulo: ROTULO_CAMPO[campo],
@@ -326,7 +328,7 @@ export function detalhesDoContato(c: ResultadoContato, _g: ResultadoGrupo): Deta
       valorReferencia: valorReferenciaDe(comp),
       ...(copiavel ? { copiavel } : {}),
       ...(comp?.fonteUrl ? { url: comp.fonteUrl } : {}),
-      ...(comp?.origemValor === "pares" && comp.observacao ? { observacao: comp.observacao } : {}),
+      ...((comp?.origemValor === "pares" || campo === "nome") && comp?.observacao ? { observacao: comp.observacao } : {}),
       coerencias: coerencias.map(textoCoerencia),
     });
   }

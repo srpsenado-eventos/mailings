@@ -76,8 +76,8 @@ function Subsecao({ titulo, eleitos, governo, conferir, ctx }: { titulo: string;
   );
 }
 
-/** Seção recolhível dos eleitos de um grupo do Contatos, com A cadastrar e A conferir. Só renderiza. */
-export function SecaoEleitos({ secao, abertoInicial, modo, decisoes }: { secao: SecaoGrupoEleito; abertoInicial: boolean; modo: "local" | "web"; decisoes?: HistoricoDecisoes }) {
+/** Seção recolhível dos eleitos de um grupo do Contatos, com A cadastrar e A conferir. `aviso` fica visível mesmo recolhida. Só renderiza. */
+export function SecaoEleitos({ secao, abertoInicial, modo, decisoes, aviso }: { secao: SecaoGrupoEleito; abertoInicial: boolean; modo: "local" | "web"; decisoes?: HistoricoDecisoes; aviso?: string }) {
   const [aberto, setAberto] = useState(abertoInicial);
   const ctx: ContextoDecisao = { modo, ...(decisoes ? { decisoes } : {}) };
   return (
@@ -86,6 +86,7 @@ export function SecaoEleitos({ secao, abertoInicial, modo, decisoes }: { secao: 
         <span aria-hidden className="w-3 text-xs text-cinza">{aberto ? "▾" : "▸"}</span>
         <h2 className="font-serif text-lg font-semibold">{secao.titulo}</h2>
       </button>
+      {aviso && <p className="px-4 pb-3 text-xs text-cinza">{aviso}</p>}
       {aberto && (
         <>
           <Subsecao titulo="A cadastrar" eleitos={secao.aCadastrar} governo={secao.governo.aCadastrar} conferir={false} ctx={ctx} />

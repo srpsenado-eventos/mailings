@@ -2,12 +2,14 @@ import { describe, expect, test } from "vitest";
 import {
   ehGrupoDeTeste,
   gruposNaoCadastrados,
-  gruposVaziosVisiveis,
+  linhasDosGruposNaoCadastrados,
   rotulosDeTesteForaDoAgrupador,
   retratoSemGruposDeTeste,
+  secoesDosDemaisGrupos,
   TEXTO_GRUPO_NAO_CADASTRADO,
 } from "@/lib/painel-grupos-vazios";
 import type { LinhaAgrupador } from "@/lib/agrupador";
+import type { SecaoGrupoEleito } from "@/lib/painel-eleicao";
 import type { ResultadoContato, ResultadoGrupo, ResumoAnalise, Semaforo } from "@/lib/types";
 
 function contato(nome: string, semaforo: Semaforo): ResultadoContato {
@@ -54,6 +56,10 @@ describe("rotulosDeTesteForaDoAgrupador", () => {
       grupo("Ministros do STF;Fora de teste real", [contato("Maria", "verde")]),
     ];
     expect(rotulosDeTesteForaDoAgrupador(grupos)).toEqual(["EMCFA indicados - Posse Presidencial 2027", "Outro fora"]);
+  });
+  test("o rótulo do singular dos deputados é apelido e não vira linha avulsa (spec 2026-11-05 §9.2)", () => {
+    const grupos = [grupo("Deputado Federal - Posse Presidencial 2027; EMCFA indicados - Posse Presidencial 2027", [contato("Teste a", "verde")])];
+    expect(rotulosDeTesteForaDoAgrupador(grupos)).toEqual(["EMCFA indicados - Posse Presidencial 2027"]);
   });
 });
 
@@ -107,22 +113,84 @@ describe("gruposNaoCadastrados", () => {
   });
 });
 
-describe("gruposVaziosVisiveis", () => {
+const secao = (rotulo: string): SecaoGrupoEleito => ({
+  grupo: rotulo, titulo: `${rotulo} — 1 pela lista · 0 no Contatos · 1 a cadastrar`,
+  aCadastrar: [], aConferir: [], governo: { aCadastrar: [], aConferir: [] }, pelaLista: 1, noContatos: 0,
+});
+
+describe("linhasDosGruposNaoCadastrados (spec 2026-11-05 §9.1)", () => {
   const lista = [{ rotulo: "B", texto: "x" }, { rotulo: "C", texto: "y" }];
-  test("tudo sem busca e sem grupo mostra todos", () => {
-    expect(gruposVaziosVisiveis(lista, { filtro: "tudo", busca: "", grupo: "" })).toEqual(lista);
+
+  test("tudo sem busca e sem grupo mostra todas, na ordem da lista, com a seção de quem tem", () => {
+    // Act
+    const out = linhasDosGruposNaoCadastrados(lista, [secao("C")], { filtro: "tudo", busca: "", grupo: "" });
+
+    // Assert
+    expect(out).toEqual([{ rotulo: "B", texto: "x" }, { rotulo: "C", texto: "y", secao: secao("C") }]);
   });
   test("busca só com espaços conta como vazia", () => {
-    expect(gruposVaziosVisiveis(lista, { filtro: "tudo", busca: "  ", grupo: "" })).toEqual(lista);
+    expect(linhasDosGruposNaoCadastrados(lista, [], { filtro: "tudo", busca: "  ", grupo: "" })).toEqual(lista);
   });
-  test("outro filtro ou busca esconde todos", () => {
-    expect(gruposVaziosVisiveis(lista, { filtro: "divergencia", busca: "", grupo: "" })).toEqual([]);
-    expect(gruposVaziosVisiveis(lista, { filtro: "tudo", busca: "ana", grupo: "" })).toEqual([]);
+  test("com busca entra só a linha com seção; a sem seção some", () => {
+    const out = linhasDosGruposNaoCadastrados(lista, [secao("C")], { filtro: "tudo", busca: "ana", grupo: "" });
+    expect(out.map((l) => l.rotulo)).toEqual(["C"]);
+    expect(out[0].secao).toEqual(secao("C"));
+  });
+  test("busca sem resultado na seção não mostra o grupo", () => {
+    expect(linhasDosGruposNaoCadastrados(lista, [], { filtro: "tudo", busca: "ninguem", grupo: "" })).toEqual([]);
+  });
+  test("outro filtro sem seção esconde todas", () => {
+    expect(linhasDosGruposNaoCadastrados(lista, [], { filtro: "divergencia", busca: "", grupo: "" })).toEqual([]);
+  });
+  test("filtro da eleição mostra só a linha com seção", () => {
+    const out = linhasDosGruposNaoCadastrados(lista, [secao("B")], { filtro: "a_cadastrar", busca: "", grupo: "" });
+    expect(out.map((l) => l.rotulo)).toEqual(["B"]);
   });
   test("grupo escolhido mostra só a linha dele, mesmo com outro filtro", () => {
-    expect(gruposVaziosVisiveis(lista, { filtro: "saida", busca: "", grupo: "C" })).toEqual([lista[1]]);
+    expect(linhasDosGruposNaoCadastrados(lista, [], { filtro: "saida", busca: "", grupo: "C" })).toEqual([lista[1]]);
+  });
+  test("grupo escolhido com seção leva a seção dele, sem a dos outros", () => {
+    const out = linhasDosGruposNaoCadastrados(lista, [secao("B"), secao("C")], { filtro: "tudo", busca: "", grupo: "C" });
+    expect(out).toEqual([{ rotulo: "C", texto: "y", secao: secao("C") }]);
   });
   test("grupo escolhido que tem contatos não gera linha", () => {
-    expect(gruposVaziosVisiveis(lista, { filtro: "tudo", busca: "", grupo: "A" })).toEqual([]);
+    expect(linhasDosGruposNaoCadastrados(lista, [secao("A")], { filtro: "tudo", busca: "", grupo: "A" })).toEqual([]);
+  });
+  test("não muta a lista nem as seções", () => {
+    // Arrange
+    const copia = structuredClone(lista);
+    const secoes = [secao("B")];
+
+    // Act
+    linhasDosGruposNaoCadastrados(lista, secoes, { filtro: "tudo", busca: "", grupo: "" });
+
+    // Assert
+    expect(lista).toEqual(copia);
+    expect(secoes).toEqual([secao("B")]);
+  });
+});
+
+describe("secoesDosDemaisGrupos (spec 2026-11-05 §9.1)", () => {
+  const lista = [{ rotulo: "Deputado Federal eleitos - Posse Presidencial 2027", texto: "x" }];
+  const noLugar = secao("Deputado Federal eleitos - Posse Presidencial 2027");
+  const senadores = secao("Senadores eleitos - Posse Presidencial 2027");
+  const deputados = secao("Deputados Federais");
+
+  test("chave desligada não mostra nenhuma", () => {
+    expect(secoesDosDemaisGrupos([noLugar, senadores], lista, { eleicaoLigada: false, grupo: "" })).toEqual([]);
+  });
+  test("chave ligada mostra as de grupos com contatos, sem a que está no lugar do grupo", () => {
+    expect(secoesDosDemaisGrupos([noLugar, senadores], lista, { eleicaoLigada: true, grupo: "" })).toEqual([senadores]);
+  });
+  test("com grupo escolhido, só a do próprio grupo", () => {
+    const out = secoesDosDemaisGrupos([senadores, deputados], [], { eleicaoLigada: true, grupo: "senadores eleitos - posse presidencial 2027 " });
+    expect(out).toEqual([senadores]);
+  });
+  test("grupo escolhido pelo apelido acha a seção do rótulo oficial", () => {
+    const out = secoesDosDemaisGrupos([senadores, deputados], [], { eleicaoLigada: true, grupo: "Deputado Federal - Posse Presidencial 2027" });
+    expect(out).toEqual([deputados]);
+  });
+  test("grupo escolhido sem seção não mostra nenhuma", () => {
+    expect(secoesDosDemaisGrupos([senadores], [], { eleicaoLigada: true, grupo: "Ministros do STF" })).toEqual([]);
   });
 });

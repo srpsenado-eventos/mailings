@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { deputadosEmExercicio, nomesComAbreviacao } from "@/lib/eleitos-casamento";
+import { casaDoGrupo, deputadosEmExercicio, nomesComAbreviacao } from "@/lib/eleitos-casamento";
 import type { DeputadoAtual } from "@/lib/types";
 
 const dep = (over: Partial<DeputadoAtual>): DeputadoAtual => ({
@@ -134,5 +134,26 @@ describe("nomesComAbreviacao", () => {
   test("nome vazio não casa nada", () => {
     expect(nomesComAbreviacao("", "")).toBe(false);
     expect(nomesComAbreviacao("A.", "")).toBe(false);
+  });
+});
+
+describe("casaDoGrupo (spec 2026-11-05 §9.2)", () => {
+  test.each([
+    ["Deputado Federal - Posse Presidencial 2027", { casa: "camara", eleitos: false }],
+    ["  deputado federal - posse presidencial 2027 ", { casa: "camara", eleitos: false }],
+    ["Deputados Federais", { casa: "camara", eleitos: false }],
+    ["Deputado Federal eleitos - Posse Presidencial 2027", { casa: "camara", eleitos: true }],
+    ["Senadores", { casa: "senado", eleitos: false }],
+    ["Senadores eleitos - Posse Presidencial 2027", { casa: "senado", eleitos: true }],
+  ])("%s", (rotulo, esperado) => {
+    expect(casaDoGrupo(rotulo)).toEqual(esperado);
+  });
+
+  test("o rótulo do singular também vale dentro de uma célula com mais de um grupo", () => {
+    expect(casaDoGrupo("Ministros de Estado; Deputado Federal - Posse Presidencial 2027")).toEqual({ casa: "camara", eleitos: false });
+  });
+
+  test.each(["Ex-Deputados Federais", "Ex-Senadores", "Presidente da Câmara dos Deputados", "Deputado Federal"])("%s fica fora", (rotulo) => {
+    expect(casaDoGrupo(rotulo)).toBeUndefined();
   });
 });

@@ -637,3 +637,26 @@ describe("classificarEleitos: a decisão do GT vence a regra (spec 2026-10-30 §
     expect(comDecisao.eleicao?.eleitos[0]).toMatchObject({ destino: "novo", grupoDestino: GRUPO_DEPUTADOS_ELEITOS });
   });
 });
+
+describe("aplicarEleicao: grupo Deputado Federal no Contatos (spec 2026-11-05 §9.2)", () => {
+  test("o rótulo do singular liga camaraNoContatos e casa o eleito", () => {
+    // Arrange
+    const rotulo = "Deputado Federal - Posse Presidencial 2027";
+    const contato: ContatoPlanilha = { id: "30", nome: "Rui Fictício", grupo: rotulo, departamento: "BAHIA" };
+    const resultado: ResultadoAnalise = {
+      arquivoNome: "base.xlsx",
+      grupos: [grupo(rotulo, [contato])],
+      resumo: { total: 1, verde: 1, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0, gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0 },
+    };
+    const atuais: DeputadoAtual[] = [{ uf: "BA", nomeParlamentar: "Rui Fictício", nomeCivil: "RUI FICTICIO SOUZA" }];
+    const reeleito = eleito({ casa: "camara", uf: "BA", nomeUrna: "Rui Fictício", nomeCompleto: "Rui Fictício Souza" });
+
+    // Act
+    const r = aplicarEleicao(resultado, [reeleito], ["camara.xlsx"], atuais);
+
+    // Assert
+    expect(r.eleicao?.camaraNoContatos).toBe(true);
+    expect(r.eleicao?.eleitos[0]).toMatchObject({ destino: "reeleito", grupoDestino: "Deputados Federais", jaCadastrado: true });
+    expect(r.grupos[0].contatos[0].eleicao?.destino).toBe("reeleito");
+  });
+});

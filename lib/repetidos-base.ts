@@ -1,4 +1,6 @@
+import { GRUPO_DEPUTADOS_FEDERAIS } from "@/data/grupos-posse";
 import { PRECEDENCIA, type NivelPrecedencia, type RegraPrecedencia } from "@/data/precedencia";
+import { grupoDoAgrupador } from "@/lib/agrupador";
 import { casaSegmento, segmentarGrupo } from "@/lib/catalogo";
 import { grupoEquivalente, type BloqueioDoGrupo, type CasoDecidido, type Pendencia, type RegistroManual, type SituacaoNoContatos } from "@/lib/decisoes";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
@@ -15,13 +17,15 @@ const GRUPO_FORA = /\beleit[oa]s?\b|piloto/;
 /**
  * Regra de precedência de um segmento (já normalizado) do rótulo "Grupo" do Contatos.
  * Exata primeiro; por contenção só quando uma regra única casa — segmento que casa duas
- * fica de fora em vez de cair na primeira da tabela.
+ * fica de fora em vez de cair na primeira da tabela. O rótulo do Contatos para Deputados Federais
+ * é resolvido pelo agrupador; os outros apelidos seguem a busca de sempre.
  */
 export function regraDoSegmento(segmento: string): RegraPrecedencia | undefined {
   if (GRUPO_FORA.test(segmento)) return undefined;
-  const exata = PRECEDENCIA.find((r) => normalizarTexto(r.grupo) === segmento);
+  const alvo = grupoDoAgrupador(segmento)?.rotulo === GRUPO_DEPUTADOS_FEDERAIS ? normalizarTexto(GRUPO_DEPUTADOS_FEDERAIS) : segmento;
+  const exata = PRECEDENCIA.find((r) => normalizarTexto(r.grupo) === alvo);
   if (exata) return exata;
-  const contidas = PRECEDENCIA.filter((r) => casaSegmento(normalizarTexto(r.grupo), segmento));
+  const contidas = PRECEDENCIA.filter((r) => casaSegmento(normalizarTexto(r.grupo), alvo));
   return contidas.length === 1 ? contidas[0] : undefined;
 }
 

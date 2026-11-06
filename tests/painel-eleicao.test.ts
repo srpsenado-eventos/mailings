@@ -182,6 +182,15 @@ describe("secoesDeEleicao: uma seção por grupo de eleitos do Contatos", () => 
     expect(secoesDeEleicao({ ...comCamara, camaraNoContatos: false }, [], "tudo", "")).toEqual([]);
   });
 
+  test("o rótulo do singular conta no Contatos de Deputados Federais (spec 2026-11-05 §9.2)", () => {
+    // Arrange
+    const comCamara = eleicao([classificado({ nome: "Rui Reeleito", casa: "camara", destino: "reeleito", grupoDestino: GRUPO_DEPUTADOS_FEDERAIS })], true);
+    // Act
+    const [s] = secoesDeEleicao(comCamara, [grupo("Deputado Federal - Posse Presidencial 2027", 2)], "tudo", "");
+    // Assert
+    expect(s.titulo).toBe("Deputados Federais — 1 pela lista · 2 no Contatos · 1 a cadastrar");
+  });
+
   test("com a planilha da Câmara, Deputados Federais conta pela lista os deputados em exercício", () => {
     // Arrange
     const atuais = Array.from({ length: 513 }, (_, i) => ({ uf: "SP", nomeParlamentar: `Dep ${i}`, nomeCivil: `Deputado ${i}` }));

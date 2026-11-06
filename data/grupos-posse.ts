@@ -25,7 +25,7 @@ export const GRUPO_SENADORES = "Senadores";
 export const GRUPO_GOVERNADORES = "Governadores";
 
 const fonte = (rotulo: string, apelidos?: readonly string[]): GrupoPosse => ({ rotulo, fiscalizacao: "fonte", ...(apelidos ? { apelidos } : {}) });
-const lista = (rotulo: string): GrupoPosse => ({ rotulo, fiscalizacao: "lista" });
+const lista = (rotulo: string, apelidos?: readonly string[]): GrupoPosse => ({ rotulo, fiscalizacao: "lista", ...(apelidos ? { apelidos } : {}) });
 const neutro = (rotulo: string): GrupoPosse => ({ rotulo, fiscalizacao: "neutro" });
 
 export const GRUPOS_POSSE: readonly GrupoPosse[] = [
@@ -49,7 +49,8 @@ export const GRUPOS_POSSE: readonly GrupoPosse[] = [
   fonte("Senadores titulares fora de exercício - Posse 2027"),
   lista(GRUPO_GOVERNADORES_ELEITOS),
   lista(GRUPO_SENADORES_ELEITOS),
-  lista(GRUPO_DEPUTADOS_FEDERAIS),
+  // O Contatos grava este grupo no singular; é o mesmo grupo (Clovis, 2026-11-06).
+  lista(GRUPO_DEPUTADOS_FEDERAIS, ["Deputado Federal - Posse Presidencial 2027"]),
   lista(GRUPO_DEPUTADOS_ELEITOS),
   neutro("Ministros de Estado Indicados - Posse 2027"),
   neutro("Convidados do presidente eleito - Posse 2027"),

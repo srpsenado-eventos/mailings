@@ -1,3 +1,5 @@
+import { GRUPO_DEPUTADOS_FEDERAIS } from "@/data/grupos-posse";
+import { grupoDoAgrupador } from "@/lib/agrupador";
 import { pontuarPessoa } from "@/lib/match";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import { siglaDaUf } from "@/lib/uf";
@@ -8,6 +10,10 @@ import type { CasaLegislativa, ContatoDoEleito, ContatoPlanilha, DeputadoAtual }
 export const MOTIVO_AMBIGUO = "Nome casa mais de um contato do Contatos";
 export const MOTIVO_HOMONIMO_EM_EXERCICIO = "Mais de um deputado em exercício casa este nome: conferir";
 
+/** Algum segmento do rótulo é o grupo Deputados Federais do agrupador, inclusive pelo apelido do Contatos. */
+const temGrupoDosDeputados = (grupo: string): boolean =>
+  grupo.split(";").some((s) => grupoDoAgrupador(s)?.rotulo === GRUPO_DEPUTADOS_FEDERAIS);
+
 export function casaDoGrupo(grupo: string): { casa: CasaLegislativa; eleitos: boolean } | undefined {
   const g = normalizarTexto(grupo);
   if (g.startsWith("ex-") || g.startsWith("ex ")) return undefined;
@@ -17,7 +23,7 @@ export function casaDoGrupo(grupo: string): { casa: CasaLegislativa; eleitos: bo
     return undefined;
   }
   if (g.includes("senadores")) return { casa: "senado", eleitos: false };
-  if (g.includes("deputados federais")) return { casa: "camara", eleitos: false };
+  if (g.includes("deputados federais") || temGrupoDosDeputados(grupo)) return { casa: "camara", eleitos: false };
   return undefined;
 }
 

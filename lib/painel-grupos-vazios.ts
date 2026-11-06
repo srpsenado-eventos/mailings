@@ -1,6 +1,7 @@
 import { GRUPO_DEPUTADOS_FEDERAIS } from "@/data/grupos-posse";
 import { grupoDoAgrupador, type LinhaAgrupador } from "@/lib/agrupador";
 import type { Filtro } from "@/lib/painel";
+import type { SecaoGrupoEleito } from "@/lib/painel-eleicao";
 import type { ResultadoGrupo, ResumoAnalise } from "@/lib/types";
 
 export const TEXTO_GRUPO_NAO_CADASTRADO = "Grupo ainda não cadastrado no Contatos";
@@ -10,6 +11,11 @@ const PREFIXO_CONTATO_DE_TESTE = "teste";
 export interface GrupoNaoCadastrado {
   rotulo: string;
   texto: string;
+}
+
+/** Linha de grupo não cadastrado; com `secao`, os eleitos classificados para ele aparecem no lugar dela. */
+export interface LinhaGrupoNaoCadastrado extends GrupoNaoCadastrado {
+  secao?: SecaoGrupoEleito;
 }
 
 /**
@@ -64,11 +70,37 @@ export function gruposNaoCadastrados(
   return [...doAgrupador, ...extras];
 }
 
-/** Com grupo escolhido, só a linha dele; sem grupo, todas, mas apenas no filtro "tudo" e sem busca. */
-export function gruposVaziosVisiveis(
+/**
+ * Linhas dos grupos não cadastrados, com a seção dos eleitos de cada um (spec 2026-11-05 §9.1). Com
+ * grupo escolhido, só a linha dele; sem grupo, entra quem tem seção visível e, no filtro "tudo" sem
+ * busca, também quem não tem.
+ */
+export function linhasDosGruposNaoCadastrados(
   lista: readonly GrupoNaoCadastrado[],
+  secoes: readonly SecaoGrupoEleito[],
   { filtro, busca, grupo }: { filtro: Filtro; busca: string; grupo: string },
-): GrupoNaoCadastrado[] {
-  if (grupo !== "") return lista.filter((l) => l.rotulo === grupo);
-  return filtro === "tudo" && busca.trim() === "" ? [...lista] : [];
+): LinhaGrupoNaoCadastrado[] {
+  const linhas = lista.map((l): LinhaGrupoNaoCadastrado => {
+    const secao = secoes.find((s) => s.grupo === l.rotulo);
+    return secao ? { ...l, secao } : { ...l };
+  });
+  if (grupo !== "") return linhas.filter((l) => l.rotulo === grupo);
+  const semRecorte = filtro === "tudo" && busca.trim() === "";
+  return linhas.filter((l) => semRecorte || l.secao !== undefined);
+}
+
+/**
+ * Seções dos grupos que não estão entre os não cadastrados: só com a chave "Eleição 2026" ligada e,
+ * com grupo escolhido, só a do próprio grupo (que pode vir pelo apelido do Contatos).
+ */
+export function secoesDosDemaisGrupos(
+  secoes: readonly SecaoGrupoEleito[],
+  lista: readonly GrupoNaoCadastrado[],
+  { eleicaoLigada, grupo }: { eleicaoLigada: boolean; grupo: string },
+): SecaoGrupoEleito[] {
+  if (!eleicaoLigada) return [];
+  const demais = secoes.filter((s) => !lista.some((l) => l.rotulo === s.grupo));
+  if (grupo === "") return demais;
+  const rotulo = grupoDoAgrupador(grupo)?.rotulo ?? grupo;
+  return demais.filter((s) => s.grupo === rotulo);
 }

@@ -272,3 +272,19 @@ describe("classificarGovernadores: a decisão do GT vence a regra (spec 2026-10-
     expect(r.decisao?.tipo).toBe("pessoas_diferentes");
   });
 });
+
+describe("papel do grupo Deputado Federal no Contatos (spec 2026-11-05 §9.2)", () => {
+  test("governador eleito cadastrado no rótulo do singular é reconhecido como deputado atual", () => {
+    // Arrange
+    const rotulo = "Deputado Federal - Posse Presidencial 2027";
+    const e = gov({ statusMandato: "Mandato novo (atual deputado federal)" });
+    const contato = { ...marta(rotulo, "Deputada Federal"), departamento: "GOIÁS" };
+
+    // Act
+    const [r] = classificarGovernadores([e], [grupo(rotulo, [contato])]);
+
+    // Assert
+    expect(r).toMatchObject({ destino: "outro_cargo", grupoDestino: "Deputados Federais", jaCadastrado: true });
+    expect(r.contatos).toEqual([{ grupo: rotulo, nome: "Marta Fictícia", id: "1" }]);
+  });
+});

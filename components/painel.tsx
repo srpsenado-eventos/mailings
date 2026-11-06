@@ -18,7 +18,7 @@ import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-con
 import { contarBloqueiosDoGrupo, ehLinhaABloquear, ROTULO_CARTAO_BLOQUEIO, textosDeBloqueioDoGrupo, totalABloquear } from "@/lib/painel-bloqueio";
 import { avisoUrlCaida, cartoesDoResumo, estadoDaFonteDoGrupo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, rotuloDaOpcaoDeGrupo, textoAlternativa, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoMudanca, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, textosProvisorias, type Filtro } from "@/lib/painel";
 import type { HistoricoDecisoes } from "@/lib/decisoes";
-import { gruposNaoCadastrados, gruposVaziosVisiveis, retratoSemGruposDeTeste, rotulosDeTesteForaDoAgrupador } from "@/lib/painel-grupos-vazios";
+import { gruposNaoCadastrados, linhasDosGruposNaoCadastrados, retratoSemGruposDeTeste, rotulosDeTesteForaDoAgrupador, secoesDosDemaisGrupos } from "@/lib/painel-grupos-vazios";
 import { motivosDosGruposVazios, retratoComPropostasDecididas } from "@/lib/propostas-decisoes";
 import { autoridadesRepetidas, etiquetaDeRepeticao, textoDoLinkDoPainel } from "@/lib/repetidos";
 import type { FalhasPorUrl, ResultadoGrupo, Retrato } from "@/lib/types";
@@ -71,7 +71,7 @@ export function Painel({ retrato: retratoBruto, aviso, onNovaVarredura, modo = "
   const [grupo, setGrupo] = useState("");
   const temEleicao = retrato.eleicao !== undefined;
   const [eleicaoLigada, setEleicaoLigada] = useState(false);
-  const secoes = useMemo(() => (eleicaoLigada ? secoesDeEleicao(retrato.eleicao, retrato.grupos, filtro, busca) : []), [eleicaoLigada, retrato, filtro, busca]);
+  const secoes = useMemo(() => secoesDeEleicao(retrato.eleicao, retrato.grupos, filtro, busca), [retrato, filtro, busca]);
   const agrupador = useMemo(() => linhasDoAgrupador(retrato.grupos, esperadosDoAgrupador(retrato.eleicao)), [retrato]);
   const motivosVazios = useMemo(() => motivosDosGruposVazios(agrupador, decisoes), [agrupador, decisoes]);
   const vazios = useMemo(() => gruposNaoCadastrados(agrupador, motivosVazios, temGrupoDeputados(retrato.eleicao), rotulosExtras), [agrupador, motivosVazios, retrato, rotulosExtras]);
@@ -81,7 +81,8 @@ export function Painel({ retrato: retratoBruto, aviso, onNovaVarredura, modo = "
   const grupos = useMemo(() => filtrarGrupos(retrato.grupos, filtro, busca, grupo, ehLinhaABloquear(repetidas)), [retrato, filtro, busca, grupo, repetidas]);
   const linkRepetidas = textoDoLinkDoPainel(repetidas);
   const deputados = useMemo(() => grupoDeputados(retrato.eleicao, { busca, filtro, grupo }), [retrato, busca, filtro, grupo]);
-  const vaziosVisiveis = gruposVaziosVisiveis(vazios, { filtro, busca, grupo });
+  const linhasVazias = linhasDosGruposNaoCadastrados(vazios, secoes, { filtro, busca, grupo });
+  const secoesDemais = secoesDosDemaisGrupos(secoes, vazios, { eleicaoLigada, grupo });
   const total = retrato.resumo.total;
   const visiveis = contarContatos(grupos);
   const filtrando = filtro !== "tudo" || busca.trim() !== "" || grupo !== "";
@@ -245,15 +246,17 @@ export function Painel({ retrato: retratoBruto, aviso, onNovaVarredura, modo = "
           );
         })}
         {deputados && <GrupoDeputados grupo={deputados} aberto={estaAberto(NOME_GRUPO_DEPUTADOS)} onAlternar={() => alternar(NOME_GRUPO_DEPUTADOS)} />}
-        {vaziosVisiveis.map((v) => (
+        {linhasVazias.map((v) => (v.secao ? (
+          <SecaoEleitos key={`${v.secao.grupo}-${filtrando}`} secao={v.secao} abertoInicial={filtrando} modo={modo} decisoes={decisoes} aviso={v.texto} />
+        ) : (
           <section key={`vazio-${v.rotulo}`} className="rounded-xl border border-borda bg-cartao px-4 py-3">
             <h2 className="font-serif text-lg font-semibold">{v.rotulo}</h2>
             <p className="text-xs text-cinza">{v.texto}</p>
           </section>
-        ))}
-        {secoes.map((s) => <SecaoEleitos key={`${s.grupo}-${filtrando}`} secao={s} abertoInicial={filtrando} modo={modo} decisoes={decisoes} />)}
+        )))}
+        {secoesDemais.map((s) => <SecaoEleitos key={`${s.grupo}-${filtrando}`} secao={s} abertoInicial={filtrando} modo={modo} decisoes={decisoes} />)}
         {secoesGov.map((s) => <SecaoGoverno key={`${s.id}-${filtrando}`} secao={s} abertoInicial={filtrando} />)}
-        {grupos.length === 0 && secoes.length === 0 && secoesGov.length === 0 && !deputados && vaziosVisiveis.length === 0 && <p className="text-sm text-cinza">Nada para mostrar com este filtro.</p>}
+        {grupos.length === 0 && secoesDemais.length === 0 && secoesGov.length === 0 && !deputados && linhasVazias.length === 0 && <p className="text-sm text-cinza">Nada para mostrar com este filtro.</p>}
       </div>
     </main>
   );

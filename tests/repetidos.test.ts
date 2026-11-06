@@ -22,6 +22,15 @@ const stf = (nome = "Ana Fictícia", cargo = "Ministra do Supremo Tribunal Feder
 const tse = (nome = "Ana Fictícia", cargo = "Ministra do Tribunal Superior Eleitoral") => grupo("Ministros do TSE", [linha(nome, cargo)]);
 
 describe("autoridadesRepetidas", () => {
+  test("deputado cadastrado no rótulo do singular vale pelo nível 4.14 de Deputados Federais (spec 2026-11-05 §9.2)", () => {
+    const [a] = autoridadesRepetidas([
+      grupo("Deputado Federal - Posse Presidencial 2027", [linha("Rui Fictício", "Deputado Federal")]),
+      grupo("Ex-Presidentes do Congresso", [linha("Rui Fictício", "Presidente do Congresso Nacional em 1999")]),
+    ]);
+    expect(a.convidaPor).toMatchObject({ grupoRegra: "Deputados Federais", nivel: { nivel: "4.14" } });
+    expect(a.motivo).toBe("Cargo atual (Deputados Federais) vence cargo de ex- (Ex-Presidentes do Congresso)");
+  });
+
   test("ministra do STF no TSE fica no STF", () => {
     const [a, ...resto] = autoridadesRepetidas([stf(), tse()]);
     expect(resto).toEqual([]);

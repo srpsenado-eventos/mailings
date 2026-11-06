@@ -206,3 +206,31 @@ O Contatos usa o rótulo "Deputado Federal - Posse Presidencial 2027", no singul
 3. "Deputado Federal - Posse Presidencial 2027" não aparece mais como linha avulsa nem como opção da lista; "Deputados Federais" continua com a lista da Câmara.
 4. Contato cadastrado com esse rótulo conta em "Deputados Federais" no agrupador, é comparado com a lista da Câmara, liga `camaraNoContatos` e tem o nível 4.14 em `/repetidos` (coberto por teste).
 5. Cartões do painel sem nenhuma alteração.
+
+## 10. Adendo de 06/11, noite: acento no nome e traço no período do cargo
+
+Apontamentos do Clovis na essência da fiscalização, a partir de três telas do painel (Rodrigo Otávio Soares Pacheco, Ministros do TCU; João Azevêdo, Senadores eleitos; ex-presidente com "1991- 1993"). Mudam o veredito, portanto exigem coleta nova.
+
+### 10.1 Acento no nome
+
+- Diferença de acento entre o Contatos e a fonte é **divergência, nos dois sentidos** (decisão do Clovis, 06/11): fonte sem acento e Contatos com acento, ou o contrário. Cedilha conta como acento. Vale para a página do grupo, a página individual e as listas (TSE e Câmara).
+- O nome esperado é o da fonte, como em toda divergência de nome (regra do GT de 04/11: o nome é exatamente o do site), e a observação "Diferença de acento em relação à fonte" sai no cartão do nome e na coluna Observacao do export, porque à vista os dois nomes parecem iguais.
+- Caixa, tratamento, espaço e pontuação continuam sem gerar divergência. O Clovis não pediu mudança nesses casos.
+- **Achar a pessoa não muda:** casamento, repetidos, eleição e memória de leitura seguem por `normalizarNome`, sem acento. Só o veredito do campo Nome olha o acento (`mesmaGrafiaDeNome`, `soAcentoDiverge`, em `lib/normalize.ts`). Diferença de acento nunca vira possível saída, e a regra de ouro não muda.
+- Na página individual, nome achado só no texto corrido passa a trazer a grafia da página (`grafiasNoTexto`, em `lib/match.ts`), só com letras e números: pontuação colada ao nome ("Governador:João", "João/PB") não entra. Se a página cita a pessoa de dois jeitos, vale a ocorrência com os acentos do Contatos, mesmo que um título em caixa alta venha sem acento. A pessoa continua confirmada para a guarda de leitura suspeita.
+- A grafia lembrada pela IA (`origem: "conhecimento"`) não é fonte: nesses nomes o acento não conta.
+- Nos grupos de lista, a observação de acento fica no lugar de "Nome de urna (TSE): aguarda aprovação do nome político" e de "Nome parlamentar (Câmara)": nesses casos o nome é o mesmo, e não há nome político a aprovar.
+
+### 10.2 Traço no período do cargo
+
+- O cargo com traço entre os anos já divergia. Agora o achado **diz que o problema é o traço**: `Período com traço (1991- 1993): usar "a" entre os anos (1991 a 1993)`. Hífen, meia-risca e travessão contam, com ou sem espaço.
+- Quando trocar o traço basta para o cargo entrar no formato do GT, o esperado leva os anos do cadastro no lugar de "AAAA a AAAA", e o cartão do cargo oferece o botão Copiar. Quando não basta (cargo com outro erro, anos invertidos), o esperado fica com o marcador e a observação continua apontando o traço.
+- Vale nos dois grupos de ex-presidentes. O formato do cargo dos Ex-Presidentes da República segue aguardando a decisão do Clovis (§9.3).
+
+### 10.3 Critérios de aceite, depois da coleta
+
+1. Rodrigo Otávio Soares Pacheco, em Ministros do TCU, e João Azevêdo, em Senadores eleitos, saem com "Nome diverge" e a observação de acento.
+2. Ranko Vilovic e Aleksandar Ristic, em Embaixadores, também saem com "Nome diverge".
+3. Nenhum contato vira possível saída ou indeterminado por causa do acento.
+4. O ex-presidente com "1991- 1993" mostra o aviso do traço e "… no período de 1991 a 1993" para copiar.
+5. Nomes só com diferença de caixa continuam "confere".

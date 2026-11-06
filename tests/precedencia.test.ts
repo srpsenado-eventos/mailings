@@ -68,6 +68,23 @@ describe("regraDoSegmento", () => {
   });
 });
 
+describe("regraDoSegmento e o rótulo do Contatos para os deputados (spec 2026-11-05 §9.2)", () => {
+  test("o rótulo do singular acha a regra de Deputados Federais, nível 4.14", () => {
+    const regra = regraDoSegmento(normalizarTexto("Deputado Federal - Posse Presidencial 2027"));
+    expect(regra?.grupo).toBe("Deputados Federais");
+    expect(regra?.nivel?.nivel).toBe("4.14");
+  });
+
+  test("o rótulo dos deputados eleitos continua fora", () => {
+    expect(regraDoSegmento(normalizarTexto("Deputado Federal eleitos - Posse Presidencial 2027"))).toBeUndefined();
+  });
+
+  test("os outros apelidos do agrupador não mudam de resultado", () => {
+    expect(regraDoSegmento("defensor")?.grupo).toBe("Defensor Público Geral da União");
+    expect(regraDoSegmento(normalizarTexto("Ex-Presidentes do Senado"))).toBeUndefined();
+  });
+});
+
 describe("regraDoSegmento e o filtro de eleitos", () => {
   test("eleitoral não é barrado como eleitos: casa por contenção", () => {
     expect(regraDoSegmento("ministros do tse (eleitoral)")?.grupo).toBe("Ministros do TSE");

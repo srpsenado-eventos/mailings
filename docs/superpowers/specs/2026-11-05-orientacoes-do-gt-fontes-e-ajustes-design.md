@@ -175,3 +175,34 @@ O contato "Teste novos grupos" (Id 54214) foi usado para criar os grupos no Cont
 ### 8.3 Filtro "Com divergência"
 
 Novo botão "Com divergência", logo depois de "Tudo": mostra só os contatos amarelos, o mesmo número do cartão. Sem propostas de inclusão.
+
+## 9. Adendo de 06/11: eleitos no próprio grupo e rótulo dos Deputados Federais
+
+Pergunta do Clovis ao ver o painel depois do PR #32: a lista de quem entra em cada grupo, calculada pelas regras e pelas planilhas do TSE, tinha sumido. Conferência nos retratos: a classificação está igual nas coletas de 04/11 e 05/11 (Senadores eleitos 22, Deputado Federal eleitos 209, Governadores eleitos 8). O que mudou foi a tela. Senadores e Governadores eleitos foram cadastrados na base de 04/11 e viraram grupos normais. Os 209 deputados eleitos, que não têm contato, só aparecem com a chave "Eleição 2026" ligada, no fim da página, e a linha avulsa do §8.2 diz "Grupo ainda não cadastrado no Contatos" sem nenhum nome. Clovis aprovou o ajuste em 06/11. Branch: `fix/eleitos-nos-grupos-nao-cadastrados`. Só tela e agrupador: não pede coleta nova nem muda o retrato gravado.
+
+### 9.1 Quem entra aparece no lugar do grupo
+
+- Grupo do agrupador com 0 contatos e eleitos classificados para ele mostra, **no lugar da linha avulsa**, a seção dos eleitos, sem depender da chave "Eleição 2026". O título segue "<grupo> — N pela lista · 0 no Contatos · N a cadastrar", e o texto "Grupo ainda não cadastrado no Contatos" (ou o motivo da decisão do GT) continua visível na seção.
+- A seção fica recolhida sem filtro, como os demais grupos, e abre quando o grupo é escolhido na lista "Grupo" ou quando há busca.
+- A busca alcança esses nomes com a chave desligada. Busca sem resultado na seção não mostra o grupo; a regra do §8.2 para as linhas sem seção não muda.
+- Com um grupo escolhido na lista, só aparece a seção desse grupo.
+- Seção de grupo que já tem contatos (por exemplo, eleito "a conferir" de Senadores eleitos) continua como antes: só com a chave ligada, depois dos grupos.
+- A seção nunca conta em cartão nem pinta semáforo. Nada muda na regra de ouro do "possível saída".
+
+### 9.2 Rótulo do grupo Deputados Federais
+
+O Contatos usa o rótulo "Deputado Federal - Posse Presidencial 2027", no singular, para o grupo que o agrupador chama "Deputados Federais" (decisão do Clovis, 06/11: é o mesmo grupo). O rótulo vira **apelido** de "Deputados Federais" no agrupador, que continua com 28 grupos, em modo `lista`. A linha avulsa duplicada some. O reconhecimento precisa valer também onde o rótulo é lido fora do agrupador, para os deputados não ficarem fora das regras quando forem cadastrados: `casaDoGrupo` (eleição e `camaraNoContatos`), `lib/eleitos-governo.ts` e `regraDoSegmento` (precedência de `/repetidos`).
+
+### 9.3 Fora deste adendo
+
+- Grupo parcialmente cadastrado: quem falta continua na seção com a chave ligada. Se o Clovis quiser essas pessoas fora da chave, é outro ajuste.
+- "EMCFA indicados - Posse Presidencial 2027" segue avulso e fora dos 28, aguardando a decisão do Clovis.
+- Formato do cargo dos Ex-Presidentes da República segue aguardando a decisão do Clovis.
+
+### 9.4 Critérios de aceite, no painel local
+
+1. Com a chave desligada, "Deputado Federal eleitos" aparece no lugar do grupo com "209 pela lista · 0 no Contatos · 209 a cadastrar", e escolher o grupo na lista abre os 209 nomes.
+2. Buscar o nome de um desses eleitos, com a chave desligada, encontra a linha.
+3. "Deputado Federal - Posse Presidencial 2027" não aparece mais como linha avulsa nem como opção da lista; "Deputados Federais" continua com a lista da Câmara.
+4. Contato cadastrado com esse rótulo conta em "Deputados Federais" no agrupador, é comparado com a lista da Câmara, liga `camaraNoContatos` e tem o nível 4.14 em `/repetidos` (coberto por teste).
+5. Cartões do painel sem nenhuma alteração.

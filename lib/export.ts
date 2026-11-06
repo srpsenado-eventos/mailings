@@ -157,7 +157,11 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
         Divergencias: [...new Set(c.camposDivergentes.map((d) => d.campo))].join(", "),
         Origem: c.origem,
         Fonte: c.fonteUrl ?? "",
-        Observacao: observacaoCom(c.observacao, [...ressalvasDoContato(c, g, analise.falhas), ...ressalvas]),
+        Observacao: observacaoCom(c.observacao, [
+          ...[comparacaoDe(c, "nome")?.observacao].filter((o): o is string => Boolean(o)),
+          ...ressalvasDoContato(c, g, analise.falhas),
+          ...ressalvas,
+        ]),
         "Fonte do cargo": fonteDoCargo(c),
       };
       for (const f of CAMPOS) {

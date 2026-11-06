@@ -13,9 +13,10 @@ import {
   comparacoesTratamento,
   compararContatoSemFonteOficial,
   divergenciasDe,
+  OBSERVACAO_ACENTO_NOME,
   situacaoCampo,
 } from "@/lib/match";
-import { normalizarNome, normalizarTexto } from "@/lib/normalize";
+import { mesmaGrafiaDeNome, normalizarNome, normalizarTexto, soAcentoDiverge } from "@/lib/normalize";
 import { UF_POR_EXTENSO } from "@/lib/uf";
 import { aplicarPares } from "@/lib/tratamento-pares";
 import type {
@@ -137,7 +138,7 @@ export function composicaoDaLista(grupo: string, eleicao: ResultadoEleicao): Pes
 
 /** O nome confere só com o nome de urna ou o parlamentar (spec §4.6); o completo ou civil não confere. */
 function nomeConfere(contato: ContatoPlanilha, p: PessoaDaLista): boolean {
-  return normalizarNome(contato.nome) === normalizarNome(p.nome);
+  return mesmaGrafiaDeNome(contato.nome, p.nome);
 }
 
 /** Nome igual a um dos dois nomes da pessoa: serve só para escolher entre várias pessoas que casam. */
@@ -180,9 +181,17 @@ function eixosDoContato(c: ResultadoContato): Pick<ResultadoContato, "endereco" 
 function comparadoComPessoa(c: ResultadoContato, p: PessoaDaLista, rotulo: string): ResultadoContato {
   const { contato } = c;
   const nomeOk = nomeConfere(contato, p);
+  const soAcento = soAcentoDiverge(contato.nome, p.nome);
+  const observacaoDoNome = soAcento ? OBSERVACAO_ACENTO_NOME : rotulo === GRUPO_DEPUTADOS_FEDERAIS ? OBSERVACAO_NOME_PARLAMENTAR : OBSERVACAO_NOME_URNA;
   const cargo = contato.cargo ? cargoDaComparacao(contato.cargo, p) : "";
   const comparacoes: ComparacaoCampo[] = [
-    { campo: "nome", valorPlanilha: contato.nome, valorEsperado: p.nome, situacao: nomeOk ? "confere" : "divergente" },
+    {
+      campo: "nome",
+      valorPlanilha: contato.nome,
+      valorEsperado: p.nome,
+      situacao: nomeOk ? "confere" : "divergente",
+      ...(soAcento ? { observacao: OBSERVACAO_ACENTO_NOME } : {}),
+    },
     // Cargo vazio fica fora, como na comparação com a página: o painel já o acusa como "Cargo vazio".
     ...(contato.cargo
       ? [{ campo: "cargo" as const, valorPlanilha: contato.cargo, valorEsperado: cargo, situacao: situacaoCampo(contato.cargo, cargo) }]
@@ -198,7 +207,7 @@ function comparadoComPessoa(c: ResultadoContato, p: PessoaDaLista, rotulo: strin
     comparacoes,
     camposDivergentes,
     origem: "oficial",
-    ...(nomeOk ? {} : { observacao: rotulo === GRUPO_DEPUTADOS_FEDERAIS ? OBSERVACAO_NOME_PARLAMENTAR : OBSERVACAO_NOME_URNA }),
+    ...(nomeOk ? {} : { observacao: observacaoDoNome }),
     ...eixosDoContato(c),
   };
 }

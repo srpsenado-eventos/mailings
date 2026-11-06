@@ -96,3 +96,31 @@ export function nucleoDeNome(linha: string): string {
 export function normalizarNome(nome: string): string {
   return normalizarTexto(removerTratamentos(nome));
 }
+
+/** Letras do nome com os acentos: sem tratamento, sem caixa, sem pontuação e com espaços colapsados. */
+function letrasComAcento(nome: string): string {
+  return removerTratamentos(nome)
+    .normalize("NFC")
+    .toLocaleLowerCase("pt-BR")
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, " ")
+    .trim();
+}
+
+/** Os dois nomes têm os mesmos acentos? Cedilha conta como acento; caixa e pontuação, não. */
+export function mesmosAcentos(a: string, b: string): boolean {
+  return letrasComAcento(a) === letrasComAcento(b);
+}
+
+/**
+ * Igualdade do nome para o veredito (regra do Clovis de 06/11): como `normalizarNome`, mas o acento
+ * conta, nos dois sentidos. Só o veredito do campo usa esta forma: achar a pessoa continua por
+ * `normalizarNome`, senão diferença de acento viraria possível saída.
+ */
+export function mesmaGrafiaDeNome(a: string, b: string): boolean {
+  return normalizarNome(a) === normalizarNome(b) && mesmosAcentos(a, b);
+}
+
+/** Os dois nomes são iguais e só o acento os separa. */
+export function soAcentoDiverge(a: string, b: string): boolean {
+  return normalizarNome(a) === normalizarNome(b) && !mesmosAcentos(a, b);
+}

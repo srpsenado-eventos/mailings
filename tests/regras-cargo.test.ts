@@ -1,8 +1,9 @@
 import { describe, expect, test } from "vitest";
+import { detalhesDoContato } from "@/lib/painel";
 import { comparacaoCargoExPresidente, OBSERVACAO_PERIODO, PERIODO_PRESIDENCIA } from "@/lib/regras-cargo";
 import { REGRAS_NOME } from "@/data/regras-nome";
 import { rotuloAchado, textoCoerencia } from "@/lib/tratamento";
-import type { ContatoPlanilha } from "@/lib/types";
+import type { ContatoPlanilha, ResultadoContato, ResultadoGrupo } from "@/lib/types";
 
 const SENADO = "Ex-Presidentes do Congresso";
 const REPUBLICA = "Ex-Presidentes da República";
@@ -86,7 +87,6 @@ describe("comparacaoCargoExPresidente", () => {
   test.each([
     "Presidente do Congresso Nacional no período de AAAA a AAAA",
     "Presidente do Congresso Nacional no período de 2021 a 2019",
-    "Presidente do Congresso Nacional no período de 1991- 1993",
     "Presidente do Congresso Nacional no período de 1995 a 1997 e de 2011 a 2009",
     "Presidente do Congresso Nacional no período de 2019",
     "Presidente do Congresso Nacional em AAAA",
@@ -145,6 +145,73 @@ describe("comparacaoCargoExPresidente", () => {
     // Act + Assert
     expect(() => comparacaoCargoExPresidente(contato, SENADO)).not.toThrow();
     expect(contato.cargo).toBe("Ex-Presidente do Senado Federal");
+  });
+});
+
+describe("período escrito com traço", () => {
+  test.each([
+    ["Presidente do Congresso Nacional no período de 1991- 1993", "1991- 1993"],
+    ["Presidente do Congresso Nacional no período de 1991-1993", "1991-1993"],
+    ["Presidente do Congresso Nacional no período de 1991 – 1993", "1991 – 1993"],
+    ["Presidente do Congresso Nacional no período de 1991 — 1993", "1991 — 1993"],
+  ])('"%s" aponta o traço e traz os anos no esperado', (cargo, trecho) => {
+    // Act
+    const [achado] = comparacaoCargoExPresidente(exPresidente(cargo), SENADO);
+
+    // Assert
+    expect(achado).toMatchObject({
+      situacao: "divergente",
+      achado: "cargo_ex_presidente",
+      valorEsperado: "Presidente do Congresso Nacional no período de 1991 a 1993",
+      observacao: 'Período com traço (' + trecho + '): usar "a" entre os anos (1991 a 1993)',
+    });
+  });
+
+  test("dois períodos com traço corrigem os dois e citam os dois", () => {
+    // Act
+    const [achado] = comparacaoCargoExPresidente(exPresidente("Presidente do Congresso Nacional no período de 1995-1997 e de 2009-2011"), SENADO);
+
+    // Assert
+    expect(achado.valorEsperado).toBe("Presidente do Congresso Nacional no período de 1995 a 1997 e de 2009 a 2011");
+    expect(achado.observacao).toBe('Período com traço (1995-1997, 2009-2011): usar "a" entre os anos (1995 a 1997, 2009 a 2011)');
+  });
+
+  test("traço com o resto também fora do formato aponta o traço e mantém o marcador no esperado", () => {
+    // Act
+    const [achado] = comparacaoCargoExPresidente(exPresidente("Ex-Presidente do Congresso Nacional 1991-1993"), SENADO);
+
+    // Assert
+    expect(achado.valorEsperado).toBe("Presidente do Congresso Nacional no período de AAAA a AAAA");
+    expect(achado.observacao).toBe('Período com traço (1991-1993): usar "a" entre os anos (1991 a 1993)');
+  });
+
+  test("traço com os anos invertidos não propõe período inválido", () => {
+    // Act
+    const [achado] = comparacaoCargoExPresidente(exPresidente("Presidente do Congresso Nacional no período de 2021-2019"), SENADO);
+
+    // Assert
+    expect(achado.valorEsperado).toBe("Presidente do Congresso Nacional no período de AAAA a AAAA");
+  });
+
+  test("o cartão do cargo oferece copiar só quando o esperado traz os anos", () => {
+    // Arrange
+    const cartaoDo = (cargo: string) => {
+      const comparacoes = comparacaoCargoExPresidente(exPresidente(cargo), SENADO);
+      const c = { contato: exPresidente(cargo), semaforo: "amarelo", score: 1, comparacoes, camposDivergentes: [], origem: "oficial" } as unknown as ResultadoContato;
+      return detalhesDoContato(c, { grupo: SENADO, contatos: [c], novos: [] } as unknown as ResultadoGrupo).find((d) => d.campo === "cargo");
+    };
+
+    // Act e Assert
+    expect(cartaoDo("Presidente do Congresso Nacional no período de 1991- 1993")?.copiavel).toBe("Presidente do Congresso Nacional no período de 1991 a 1993");
+    expect(cartaoDo("Presidente do Congresso Nacional")?.copiavel).toBeUndefined();
+  });
+
+  test("sem traço a observação continua pedindo o período", () => {
+    // Act
+    const [achado] = comparacaoCargoExPresidente(exPresidente("Presidente do Congresso Nacional"), SENADO);
+
+    // Assert
+    expect(achado.observacao).toBe(OBSERVACAO_PERIODO);
   });
 });
 

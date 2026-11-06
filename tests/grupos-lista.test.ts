@@ -141,6 +141,32 @@ describe("composicaoDaLista (spec 2026-10-30 §4.6)", () => {
   });
 });
 
+describe("rótulo do Contatos para Deputados Federais (spec 2026-11-05 §9.2)", () => {
+  const SINGULAR = "Deputado Federal - Posse Presidencial 2027";
+  const comCargo = (nome: string): ContatoPlanilha => ({ ...SENHOR, nome, grupo: SINGULAR, cargo: "Deputado Federal", departamento: "BAHIA" });
+
+  test("a composição é a lista de exercício da Câmara", () => {
+    const lista = composicaoDaLista(SINGULAR, eleicao({ deputadosAtuais: [deputado()] }));
+    expect(lista?.map((p) => p.nome)).toEqual(["Leo Fictício"]);
+  });
+
+  test("contato comparado com a lista da Câmara; fora dela, indeterminado e nunca possível saída", () => {
+    // Arrange
+    const entrada = analise([grupoLista(SINGULAR, [comCargo("Leo Fictício"), comCargo("Sicrano Inexistente")])], eleicao({ deputadosAtuais: [deputado()] }));
+
+    // Act
+    const r = aplicarListas(entrada, "06/11");
+
+    // Assert
+    const [leo, sicrano] = r.grupos[0].contatos;
+    expect(leo.semaforo).toBe("verde");
+    expect(sicrano.semaforo).toBe("indeterminado");
+    expect(sicrano.possivelSaida).toBeFalsy();
+    expect(sicrano.observacao).toBe("Não está na lista de Deputados Federais (planilha da Câmara de 06/11)");
+    expect(r.resumo.possivelSaida).toBe(0);
+  });
+});
+
 describe("aplicarListas (spec 2026-10-30 §4.6)", () => {
   test("contato que casa o eleito da lista do grupo sai verde, sem observação de lista", () => {
     const r = aplicarListas(analise([grupoLista(GRUPO_SENADORES_ELEITOS, [deltan])], eleicao()), "30/10");

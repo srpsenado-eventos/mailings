@@ -1234,6 +1234,36 @@ describe("analisar: grupos de modo lista e neutro (spec 2026-10-30 §4.5 e §4.6
   });
 });
 
+describe("analisar: rótulo do Contatos para Deputados Federais (spec 2026-11-05 §9.2)", () => {
+  test("o grupo é de modo lista: nada é resolvido, raspado nem enviado à IA, e ninguém vira possível saída", async () => {
+    // Arrange
+    const rotulo = "Deputado Federal - Posse Presidencial 2027";
+    const resolverFonte = vi.fn(() => {
+      throw new Error("resolverFonte não deveria ser chamado");
+    });
+    const raspar = vi.fn(async () => {
+      throw new Error("raspar não deveria ser chamado");
+    });
+    const extrairComposicao = vi.fn(async () => {
+      throw new Error("extrairComposicao não deveria ser chamado");
+    });
+    const d: Dependencias = { resolverFonte, raspar, extrairComposicao };
+
+    // Act
+    const r = await analisar("c.xlsx", [{ nome: "Deputado Um", grupo: rotulo, ...CADASTRO_OK }], d);
+
+    // Assert
+    expect(resolverFonte).not.toHaveBeenCalled();
+    expect(raspar).not.toHaveBeenCalled();
+    expect(extrairComposicao).not.toHaveBeenCalled();
+    const [g] = r.grupos;
+    expect(g.fiscalizacao).toBe("lista");
+    expect(g.contatos[0].semaforo).toBe("indeterminado");
+    expect(g.contatos[0].possivelSaida).toBeFalsy();
+    expect(r.resumo.gruposSemFonte).toBe(0);
+  });
+});
+
 describe("cargo nos tribunais (spec 2026-10-30 §3.2)", () => {
   const depsTribunal = (grupoCanonico: string, cargoNaPagina: string): Dependencias => ({
     resolverFonte: () => ({

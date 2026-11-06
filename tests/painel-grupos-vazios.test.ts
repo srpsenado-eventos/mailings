@@ -55,6 +55,10 @@ describe("rotulosDeTesteForaDoAgrupador", () => {
     ];
     expect(rotulosDeTesteForaDoAgrupador(grupos)).toEqual(["EMCFA indicados - Posse Presidencial 2027", "Outro fora"]);
   });
+  test("o rótulo do singular dos deputados é apelido e não vira linha avulsa (spec 2026-11-05 §9.2)", () => {
+    const grupos = [grupo("Deputado Federal - Posse Presidencial 2027; EMCFA indicados - Posse Presidencial 2027", [contato("Teste a", "verde")])];
+    expect(rotulosDeTesteForaDoAgrupador(grupos)).toEqual(["EMCFA indicados - Posse Presidencial 2027"]);
+  });
 });
 
 describe("retratoSemGruposDeTeste", () => {

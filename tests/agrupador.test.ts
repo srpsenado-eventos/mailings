@@ -152,3 +152,33 @@ describe("textos do bloco do agrupador", () => {
     expect(ROTULO_FISCALIZACAO.neutro).toBe("Sem fonte oficial (grupo de convidados)");
   });
 });
+
+describe("rótulo do Contatos para Deputados Federais (spec 2026-11-05 §9.2)", () => {
+  const SINGULAR = "Deputado Federal - Posse Presidencial 2027";
+
+  it("é apelido de Deputados Federais, em modo lista, sem criar um 29º grupo", () => {
+    // Act
+    const grupo = grupoDoAgrupador(SINGULAR);
+
+    // Assert
+    expect(grupo?.rotulo).toBe("Deputados Federais");
+    expect(modoDoGrupo(SINGULAR)).toBe("lista");
+    expect(GRUPOS_POSSE).toHaveLength(28);
+  });
+
+  it("não confunde o rótulo dos eleitos com o apelido", () => {
+    expect(grupoDoAgrupador(GRUPO_DEPUTADOS_ELEITOS)?.rotulo).toBe(GRUPO_DEPUTADOS_ELEITOS);
+  });
+
+  it("os contatos do rótulo contam em Deputados Federais, sem linha fora do agrupador", () => {
+    // Arrange
+    const grupos = [{ grupo: SINGULAR, contatos: [{}, {}] }];
+
+    // Act
+    const linhas = linhasDoAgrupador(grupos, {});
+
+    // Assert
+    expect(linhas.find((l) => l.rotulo === "Deputados Federais")?.noContatos).toBe(2);
+    expect(linhas.some((l) => l.foraDoAgrupador)).toBe(false);
+  });
+});

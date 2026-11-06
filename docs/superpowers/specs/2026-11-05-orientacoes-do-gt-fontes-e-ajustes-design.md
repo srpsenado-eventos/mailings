@@ -184,7 +184,7 @@ Pergunta do Clovis ao ver o painel depois do PR #32: a lista de quem entra em ca
 
 - Grupo do agrupador com 0 contatos e eleitos classificados para ele mostra, **no lugar da linha avulsa**, a seção dos eleitos, sem depender da chave "Eleição 2026". O título segue "<grupo> — N pela lista · 0 no Contatos · N a cadastrar", e o texto "Grupo ainda não cadastrado no Contatos" (ou o motivo da decisão do GT) continua visível na seção.
 - A seção fica recolhida sem filtro, como os demais grupos, e abre quando o grupo é escolhido na lista "Grupo" ou quando há busca.
-- A busca alcança esses nomes com a chave desligada. Busca sem resultado na seção não mostra o grupo; a regra do §8.2 para as linhas sem seção não muda.
+- A busca alcança esses nomes com a chave desligada. Busca sem resultado na seção não mostra o grupo, salvo quando ele foi escolhido na lista: aí continua a linha simples com o nome e o texto (§8.2, que não muda para as linhas sem seção).
 - Com um grupo escolhido na lista, só aparece a seção desse grupo.
 - Seção de grupo que já tem contatos (por exemplo, eleito "a conferir" de Senadores eleitos) continua como antes: só com a chave ligada, depois dos grupos.
 - A seção nunca conta em cartão nem pinta semáforo. Nada muda na regra de ouro do "possível saída".

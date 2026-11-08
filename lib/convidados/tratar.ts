@@ -13,7 +13,8 @@ import {
   type ReferenciasEleicao,
 } from "./duplicidade";
 import { tratarNome } from "./nome";
-import { tratarNumero } from "./numero";
+import { REVISAO_COMPLEMENTO_REGRA_A, tratarNumero } from "./numero";
+import { LIMITES } from "./limites";
 import { conferirProtocolo } from "./protocolo";
 import {
   CAMPOS_MODELO,
@@ -60,6 +61,12 @@ function campoDaRevisaoDeNumero(texto: string): CampoModelo {
   return texto.startsWith("Complemento") ? "COMPLEMENTO" : "NUMERO";
 }
 
+/** A regra A pode deixar o Complemento acima de 30, e o encaixe seguinte pode fazê-lo caber abreviado. */
+function complementoCoubeNoEncaixe(revisao: Revisao, encaixe: { complemento: string; trechoQueNaoCoube: string }): boolean {
+  if (revisao.texto !== REVISAO_COMPLEMENTO_REGRA_A) return false;
+  return encaixe.complemento.length <= (LIMITES.COMPLEMENTO ?? Infinity) && encaixe.trechoQueNaoCoube === "";
+}
+
 /** A revisão do encaixe pode juntar avisos do Logradouro e do Complemento com "; ". */
 function revisoesDoEncaixe(revisao: Revisao | undefined): RevisaoDeCampo[] {
   if (revisao === undefined) return [];
@@ -86,11 +93,10 @@ function curarCampos(recebido: Valores): Curadoria {
 
   const numero = tratarNumero({ numero: recebido.NUMERO, logradouro: recebido.LOGRADOURO, complemento: recebido.COMPLEMENTO, uf, cidade });
   regras.push(...numero.regras);
-  if (numero.revisao !== undefined) {
+  const encaixe = encaixarLogradouroComplemento(numero.logradouro, numero.complemento);
+  if (numero.revisao !== undefined && !complementoCoubeNoEncaixe(numero.revisao, encaixe)) {
     revisoes.push({ campo: campoDaRevisaoDeNumero(numero.revisao.texto), revisao: numero.revisao });
   }
-
-  const encaixe = encaixarLogradouroComplemento(numero.logradouro, numero.complemento);
   regras.push(...encaixe.regras);
   revisoes.push(...revisoesDoEncaixe(encaixe.revisao));
 

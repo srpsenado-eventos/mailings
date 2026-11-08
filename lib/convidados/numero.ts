@@ -11,8 +11,17 @@ export const MARCAS_DE_LOTE: Readonly<Record<string, string>> = {
 
 const REGRA_A_NUMERO =
   "Número acima de 6 com lote/casa: Número = S/N e o trecho vai ao Complemento (regra A dos Correios)";
+export const REVISAO_COMPLEMENTO_REGRA_A = "Complemento acima de 30 depois da regra A";
 const REGRA_A_LOGRADOURO = "Lote/Casa/Chácara do Logradouro levado ao Complemento (regra A dos Correios)";
-const LOTE_NO_LOGRADOURO = /\b(lotes?|casa|ch[aá]cara)\s+[\w/.-]+/i;
+/**
+ * Identificador de lote/casa/chácara: contém dígito ("12", "5/6", "12A") ou é uma letra maiúscula
+ * isolada ("B"). Nome próprio ("Civil", "de Apoio", "Santa Luzia") não é identificador, e a letra
+ * isolada exige maiúscula para que o conectivo "e" não conte.
+ */
+const IDENTIFICADOR = String.raw`(?:[\w/.-]*\d(?:[\w/.-]*[\w/])?|[A-Z](?![\p{L}\d]))`;
+const MARCA_NO_LOGRADOURO = String.raw`\b(?:lotes?|lt|casa|cs|ch[aá]cara|ch)\.?`;
+const LOTE_NO_LOGRADOURO = new RegExp(String.raw`${MARCA_NO_LOGRADOURO}\s+${IDENTIFICADOR}`, "giu");
+const SO_IDENTIFICADOR = new RegExp(String.raw`^${IDENTIFICADOR}$`, "u");
 
 export interface EntradaNumero {
   numero: string;
@@ -41,35 +50,55 @@ function chaveDoToken(token: string): string {
   return normalizarTexto(token.replace(/^[.,;:]+|[.,;:]+$/g, ""));
 }
 
+/** O token (sem pontuação nas pontas) é identificador de lote: tem dígito ou é uma letra maiúscula isolada. */
+function ehIdentificador(token: string | undefined): boolean {
+  if (token === undefined) return false;
+  return SO_IDENTIFICADOR.test(token.replace(/^[.,;:]+|[.,;:]+$/g, ""));
+}
+
+/** Abrevia a marca (Lote, Casa, Chácara, Bloco) só quando o token seguinte é identificador. */
 export function abreviarLote(trecho: string): string {
-  return trecho
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((token) => {
+  const tokens = trecho.split(/\s+/).filter(Boolean);
+  return tokens
+    .map((token, i) => {
       const sigla = MARCAS_DE_LOTE[chaveDoToken(token)];
-      if (!sigla) return token;
+      if (!sigla || !ehIdentificador(tokens[i + 1])) return token;
       return sigla + (token.endsWith(",") ? "," : "");
     })
     .join(" ");
 }
 
 function temMarcaDeLote(numero: string): boolean {
-  const primeiro = numero.split(/\s+/)[0] ?? "";
-  return chaveDoToken(primeiro) in MARCAS_DE_LOTE;
+  const [primeiro = "", segundo] = numero.split(/\s+/);
+  return chaveDoToken(primeiro) in MARCAS_DE_LOTE && ehIdentificador(segundo);
 }
 
 function juntarAoComplemento(trecho: string, complemento: string): { complemento: string; revisao?: Revisao } {
   const novo = abreviarLote(trecho) + (complemento ? `, ${complemento}` : "");
   const limite = LIMITES.COMPLEMENTO ?? Infinity;
   if (novo.length > limite) {
-    return { complemento: novo, revisao: { marca: "revisar", texto: "Complemento acima de 30 depois da regra A" } };
+    return { complemento: novo, revisao: { marca: "revisar", texto: REVISAO_COMPLEMENTO_REGRA_A } };
   }
   return { complemento: novo };
 }
 
-function tirarDoLogradouro(logradouro: string, trecho: string): string {
+/**
+ * A busca ignora caixa na marca ("LOTE", "lote"), e isso também deixaria a letra isolada minúscula
+ * passar; por isso cada achado é conferido de novo pelo identificador, que exige maiúscula.
+ */
+function ehLoteDeVerdade(achado: string): boolean {
+  return ehIdentificador(achado.split(/\s+/).pop());
+}
+
+/** Todas as ocorrências de lote, casa e chácara com identificador no Logradouro, na ordem. */
+function lotesDoLogradouro(logradouro: string): string[] {
+  return (logradouro.match(LOTE_NO_LOGRADOURO) ?? []).filter(ehLoteDeVerdade);
+}
+
+/** Tira do Logradouro todas as ocorrências de lote, casa e chácara com identificador. */
+function tirarDoLogradouro(logradouro: string): string {
   return logradouro
-    .replace(trecho, " ")
+    .replace(LOTE_NO_LOGRADOURO, (achado) => (ehLoteDeVerdade(achado) ? " " : achado))
     .replace(/\s+/g, " ")
     .replace(/\s+,/g, ",")
     .replace(/,\s*,/g, ",")
@@ -80,12 +109,12 @@ function tratarNumeroVazio(entrada: EntradaNumero): SaidaNumero {
   const { logradouro, complemento, uf, cidade } = entrada;
   if (ehEnderecoDoDf(uf, cidade)) {
     const regras = ["Número vazio em endereço do DF = S/N"];
-    const achado = LOTE_NO_LOGRADOURO.exec(logradouro);
-    if (!achado) return { numero: "S/N", logradouro, complemento, regras };
-    const juntado = juntarAoComplemento(achado[0], complemento);
+    const achados = lotesDoLogradouro(logradouro);
+    if (achados.length === 0) return { numero: "S/N", logradouro, complemento, regras };
+    const juntado = juntarAoComplemento(achados.join(" "), complemento);
     return {
       numero: "S/N",
-      logradouro: tirarDoLogradouro(logradouro, achado[0]),
+      logradouro: tirarDoLogradouro(logradouro),
       complemento: juntado.complemento,
       regras: [...regras, REGRA_A_LOGRADOURO],
       ...(juntado.revisao ? { revisao: juntado.revisao } : {}),

@@ -104,6 +104,26 @@ describe("número", () => {
     expect(r.numero).toBe("");
     expect(r.revisao).toEqual({ marca: "revisar", texto: "Número não informado" });
   });
+  test("Casa, Chácara ou Lote seguidos de nome próprio ficam no Logradouro intactos", () => {
+    for (const logradouro of ["Palácio do Planalto, Casa Civil", "SHIS QI 5 Casa de Apoio", "Chácara Santa Luzia", "Rua da Casa e Jardim"]) {
+      const r = tratarNumero({ ...base, numero: "", logradouro });
+      expect(r).toMatchObject({ numero: "S/N", logradouro, complemento: "" });
+      expect(r.regras).not.toContain("Lote/Casa/Chácara do Logradouro levado ao Complemento (regra A dos Correios)");
+    }
+  });
+  test("Casa seguida de letra isolada vai ao Complemento", () => {
+    const r = tratarNumero({ ...base, numero: "", logradouro: "SHIS QI 5 Casa B" });
+    expect(r).toMatchObject({ numero: "S/N", logradouro: "SHIS QI 5", complemento: "Cs B" });
+  });
+  test("todas as ocorrências de lote e casa do Logradouro vão ao Complemento", () => {
+    const r = tratarNumero({ ...base, numero: "", logradouro: "Quadra 5 Lote 12 Casa 3" });
+    expect(r).toMatchObject({ numero: "S/N", logradouro: "Quadra 5", complemento: "Lt 12 Cs 3" });
+  });
+  test("Número acima de 6 com Casa seguida de nome próprio não é regra A", () => {
+    const r = tratarNumero({ ...base, numero: "Casa Amarela" });
+    expect(r.numero).toBe("Casa Amarela");
+    expect(r.revisao?.texto).toBe("Número acima de 6 caracteres sem lote/casa/bloco");
+  });
   test("abreviarLote cobre lote, casa, chácara e bloco", () => {
     expect(abreviarLote("Chácara 7 Bloco B")).toBe("Ch 7 Bl B");
     expect(abreviarLote("Lotes 1, 2")).toBe("Lt 1, 2");

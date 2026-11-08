@@ -66,6 +66,16 @@ describe("casos fora do exemplo", () => {
     expect(r.linhas[0].entraNoArquivo).toBe(false);
     expect(r.contagens.semProtocolo).toBe(1);
   });
+  test("Complemento que passou de 30 na regra A e coube no encaixe não fica REVISAR", () => {
+    const caso = { ...CASOS[3], NUMERO: "Lote 12 Casa 3", COMPLEMENTO: "Condomínio Residencial Exemplo" };
+    const r = tratarLista({ linhas: lerListaPadrao(montarListaPadrao([caso])), grupo: GRUPO, base: [], enderecos: [] });
+    const linha = r.linhas[0];
+    expect(linha.gravado.NUMERO).toBe("S/N");
+    expect(linha.gravado.COMPLEMENTO).toBe("Lt 12 Cs 3, Cond Res Exemplo");
+    expect(linha.trechoQueNaoCoube).toBe("");
+    expect(linha.achados.filter((a) => a.campo === "COMPLEMENTO")).toEqual([]);
+    expect(linha.marcas).not.toContain("revisar");
+  });
   test("a aba Regras tem uma regra para cada família de tratamento", () => {
     expect(REGRAS_TEXTO.map((r) => r.titulo)).toContain("Duplicidade");
     expect(REGRAS_TEXTO.find((r) => r.titulo === "Duplicidade")?.texto).toMatch(/BASE GRUPOS POSSE/);

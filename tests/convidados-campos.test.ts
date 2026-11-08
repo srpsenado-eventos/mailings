@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { abreviarLote, ehEnderecoDoDf, tratarNumero } from "@/lib/convidados/numero";
+import { tratarCep, ufDoCep } from "@/lib/convidados/cep";
+import { tratarBairro, tratarCidade, tratarUf } from "@/lib/convidados/bairro-cidade-uf";
 import { abreviarAteCaber, classeDoSegmento, encaixarLogradouroComplemento, PASSOS_LOGRADOURO } from "@/lib/convidados/abreviacoes";
 
 describe("logradouro e complemento", () => {
@@ -103,5 +105,52 @@ describe("número", () => {
   test("abreviarLote cobre lote, casa, chácara e bloco", () => {
     expect(abreviarLote("Chácara 7 Bloco B")).toBe("Ch 7 Bl B");
     expect(abreviarLote("Lotes 1, 2")).toBe("Lt 1, 2");
+  });
+});
+
+describe("cep", () => {
+  test("7 dígitos em SP ganha zero à esquerda e VALIDAR; em RJ é REVISAR com o valor mantido", () => {
+    expect(tratarCep("1310100", "SP")).toEqual({ valor: "01310100", regras: ["CEP com 7 dígitos em SP: zero à esquerda (01310100)"], revisao: { marca: "validar", texto: "CEP completado por inferência; confirmar nos Correios", sugestao: "01310100" } });
+    const rj = tratarCep("1310100", "RJ");
+    expect(rj.valor).toBe("1310100");
+    expect(rj.revisao?.marca).toBe("revisar");
+  });
+  test("pontuação sai; letras e vazio são REVISAR", () => {
+    expect(tratarCep("70.165-900", "DF")).toMatchObject({ valor: "70165900", regras: ["CEP: pontuação removida"] });
+    expect(tratarCep("ABC12345", "DF")).toMatchObject({ valor: "ABC12345", revisao: { marca: "revisar", texto: "CEP inválido (ABC12345)" } });
+    expect(tratarCep("", "DF").revisao?.texto).toBe("CEP vazio");
+  });
+  test("faixa incompatível com a UF só avisa", () => {
+    expect(ufDoCep("70165900")).toBe("DF");
+    const r = tratarCep("70165900", "SP");
+    expect(r.valor).toBe("70165900");
+    expect(r.revisao).toEqual({ marca: "revisar", texto: "CEP fora da faixa da UF SP (faixa do CEP: DF)" });
+    expect(tratarCep("70165900", "DF").revisao).toBeUndefined();
+  });
+});
+
+describe("bairro, cidade e uf", () => {
+  test("bairro: de-para, canônico, limite e vazio", () => {
+    expect(tratarBairro("Setor de Administração Federal Sul").valor).toBe("Setor de Adm. Federal Sul");
+    expect(tratarBairro("zona civico administrativa")).toMatchObject({ valor: "Zona Cívico-Administrativa", regras: ["Bairro padronizado (zona civico administrativa → Zona Cívico-Administrativa)"] });
+    expect(tratarBairro("Asa Sul")).toEqual({ valor: "Asa Sul", regras: [] });
+    expect(tratarBairro("").revisao?.texto).toBe("Bairro vazio");
+    const longo = tratarBairro("Residencial Exemplo das Palmeiras Imperiais Norte");
+    expect(longo.valor).toBe("Res Exemplo das Palmeiras Imperiais Norte");
+    expect(longo.regras[0]).toMatch(/^Bairro acima de 30: abreviado \(/);
+    expect(longo.revisao).toEqual({ marca: "revisar", texto: "Bairro acima de 30 caracteres" });
+    const medio = tratarBairro("Residencial Exemplo das Palmeiras");
+    expect(medio.valor.length).toBeLessThanOrEqual(30);
+    expect(medio.revisao).toBeUndefined();
+  });
+  test("cidade: Brasília padronizada, vazia é REVISAR", () => {
+    expect(tratarCidade("brasilia").valor).toBe("Brasília");
+    expect(tratarCidade("Brasília")).toEqual({ valor: "Brasília", regras: [] });
+    expect(tratarCidade("").revisao?.texto).toBe("Cidade vazia");
+  });
+  test("uf: caixa alta, inexistente e vazia", () => {
+    expect(tratarUf("df")).toMatchObject({ valor: "DF", regras: ["UF em caixa alta"] });
+    expect(tratarUf("BR")).toMatchObject({ valor: "BR", revisao: { marca: "revisar", texto: "UF inexistente (BR)" } });
+    expect(tratarUf("").revisao?.texto).toBe("UF vazia");
   });
 });

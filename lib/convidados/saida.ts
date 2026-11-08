@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import * as XLSX from "xlsx";
 import { REGRAS_TEXTO } from "@/lib/convidados/regras-texto";
 import { textoDaSituacao } from "@/lib/convidados/tratar";
 import {
@@ -100,16 +101,44 @@ function escreverLinhasDoArquivo(ws: ExcelJS.Worksheet, rodada: Rodada, primeira
   });
 }
 
+const ERRO_MODELO = "Modelo do PRODASEN com cabeçalho diferente do esperado";
+const LARGURAS_PRODASEN = [24, 18, 30, 18, 12, 28, 12, 22, 24, 20, 8, 24, 28];
+const ULTIMA_LINHA_FORMATADA = 500;
+const UFS_DO_MODELO = "AC,AL,AP,AM,BA,CE,DF,ES,GO,MA,MT,MS,MG,PA,PB,PR,PE,PI,RJ,RN,RS,RO,RR,SC,SP,SE,TO";
+
+/** Confere o cabeçalho do modelo com a xlsx (SheetJS), que lê o dialeto do arquivo real do PRODASEN. */
+function conferirModelo(modelo: ArrayBuffer): void {
+  const wb = XLSX.read(modelo, { type: "array" });
+  const aba = wb.Sheets["Contatos"];
+  if (!aba) throw new Error(ERRO_MODELO);
+  const linhas = XLSX.utils.sheet_to_json<unknown[]>(aba, { header: 1, defval: "" });
+  const cabecalho = (linhas[0] ?? []).map((v) => String(v));
+  const igual = cabecalho.length === CABECALHO_PRODASEN.length && CABECALHO_PRODASEN.every((c, i) => cabecalho[i] === c);
+  if (!igual) throw new Error(ERRO_MODELO);
+}
+
 export async function gerarImportacao(rodada: Rodada, modelo: ArrayBuffer): Promise<ArrayBuffer> {
+  conferirModelo(modelo);
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(Buffer.from(modelo) as unknown as ExcelJS.Buffer);
-  const ws = wb.getWorksheet("Contatos");
-  const erro = "Modelo do PRODASEN com cabeçalho diferente do esperado";
-  if (!ws) throw new Error(erro);
-  const atual = CABECALHO_PRODASEN.map((_, i) => String(ws.getRow(1).getCell(i + 1).value ?? ""));
-  const colunasExtras = ws.getRow(1).cellCount > CABECALHO_PRODASEN.length;
-  if (colunasExtras || atual.some((v, i) => v !== CABECALHO_PRODASEN[i])) throw new Error(erro);
+  const ws = wb.addWorksheet("Contatos", { views: [{ state: "frozen", ySplit: 1, topLeftCell: "A2" }] });
+  LARGURAS_PRODASEN.forEach((w, i) => {
+    ws.getColumn(i + 1).width = w;
+  });
+  for (let r = 2; r <= ULTIMA_LINHA_FORMATADA; r += 1) {
+    for (let c = 1; c <= CABECALHO_PRODASEN.length; c += 1) ws.getCell(r, c).numFmt = "@";
+  }
+  const cab = ws.getRow(1);
+  CABECALHO_PRODASEN.forEach((nome, i) => {
+    const cell = cab.getCell(i + 1);
+    cell.value = nome;
+    cell.font = { name: "Carlito", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+    preencher(cell, "FF0F6CBD");
+  });
+  cab.height = 24;
   escreverLinhasDoArquivo(ws, rodada, 2);
+  for (let r = 2; r <= ULTIMA_LINHA_FORMATADA; r += 1) {
+    ws.getCell(r, 11).dataValidation = { type: "list", allowBlank: true, formulae: [`"${UFS_DO_MODELO}"`] };
+  }
   return paraArrayBuffer(await wb.xlsx.writeBuffer());
 }
 

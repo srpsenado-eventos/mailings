@@ -1,5 +1,4 @@
 import * as XLSX from "xlsx";
-import ExcelJS from "exceljs";
 import { CABECALHO_PRODASEN, type Valores } from "@/lib/convidados/tipos";
 
 export const CABECALHO_LISTA = ["", "NOME COMPLETO DO CONVIDADO/ NOME POLÍTICO", "ÓRGÃO", "CARGO DO CONVIDADO", "CEP", "LOGRADOURO", "NÚMERO", "COMPLEMENTO", "BAIRRO", "CIDADE", "UF", "TRATAMENTO", "ENDERECAMENTO"];
@@ -57,8 +56,5 @@ export function montarBaseEnderecos(
 }
 
 export async function montarModeloProdasen(): Promise<ArrayBuffer> {
-  const wb = new ExcelJS.Workbook();
-  wb.addWorksheet("Contatos").addRow([...CABECALHO_PRODASEN]);
-  const bytes = new Uint8Array(await wb.xlsx.writeBuffer());
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  return umaAba("Contatos", [[...CABECALHO_PRODASEN]]);
 }

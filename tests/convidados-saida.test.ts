@@ -39,18 +39,37 @@ describe("arquivo de importação", () => {
     const wb = abas(await gerarImportacao(rodadaDoExemplo(), await montarModeloProdasen()));
     const m = XLSX.utils.sheet_to_json<string[]>(wb.Sheets["Contatos"], { header: 1, defval: "" });
     expect(m[0]).toEqual([...CABECALHO_PRODASEN]);
-    expect(m.length - 1).toBe(8);
+    expect(m.slice(1).filter((l) => l[0] !== "")).toHaveLength(8);
     expect(m[1][0]).toBe("Ana Beatriz Exemplo Souza");
     expect(m[3][4]).toBe("01310100");
     expect(m.every((l) => l.length <= 13)).toBe(true);
     expect(m.some((l) => l[0] === "Helena Modelo Barreto")).toBe(false);
   });
   test("modelo com cabeçalho diferente é erro claro", async () => {
-    const wb = new ExcelJS.Workbook();
-    wb.addWorksheet("Contatos").addRow(["NOME", "GRUPO"]);
-    const bytes = new Uint8Array(await wb.xlsx.writeBuffer());
-    const modelo = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+    const book = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([["NOME", "GRUPO"]]), "Contatos");
+    const modelo = XLSX.write(book, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
     await expect(gerarImportacao(rodadaDoExemplo(), modelo)).rejects.toThrow(/cabeçalho/);
+  });
+});
+
+describe("formato do arquivo de importação", () => {
+  test("reproduz cabeçalho, painel, validação de UF e formato texto do modelo", async () => {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(Buffer.from(await gerarImportacao(rodadaDoExemplo(), await montarModeloProdasen())) as unknown as ExcelJS.Buffer);
+    const ws = wb.getWorksheet("Contatos")!;
+    expect(ws.views[0]).toMatchObject({ state: "frozen", ySplit: 1 });
+    const c1 = ws.getCell(1, 1);
+    expect((c1.fill as ExcelJS.FillPattern).fgColor?.argb).toBe("FF0F6CBD");
+    expect(c1.font?.bold).toBe(true);
+    expect(ws.getCell(2, 5).numFmt).toBe("@");
+    expect(ws.getCell(400, 3).numFmt).toBe("@");
+    for (const linha of [2, 250, 500]) {
+      const validacao = ws.getCell(linha, 11).dataValidation;
+      expect(validacao?.type).toBe("list");
+      expect(validacao?.formulae?.[0]).toBe('"AC,AL,AP,AM,BA,CE,DF,ES,GO,MA,MT,MS,MG,PA,PB,PR,PE,PI,RJ,RN,RS,RO,RR,SC,SP,SE,TO"');
+    }
+    expect(ws.getCell(501, 11).dataValidation?.type).toBeUndefined();
   });
 });
 

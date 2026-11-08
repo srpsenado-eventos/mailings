@@ -3,6 +3,7 @@ import { abreviarLote, ehEnderecoDoDf, tratarNumero } from "@/lib/convidados/num
 import { tratarCep, ufDoCep } from "@/lib/convidados/cep";
 import { tratarBairro, tratarCidade, tratarUf } from "@/lib/convidados/bairro-cidade-uf";
 import { comIniciaisMaiusculas, semTitulo, sugestaoNomeCurto, tratarNome } from "@/lib/convidados/nome";
+import { conferirProtocolo, formaNoGenero } from "@/lib/convidados/protocolo";
 import { abreviarAteCaber, classeDoSegmento, encaixarLogradouroComplemento, PASSOS_LOGRADOURO } from "@/lib/convidados/abreviacoes";
 
 describe("logradouro e complemento", () => {
@@ -185,5 +186,35 @@ describe("nome", () => {
     const r = tratarNome("  Dra.  Ana   Exemplo ");
     expect(r.valor).toBe("Ana Exemplo");
     expect(r.regras).toEqual(["Nome: espaços normalizados", "Nome: título removido (Dra.)"]);
+  });
+});
+
+describe("protocolo", () => {
+  const base = { linha: 16, nome: "Luciana Protótipo Andrade" };
+  test("senadora com tratamento masculino e excelentíssimo: REVISAR nos dois campos com a forma v02 no feminino", () => {
+    const achados = conferirProtocolo({ ...base, cargo: "Senadora", tratamento: "Excelentíssimo Senhor", enderecamento: "A Sua Excelência o Senhor" });
+    expect(achados.map((a) => [a.campo, a.sugestao])).toEqual([["TRATAMENTO", "Senhora"], ["ENDERECAMENTO", "A Sua Excelência a Senhora"]]);
+    expect(achados[0]).toMatchObject({ linha: 16, tipo: "revisar", valorRecebido: "Excelentíssimo Senhor" });
+    expect(achados[0].motivo).toMatch(/Tabela de tratamentos v02 para 'Senadora'/);
+  });
+  test("deputado federal com Senhor e A Sua Excelência o Senhor: nada a revisar (exceção local resolve o empate)", () => {
+    expect(conferirProtocolo({ ...base, cargo: "Deputado Federal", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" })).toEqual([]);
+    expect(conferirProtocolo({ ...base, cargo: "Deputada Federal", tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" })).toEqual([]);
+  });
+  test("cargo sem regra ou vazio: nenhum achado de tabela", () => {
+    expect(conferirProtocolo({ ...base, cargo: "Presidente da Associação Exemplo", tratamento: "Senhor", enderecamento: "Ao Senhor" })).toEqual([]);
+    expect(conferirProtocolo({ ...base, cargo: "", tratamento: "Senhora", enderecamento: "À Senhora" })).toEqual([]);
+  });
+  test("incoerência de gênero sem regra na tabela é apontada", () => {
+    const achados = conferirProtocolo({ ...base, cargo: "Diretora Exemplo", tratamento: "Senhor", enderecamento: "À Senhora" });
+    expect(achados).toHaveLength(1);
+    expect(achados[0]).toMatchObject({ campo: "TRATAMENTO", tipo: "revisar", sugestao: "" });
+  });
+  test("formaNoGenero resolve os marcadores da tabela", () => {
+    expect(formaNoGenero("A Sua Excelência o(a) Senhor(a)", true)).toBe("A Sua Excelência a Senhora");
+    expect(formaNoGenero("A Sua Excelência o(a) Senhor(a)", false)).toBe("A Sua Excelência o Senhor");
+    expect(formaNoGenero("Excelentíssimo(a) Senhor(a)", true)).toBe("Excelentíssima Senhora");
+    expect(formaNoGenero("Ao Senhor (À Senhora)", true)).toBe("À Senhora");
+    expect(formaNoGenero("Ao Senhor (À Senhora)", false)).toBe("Ao Senhor");
   });
 });

@@ -5,12 +5,13 @@ import { lerListaPadrao } from "../lib/convidados/lista";
 import { tratarLista } from "../lib/convidados/tratar";
 import { gerarConferencia, gerarImportacao } from "../lib/convidados/saida";
 import { maisRecente, nomeConferencia, nomeDaPastaDaRodada, nomeImportacao, sufixoDaData } from "../lib/convidados/rodada-nomes";
-import type { ReferenciasEleicao } from "../lib/convidados/duplicidade";
+import { mesmoGrupo, type ReferenciasEleicao } from "../lib/convidados/duplicidade";
 import type { MetaRodada, Rodada } from "../lib/convidados/tipos";
 import { ColunaFaltanteError, lerPlanilha } from "../lib/planilha";
 import { lerPlanilhaEnderecos } from "../lib/planilha-enderecos";
 import { lerPlanilhaEleicao, PlanilhaEleicaoDesconhecidaError } from "../lib/planilha-eleitos";
-import type { DeputadoAtual, EleitoPlanilha, GovernadorPlanilha } from "../lib/types";
+import type { ContatoPlanilha, DeputadoAtual, EleitoPlanilha, GovernadorPlanilha } from "../lib/types";
+import { GRUPOS_POSSE } from "../data/grupos-posse";
 
 const PASTA_BASES = "Bases de comparação -PLANILHAS CONTATOS";
 const ELEITOS_PADRAO = "../GT Posse/Eleitos 2026";
@@ -43,6 +44,12 @@ interface Opcoes {
 }
 
 class FalhaDeUso extends Error {}
+
+/** Arquivo de entrada com colunas faltando; a mensagem já diz qual arquivo. */
+class FalhaDeLeitura extends Error {}
+
+const PREFIXO_TEMPORARIO_DO_EXCEL = "~$";
+const TAMANHO_DO_MOTIVO = 80;
 
 function lerArgumentos(argv: string[]): Opcoes {
   const { values, positionals } = parseArgs({
@@ -95,6 +102,8 @@ function lerReferencias(pasta: string): { referencias: ReferenciasEleicao; nomes
   if (!existsSync(pasta)) return { referencias: { deputados, eleitos, governadores }, nomes };
   for (const nome of readdirSync(pasta)) {
     if (![".xlsx", ".xls"].includes(extname(nome).toLowerCase())) continue;
+    // Arquivo de trava do Excel aberto ("~$Planilha.xlsx"): não é planilha.
+    if (nome.startsWith(PREFIXO_TEMPORARIO_DO_EXCEL)) continue;
     try {
       const arquivo = lerPlanilhaEleicao(lerBuffer(join(pasta, nome)));
       if (arquivo.tipo === "atuais") deputados.push(...arquivo.deputados);
@@ -102,10 +111,36 @@ function lerReferencias(pasta: string): { referencias: ReferenciasEleicao; nomes
       else eleitos.push(...arquivo.eleitos);
       nomes.push(nome);
     } catch (e) {
-      if (!(e instanceof PlanilhaEleicaoDesconhecidaError || e instanceof ColunaFaltanteError)) throw e;
+      if (e instanceof PlanilhaEleicaoDesconhecidaError || e instanceof ColunaFaltanteError) continue;
+      // Arquivo que a leitura de planilha não consegue abrir: a rodada segue sem ele.
+      console.log(`Referência ignorada: ${nome} (${motivoCurto(e)})`);
     }
   }
   return { referencias: { deputados, eleitos, governadores }, nomes };
+}
+
+/** Primeira linha da mensagem do erro, curta; a mensagem da leitura de planilha é técnica, sem dado da planilha. */
+function motivoCurto(e: unknown): string {
+  const mensagem = (e instanceof Error ? e.message : String(e)).split(/\r?\n/)[0].trim();
+  if (mensagem === "") return "não foi possível ler a planilha";
+  return mensagem.length > TAMANHO_DO_MOTIVO ? `${mensagem.slice(0, TAMANHO_DO_MOTIVO)}…` : mensagem;
+}
+
+/** Lê um arquivo de entrada e troca a falta de colunas por uma mensagem que diz qual arquivo. */
+function lerOuFalhar<T>(ler: () => T, rotulo: string): T {
+  try {
+    return ler();
+  } catch (e) {
+    if (e instanceof ColunaFaltanteError) throw new FalhaDeLeitura(`${rotulo} não reconhecida: ${e.message}`);
+    throw e;
+  }
+}
+
+/** O grupo escolhido casa algum dos 28 grupos da Posse (rótulo ou apelido) ou algum grupo da base. */
+function grupoConhecido(grupo: string, base: readonly ContatoPlanilha[]): boolean {
+  const daPosse = GRUPOS_POSSE.flatMap((g) => [g.rotulo, ...(g.apelidos ?? [])]);
+  const daBase = base.flatMap((c) => c.grupo.split(";").map((g) => g.trim()).filter(Boolean));
+  return [...daPosse, ...daBase].some((rotulo) => mesmoGrupo(rotulo, grupo));
 }
 
 function dataHora(d: Date): string {
@@ -125,10 +160,13 @@ async function executar(opcoes: Opcoes): Promise<void> {
   const caminhoEnderecos = exigirArquivo(opcoes.enderecos ? resolve(raiz, opcoes.enderecos) : baseMaisRecente(raiz, "BASE ENDERECO", "Base de endereços"), "Base de endereços");
   const caminhoModelo = exigirArquivo(resolve(raiz, opcoes.modelo ?? join(saida, NOME_MODELO)), "Modelo de importação");
 
-  const linhas = lerListaPadrao(lerBuffer(caminhoLista));
+  const linhas = lerOuFalhar(() => lerListaPadrao(lerBuffer(caminhoLista)), "Lista");
   const { referencias, nomes: nomesRef } = lerReferencias(resolve(raiz, opcoes.eleitos));
-  const base = lerPlanilha(lerBuffer(caminhoBase));
-  const enderecos = lerPlanilhaEnderecos(lerBuffer(caminhoEnderecos));
+  const base = lerOuFalhar(() => lerPlanilha(lerBuffer(caminhoBase)), "Base do Contatos");
+  const enderecos = lerOuFalhar(() => lerPlanilhaEnderecos(lerBuffer(caminhoEnderecos)), "Base de endereços");
+  if (!grupoConhecido(opcoes.grupo, base)) {
+    console.log(`Aviso: o grupo "${opcoes.grupo}" não está entre os 28 grupos da Posse nem na base; toda pessoa já cadastrada sairá como "em outro grupo".`);
+  }
   const rodada = tratarLista({ linhas, grupo: opcoes.grupo, base, enderecos, referencias });
 
   const agora = new Date();
@@ -176,8 +214,8 @@ async function principal(): Promise<number> {
       console.error(e.message);
       return 2;
     }
-    if (e instanceof ColunaFaltanteError) {
-      console.error(`Lista não reconhecida: ${e.message}`);
+    if (e instanceof FalhaDeLeitura) {
+      console.error(e.message);
       return 1;
     }
     console.error(e instanceof Error ? e.message : String(e));

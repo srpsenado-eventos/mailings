@@ -1,3 +1,4 @@
+import { EXCECOES_CARGO } from "@/data/cargos-tratamento";
 import { REGRAS_TRATAMENTO } from "@/data/tratamentos";
 import { normalizarTexto } from "@/lib/normalize";
 import {
@@ -17,6 +18,9 @@ import type { Achado, CampoModelo } from "./tipos";
 export const EXCECOES_CONVIDADOS: Readonly<Record<string, string>> = {
   "deputado federal": "Senador / Deputado Federal (sem cargo)",
 };
+
+/** As exceções do app inteiro valem também aqui; as da lista de convidados se somam a elas. */
+const EXCECOES: Readonly<Record<string, string>> = { ...EXCECOES_CARGO, ...EXCECOES_CONVIDADOS };
 
 const ACHADOS_DE_COERENCIA: readonly AchadoCoerencia[] = [
   "genero_tratamento_enderecamento",
@@ -61,7 +65,7 @@ export function conferirProtocolo(entrada: EntradaProtocolo): Achado[] {
     achados.push({ linha, nome, tipo: "revisar", campo, valorRecebido, sugestao, motivo });
   };
 
-  const regra = resolverRegra(cargo, REGRAS_TRATAMENTO, EXCECOES_CONVIDADOS);
+  const regra = resolverRegra(cargo, REGRAS_TRATAMENTO, EXCECOES);
   const primeiraLinha = regra ? linhaDeEnderecamento(regra.enderecamento) : undefined;
   if (primeiraLinha) {
     const motivo = `Tabela de tratamentos v02 para '${cargo}'. Valor recebido mantido no arquivo.`;

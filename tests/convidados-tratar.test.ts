@@ -76,6 +76,28 @@ describe("casos fora do exemplo", () => {
     expect(linha.achados.filter((a) => a.campo === "COMPLEMENTO")).toEqual([]);
     expect(linha.marcas).not.toContain("revisar");
   });
+  test("tratamento vazio em cargo com regra gera um achado só no campo", () => {
+    const caso = { ...CASOS[0], CARGO: "Senadora", TRATAMENTO: "", ENDERECAMENTO: "A Sua Excelência a Senhora" };
+    const r = tratarLista({ linhas: lerListaPadrao(montarListaPadrao([caso])), grupo: GRUPO, base: [], enderecos: [] });
+    const doTratamento = r.linhas[0].achados.filter((a) => a.campo === "TRATAMENTO");
+    expect(doTratamento).toHaveLength(1);
+    expect(doTratamento[0].motivo).toMatch(/obrigatórios no modelo/);
+  });
+  test("repetida cuja primeira ocorrência também não entra diz isso na sugestão", () => {
+    const caso = { ...CASOS[0], TRATAMENTO: "" };
+    const r = tratarLista({ linhas: lerListaPadrao(montarListaPadrao([caso, caso])), grupo: GRUPO, base: [], enderecos: [] });
+    const repetida = r.linhas[1].achados.find((a) => a.tipo === "repetida");
+    expect(repetida?.sugestao).toBe("A linha 9 também não entra no arquivo (Fora do arquivo: Tratamento ou Endereçamento vazio)");
+  });
+  test("repetida cuja primeira ocorrência entra mantém a sugestão de sempre", () => {
+    const r = tratarLista({ linhas: lerListaPadrao(montarListaPadrao([CASOS[0], CASOS[0]])), grupo: GRUPO, base: [], enderecos: [] });
+    expect(r.linhas[1].achados.find((a) => a.tipo === "repetida")?.sugestao).toBe("Só a linha 9 entra no arquivo");
+  });
+  test("lista vazia devolve nenhuma linha e contagens zeradas", () => {
+    const r = tratarLista({ linhas: [], grupo: GRUPO, base: [], enderecos: [] });
+    expect(r.linhas).toEqual([]);
+    expect(r.contagens).toEqual({ linhas: 0, novos: 0, novosAlterados: 0, novosValidar: 0, novosRevisar: 0, jaGrupoEscolhido: 0, jaOutroGrupo: 0, repetidas: 0, semProtocolo: 0, enderecoNovo: 0 });
+  });
   test("a aba Regras tem uma regra para cada família de tratamento", () => {
     expect(REGRAS_TEXTO.map((r) => r.titulo)).toContain("Duplicidade");
     expect(REGRAS_TEXTO.find((r) => r.titulo === "Duplicidade")?.texto).toMatch(/BASE GRUPOS POSSE/);

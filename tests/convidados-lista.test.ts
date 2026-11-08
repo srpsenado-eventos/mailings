@@ -14,6 +14,9 @@ describe("lerListaPadrao", () => {
     expect(linhas[0].valores).toEqual({ NOME: "Ana Beatriz Exemplo Souza", TRATAMENTO: "Senhora", ENDERECAMENTO: "À Senhora", CARGO: "Diretora", CEP: "70165900", LOGRADOURO: "Avenida das Nações", NUMERO: "120", COMPLEMENTO: "Sala 301", BAIRRO: "Asa Sul", CIDADE: "Brasília", UF: "DF" });
     expect(linhas[0].orgao).toBe("Órgão Exemplo");
   });
+  test("lista só com cabeçalho devolve nenhuma linha", () => {
+    expect(lerListaPadrao(montarListaPadrao([]))).toEqual([]);
+  });
   test("pula linha sem nome e apara espaços", () => {
     const linhas = lerListaPadrao(montarListaPadrao([{ ...linha, NOME: "  Ana Beatriz Exemplo Souza " }, { NOME: "", CEP: "1" }]));
     expect(linhas).toHaveLength(1);

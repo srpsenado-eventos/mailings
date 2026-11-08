@@ -57,6 +57,10 @@ describe("endereço de quem já existe", () => {
     expect(compararEnderecoCadastrado(15, "x", valores, ocorrencias, [cadastrado])).toBeUndefined();
     expect(compararEnderecoCadastrado(15, "x", valores, ocorrencias, [{ ...cadastrado, contatoId: "999" }, cadastrado])).toBeUndefined();
   });
+  test("Número S/N gravado e Número vazio no cadastro são o mesmo endereço", () => {
+    expect(compararEnderecoCadastrado(15, "x", valores, ocorrencias, [{ ...cadastrado, numero: "" }])).toBeUndefined();
+    expect(compararEnderecoCadastrado(15, "x", { ...valores, NUMERO: "" }, ocorrencias, [{ ...cadastrado, numero: "s/n" }])).toBeUndefined();
+  });
   test("diferente de todos: uma linha com o recebido e os cadastrados, prioritário primeiro", () => {
     const outro = { ...cadastrado, prioritario: false, complemento: "Anexo 1" };
     const a = compararEnderecoCadastrado(15, "x", { ...valores, COMPLEMENTO: "Anexo 3" }, ocorrencias, [outro, cadastrado]);

@@ -140,9 +140,12 @@ function achadoDeRepetida(linha: number, nome: string, primeira: LinhaTratada, g
   const dela = enderecoEmTexto(primeira.gravado);
   const desta = enderecoEmTexto(gravado);
   const complemento = dela === desta ? " Mesmo endereço." : ` Endereços diferem: ${dela}${SEPARADOR}${desta}`;
+  const sugestao = primeira.entraNoArquivo
+    ? `Só a linha ${primeira.linha} entra no arquivo`
+    : `A linha ${primeira.linha} também não entra no arquivo (${textoDaSituacao(primeira)})`;
   return {
     linha, nome, tipo: "repetida", campo: "—", valorRecebido: "",
-    sugestao: `Só a linha ${primeira.linha} entra no arquivo`,
+    sugestao,
     motivo: `Mesmo nome da linha ${primeira.linha}.${complemento}`,
   };
 }
@@ -238,7 +241,10 @@ function tratarUma(
 
   const naBase = tratarContraABase(item.linha, gravado, recebido, ctx);
   const faltaProtocolo = naBase.situacao === "novo" ? achadosSemProtocolo(item.linha, gravado) : [];
-  const todos = [...achados, ...naBase.achados, ...faltaProtocolo];
+  // Campo vazio já tem o achado de sem_protocolo; o da tabela no mesmo campo seria repetido.
+  const camposVazios = new Set(faltaProtocolo.map((a) => a.campo));
+  const semRepetirCampo = achados.filter((a) => !(camposVazios.has(a.campo) && a.valorRecebido === ""));
+  const todos = [...semRepetirCampo, ...naBase.achados, ...faltaProtocolo];
   const situacao: Situacao = faltaProtocolo.length > 0 ? "sem_protocolo" : naBase.situacao;
   return {
     ...parcial, situacao, achados: todos, marcas: marcasDe(todos, revisoes),

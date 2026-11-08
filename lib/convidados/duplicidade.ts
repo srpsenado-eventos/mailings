@@ -125,8 +125,15 @@ function emUmaLinha(e: Partial<EnderecoDaLinha>): string {
   return ORDEM_ENDERECO.map((campo) => (e[campo] ?? "").trim()).filter((valor) => valor !== "").join(", ");
 }
 
+/** Número vazio e "S/N" (em qualquer caixa) dizem o mesmo: sem número. */
+function numeroComparavel(valor: string | undefined): string {
+  const texto = normalizarTexto(valor ?? "");
+  return texto === "s/n" ? "" : texto;
+}
+
 function mesmoCampo(campo: CamposEndereco, a: string | undefined, b: string | undefined): boolean {
   if (campo === "cep") return (a ?? "").replace(/\D/g, "") === (b ?? "").replace(/\D/g, "");
+  if (campo === "numero") return numeroComparavel(a) === numeroComparavel(b);
   return normalizarTexto(a ?? "") === normalizarTexto(b ?? "");
 }
 

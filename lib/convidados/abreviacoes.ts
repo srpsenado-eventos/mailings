@@ -61,21 +61,41 @@ export const PASSOS_LOGRADOURO: readonly Passo[] = [
   [[palavra("Praça"), "Pç"]],
 ];
 
-/** Sem a flag `i`: as trocas daqui entram literais, com a caixa da sigla. */
+/**
+ * Com a flag `i`: casam "SALA", "Sala" e "sala". No nível 2 a palavra minúscula não deixa a sigla
+ * minúscula ("5º andar" dá "5º And", como no exemplo aprovado); ver `adaptarCaixa`.
+ */
 export const NIVEL_2_COMPLEMENTO: readonly Troca[] = [
-  [/\b[Ss]alas?\b/g, "Sl"],
-  [/\b[Aa]nd(?:ar|ares)\b/g, "And"],
-  [/\b[Pp]avimento\b/g, "Pav"],
-  [/\b[Tt][ée]rreo\b/g, "Ter"],
-  [/\b[Gg]abinete\b/g, "Gab"],
-  [/\b[Aa]partamento\b/g, "Apto"],
+  [/\bsalas?\b/gi, "Sl"],
+  [/\band(?:ar|ares)\b/gi, "And"],
+  [/\bpavimento\b/gi, "Pav"],
+  [/\bt[ée]rreo\b/gi, "Ter"],
+  [/\bgabinete\b/gi, "Gab"],
+  [/\bapartamento\b/gi, "Apto"],
   [/ (?:dos|das|de|do|da)(?= )/gi, ""],
 ];
 
-function adaptarCaixa(original: string, sigla: string, acompanhaCaixa: boolean): string {
+function ehTodaMaiuscula(texto: string): boolean {
+  return /\p{L}/u.test(texto) && texto === texto.toLocaleUpperCase("pt-BR");
+}
+
+/** O que a palavra original em minúscula faz com a sigla: fica minúscula ou fica como está. */
+export type CaixaDaMinuscula = "minuscula" | "como_esta";
+
+/**
+ * Caixa da sigla, quando o padrão ignora caixa: palavra original toda em maiúscula ("SALA") dá a
+ * sigla toda em maiúscula ("SL"); só a inicial maiúscula ("Sala") dá a sigla como está ("Sl");
+ * inicial minúscula ("sala") dá a sigla em minúscula ("sl"), ou como está com `"como_esta"`
+ * (nível 2 do Complemento).
+ */
+function adaptarCaixa(original: string, sigla: string, acompanhaCaixa: boolean, minuscula: CaixaDaMinuscula): string {
   if (!acompanhaCaixa) return sigla;
   const primeira = original.charAt(0);
-  return primeira !== primeira.toUpperCase() ? sigla.toLowerCase() : sigla;
+  if (primeira !== primeira.toLocaleUpperCase("pt-BR")) {
+    return minuscula === "minuscula" ? sigla.toLocaleLowerCase("pt-BR") : sigla;
+  }
+  if (original.length > 1 && ehTodaMaiuscula(original)) return sigla.toLocaleUpperCase("pt-BR");
+  return sigla;
 }
 
 function rotuloDaTroca(achado: string, novo: string): string {
@@ -88,6 +108,7 @@ export function abreviarAteCaber(
   valor: string,
   limite: number,
   passos: readonly Passo[],
+  minuscula: CaixaDaMinuscula = "minuscula",
 ): { valor: string; passos: string[] } {
   let atual = valor;
   const rotulos: string[] = [];
@@ -95,7 +116,7 @@ export function abreviarAteCaber(
     if (atual.length <= limite) break;
     for (const [regex, sigla] of passo) {
       atual = atual.replace(regex, (achado: string) => {
-        const novo = adaptarCaixa(achado, sigla, regex.ignoreCase);
+        const novo = adaptarCaixa(achado, sigla, regex.ignoreCase, minuscula);
         const rotulo = rotuloDaTroca(achado, novo);
         if (!rotulos.includes(rotulo)) rotulos.push(rotulo);
         return novo;
@@ -244,7 +265,7 @@ export function encaixarLogradouroComplemento(
     if (nivel1.passos.length > 0) regras.push(`Complemento abreviado (nível 1: ${nivel1.passos.join(", ")})`);
   }
   if (atual.length > limiteComplemento) {
-    const nivel2 = abreviarAteCaber(atual, limiteComplemento, [NIVEL_2_COMPLEMENTO]);
+    const nivel2 = abreviarAteCaber(atual, limiteComplemento, [NIVEL_2_COMPLEMENTO], "como_esta");
     atual = colapsar(nivel2.valor);
     if (nivel2.passos.length > 0) regras.push(`Complemento abreviado (nível 2: ${nivel2.passos.join(", ")})`);
   }

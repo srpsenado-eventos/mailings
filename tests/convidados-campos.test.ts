@@ -4,7 +4,7 @@ import { tratarCep, ufDoCep } from "@/lib/convidados/cep";
 import { tratarBairro, tratarCidade, tratarUf } from "@/lib/convidados/bairro-cidade-uf";
 import { comIniciaisMaiusculas, semTitulo, sugestaoNomeCurto, tratarNome } from "@/lib/convidados/nome";
 import { conferirProtocolo, formaNoGenero } from "@/lib/convidados/protocolo";
-import { abreviarAteCaber, classeDoSegmento, encaixarLogradouroComplemento, PASSOS_LOGRADOURO } from "@/lib/convidados/abreviacoes";
+import { abreviarAteCaber, classeDoSegmento, encaixarLogradouroComplemento, NIVEL_2_COMPLEMENTO, PASSOS_LOGRADOURO } from "@/lib/convidados/abreviacoes";
 
 describe("logradouro e complemento", () => {
   test("logradouro de 71 caracteres do DF cabe em 50 só com o primeiro passo que basta", () => {
@@ -51,6 +51,18 @@ describe("logradouro e complemento", () => {
     expect(r.complemento.startsWith("Galpão 7") || r.complemento.startsWith("Portaria Norte")).toBe(true);
     expect(r.logradouro).not.toMatch(/andar/i);
     expect(r.regras).toContain("Logradouro: trecho movido para o Complemento");
+  });
+  test("Complemento em caixa alta é abreviado no nível 2 e perde só o andar", () => {
+    const r = encaixarLogradouroComplemento("Esplanada dos Ministérios", "ANEXO II, SALA 15, 6º ANDAR, GABINETE DO MINISTRO");
+    expect(r.complemento).toBe("ANEXO II, SL 15, GAB MINISTRO");
+    expect(r.complemento.length).toBeLessThanOrEqual(30);
+    expect(r.trechoQueNaoCoube).toBe("6º AND");
+  });
+  test("a sigla acompanha a caixa da palavra: toda maiúscula, só a inicial ou minúscula; no nível 2 a minúscula fica como está", () => {
+    const passo = [[/\bsalas?\b/gi, "Sl"]] as const;
+    expect(abreviarAteCaber("SALA 1 Sala 2 sala 3", 5, [passo]).valor).toBe("SL 1 Sl 2 sl 3");
+    expect(abreviarAteCaber("APARTAMENTO 101 e TÉRREO", 5, [NIVEL_2_COMPLEMENTO], "como_esta").valor).toBe("APTO 101 e TER");
+    expect(abreviarAteCaber("sala 2, andar 3", 5, [NIVEL_2_COMPLEMENTO], "como_esta").valor).toBe("Sl 2, And 3");
   });
   test("logradouro de um segmento só que não cabe nem abreviado não é cortado e vira REVISAR", () => {
     const longo = "Rua Exemplo Muito Longa Sem Nenhuma Abreviação Possível Número Um";

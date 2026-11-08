@@ -323,7 +323,7 @@ function cortarPreambulo(texto: string): string | undefined {
  * O marcador de gênero colado — "Senhor(a)" — não é alternativa de linha e fica para
  * `expandirFormas`.
  */
-function alternativasDaLinha(linha: string): string[] {
+export function alternativasDaLinha(linha: string): string[] {
   const m = linha.match(/^(.*\S) \(([^)]+)\)$/);
   if (!m) return [linha];
   const [, antes, dentro] = m;

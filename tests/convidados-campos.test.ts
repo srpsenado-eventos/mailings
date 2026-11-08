@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { abreviarLote, ehEnderecoDoDf, tratarNumero } from "@/lib/convidados/numero";
 import { abreviarAteCaber, classeDoSegmento, encaixarLogradouroComplemento, PASSOS_LOGRADOURO } from "@/lib/convidados/abreviacoes";
 
 describe("logradouro e complemento", () => {
@@ -53,5 +54,54 @@ describe("logradouro e complemento", () => {
     expect(r.logradouro).toBe(longo);
     expect(r.revisao).toEqual({ marca: "revisar", texto: "Logradouro acima de 50 mesmo abreviado" });
     expect(r.trechoQueNaoCoube).toBe("");
+  });
+});
+
+describe("número", () => {
+  const base = { logradouro: "Rua Exemplo", complemento: "", uf: "DF", cidade: "Brasília" };
+  test("número curto fica como veio", () => {
+    expect(tratarNumero({ ...base, numero: "120" })).toMatchObject({ numero: "120", regras: [] });
+  });
+  test("Lote 12 Casa 3 no Número: S/N e Lt 12 Cs 3 no Complemento (regra A)", () => {
+    const r = tratarNumero({ ...base, numero: "Lote 12 Casa 3" });
+    expect(r.numero).toBe("S/N");
+    expect(r.complemento).toBe("Lt 12 Cs 3");
+    expect(r.regras[0]).toMatch(/regra A/);
+    expect(r.revisao).toBeUndefined();
+  });
+  test("regra A preserva o Complemento que já existia", () => {
+    expect(tratarNumero({ ...base, numero: "Bloco 4", complemento: "Sala 2" }).complemento).toBe("Bl 4, Sala 2");
+  });
+  test("regra A com Complemento acima de 30 marca REVISAR e mantém o valor", () => {
+    const r = tratarNumero({ ...base, numero: "Bloco 4", complemento: "Edifício Exemplo Sala 2 Andar 5" });
+    expect(r.complemento).toBe("Bl 4, Edifício Exemplo Sala 2 Andar 5");
+    expect(r.revisao).toEqual({ marca: "revisar", texto: "Complemento acima de 30 depois da regra A" });
+  });
+  test("acima de 6 sem marca conhecida é REVISAR, valor mantido", () => {
+    const r = tratarNumero({ ...base, numero: "1234567" });
+    expect(r.numero).toBe("1234567");
+    expect(r.revisao?.marca).toBe("revisar");
+    expect(r.revisao?.texto).toBe("Número acima de 6 caracteres sem lote/casa/bloco");
+  });
+  test("vazio no DF vira S/N; vazio em Brasília sem UF também", () => {
+    expect(tratarNumero({ ...base, numero: "" }).numero).toBe("S/N");
+    expect(tratarNumero({ ...base, numero: "", uf: "" }).numero).toBe("S/N");
+    expect(ehEnderecoDoDf("", "BSB")).toBe(true);
+    expect(ehEnderecoDoDf("GO", "Brasília")).toBe(false);
+  });
+  test("vazio no DF com Lote 12 no Logradouro: lote vai ao Complemento e sai do Logradouro", () => {
+    const r = tratarNumero({ ...base, numero: "", logradouro: "Quadra 5 Conjunto B Lote 12" });
+    expect(r).toMatchObject({ numero: "S/N", logradouro: "Quadra 5 Conjunto B", complemento: "Lt 12" });
+    expect(r.regras).toContain("Lote/Casa/Chácara do Logradouro levado ao Complemento (regra A dos Correios)");
+  });
+  test("vazio fora do DF: S/N só com indicação no logradouro, senão REVISAR", () => {
+    expect(tratarNumero({ ...base, numero: "", uf: "MG", cidade: "Belo Horizonte", logradouro: "Rua Exemplo, s/n" }).numero).toBe("S/N");
+    const r = tratarNumero({ ...base, numero: "", uf: "MG", cidade: "Belo Horizonte" });
+    expect(r.numero).toBe("");
+    expect(r.revisao).toEqual({ marca: "revisar", texto: "Número não informado" });
+  });
+  test("abreviarLote cobre lote, casa, chácara e bloco", () => {
+    expect(abreviarLote("Chácara 7 Bloco B")).toBe("Ch 7 Bl B");
+    expect(abreviarLote("Lotes 1, 2")).toBe("Lt 1, 2");
   });
 });

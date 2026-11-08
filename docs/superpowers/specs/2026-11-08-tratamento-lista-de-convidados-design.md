@@ -154,7 +154,7 @@ Pasta da rodada: `GT Posse/Contatos/Tratamento - Lista de Convidados/<DDMMMAAAA>
 
 ### 7.1 `Importacao PRODASEN - <grupo> - <DDMMMAAAA>.xlsx`
 
-Cópia do `Modelo_Importacao_Contatos_PRODASEN.xlsx` (lido da pasta `Tratamento - Lista de Convidados/`), aba "Contatos", cabeçalho intacto, **sem coluna extra**, preenchida a partir da linha 2 com as linhas de situação "Novo: importar" (inclusive as REVISAR e VALIDAR, com o valor gravado), FOTO e SITE_OFICIAL vazios. O grupo entra só no nome do arquivo, cortado em 40 caracteres e sem acento.
+Cópia do `Modelo_Importacao_Contatos_PRODASEN.xlsx` (lido da pasta `Tratamento - Lista de Convidados/`; na implementação o arquivo é reconstruído a partir do cabeçalho do modelo real, não copiado, ver §14 (a)), aba "Contatos", cabeçalho intacto, **sem coluna extra**, preenchida a partir da linha 2 com as linhas de situação "Novo: importar" (inclusive as REVISAR e VALIDAR, com o valor gravado), FOTO e SITE_OFICIAL vazios. O grupo entra só no nome do arquivo, cortado em 40 caracteres e sem acento.
 
 ### 7.2 `Conferencia - Lista de Convidados - <DDMMMAAAA>.xlsx`
 
@@ -166,7 +166,7 @@ Cinco abas, no formato do exemplo aprovado:
 - **Revisoes**: só o que pede ação humana, **um achado por linha**: Linha na lista, Nome, Tipo (Validar; Revisar; Já no Contatos: outro grupo; Já no Contatos: grupo escolhido; Endereço novo para contato já cadastrado; Endereço diferente do cadastrado; Repetida na lista; Conferir duplicidade), Campo, Valor recebido, Sugestão da ferramenta, Motivo, Decisão (em branco, para o GT preencher). Cor por tipo como na Simulacao.
 - **Regras**: as regras desta spec em linguagem do GT, na ordem em que são aplicadas, geradas do mesmo código que as aplica (uma lista de `{ titulo, texto }` exportada pelo módulo), para a aba nunca descrever regra que o código não tem.
 
-Fonte Arial 10, cabeçalho azul escuro com texto branco, como nas planilhas de outubro. A `xlsx` 0.18.5 instalada **não grava** preenchimento nem fonte (medido em 08/11 pelo revisor), e as cores fazem parte do formato aprovado: a gravação dos dois arquivos usa **`exceljs`**, dependência nova registrada por esta spec, restrita a `lib/convidados/saida.ts`. O `exceljs` também preserva, ao copiar o modelo do PRODASEN, o cabeçalho, o formato de texto e a validação de dados da coluna UF, que a `xlsx` perde. A leitura das planilhas continua pela `xlsx`, como no resto do projeto.
+Fonte Arial 10, cabeçalho azul escuro com texto branco, como nas planilhas de outubro. A `xlsx` 0.18.5 instalada **não grava** preenchimento nem fonte (medido em 08/11 pelo revisor), e as cores fazem parte do formato aprovado: a gravação dos dois arquivos usa **`exceljs`**, dependência nova registrada por esta spec, restrita a `lib/convidados/saida.ts`. O `exceljs` também preserva, ao copiar o modelo do PRODASEN, o cabeçalho, o formato de texto e a validação de dados da coluna UF, que a `xlsx` perde (na implementação o `exceljs` não lê o modelo real e o arquivo é reconstruído reproduzindo esses itens, ver §14 (a)). A leitura das planilhas continua pela `xlsx`, como no resto do projeto.
 
 ## 8. Arquitetura
 
@@ -245,3 +245,26 @@ Critério de aceite da arquitetura: apagar `lib/convidados/`, `scripts/convidado
 ## 13. Testes
 
 `tests/convidados-lista.test.ts` (leitura e colunas), `tests/convidados-campos.test.ts` (cada regra do §5, AAA, nomes em português), `tests/convidados-duplicidade.test.ts` (§6), `tests/convidados-saida.test.ts` (estrutura das abas e do arquivo de importação, lidos de volta pela `xlsx`), `tests/convidados-tratar.test.ts` (os 11 casos do exemplo de ponta a ponta). Sem internet, sem disco fora de fixtures, sem nome real. Cobertura mínima 80% no módulo.
+
+## 14. Adendo de 08/11 (implementação)
+
+O que a etapa 1 implementou de modo diferente do texto acima, ou decidiu onde o texto deixava em aberto. Quando este adendo e as seções anteriores discordam, vale o adendo.
+
+(a) **O arquivo de importação não é cópia do modelo.** O `exceljs` 4.4 não lê o `Modelo_Importacao_Contatos_PRODASEN.xlsx` real: ele foi gravado pelo OpenXML SDK com o prefixo de namespace `x:`, que o `exceljs` não reconhece. `gerarImportacao` (`lib/convidados/saida.ts`) valida o cabeçalho do modelo real com a `xlsx` (que lê o arquivo) e reconstrói o arquivo com o `exceljs`, reproduzindo o que o modelo tem: aba "Contatos", cabeçalho em negrito branco sobre `0F6CBD`, as larguras das colunas, o painel congelado na primeira linha, 500 linhas em formato texto e a validação de lista de UF em K2:K500. Risco: se o importador do Contatos exigir algo do arquivo além disso, a falha aparece lá, não aqui. Recomendação: a primeira importação real com um lote pequeno.
+
+(b) **Abreviação só até caber (§5.2).** A linha 10 do exemplo aprovado mostrava "SAS Qd 3 Bl C Ed Sede da Associação" no Logradouro e "5º And Sl 512" no Complemento. Pela regra da própria spec (cada passo só enquanto o valor passa do limite), o Logradouro sai "SAS Quadra 3 Bloco C Edifício Sede da Associação" (o primeiro passo já basta para caber em 50) e o Complemento, que já cabia em 30, não muda. O arquivo real difere do exemplo nesse ponto, e a regra prevalece.
+
+(c) **Bairro acima de 30 (§5.5)** é abreviado pelo de-para dos Correios e pelos mesmos passos do Logradouro e, se não couber, fica REVISAR com o valor abreviado; nunca é cortado.
+
+(d) **Gênero antes do padrão da tabela (§5.8).** O marcador de gênero do padrão da tabela ("Senhor(a)", "o(a)") é resolvido no gênero da pessoa antes de expandir as formas aceitas, para que o gênero oposto divirja, como pede a decisão 4 do Clovis.
+
+(e) **Endereço de quem já existe (§6.2)** só é comparado quando a lista trouxe algum campo de endereço; linha sem endereço não gera "Endereço novo" nem "Endereço diferente".
+
+(f) **Correções da revisão final da branch:**
+- Lote, Casa e Chácara do Logradouro (§5.3) só vão ao Complemento quando seguidos de identificador com dígito ou de uma letra maiúscula isolada ("Lote 12", "Casa 3", "Casa B", "Lt 5/6"); seguidos de nome ("Casa Civil", "Casa de Apoio", "Chácara Santa Luzia") ficam no Logradouro. Todas as ocorrências saem ("Quadra 5 Lote 12 Casa 3" dá Logradouro "Quadra 5" e Complemento "Lt 12 Cs 3"). A mesma exigência vale para a marca no início do Número acima de 6 (regra A).
+- A revisão "Complemento acima de 30 depois da regra A" é descartada quando o encaixe seguinte faz o Complemento caber sem trecho de fora.
+- O nível 2 do Complemento (§5.2) ignora caixa: "SALA" e "ANDAR" também são abreviados. A sigla sai toda em maiúscula quando a palavra está toda em maiúscula ("SL"), com a inicial maiúscula quando só a inicial está ("Sl"), e no nível 2 a palavra minúscula mantém a sigla como está ("5º andar" dá "5º And").
+- Títulos seguidos no início do nome (§5.6) saem todos ("Exma. Sra. Maria" dá "Maria"), com a regra registrando os removidos.
+- Tratamento ou Endereçamento vazio fica só com o achado de campo obrigatório, sem o achado da tabela no mesmo campo.
+- Na comparação do endereço de quem já existe (§6.2), Número vazio e "S/N" são o mesmo.
+- O comando ignora, na pasta de eleitos, o arquivo de trava do Excel (`~$...`) e qualquer arquivo que a leitura de planilha não abra (linha "Referência ignorada: <arquivo> (<motivo>)"), diz qual base não foi reconhecida e avisa quando o grupo não está entre os 28 da Posse nem na base.

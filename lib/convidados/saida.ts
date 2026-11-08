@@ -37,12 +37,12 @@ const MARCA_DO_ACHADO: Readonly<Record<TipoAchado, string>> = {
 };
 
 const COMO_LER = [
-  "Amarelo na coluna GRAVADO: a ferramenta alterou o valor recebido; o original está na coluna RECEBIDO ao lado.",
-  "Azul: inferência a confirmar (VALIDAR). Laranja: a ferramenta não resolveu sozinha (REVISAR) ou há algo para o GT decidir (ATENÇÃO).",
-  "Verde: a pessoa já está no Contatos, no grupo escolhido; nada a fazer. Cinza: linha que não entra no arquivo PRODASEN.",
-  "Simulacao mostra todas as linhas da lista; Modelo PRODASEN mostra só as que entram no arquivo de importação, no mesmo leiaute.",
-  "Tratamento e Endereçamento são conferidos contra a tabela de tratamentos, mas nunca alterados pela ferramenta; divergência aparece em Revisoes.",
-  "Revisoes traz um achado por linha, com a coluna Decisão em branco para o GT preencher. Linha já cadastrada em outro grupo não entra no arquivo: incluir o contato no grupo escolhido direto no Contatos.",
+  "Aba 'Simulacao': cada campo em duas colunas, RECEBIDO e GRAVADO. Amarelo = a ferramenta mudou o valor; laranja = precisa de revisão humana; azul = alterado por inferência, validar; verde = já cadastrado no grupo escolhido (era o esperado); cinza = linha que não entra no arquivo de importação.",
+  "Aba 'Modelo PRODASEN': cópia exata do arquivo de importação gerado ao lado ('Importacao PRODASEN - <grupo> - <data>.xlsx'), só com as linhas 'Novo: importar', já com os ajustes.",
+  "Aba 'Revisoes': só o que pede ação humana, uma linha por achado, com a sugestão da ferramenta e a coluna 'Decisão' em branco para preencher.",
+  "Aba 'Regras': as regras aplicadas nesta rodada, na ordem.",
+  "Tratamento e Endereçamento chegam preenchidos na lista; a ferramenta só confere pela tabela de tratamentos e aponta divergência, sem mudar o valor.",
+  "Grupo não vai no arquivo: é escolhido no Contatos na hora de subir o lote. Aqui ele serve só para a duplicidade.",
 ];
 
 function paraArrayBuffer(buffer: ExcelJS.Buffer): ArrayBuffer {

@@ -95,5 +95,7 @@ describe("arquivo de conferência", () => {
     expect(plano).toMatch(/Linhas na lista \| 11/);
     expect(plano).toMatch(/Novo: importar \(entram no arquivo PRODASEN\) \| 8/);
     expect(plano).toMatch(/Como ler/);
+    expect(plano).toMatch(/Aba 'Regras': as regras aplicadas nesta rodada, na ordem\./);
+    expect(plano).toMatch(/Grupo não vai no arquivo: é escolhido no Contatos/);
   });
 });

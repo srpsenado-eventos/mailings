@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { abreviarLote, ehEnderecoDoDf, tratarNumero } from "@/lib/convidados/numero";
 import { tratarCep, ufDoCep } from "@/lib/convidados/cep";
 import { tratarBairro, tratarCidade, tratarUf } from "@/lib/convidados/bairro-cidade-uf";
+import { comIniciaisMaiusculas, semTitulo, sugestaoNomeCurto, tratarNome } from "@/lib/convidados/nome";
 import { abreviarAteCaber, classeDoSegmento, encaixarLogradouroComplemento, PASSOS_LOGRADOURO } from "@/lib/convidados/abreviacoes";
 
 describe("logradouro e complemento", () => {
@@ -152,5 +153,37 @@ describe("bairro, cidade e uf", () => {
     expect(tratarUf("df")).toMatchObject({ valor: "DF", regras: ["UF em caixa alta"] });
     expect(tratarUf("BR")).toMatchObject({ valor: "BR", revisao: { marca: "revisar", texto: "UF inexistente (BR)" } });
     expect(tratarUf("").revisao?.texto).toBe("UF vazia");
+  });
+});
+
+describe("nome", () => {
+  test("título sai, patente e cargo ficam", () => {
+    expect(semTitulo("Dr. Carlos Eduardo Fictício Ramos")).toEqual({ valor: "Carlos Eduardo Fictício Ramos", removido: "Dr." });
+    expect(semTitulo("S.E. Sra. Ana Beatriz Exemplo Souza").valor).toBe("Ana Beatriz Exemplo Souza");
+    expect(semTitulo("General de Exército Roberto Hipotético Lima").valor).toBe("General de Exército Roberto Hipotético Lima");
+    expect(semTitulo("Senador Paulo Amostra Teixeira").valor).toBe("Senador Paulo Amostra Teixeira");
+  });
+  test("caixa alta integral vira iniciais maiúsculas com conectivos minúsculos", () => {
+    expect(comIniciaisMaiusculas("MARIA DA CONCEIÇÃO D'ÁVILA E SOUZA-LIMA")).toBe("Maria da Conceição D'Ávila e Souza-Lima");
+    const r = tratarNome("ANA BEATRIZ EXEMPLO SOUZA");
+    expect(r.valor).toBe("Ana Beatriz Exemplo Souza");
+    expect(r.regras).toContain("Nome em caixa alta convertido; conferir a grafia");
+    expect(tratarNome("Ana Beatriz Exemplo Souza")).toEqual({ valor: "Ana Beatriz Exemplo Souza", regras: [] });
+  });
+  test("nome acima de 50 é REVISAR com sugestão e contagem, valor mantido", () => {
+    const nome = "Maria Auxiliadora da Conceição Exemplo de Almeida Prado";
+    const r = tratarNome(nome);
+    expect(r.valor).toBe(nome);
+    expect(r.revisao?.marca).toBe("revisar");
+    expect(r.revisao?.texto).toBe("Nome com 55 caracteres (limite 50). A ferramenta não corta nome sozinha.");
+    expect(r.revisao?.sugestao).toBe("Maria de Almeida Prado (22)");
+  });
+  test("patente abreviada entra primeiro na sugestão", () => {
+    expect(sugestaoNomeCurto("General de Exército Roberto Hipotético de Lima Exemplo Longo")).toBe("Gen Ex Roberto Hipotético de Lima Exemplo Longo (47)");
+  });
+  test("espaços colapsados e título removido registram a regra", () => {
+    const r = tratarNome("  Dra.  Ana   Exemplo ");
+    expect(r.valor).toBe("Ana Exemplo");
+    expect(r.regras).toEqual(["Nome: espaços normalizados", "Nome: título removido (Dra.)"]);
   });
 });

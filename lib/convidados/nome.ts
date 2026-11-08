@@ -34,17 +34,27 @@ function ehConectivo(token: string): boolean {
   return CONECTIVOS.has(token.toLocaleLowerCase("pt-BR"));
 }
 
-/** Remove só o primeiro título (uma ou duas palavras) do início do nome. */
-export function semTitulo(nome: string): { valor: string; removido?: string } {
-  const tokens = palavras(nome);
+/** Quantas palavras do início formam um título da lista (duas antes de uma); 0 se nenhuma. */
+function tamanhoDoTitulo(tokens: readonly string[]): number {
   for (const quantidade of [2, 1]) {
     if (tokens.length <= quantidade) continue;
-    const trecho = tokens.slice(0, quantidade);
-    if (TITULOS.includes(trecho.map(chaveToken).join(" "))) {
-      return { valor: tokens.slice(quantidade).join(" "), removido: trecho.join(" ") };
-    }
+    if (TITULOS.includes(tokens.slice(0, quantidade).map(chaveToken).join(" "))) return quantidade;
   }
-  return { valor: nome };
+  return 0;
+}
+
+/** Remove do início do nome todos os títulos seguidos da lista `TITULOS` ("Exma. Sra."); nunca o nome inteiro. */
+export function semTitulo(nome: string): { valor: string; removido?: string } {
+  let tokens = palavras(nome);
+  const removidos: string[] = [];
+  let quantidade = tamanhoDoTitulo(tokens);
+  while (quantidade > 0) {
+    removidos.push(...tokens.slice(0, quantidade));
+    tokens = tokens.slice(quantidade);
+    quantidade = tamanhoDoTitulo(tokens);
+  }
+  if (removidos.length === 0) return { valor: nome };
+  return { valor: tokens.join(" "), removido: removidos.join(" ") };
 }
 
 export function ehCaixaAlta(nome: string): boolean {

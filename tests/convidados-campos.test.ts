@@ -196,6 +196,13 @@ describe("nome", () => {
     expect(semTitulo("General de Exército Roberto Hipotético Lima").valor).toBe("General de Exército Roberto Hipotético Lima");
     expect(semTitulo("Senador Paulo Amostra Teixeira").valor).toBe("Senador Paulo Amostra Teixeira");
   });
+  test("títulos seguidos saem todos e a regra registra os removidos", () => {
+    expect(semTitulo("Exma. Sra. Maria Exemplo Silva")).toEqual({ valor: "Maria Exemplo Silva", removido: "Exma. Sra." });
+    const r = tratarNome("Exma. Sra. Maria Exemplo Silva");
+    expect(r.valor).toBe("Maria Exemplo Silva");
+    expect(r.regras).toEqual(["Nome: título removido (Exma. Sra.)"]);
+    expect(semTitulo("Dr. Coronel Roberto Hipotético Lima").valor).toBe("Coronel Roberto Hipotético Lima");
+  });
   test("caixa alta integral vira iniciais maiúsculas com conectivos minúsculos", () => {
     expect(comIniciaisMaiusculas("MARIA DA CONCEIÇÃO D'ÁVILA E SOUZA-LIMA")).toBe("Maria da Conceição D'Ávila e Souza-Lima");
     const r = tratarNome("ANA BEATRIZ EXEMPLO SOUZA");

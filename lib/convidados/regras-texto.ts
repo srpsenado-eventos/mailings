@@ -23,7 +23,7 @@ export const REGRAS_TEXTO: readonly RegraEmTexto[] = [
   {
     titulo: "Número vazio",
     texto:
-      "Em endereço do DF (UF = DF, ou UF vazia com cidade Brasília), Número vazio vira S/N. Se o Logradouro traz Lote, Casa ou Chácara, o trecho vai ao Complemento abreviado. Fora do DF, S/N só quando o logradouro já traz 'S/N' ou 'sem número'; senão a linha fica em REVISAR (número não informado).",
+      "Em endereço do DF (UF = DF, ou UF vazia com cidade Brasília), Número vazio vira S/N. Se o Logradouro traz Lote, Casa ou Chácara seguidos de número ou de letra isolada (Lote 12, Casa B), cada trecho vai ao Complemento abreviado; seguidos de nome (Casa Civil, Chácara Santa Luzia), ficam no Logradouro. Fora do DF, S/N só quando o logradouro já traz 'S/N' ou 'sem número'; senão a linha fica em REVISAR (número não informado).",
   },
   {
     titulo: "Número acima de 6 (regra A)",
@@ -48,7 +48,7 @@ export const REGRAS_TEXTO: readonly RegraEmTexto[] = [
   {
     titulo: "Título no nome",
     texto:
-      "Dr., Dra., Exmo., Sr., Sra. e SE Sr. no início do nome saem (alterado). Patente e cargo (General, Senador, Ministro) ficam: fazem parte do nome pelas regras do GT.",
+      "Dr., Dra., Exmo., Sr., Sra. e SE Sr. no início do nome saem (alterado), também quando vêm seguidos (Exma. Sra.). Patente e cargo (General, Senador, Ministro) ficam: fazem parte do nome pelas regras do GT.",
   },
   {
     titulo: "Tratamento e Endereçamento",

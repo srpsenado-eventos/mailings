@@ -20,6 +20,7 @@ import {
   type Etiqueta as EtiquetaPainel,
 } from "@/lib/painel";
 import { destacaLinha, detalheDaEleicao, detalheDoGoverno, etiquetasDeEleicao, etiquetasDeGoverno } from "@/lib/painel-eleicao";
+import { EXPLICACAO_FONTE_PROPRIA, fontePropria, TEXTO_FONTE_PROPRIA } from "@/lib/painel-fonte-propria";
 import type { AcaoBloqueio } from "@/lib/repetidos-decisoes";
 import type { EleicaoContato, EleicaoGovernoContato, ResultadoContato, ResultadoGrupo, Retrato } from "@/lib/types";
 
@@ -44,6 +45,19 @@ function BotaoCopiar({ texto }: { texto: string }) {
     >
       {copiado ? "Copiado" : "Copiar"}
     </button>
+  );
+}
+
+/**
+ * "Fonte própria · abrir": a pessoa veio de outra página do órgão, não da fonte do cabeçalho
+ * (convocados do TST e do STJ, senadores fora de exercício). O clique no link não abre o detalhe.
+ */
+function FontePropria({ url }: { url: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Etiqueta texto={TEXTO_FONTE_PROPRIA} tom="neutro" explicacao={EXPLICACAO_FONTE_PROPRIA} />
+      <a href={url} target="_blank" rel="noreferrer" title={url} className="text-xs text-acao underline" onClick={(e) => e.stopPropagation()}>abrir</a>
+    </span>
   );
 }
 
@@ -203,6 +217,7 @@ export function LinhaContato({ c, g, retrato, eleicaoLigada = false, repeticoes,
   const situacao = situacaoDoContato(c, g);
   const motivo = motivoDoContato(c, g);
   const subtitulo = motivo ?? [c.contato.tratamento, c.contato.enderecamento].filter(Boolean).join(" · ");
+  const urlPropria = fontePropria(c.fonteUrl, g);
   return (
     <div className={`border-t border-separador ${eleicaoLigada && destacaLinha(c.eleicao, c.eleicaoGoverno) ? "border-l-4 border-l-atencao" : ""} ${fosca ? "opacity-60" : ""}`}>
       <div className={`${COLUNAS} cursor-pointer hover:bg-fundo/60`} onClick={() => setAberto((v) => !v)}>
@@ -214,6 +229,7 @@ export function LinhaContato({ c, g, retrato, eleicaoLigada = false, repeticoes,
         <div>
           <div className="flex flex-wrap gap-1.5">
             {etiquetas.map((e) => <Etiqueta key={`${e.campo}-${e.texto}`} texto={e.texto} tom={e.tom} explicacao={e.explicacao} quebra={repeticoes?.includes(e)} />)}
+            {urlPropria && <FontePropria url={urlPropria} />}
           </div>
           {bloqueio && <MarcarBloqueio acao={bloqueio} modo={modo} />}
         </div>
@@ -224,8 +240,11 @@ export function LinhaContato({ c, g, retrato, eleicaoLigada = false, repeticoes,
   );
 }
 
-/** `nota`: fonte rotulada ("fora de exercício: Ocupação de cargo de ministro"), quando a pessoa veio de uma fonte secundária. */
-export function LinhaNovo({ nome, cargo, viaIa, nota }: { nome: string; cargo?: string; viaIa: boolean; nota?: string }) {
+/**
+ * `nota`: fonte rotulada ("fora de exercício: Ocupação de cargo de ministro"), quando a pessoa veio
+ * de uma fonte secundária. `fonteUrl`: a página dela, mostrada só quando difere da principal do grupo.
+ */
+export function LinhaNovo({ nome, cargo, viaIa, nota, fonteUrl }: { nome: string; cargo?: string; viaIa: boolean; nota?: string; fonteUrl?: string }) {
   return (
     <div className="border-t border-separador">
       <div className={COLUNAS}>
@@ -237,6 +256,7 @@ export function LinhaNovo({ nome, cargo, viaIa, nota }: { nome: string; cargo?: 
         <div className="flex flex-wrap gap-1.5">
           {cargo && <Etiqueta texto={`Site: ${cargo}${viaIa ? " (via IA)" : ""}`} tom="neutro" explicacao={EXPLICACAO_NOVO} />}
           {nota && <Etiqueta texto={nota} tom="neutro" />}
+          {fonteUrl && <FontePropria url={fonteUrl} />}
         </div>
         <div><Etiqueta texto="Avaliar inclusão" tom="atencao" /></div>
       </div>

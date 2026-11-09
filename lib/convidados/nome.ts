@@ -1,5 +1,5 @@
 import { chaveToken, normalizarTexto } from "@/lib/normalize";
-import { mesmoGrupo } from "./duplicidade";
+import { mesmoGrupo } from "./grupo";
 import { LIMITES } from "./limites";
 import type { ResultadoCampo } from "./tipos";
 

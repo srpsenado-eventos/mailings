@@ -16,6 +16,7 @@ import { Etiqueta } from "@/components/etiqueta";
 import { PublicarButton } from "@/components/publicar-button";
 import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-contato";
 import { contarBloqueiosDoGrupo, ehLinhaABloquear, ROTULO_CARTAO_BLOQUEIO, textosDeBloqueioDoGrupo, totalABloquear } from "@/lib/painel-bloqueio";
+import { fontePropria } from "@/lib/painel-fonte-propria";
 import { avisoUrlCaida, cartoesDoResumo, estadoDaFonteDoGrupo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, rotuloDaOpcaoDeGrupo, textoAlternativa, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoMudanca, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, textosProvisorias, type Filtro } from "@/lib/painel";
 import type { HistoricoDecisoes } from "@/lib/decisoes";
 import { gruposNaoCadastrados, linhasDosGruposNaoCadastrados, retratoSemGruposDeTeste, rotulosDeTesteForaDoAgrupador, secoesDosDemaisGrupos } from "@/lib/painel-grupos-vazios";
@@ -235,6 +236,7 @@ export function Painel({ retrato: retratoBruto, aviso, onNovaVarredura, modo = "
                       cargo={n.cargo}
                       viaIa={n.origem === "conhecimento"}
                       nota={n.rotuloFonte ? [n.rotuloFonte, n.contexto].filter(Boolean).join(": ") : undefined}
+                      fonteUrl={fontePropria(n.fonteUrl, g)}
                     />
                   ))}
                   {g.dispensados?.map((d, i) => (

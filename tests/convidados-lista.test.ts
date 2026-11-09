@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { lerListaPadrao } from "@/lib/convidados/lista";
+import { lerListaPadrao, lerListaPadraoComAba } from "@/lib/convidados/lista";
 import { ColunaFaltanteError } from "@/lib/planilha";
 import { montarListaPadrao } from "./fixtures/convidados/montar";
 
@@ -43,5 +43,22 @@ describe("lerListaPadrao", () => {
   test("planilha sem cabeçalho reconhecível é ColunaFaltanteError", () => {
     const buf = montarListaPadrao([], { semColunas: ["NOME COMPLETO DO CONVIDADO/ NOME POLÍTICO", "CEP"] });
     expect(() => lerListaPadrao(buf)).toThrow(ColunaFaltanteError);
+  });
+});
+
+describe("lerListaPadraoComAba", () => {
+  test("lê a aba Lista de Convidados mesmo com a aba de orientações antes, com exemplos e cabeçalho sem as colunas do GT", () => {
+    const buf = montarListaPadrao([linha], { abaDeOrientacoesAntes: true });
+    const lida = lerListaPadraoComAba(buf);
+    expect(lida.aba).toBe("Lista de Convidados");
+    expect(lida.linhas).toHaveLength(1);
+    expect(lida.linhas[0].valores.NOME).toBe("Ana Beatriz Exemplo Souza");
+  });
+  test("sem a aba Lista de Convidados, lê a primeira aba com o cabeçalho que não seja de orientações", () => {
+    const buf = montarListaPadrao([linha], { aba: "Convidados Gabinete", abaDeOrientacoesAntes: true });
+    expect(lerListaPadraoComAba(buf).aba).toBe("Convidados Gabinete");
+  });
+  test("aba Lista de Convidados só com cabeçalho devolve 0 linhas, nunca os exemplos da aba de orientações", () => {
+    expect(lerListaPadrao(montarListaPadrao([], { abaDeOrientacoesAntes: true }))).toEqual([]);
   });
 });

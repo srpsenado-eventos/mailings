@@ -142,17 +142,23 @@ export async function gerarImportacao(rodada: Rodada, modelo: ArrayBuffer): Prom
   return paraArrayBuffer(await wb.xlsx.writeBuffer());
 }
 
+function descricaoDaLista(meta: MetaRodada): string {
+  const linhas = `linhas ${meta.primeiraLinha} a ${meta.ultimaLinha}`;
+  if (meta.origem === "camara") return `${meta.listaNome} (planilha do site da Câmara, deputados em exercício, aba '${meta.aba}', ${linhas})`;
+  return `${meta.listaNome} (aba '${meta.aba}', ${linhas})`;
+}
+
 function resumo(wb: ExcelJS.Workbook, rodada: Rodada, meta: MetaRodada): void {
   const ws = wb.addWorksheet("Resumo");
   const c = rodada.contagens;
   const titulo = ws.addRow(["Tratamento da lista de convidados"]);
   const pares: [string, string | number][] = [
-    ["Lista recebida", `${meta.listaNome} (aba 'Lista de Convidados', linhas ${meta.primeiraLinha} a ${meta.ultimaLinha})`],
+    ["Lista recebida", descricaoDaLista(meta)],
     ["Grupo escolhido ao rodar", rodada.grupo],
     ["Base do Contatos usada", meta.baseNome],
     ["Base de endereços usada", meta.enderecosNome],
     ["Listas de referência", meta.referencias.length > 0 ? meta.referencias.join(", ") : "nenhuma encontrada"],
-    ["Gerado em", `${meta.geradoEm} · ${meta.origem}`],
+    ["Gerado em", `${meta.geradoEm} · ${meta.comando}`],
   ];
   pares.forEach((p) => ws.addRow(p));
   ws.addRow([]);

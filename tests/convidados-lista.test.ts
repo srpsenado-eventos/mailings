@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { lerListaPadrao, lerListaPadraoComAba } from "@/lib/convidados/lista";
+import { lerLista, lerListaPadrao, lerListaPadraoComAba } from "@/lib/convidados/lista";
 import { ColunaFaltanteError } from "@/lib/planilha";
 import { montarListaPadrao } from "./fixtures/convidados/montar";
+import { montarPlanilhaDaCamara } from "./fixtures/convidados/montar-camara";
 
 const linha = { NOME: "Ana Beatriz Exemplo Souza", orgao: "Órgão Exemplo", CARGO: "Diretora", CEP: "70165900", LOGRADOURO: "Avenida das Nações", NUMERO: "120", COMPLEMENTO: "Sala 301", BAIRRO: "Asa Sul", CIDADE: "Brasília", UF: "DF", TRATAMENTO: "Senhora", ENDERECAMENTO: "À Senhora" };
 
@@ -60,5 +61,18 @@ describe("lerListaPadraoComAba", () => {
   });
   test("aba Lista de Convidados só com cabeçalho devolve 0 linhas, nunca os exemplos da aba de orientações", () => {
     expect(lerListaPadrao(montarListaPadrao([], { abaDeOrientacoesAntes: true }))).toEqual([]);
+  });
+});
+
+describe("despachante de origem", () => {
+  test("planilha da Câmara é reconhecida pelas colunas", () => {
+    const r = lerLista(montarPlanilhaDaCamara([{ nomeParlamentar: "Pedro Exemplo" }]));
+    expect(r.origem).toBe("camara");
+    expect(r.linhas).toHaveLength(1);
+  });
+  test("modelo Padrão devolve a origem e a aba lida", () => {
+    const r = lerLista(montarListaPadrao([{ NOME: "Ana Exemplo" }]));
+    expect(r.origem).toBe("padrao");
+    expect(r.aba).toBe("Lista de Convidados");
   });
 });

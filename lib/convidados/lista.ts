@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { normalizarTexto } from "@/lib/normalize";
 import { ColunaFaltanteError } from "@/lib/planilha";
+import { abaDaListaDaCamara, lerListaDaCamara } from "./camara";
 import { CAMPOS_MODELO, type CampoModelo, type LinhaLista, type Valores } from "./tipos";
 
 /** Quantas linhas, do topo de cada aba, são varridas à procura do cabeçalho. */
@@ -88,4 +89,20 @@ export function lerListaPadraoComAba(buffer: ArrayBuffer): ListaLida {
     return { linhas, aba: nomeAba };
   }
   throw new ColunaFaltanteError([ROTULO_NOME, "CEP"]);
+}
+
+export type OrigemLista = "padrao" | "camara";
+
+export interface ListaDeEntrada {
+  origem: OrigemLista;
+  aba: string;
+  linhas: LinhaLista[];
+}
+
+/** Reconhece pelas colunas se a lista é a planilha do site da Câmara; senão lê como modelo Padrão. */
+export function lerLista(buffer: ArrayBuffer): ListaDeEntrada {
+  const abaCamara = abaDaListaDaCamara(buffer);
+  if (abaCamara !== undefined) return { origem: "camara", aba: abaCamara, linhas: lerListaDaCamara(buffer) };
+  const { linhas, aba } = lerListaPadraoComAba(buffer);
+  return { origem: "padrao", aba, linhas };
 }

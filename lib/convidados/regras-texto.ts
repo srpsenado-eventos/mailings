@@ -70,4 +70,9 @@ export const REGRAS_TEXTO: readonly RegraEmTexto[] = [
     texto:
       "Mesmo nome em mais de uma linha: só a primeira entra no arquivo; as demais saem como 'Repetida na própria lista', com a indicação da linha que vale e, se o endereço difere, os dois endereços.",
   },
+  {
+    titulo: "Lista da Câmara (deputados em exercício)",
+    texto:
+      "Quando a lista é a planilha do site da Câmara (colunas Nome Parlamentar, Titular/Suplente/Efetivado e Nome Civil), a ferramenta monta cada linha no modelo: Nome = Nome Parlamentar como no site; Tratamento, Endereçamento e Cargo pelo gênero da coluna Tratamento da Câmara (Senhor / Senhora, A Sua Excelência o Senhor / a Senhora, Deputado / Deputada Federal); Logradouro 'Praça dos Três Poderes'; Número S/N e Complemento 'Anexo N, Gabinete NNN' (regra A dos Correios: 'Anexo 4' passa de 6 caracteres); CEP o da planilha da Câmara; Bairro 'Zona Cívico-Administrativa', Brasília, DF. Titulares, efetivados e suplentes em exercício entram todos. A referência 'Consta na lista da Câmara' não é calculada, porque a lista é a própria Câmara.",
+  },
 ];

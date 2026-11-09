@@ -1,3 +1,4 @@
+import type { OrigemLista } from "./lista";
 export const CAMPOS_MODELO = [
   "NOME", "TRATAMENTO", "ENDERECAMENTO", "CARGO", "CEP", "LOGRADOURO", "NUMERO", "COMPLEMENTO", "BAIRRO", "CIDADE", "UF",
 ] as const;
@@ -108,7 +109,7 @@ export interface Rodada {
   };
 }
 
-/** `geradoEm` já formatado "DD/MM/AAAA HH:MM"; `origem` é o texto do comando ou "tela". */
+/** `geradoEm` já formatado "DD/MM/AAAA HH:MM"; `comando` é o texto do comando ou "tela"; `origem` e `aba` dizem de onde a lista foi lida. */
 export interface MetaRodada {
   listaNome: string;
   primeiraLinha: number;
@@ -117,5 +118,7 @@ export interface MetaRodada {
   enderecosNome: string;
   referencias: string[];
   geradoEm: string;
-  origem: string;
+  comando: string;
+  origem: OrigemLista;
+  aba: string;
 }

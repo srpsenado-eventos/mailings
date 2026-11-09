@@ -1,8 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { tratarLista, textoDaSituacao } from "@/lib/convidados/tratar";
 import { REGRAS_TEXTO } from "@/lib/convidados/regras-texto";
-import { lerListaPadrao } from "@/lib/convidados/lista";
+import { lerListaPadrao, lerLista } from "@/lib/convidados/lista";
 import { montarListaPadrao } from "./fixtures/convidados/montar";
+import { montarPlanilhaDaCamara } from "./fixtures/convidados/montar-camara";
 import { CASOS, GRUPO, rodadaDoExemplo } from "./fixtures/convidados/exemplo";
 
 describe("tratarLista sobre os 11 casos do exemplo aprovado", () => {
@@ -101,6 +102,25 @@ describe("casos fora do exemplo", () => {
   test("a aba Regras tem uma regra para cada família de tratamento", () => {
     expect(REGRAS_TEXTO.map((r) => r.titulo)).toContain("Duplicidade");
     expect(REGRAS_TEXTO.find((r) => r.titulo === "Duplicidade")?.texto).toMatch(/BASE GRUPOS POSSE/);
-    expect(REGRAS_TEXTO).toHaveLength(13);
+    expect(REGRAS_TEXTO).toHaveLength(14);
+  });
+});
+
+describe("lista da Câmara tratada como entrada", () => {
+  const lida = lerLista(montarPlanilhaDaCamara([
+    { nomeParlamentar: "Dr. Carlos Exemplo", anexo: "4", gabinete: "414", tratamento: "Exmo. Senhor Deputado" },
+    { nomeParlamentar: "Ana Exemplo", anexo: "3", gabinete: "531", tratamento: "Exma. Senhora Deputada" },
+    { nomeParlamentar: "Pedro Exemplo", anexo: "0", gabinete: "20", tratamento: "Exmo. Senhor Deputado" },
+  ]));
+  const eleito = { casa: "camara" as const, uf: "DF", nomeUrna: "Dr. Carlos Exemplo", nomeCompleto: "Carlos Eduardo Exemplo", situacaoTse: "Eleito", statusMandato: "Reeleito", genero: "M" };
+  const r = tratarLista({ linhas: lida.linhas, grupo: "Deputados Federais", base: [], enderecos: [], referencias: { deputados: [], eleitos: [eleito], governadores: [] } });
+  test("três linhas novas, sem campo alterado nem achado", () => {
+    expect(lida.origem).toBe("camara");
+    expect(r.linhas.map((x) => textoDaSituacao(x))).toEqual(["Novo: importar", "Novo: importar", "Novo: importar"]);
+    expect(r.linhas.every((x) => x.camposAlterados.length === 0 && x.achados.length === 0)).toBe(true);
+  });
+  test("referência do TSE aparece e a da Câmara nunca", () => {
+    expect(r.linhas[0].referencia.startsWith("Eleito em 2026")).toBe(true);
+    expect(r.linhas.some((x) => x.referencia.includes("Consta na lista da Câmara"))).toBe(false);
   });
 });

@@ -48,7 +48,7 @@ export const REGRAS_TEXTO: readonly RegraEmTexto[] = [
   {
     titulo: "Título no nome",
     texto:
-      "Dr., Dra., Exmo., Sr., Sra. e SE Sr. no início do nome saem (alterado), também quando vêm seguidos (Exma. Sra.). Patente e cargo (General, Senador, Ministro) ficam: fazem parte do nome pelas regras do GT.",
+      "Exmo., Exma., Sr., Sra. e SE Sr. no início do nome saem (alterado), também quando vêm seguidos (Exma. Sra.). Dr. e Dra. só saem no grupo Ministros do STM (regra do GT para o STM); nos demais grupos o nome vai como está. Patente e cargo (General, Senador, Ministro) ficam: fazem parte do nome pelas regras do GT.",
   },
   {
     titulo: "Tratamento e Endereçamento",

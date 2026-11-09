@@ -76,7 +76,7 @@ function revisoesDoEncaixe(revisao: Revisao | undefined): RevisaoDeCampo[] {
   }));
 }
 
-function curarCampos(recebido: Valores): Curadoria {
+function curarCampos(recebido: Valores, grupo: string): Curadoria {
   const revisoes: RevisaoDeCampo[] = [];
   const regras: string[] = [];
   const aplicar = (campo: CampoModelo, resultado: ResultadoCampo): string => {
@@ -85,7 +85,7 @@ function curarCampos(recebido: Valores): Curadoria {
     return resultado.valor;
   };
 
-  const nome = aplicar("NOME", tratarNome(recebido.NOME));
+  const nome = aplicar("NOME", tratarNome(recebido.NOME, grupo));
   const uf = aplicar("UF", tratarUf(recebido.UF));
   const cidade = aplicar("CIDADE", tratarCidade(recebido.CIDADE));
   const cep = aplicar("CEP", tratarCep(recebido.CEP, uf));
@@ -218,7 +218,7 @@ function tratarUma(
   ctx: ContextoDuplicidade,
 ): LinhaTratada {
   const recebido = item.valores;
-  const { gravado, regras, revisoes, trechoQueNaoCoube } = curarCampos(recebido);
+  const { gravado, regras, revisoes, trechoQueNaoCoube } = curarCampos(recebido, ctx.grupo);
   const nome = gravado.NOME;
   const camposAlterados = CAMPOS_MODELO.filter((c) => gravado[c] !== recebido[c]);
 

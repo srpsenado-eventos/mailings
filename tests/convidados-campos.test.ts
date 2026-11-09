@@ -191,7 +191,7 @@ describe("bairro, cidade e uf", () => {
 
 describe("nome", () => {
   test("título sai, patente e cargo ficam", () => {
-    expect(semTitulo("Dr. Carlos Eduardo Fictício Ramos")).toEqual({ valor: "Carlos Eduardo Fictício Ramos", removido: "Dr." });
+    expect(semTitulo("Dr. Carlos Eduardo Fictício Ramos", "Ministros do STM")).toEqual({ valor: "Carlos Eduardo Fictício Ramos", removido: "Dr." });
     expect(semTitulo("S.E. Sra. Ana Beatriz Exemplo Souza").valor).toBe("Ana Beatriz Exemplo Souza");
     expect(semTitulo("General de Exército Roberto Hipotético Lima").valor).toBe("General de Exército Roberto Hipotético Lima");
     expect(semTitulo("Senador Paulo Amostra Teixeira").valor).toBe("Senador Paulo Amostra Teixeira");
@@ -201,7 +201,27 @@ describe("nome", () => {
     const r = tratarNome("Exma. Sra. Maria Exemplo Silva");
     expect(r.valor).toBe("Maria Exemplo Silva");
     expect(r.regras).toEqual(["Nome: título removido (Exma. Sra.)"]);
-    expect(semTitulo("Dr. Coronel Roberto Hipotético Lima").valor).toBe("Coronel Roberto Hipotético Lima");
+    expect(semTitulo("Dr. Coronel Roberto Hipotético Lima", "Ministros do STM").valor).toBe("Coronel Roberto Hipotético Lima");
+  });
+  test("Dr. fica no nome fora do STM", () => {
+    const r = tratarNome("Dr. Fulano Exemplo", "Deputados Federais");
+    expect(r.valor).toBe("Dr. Fulano Exemplo");
+    expect(r.regras).toEqual([]);
+  });
+  test("Dr. sai do nome no grupo Ministros do STM, com a regra registrada", () => {
+    const r = tratarNome("Dr. Fulano Exemplo", "Ministros do STM");
+    expect(r.valor).toBe("Fulano Exemplo");
+    expect(r.regras).toEqual(["Nome: título removido (Dr.)"]);
+  });
+  test("Dra. sai no STM também com o rótulo em outra caixa", () => {
+    expect(tratarNome("Dra. Fulana Exemplo", "ministros do stm").valor).toBe("Fulana Exemplo");
+  });
+  test("Exma. Sra. sai em qualquer grupo", () => {
+    expect(tratarNome("Exma. Sra. Maria Exemplo", "Deputados Federais").valor).toBe("Maria Exemplo");
+    expect(tratarNome("Exma. Sra. Maria Exemplo").valor).toBe("Maria Exemplo");
+  });
+  test("Dr. no meio do nome nunca é título", () => {
+    expect(tratarNome("João Dr. Exemplo", "Ministros do STM").valor).toBe("João Dr. Exemplo");
   });
   test("caixa alta integral vira iniciais maiúsculas com conectivos minúsculos", () => {
     expect(comIniciaisMaiusculas("MARIA DA CONCEIÇÃO D'ÁVILA E SOUZA-LIMA")).toBe("Maria da Conceição D'Ávila e Souza-Lima");
@@ -222,7 +242,7 @@ describe("nome", () => {
     expect(sugestaoNomeCurto("General de Exército Roberto Hipotético de Lima Exemplo Longo")).toBe("Gen Ex Roberto Hipotético de Lima Exemplo Longo (47)");
   });
   test("espaços colapsados e título removido registram a regra", () => {
-    const r = tratarNome("  Dra.  Ana   Exemplo ");
+    const r = tratarNome("  Dra.  Ana   Exemplo ", "Ministros do STM");
     expect(r.valor).toBe("Ana Exemplo");
     expect(r.regras).toEqual(["Nome: espaços normalizados", "Nome: título removido (Dra.)"]);
   });

@@ -1,9 +1,15 @@
 import { chaveToken, normalizarTexto } from "@/lib/normalize";
+import { mesmoGrupo } from "./duplicidade";
 import { LIMITES } from "./limites";
 import type { ResultadoCampo } from "./tipos";
 
-/** Títulos removidos do início do nome, comparados por `chaveToken` (sem ponto, acento ou caixa). Patente e cargo ficam. */
-export const TITULOS: readonly string[] = ["dr", "dra", "exmo", "exma", "sr", "sra", "se sr", "se sra"];
+/** Grupo em que "Dr." e "Dra." saem do nome (regra do GT para o STM). */
+export const GRUPO_STM = "Ministros do STM";
+
+/** Títulos removidos do início do nome em qualquer grupo, comparados por `chaveToken` (sem ponto, acento ou caixa). Patente e cargo ficam. */
+export const TITULOS_SEMPRE: readonly string[] = ["exmo", "exma", "sr", "sra", "se sr", "se sra"];
+/** Títulos que só saem no grupo do STM. */
+export const TITULOS_STM: readonly string[] = ["dr", "dra"];
 
 export const CONECTIVOS: ReadonlySet<string> = new Set(["de", "da", "do", "das", "dos", "e"]);
 
@@ -35,23 +41,24 @@ function ehConectivo(token: string): boolean {
 }
 
 /** Quantas palavras do início formam um título da lista (duas antes de uma); 0 se nenhuma. */
-function tamanhoDoTitulo(tokens: readonly string[]): number {
+function tamanhoDoTitulo(tokens: readonly string[], titulos: readonly string[]): number {
   for (const quantidade of [2, 1]) {
     if (tokens.length <= quantidade) continue;
-    if (TITULOS.includes(tokens.slice(0, quantidade).map(chaveToken).join(" "))) return quantidade;
+    if (titulos.includes(tokens.slice(0, quantidade).map(chaveToken).join(" "))) return quantidade;
   }
   return 0;
 }
 
-/** Remove do início do nome todos os títulos seguidos da lista `TITULOS` ("Exma. Sra."); nunca o nome inteiro. */
-export function semTitulo(nome: string): { valor: string; removido?: string } {
+/** Remove do início do nome todos os títulos seguidos ("Exma. Sra."); "Dr." e "Dra." só no grupo do STM; nunca o nome inteiro. */
+export function semTitulo(nome: string, grupo = ""): { valor: string; removido?: string } {
+  const titulos = mesmoGrupo(grupo, GRUPO_STM) ? [...TITULOS_SEMPRE, ...TITULOS_STM] : TITULOS_SEMPRE;
   let tokens = palavras(nome);
   const removidos: string[] = [];
-  let quantidade = tamanhoDoTitulo(tokens);
+  let quantidade = tamanhoDoTitulo(tokens, titulos);
   while (quantidade > 0) {
     removidos.push(...tokens.slice(0, quantidade));
     tokens = tokens.slice(quantidade);
-    quantidade = tamanhoDoTitulo(tokens);
+    quantidade = tamanhoDoTitulo(tokens, titulos);
   }
   if (removidos.length === 0) return { valor: nome };
   return { valor: tokens.join(" "), removido: removidos.join(" ") };
@@ -103,11 +110,11 @@ export function sugestaoNomeCurto(nome: string): string {
   return `${curto} (${curto.length})`;
 }
 
-export function tratarNome(nome: string): ResultadoCampo {
+export function tratarNome(nome: string, grupo = ""): ResultadoCampo {
   const regras: string[] = [];
   let valor = palavras(nome).join(" ");
   if (valor !== nome) regras.push(REGRA_ESPACOS);
-  const titulo = semTitulo(valor);
+  const titulo = semTitulo(valor, grupo);
   if (titulo.removido !== undefined) {
     valor = titulo.valor;
     regras.push(`Nome: título removido (${titulo.removido})`);

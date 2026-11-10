@@ -7,20 +7,46 @@ import type {
   ResultadoGrupo,
   CampoDivergente,
   ComparacaoCampo,
+  FonteIndividual,
+  LeituraAlternativa,
   SituacaoCampo,
   OrigemVeredito,
   Semaforo,
 } from "@/lib/types";
-import { normalizarNome, normalizarTexto } from "@/lib/normalize";
-import { CARGOS } from "@/lib/cargos";
-import { comparacaoRegraNome, comparacoesCoerencia, comparacoesProtocolo } from "@/lib/tratamento";
+import {
+  mesmaGrafiaDeNome,
+  mesmosAcentos,
+  normalizarNome,
+  normalizarTexto,
+  semTratamentoDeEmbaixada,
+  soAcentoDiverge,
+} from "@/lib/normalize";
+import { CARGOS, PREFIXOS_NEGANTES, tokensSignificativos } from "@/lib/cargos";
+import {
+  cargoEsperadoNoTribunal,
+  contextoCargoDoGrupo,
+  semGenero,
+  situacaoCargoTribunal,
+  temGeneroNeutro,
+  tratamentoAceitoDoPresidente,
+  type ContextoCargo,
+} from "@/lib/cargo-tribunal";
+import { comparacoesProtocoloFixo } from "@/lib/protocolo-fixo";
+import { ehItemInstitucional } from "@/lib/proposta-inclusao";
+import { comparacaoLimiteNome } from "@/lib/limite-nome";
+import {
+  comparacaoPrefixoNome,
+  comparacaoRegraNome,
+  comparacoesCoerencia,
+  comparacoesProtocolo,
+  nomeEsperadoComPrefixo,
+} from "@/lib/tratamento";
+import { comparacaoCargoExPresidente } from "@/lib/regras-cargo";
 
 const LIMIAR_PESSOA = 0.6;
 const LIMIAR_TOKEN = 0.85;
 const LIMIAR_SUGESTAO = 0.4;
 const MAX_SUGESTOES = 3;
-/** Prefixos que mudam o sentido de um cargo de 1 token (ex.: "Presidente" ≠ "Vice-Presidente"). */
-const PREFIXOS_NEGANTES = ["vice", "ex", "sub", "adjunto", "interino", "substituto"];
 
 /**
  * Quando o rótulo da planilha não casa nenhum grupo cadastrado, sugere os nomes
@@ -73,6 +99,36 @@ export function pontuarPessoa(nomePlanilha: string, nomeSite: string): number {
   return fortes / Math.min(a.length, b.length);
 }
 
+/** Partes significativas que o destaque precisa ter para valer no casamento. */
+const MIN_TOKENS_DESTAQUE = 2;
+
+/**
+ * Escore do contato contra uma pessoa da composição: o maior entre o nome completo e o nome
+ * em destaque, quando a fonte o marca (spec 2026-10-30 §3.1). Qualquer um dos dois casa.
+ * Destaque de uma parte só ("Moura") não entra no escore: casaria quem tem a mesma palavra
+ * no nome ("Moura Ribeiro") com a pessoa errada. Ele continua sendo o nome esperado.
+ */
+function pontuarContraPessoa(nomePlanilha: string, pessoa: PessoaSite): number {
+  const pelaPessoa = pontuarPessoa(nomePlanilha, pessoa.nome);
+  const destaque = pessoa.nomeDestaque;
+  if (destaque === undefined || tokensNome(destaque).length < MIN_TOKENS_DESTAQUE) return pelaPessoa;
+  return Math.max(pelaPessoa, pontuarPessoa(nomePlanilha, destaque));
+}
+
+/** O nome que o Contatos deve ter: o destaque da página, quando há; senão, o nome completo. */
+function nomeEsperado(pessoa: PessoaSite): string {
+  return semTratamentoDeEmbaixada(pessoa.nomeDestaque ?? pessoa.nome);
+}
+
+/**
+ * A pessoa como proposta de inclusão: com destaque, o nome que o Contatos deve ter é o
+ * destaque e o nome completo da página fica em `contexto` (sem contexto próprio).
+ */
+function comoProposta(pessoa: PessoaSite): PessoaSite {
+  if (pessoa.nomeDestaque === undefined) return pessoa;
+  return { ...pessoa, nome: pessoa.nomeDestaque, contexto: pessoa.contexto ?? `Nome completo: ${pessoa.nome}` };
+}
+
 /**
  * Compõe a lista final de pessoas a partir da Camada 1 (página) e da Camada 2 (IA):
  * - Página ilegível (sem pessoas) → usa a composição da IA (cobertura, ex.: TCU/JS).
@@ -93,6 +149,15 @@ export function mesclarComposicao(
       !pessoasPagina.some((p) => pontuarPessoa(p.nome, ia.nome) >= LIMIAR_PESSOA),
   );
   return [...pessoasPagina, ...resgates];
+}
+
+/**
+ * Quantos contatos casam alguém da composição, pela mesma régua de `mesclarComposicao`.
+ * Serve à leitura parcial da spec 2026-10-20 (§5.1, passo 4): a página de hoje casou
+ * menos da metade do grupo?
+ */
+export function contarContatosCasados(contatos: readonly ContatoPlanilha[], pessoas: readonly PessoaSite[]): number {
+  return contatos.filter((c) => pessoas.some((p) => pontuarContraPessoa(c.nome, p) >= LIMIAR_PESSOA)).length;
 }
 
 /**
@@ -129,21 +194,13 @@ function melhorPessoa(nome: string, pessoas: PessoaSite[]): { indice: number; sc
   let indice = -1;
   let score = 0;
   pessoas.forEach((p, i) => {
-    const s = pontuarPessoa(nome, p.nome);
+    const s = pontuarContraPessoa(nome, p);
     if (s > score) {
       score = s;
       indice = i;
     }
   });
   return { indice, score };
-}
-
-/** Tokens significativos (sem acento, sem pontuação, sem palavras de 1 letra). */
-function tokensSignificativos(valor: string): string[] {
-  return normalizarTexto(valor)
-    .replace(/[^a-z0-9 ]/g, " ")
-    .split(" ")
-    .filter((t) => t.length > 1);
 }
 
 /** Papéis de autoridade (do léxico) presentes no valor, por token exato. */
@@ -158,9 +215,23 @@ function rolesDe(valor: string): string[] {
  * real de papel (Ministro→Presidente), gênero (Ministro≠Ministra) e prefixo
  * (Presidente≠Vice-Presidente, Senador≠Ex-Senador). Sem palavra-chave de cargo,
  * cai na comparação por tokens.
+ *
+ * Página sem gênero ("Ministro(a)", "Ministro/Ministra") confirma os dois gêneros do
+ * Contatos; com um gênero explícito, "Ministra" continua não confirmando "Ministro". Nos
+ * grupos de tribunal (`contexto.tribunal`), as funções de tribunal valem como "Ministro"
+ * (`situacaoCargoTribunal`, `lib/cargo-tribunal.ts`). Spec 2026-10-30 §3.2.
  */
-function situacaoCampo(valorPlanilha: string, valorEsperado?: string): SituacaoCampo {
+export function situacaoCampo(valorPlanilha: string, valorEsperado?: string, contexto: ContextoCargo = {}): SituacaoCampo {
   if (valorEsperado === undefined) return "fonte_nao_informa";
+  const doTribunal = contexto.tribunal ? situacaoCargoTribunal(valorPlanilha, valorEsperado) : undefined;
+  if (doTribunal) return doTribunal;
+  return temGeneroNeutro(valorEsperado)
+    ? situacaoPorPapel(semGenero(valorPlanilha), semGenero(valorEsperado))
+    : situacaoPorPapel(valorPlanilha, valorEsperado);
+}
+
+/** A régua de papel, gênero e prefixo de `situacaoCampo`, sem o contexto do grupo. */
+function situacaoPorPapel(valorPlanilha: string, valorEsperado: string): SituacaoCampo {
   const tp = tokensSignificativos(valorPlanilha);
   const ts = tokensSignificativos(valorEsperado);
   const rolesP = rolesDe(valorPlanilha);
@@ -184,10 +255,19 @@ function situacaoCampo(valorPlanilha: string, valorEsperado?: string): SituacaoC
   return "confere";
 }
 
-/** Nome: o site é o parâmetro — confere só se igual normalizado. */
-function situacaoNome(planilha: string, site: string): SituacaoCampo {
-  return normalizarNome(planilha) === normalizarNome(site) ? "confere" : "divergente";
+/**
+ * Nome: o site é o parâmetro — confere só se igual normalizado ao nome esperado. Com destaque
+ * (STJ), o esperado é o destaque: o nome completo da página diverge (spec 2026-10-30 §3.1).
+ */
+function situacaoNome(planilha: string, pessoa: PessoaSite): SituacaoCampo {
+  const esperado = nomeEsperado(pessoa);
+  // A grafia lembrada pela IA não é fonte: o acento só conta quando o nome veio de uma página.
+  const igual = pessoa.origem === "conhecimento" ? normalizarNome(planilha) === normalizarNome(esperado) : mesmaGrafiaDeNome(planilha, esperado);
+  return igual ? "confere" : "divergente";
 }
+
+/** Observação do nome que só difere da fonte no acento: à vista, os dois parecem iguais. */
+export const OBSERVACAO_ACENTO_NOME = "Diferença de acento em relação à fonte";
 
 /**
  * Auditoria de Tratamento, Endereçamento e Nome — Camada A (coerência interna do
@@ -202,14 +282,22 @@ function situacaoNome(planilha: string, site: string): SituacaoCampo {
  * Ver docs/superpowers/specs/2026-09-15-auditoria-tratamento-correcao-de-alvo.md e
  * docs/superpowers/specs/2026-09-18-regras-de-escrita-do-cadastro.md.
  */
-function comparacoesTratamento(
+export function comparacoesTratamento(
   contato: ContatoPlanilha,
   grupoCanonico: string | undefined,
 ): ComparacaoCampo[] {
+  const aceitaPresidente = tratamentoAceitoDoPresidente(contato, grupoCanonico);
   return [
     ...comparacoesCoerencia(contato),
-    ...comparacoesProtocolo(contato),
+    ...(comparacoesProtocoloFixo(contato, grupoCanonico) ?? comparacoesProtocolo(contato).map((c) =>
+      aceitaPresidente && c.campo === "tratamento" && c.situacao === "divergente"
+        ? { ...c, situacao: "confere" as const }
+        : c,
+    )),
     ...comparacaoRegraNome(contato, grupoCanonico),
+    ...comparacaoPrefixoNome(contato, grupoCanonico),
+    ...comparacaoLimiteNome(contato, grupoCanonico),
+    ...comparacaoCargoExPresidente(contato, grupoCanonico),
   ];
 }
 
@@ -218,7 +306,7 @@ function comparacoesTratamento(
  * de fora de propósito: são limites da fonte e do cadastro de regras, não defeitos do
  * contato, e por contrato não pintam amarelo.
  */
-function divergenciasDe(comparacoes: readonly ComparacaoCampo[]): CampoDivergente[] {
+export function divergenciasDe(comparacoes: readonly ComparacaoCampo[]): CampoDivergente[] {
   return comparacoes
     .filter((c) => c.situacao === "divergente")
     .map((c) => ({ campo: c.campo, valorPlanilha: c.valorPlanilha, valorEncontrado: c.valorEsperado }));
@@ -279,18 +367,21 @@ function montarResultado(
     {
       campo: "nome",
       valorPlanilha: contato.nome,
-      valorEsperado: pessoa.nome,
+      // Com a regra do prefixo (spec 2026-10-30 §3.3), o copiável leva o prefixo: nunca propõe tirá-lo.
+      valorEsperado: nomeEsperadoComPrefixo(contato, grupoCanonico, nomeEsperado(pessoa)),
       origemValor: ov,
-      situacao: situacaoNome(contato.nome, pessoa.nome),
+      situacao: situacaoNome(contato.nome, pessoa),
+      ...(pessoa.origem !== "conhecimento" && soAcentoDiverge(contato.nome, nomeEsperado(pessoa)) ? { observacao: OBSERVACAO_ACENTO_NOME } : {}),
     },
   ];
   if (contato.cargo) {
+    const contextoCargo = contextoCargoDoGrupo(grupoCanonico);
     comparacoes.push({
       campo: "cargo",
       valorPlanilha: contato.cargo,
-      valorEsperado: pessoa.cargo,
+      valorEsperado: cargoEsperadoNoTribunal(contato.cargo, pessoa.cargo, contextoCargo),
       origemValor: ov,
-      situacao: situacaoCampo(contato.cargo, pessoa.cargo),
+      situacao: situacaoCampo(contato.cargo, pessoa.cargo, contextoCargo),
     });
   }
   if (contato.endereco) {
@@ -356,13 +447,13 @@ export function compararContato(contato: ContatoPlanilha, fonte: ConteudoFonte):
 export function marcarFonteInacessivel(
   grupo: string,
   contatos: ContatoPlanilha[],
-  url: string,
+  url: string | undefined,
   motivo: string,
   grupoCanonico?: string,
 ): ResultadoGrupo {
   return {
     grupo,
-    fonteUrl: url,
+    ...(url ? { fonteUrl: url } : {}),
     semFonte: false,
     fonteInacessivel: true,
     erroFonte: motivo,
@@ -379,7 +470,7 @@ export function marcarFonteInacessivel(
         comparacoes: protocolo,
         camposDivergentes: divergenciasDe(protocolo),
         origem: "oficial" as const,
-        fonteUrl: url,
+        ...(url ? { fonteUrl: url } : {}),
         observacao: "Fonte cadastrada, mas inacessível — verifique manualmente",
       };
     }),
@@ -443,12 +534,462 @@ export function compararGrupo(
       leituraParcial,
     );
   });
-  // "novos": de fonte que propõe inclusão, só quem está na faixa de UF do grupo. Das
+  // "novos": pessoa que veio só do conhecimento da IA nunca vira proposta (spec 2026-11-05 §7.5).
+  // De fonte que propõe inclusão, só quem está na faixa de UF do grupo. Das
   // demais fontes, mantém a regra antiga — só pessoa com cargo, que corta item de menu
   // do texto achatado. Numa fonte tabular toda linha já é pessoa.
-  const novos = fonte.pessoas.filter((p, i) => {
-    if (usados.has(i)) return false;
-    return p.propoeInclusao ? naFaixaDeUf(p, ufsDoGrupo) : Boolean(p.cargo);
-  });
+  const novos = fonte.pessoas
+    .filter((p, i) => {
+      if (usados.has(i) || ehItemInstitucional(p.nome) || p.origem === "conhecimento") return false;
+      return p.propoeInclusao ? naFaixaDeUf(p, ufsDoGrupo) : Boolean(p.cargo);
+    })
+    .map(comoProposta);
   return { grupo, fonteUrl: fonte.url, semFonte: false, contatos: resultados, novos };
+}
+
+// ---------------------------------------------------------------------------
+// Fontes individuais por contato (spec 2026-10-15)
+// ---------------------------------------------------------------------------
+
+/**
+ * Abaixo disto a página individual não conta como lida: é o CAPTCHA do gov.br (uns 200
+ * caracteres), o menu sem o miolo, ou uma resposta vazia. Regra de ouro: sem conteúdo não
+ * há "ausência", há fonte inacessível. Calibrado pelas fixtures de ministério e de governo.
+ */
+export const MIN_TEXTO_PAGINA_INDIVIDUAL = 300;
+export const MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO = "página individual sem conteúdo legível (CAPTCHA ou só menu)";
+export const OBSERVACAO_NAO_CONSTA_INDIVIDUAL = "Não consta na página individual (possível saída)";
+export const OBSERVACAO_NOME_VAZIO_INDIVIDUAL = "Nome vazio no cadastro: não há o que procurar na página";
+export const OBSERVACAO_SEM_INDIVIDUAL = "Sem fonte individual cadastrada";
+
+export function paginaComConteudo(c: ConteudoFonte): boolean {
+  return c.textoLimpo.trim().length >= MIN_TEXTO_PAGINA_INDIVIDUAL;
+}
+
+/** Só letras, dígitos e espaços simples: para procurar um nome como trecho de um texto. */
+function soPalavras(valor: string): string {
+  return normalizarTexto(valor).replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Conectivos de nome: não contam como nome a mais na janela nem precisam casar. */
+const CONECTIVOS_NOME = new Set(["de", "da", "do", "das", "dos", "e"]);
+/** Nomes do meio a mais que a janela tolera entre o primeiro e o último nome do Contatos (R9). */
+const MAX_NOMES_A_MAIS = 3;
+
+/** Palavra da página: o texto original (para exibir) e a forma normalizada (para casar). */
+interface PalavraPagina { original: string; norma: string }
+
+function palavrasDe(texto: string): PalavraPagina[] {
+  return texto
+    .split(/\s+/)
+    .filter((o) => o.length > 0)
+    .flatMap((original) => soPalavras(original).split(" ").filter(Boolean).map((norma) => ({ original, norma })));
+}
+
+/**
+ * Janela de palavras consecutivas que começa no primeiro nome de `alvo`, termina no último,
+ * traz todos os nomes na ordem e tem no máximo `alvo.length + MAX_NOMES_A_MAIS` palavras que
+ * não são conectivo. Devolve o trecho original da janela, ou `undefined`.
+ */
+function janelaDoNome(alvo: readonly string[], palavras: readonly PalavraPagina[]): string | undefined {
+  const limite = alvo.length + MAX_NOMES_A_MAIS;
+  for (let i = 0; i < palavras.length; i += 1) {
+    if (palavras[i].norma !== alvo[0]) continue;
+    let k = 1;
+    let contadas = 1;
+    for (let j = i + 1; j < palavras.length && contadas < limite; j += 1) {
+      if (CONECTIVOS_NOME.has(palavras[j].norma)) continue;
+      contadas += 1;
+      if (palavras[j].norma === alvo[k]) k += 1;
+      if (k === alvo.length) return trechoOriginal(palavras.slice(i, j + 1));
+    }
+  }
+  return undefined;
+}
+
+/** Junta as palavras originais da janela (uma vez cada) e apara a pontuação das pontas. */
+function trechoOriginal(janela: readonly PalavraPagina[]): string {
+  const originais = janela.map((p) => p.original).filter((o, n, todas) => n === 0 || o !== todas[n - 1]);
+  return originais.join(" ").replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+}
+
+/**
+ * Como o texto da página escreve o nome (`trecho` já normalizado), uma entrada por ocorrência. Só
+ * letras e números: o que está colado ao nome ("Governador:João", "João/PB") nunca entra na grafia.
+ */
+function grafiasNoTexto(trecho: string, texto: string): string[] {
+  const alvo = trecho.split(" ");
+  const palavras = (texto.match(/[\p{L}\p{M}\p{N}]+/gu) ?? []).map((original) => ({ original, norma: soPalavras(original) }));
+  return palavras.flatMap((p, i) => {
+    if (p.norma !== alvo[0]) return [];
+    const janela = palavras.slice(i, i + alvo.length);
+    const casou = janela.length === alvo.length && janela.every((q, k) => q.norma === alvo[k]);
+    return casou ? [janela.map((q) => q.original).join(" ")] : [];
+  });
+}
+
+/** Resultado de `nomeNaPagina`: `exato` falso quando a página traz o nome mais longo (R9). */
+export interface NomeAchado {
+  pessoa?: PessoaSite;
+  /** O nome como a página o escreve (valor esperado quando não é exato). */
+  nomeNaPagina?: string;
+  exato: boolean;
+}
+
+/**
+ * O nome do contato está na página individual? Vias exatas (spec §4.3): uma `PessoaSite` com
+ * o mesmo nome normalizado, ou o nome inteiro como trecho contíguo do texto, com fronteira de
+ * palavra. Vias não exatas (decisão R9, spec §9), para nome de duas ou mais palavras: uma
+ * `PessoaSite`, ou um trecho do texto, com todos os nomes do Contatos na ordem numa janela
+ * com até três nomes a mais ("Guilherme Boulos" acha "Guilherme Castro Boulos"). Por último,
+ * o nome mais curto em destaque (spec 2026-10-23 §4.1, `nomeCurtoEmDestaque`).
+ * `undefined` é nome ausente.
+ */
+export function nomeNaPagina(nome: string, c: ConteudoFonte): NomeAchado | undefined {
+  const alvo = normalizarNome(nome);
+  if (!alvo) return undefined;
+  const trecho = soPalavras(alvo);
+  // A página pode citar a mesma pessoa de dois jeitos: vale a ocorrência com os acentos do Contatos.
+  const grafias = trecho ? grafiasNoTexto(trecho, c.textoLimpo) : [];
+  const grafiaIgual = grafias.find((g) => mesmosAcentos(g, nome));
+  const pessoas = c.pessoas.filter((p) => normalizarNome(p.nome) === alvo);
+  const pessoa = pessoas.find((p) => mesmosAcentos(p.nome, nome)) ?? pessoas[0];
+  if (pessoa) return { pessoa, nomeNaPagina: mesmosAcentos(pessoa.nome, nome) ? pessoa.nome : (grafiaIgual ?? pessoa.nome), exato: true };
+  if (!trecho) return undefined;
+  if (` ${soPalavras(c.textoLimpo)} `.includes(` ${trecho} `)) return { nomeNaPagina: grafiaIgual ?? grafias[0] ?? nome, exato: true };
+
+  const tokens = trecho.split(" ").filter((t) => !CONECTIVOS_NOME.has(t));
+  if (tokens.length < 2) return undefined;
+  const pessoaLonga = c.pessoas.find((p) => janelaDoNome(tokens, palavrasDe(normalizarNome(p.nome))) !== undefined);
+  if (pessoaLonga) return { pessoa: pessoaLonga, nomeNaPagina: pessoaLonga.nome, exato: false };
+  const doTexto = janelaDoNome(tokens, palavrasDe(c.textoLimpo));
+  if (doTexto) return { nomeNaPagina: doTexto, exato: false };
+  const curto = nomeCurtoEmDestaque(tokens, c);
+  if (curto) return curto;
+  return undefined;
+}
+
+/** Partes significativas de um nome: normalizado, sem tratamento e sem conectivos. */
+function partesDoNome(nome: string): string[] {
+  return soPalavras(normalizarNome(nome))
+    .split(" ")
+    .filter((t) => t.length > 0 && !CONECTIVOS_NOME.has(t));
+}
+
+/** Todas as `partes` aparecem em `alvo`, na mesma ordem (não precisam ser vizinhas). */
+function ehSubsequencia(partes: readonly string[], alvo: readonly string[]): boolean {
+  let k = 0;
+  for (const parte of alvo) {
+    if (k < partes.length && parte === partes[k]) k += 1;
+  }
+  return k === partes.length;
+}
+
+/**
+ * Nome mais curto em destaque (spec 2026-10-23 §4.1): a página individual publica o nome
+ * político ("Waldez Góes") e o Contatos tem o nome civil ("Antônio Waldez Góes da Silva").
+ * Reconhece quando um destaque (título h1–h3, negrito) tem duas ou mais partes, menos partes
+ * que o nome do Contatos, e todas elas nele, na ordem. Só destaque: a página "quem é quem"
+ * lista o gabinete no texto, e um assessor com duas partes do nome do ministro esconderia uma
+ * saída real. Dois destaques distintos (após `normalizarNome`) que reconhecem são ambíguos e
+ * não reconhecem. A pessoa estruturada com o mesmo nome do destaque vem em `pessoa` (traz o
+ * cargo). Nunca é exato: sai "Nome diverge" com o nome da página.
+ */
+function nomeCurtoEmDestaque(alvo: readonly string[], c: ConteudoFonte): NomeAchado | undefined {
+  const reconhece = (candidato: string): boolean => {
+    const partes = partesDoNome(candidato);
+    return partes.length >= 2 && partes.length < alvo.length && ehSubsequencia(partes, alvo);
+  };
+  const candidatos = c.destaques.filter(reconhece);
+  const chaves = new Set(candidatos.map((d) => normalizarNome(d)));
+  if (chaves.size !== 1) return undefined;
+  const destaque = candidatos[0];
+  const chave = normalizarNome(destaque);
+  const pessoa = c.pessoas.find((p) => normalizarNome(p.nome) === chave);
+  return pessoa ? { pessoa, nomeNaPagina: destaque, exato: false } : { nomeNaPagina: destaque, exato: false };
+}
+
+/** Denominações de cargo publicadas por uma fonte `casamento: "cargo"`, únicas, na ordem da página. */
+export function listaDeCargos(c: ConteudoFonte): string[] {
+  return [...new Set(c.pessoas.map((p) => p.cargo?.trim() ?? "").filter((x) => x.length > 0))];
+}
+
+export type ListaCargos = { url: string; cargos: readonly string[] } | { url: string; erro: string };
+
+/** Tokens que não distinguem uma pasta da outra: toda denominação de ministro os tem. */
+const TOKENS_GENERICOS_CARGO = new Set(["de", "da", "do", "das", "dos", "e", "em", "ministro", "ministra", "estado"]);
+
+function tokensDistintivos(valor: string): string[] {
+  return tokensSignificativos(valor).filter((t) => !TOKENS_GENERICOS_CARGO.has(t));
+}
+
+/**
+ * Cargo do contato contra a lista de denominações da página geral (spec §5.3). A denominação
+ * esperada é a de maior sobreposição de tokens distintivos ("fazenda", "casa civil"; empate:
+ * a primeira da lista). `confere` exige DUAS coisas: a régua de cargo de sempre
+ * (`situacaoCampo`: papel, gênero, prefixo) e o MESMO conjunto de tokens distintivos nos dois
+ * cargos (ordem e repetição não contam). Pasta diferente que divide um token, ou qualificador
+ * a mais ou a menos, é `divergente`, com a denominação oficial em `valorEsperado`. Sem token
+ * em comum com denominação alguma, a lista não informa este cargo. Nome não entra aqui.
+ */
+export function compararCargoNaLista(
+  cargo: string,
+  lista: readonly string[],
+  fonteUrl: string,
+  contexto: ContextoCargo = {},
+): ComparacaoCampo {
+  const tc = tokensDistintivos(cargo);
+  let melhor: { denominacao: string; n: number } | undefined;
+  for (const d of lista) {
+    const n = tokensDistintivos(d).filter((t) => tc.includes(t)).length;
+    if (n > 0 && (!melhor || n > melhor.n)) melhor = { denominacao: d, n };
+  }
+  if (!melhor) return { campo: "cargo", valorPlanilha: cargo, situacao: "fonte_nao_informa", fonteUrl };
+  const doOficial = new Set(tokensDistintivos(melhor.denominacao));
+  const doContato = new Set(tc);
+  const mesmoConjunto = doOficial.size === doContato.size && [...doContato].every((t) => doOficial.has(t));
+  return {
+    campo: "cargo",
+    valorPlanilha: cargo,
+    valorEsperado: cargoEsperadoNoTribunal(cargo, melhor.denominacao, contexto),
+    origemValor: "pagina",
+    situacao: mesmoConjunto && situacaoCampo(cargo, melhor.denominacao, contexto) === "confere" ? "confere" : "divergente",
+    fonteUrl,
+  };
+}
+
+function comparacaoCargoPelaLista(cargo: string, lista: ListaCargos | undefined, contexto: ContextoCargo = {}): ComparacaoCampo {
+  if (!lista) return { campo: "cargo", valorPlanilha: cargo, situacao: "nao_verificado" };
+  if ("erro" in lista) return { campo: "cargo", valorPlanilha: cargo, situacao: "nao_verificado", fonteUrl: lista.url };
+  return compararCargoNaLista(cargo, lista.cargos, lista.url, contexto);
+}
+
+export function comparacoesSemSite(contato: ContatoPlanilha): ComparacaoCampo[] {
+  const lista: ComparacaoCampo[] = [];
+  for (const campo of ["telefone", "email"] as const) {
+    const v = contato[campo];
+    if (v) lista.push({ campo, valorPlanilha: v, valorEsperado: undefined, situacao: "fonte_nao_informa" });
+  }
+  return lista;
+}
+
+export const OBSERVACAO_SEM_FONTE_OFICIAL = "Sem fonte oficial (grupo de convidados)";
+export const MOTIVO_SEM_LISTA = "Sem a lista nesta varredura";
+
+/**
+ * Contato de grupo de modo `neutro` ou `lista` (spec 2026-10-30 §4.5 e §4.6): nenhuma página é lida,
+ * então nome e cargo ficam `fonte_nao_informa`; a auditoria de tratamento (Camadas A, B e C) vale.
+ * `neutro`: amarelo se o tratamento diverge, senão verde. `lista`: indeterminado até a comparação
+ * com a planilha (substituída na comparação com as listas). Nunca `possivelSaida` nem o campo "fonte".
+ */
+export function compararContatoSemFonteOficial(
+  contato: ContatoPlanilha,
+  modo: "lista" | "neutro",
+  grupoCanonico?: string,
+): ResultadoContato {
+  const comparacoes: ComparacaoCampo[] = [
+    { campo: "nome", valorPlanilha: contato.nome, situacao: "fonte_nao_informa" },
+    { campo: "cargo", valorPlanilha: contato.cargo ?? "", situacao: "fonte_nao_informa" },
+    ...comparacoesSemSite(contato),
+    ...comparacoesTratamento(contato, grupoCanonico),
+  ];
+  const camposDivergentes = divergenciasDe(comparacoes);
+  const base = { contato, score: 0, comparacoes, camposDivergentes, origem: "oficial" as const };
+  if (modo === "lista") return { ...base, semaforo: "indeterminado", observacao: MOTIVO_SEM_LISTA };
+  return {
+    ...base,
+    semaforo: camposDivergentes.length > 0 ? "amarelo" : "verde",
+    observacao: OBSERVACAO_SEM_FONTE_OFICIAL,
+  };
+}
+
+export interface EntradaIndividual {
+  contato: ContatoPlanilha;
+  /** A fonte individual que casou o contato. */
+  fonte: FonteIndividual;
+  /**
+   * Leitura da página individual: conteúdo OU motivo da falha. `alternativa`: a principal não
+   * serviu e o conteúdo veio da URL alternativa cadastrada (spec 2026-10-23 §3.3).
+   * `urlDaMemoria`: o conteúdo foi reaproveitado da memória e estava guardado sob esta URL (pode
+   * ser a alternativa).
+   */
+  lida: { conteudo?: ConteudoFonte; erro?: string; alternativa?: LeituraAlternativa; urlDaMemoria?: string };
+  /** Fonte do cargo do grupo (`casamento: "cargo"`), quando o grupo tem; a individual cobre o cargo quando declara. */
+  listaCargos?: ListaCargos;
+  grupoCanonico?: string;
+}
+
+export interface VereditoIndividual {
+  resultado: ResultadoContato;
+  /** O nome do contato foi encontrado na página individual. */
+  nomeConfirmado: boolean;
+  /** A página individual foi lida com conteúdo (independe de o nome estar nela). */
+  lidaComConteudo: boolean;
+}
+
+/** Veredito de um contato ligado a uma fonte individual: a tabela da spec 2026-10-15 §5.2. */
+export function compararContatoIndividual(e: EntradaIndividual): VereditoIndividual {
+  const { contato, fonte, lida, listaCargos, grupoCanonico } = e;
+  // A URL de onde o conteúdo veio: a da memória, quando ele foi reaproveitado (pode ser a
+  // alternativa), ou a alternativa, quando foi ela que respondeu hoje (spec 2026-10-23 §3.3).
+  const url = lida.urlDaMemoria ?? lida.alternativa?.url ?? fonte.url;
+  const pelaAlternativa = lida.alternativa ? { alternativa: lida.alternativa } : {};
+  const cobreCargo = fonte.campos.includes("cargo");
+  const contextoCargo = contextoCargoDoGrupo(grupoCanonico);
+  const protocolo = comparacoesTratamento(contato, grupoCanonico);
+  const cargoDe = (comp: ComparacaoCampo | undefined): ComparacaoCampo[] => (comp ? [comp] : []);
+
+  // Nome não verificado: página caída, ou nome vazio no cadastro. Cargo pela sua fonte (a
+  // individual, que não foi usada, ou a lista geral, que é independente da individual).
+  const indeterminado = (observacao: string, lidaComConteudo: boolean): VereditoIndividual => {
+    const cargo = contato.cargo
+      ? cobreCargo
+        ? { campo: "cargo", valorPlanilha: contato.cargo, situacao: "nao_verificado" as const, fonteUrl: url }
+        : comparacaoCargoPelaLista(contato.cargo, listaCargos, contextoCargo)
+      : undefined;
+    const comparacoes: ComparacaoCampo[] = [
+      { campo: "nome", valorPlanilha: contato.nome, situacao: "nao_verificado", fonteUrl: url },
+      ...cargoDe(cargo),
+      ...comparacoesSemSite(contato),
+      ...protocolo,
+    ];
+    return {
+      resultado: {
+        contato,
+        semaforo: "indeterminado",
+        score: 0,
+        comparacoes,
+        camposDivergentes: divergenciasDe(comparacoes),
+        origem: "oficial",
+        fonteUrl: url,
+        observacao,
+      },
+      nomeConfirmado: false,
+      lidaComConteudo,
+    };
+  };
+
+  const semConteudo = lida.erro !== undefined || lida.conteudo === undefined || !paginaComConteudo(lida.conteudo);
+  if (semConteudo) {
+    return indeterminado(`Página individual inacessível: ${lida.erro ?? MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO}`, false);
+  }
+  // Contato sem nome ligado por UF: não há o que procurar, e ausência aqui não é saída.
+  if (!normalizarNome(contato.nome)) return indeterminado(OBSERVACAO_NOME_VAZIO_INDIVIDUAL, true);
+
+  const conteudo = lida.conteudo as ConteudoFonte;
+  const achado = nomeNaPagina(contato.nome, conteudo);
+  if (!achado) {
+    return {
+      resultado: {
+        contato,
+        semaforo: "vermelho",
+        score: 0,
+        comparacoes: protocolo,
+        camposDivergentes: [{ campo: "nome", valorPlanilha: contato.nome }, ...divergenciasDe(protocolo)],
+        possivelSaida: true,
+        origem: "oficial",
+        fonteUrl: url,
+        observacao: OBSERVACAO_NAO_CONSTA_INDIVIDUAL,
+        ...pelaAlternativa,
+      },
+      nomeConfirmado: false,
+      lidaComConteudo: true,
+    };
+  }
+
+  const cargo = contato.cargo
+    ? cobreCargo
+      ? {
+          campo: "cargo",
+          valorPlanilha: contato.cargo,
+          valorEsperado: cargoEsperadoNoTribunal(contato.cargo, achado.pessoa?.cargo, contextoCargo),
+          origemValor: "pagina" as const,
+          situacao: situacaoCampo(contato.cargo, achado.pessoa?.cargo, contextoCargo),
+          fonteUrl: url,
+        }
+      : comparacaoCargoPelaLista(contato.cargo, listaCargos, contextoCargo)
+    : undefined;
+  const nomeDaPagina = achado.nomeNaPagina ?? contato.nome;
+  const comparacoes: ComparacaoCampo[] = [
+    // Nome mais longo na página (R9) ou com outro acento: a pessoa está lá, mas o GT quer o nome
+    // como o site o escreve; sai "divergente" (amarelo) com o nome da página para copiar.
+    achado.exato && mesmosAcentos(contato.nome, nomeDaPagina)
+      ? { campo: "nome", valorPlanilha: contato.nome, valorEsperado: nomeEsperadoComPrefixo(contato, grupoCanonico, nomeDaPagina), origemValor: "pagina", situacao: "confere", fonteUrl: url }
+      : {
+          campo: "nome",
+          valorPlanilha: contato.nome,
+          valorEsperado: achado.nomeNaPagina && nomeEsperadoComPrefixo(contato, grupoCanonico, achado.nomeNaPagina),
+          origemValor: "pagina",
+          situacao: "divergente",
+          fonteUrl: url,
+          ...(achado.exato ? { observacao: OBSERVACAO_ACENTO_NOME } : {}),
+        },
+    ...cargoDe(cargo),
+    ...comparacoesSemSite(contato),
+    ...protocolo,
+  ];
+  const camposDivergentes = divergenciasDe(comparacoes);
+  return {
+    resultado: {
+      contato,
+      semaforo: camposDivergentes.length > 0 ? "amarelo" : "verde",
+      score: 1,
+      comparacoes,
+      camposDivergentes,
+      origem: "oficial",
+      fonteUrl: url,
+      ...pelaAlternativa,
+    },
+    nomeConfirmado: true,
+    lidaComConteudo: true,
+  };
+}
+
+/**
+ * Contato de grupo com individuais que não casou nenhuma (spec §5.4). Com lista de cargos no
+ * grupo (ministro): indeterminado, nome não verificado, cargo pela lista. Sem lista
+ * (governador): o vermelho de "cadastrar fonte", como o grupo sem fonte.
+ */
+export function compararContatoSemIndividual(
+  contato: ContatoPlanilha,
+  o: { grupoCanonico?: string; listaCargos?: ListaCargos; uf?: string },
+): ResultadoContato {
+  const protocolo = comparacoesTratamento(contato, o.grupoCanonico);
+  if (o.listaCargos) {
+    const comparacoes: ComparacaoCampo[] = [
+      { campo: "nome", valorPlanilha: contato.nome, situacao: "nao_verificado" },
+      ...(contato.cargo ? [comparacaoCargoPelaLista(contato.cargo, o.listaCargos, contextoCargoDoGrupo(o.grupoCanonico))] : []),
+      ...comparacoesSemSite(contato),
+      ...protocolo,
+    ];
+    return {
+      contato,
+      semaforo: "indeterminado",
+      score: 0,
+      comparacoes,
+      camposDivergentes: divergenciasDe(comparacoes),
+      origem: "oficial",
+      observacao: OBSERVACAO_SEM_INDIVIDUAL,
+    };
+  }
+  return {
+    contato,
+    semaforo: "vermelho",
+    score: 0,
+    comparacoes: protocolo,
+    camposDivergentes: [{ campo: "fonte", valorPlanilha: "sem URL cadastrada" }, ...divergenciasDe(protocolo)],
+    origem: "oficial",
+    observacao: o.uf ? `Sem fonte individual para a UF ${o.uf}` : "UF não reconhecida no cadastro",
+  };
+}
+
+/**
+ * Pessoas com cargo de uma composição de grupo que não casam nenhum contato (régua de
+ * tokens, a mesma de `compararGrupo`): proposta de inclusão de uma fonte `casamento:
+ * "pessoa"` num grupo que também tem individuais (spec §5.5).
+ */
+export function novosForaDaPlanilha(pessoas: PessoaSite[], contatos: ContatoPlanilha[]): PessoaSite[] {
+  return pessoas
+    .filter((p) => Boolean(p.cargo) && p.origem !== "conhecimento" && !ehItemInstitucional(p.nome) && !contatos.some((c) => pontuarContraPessoa(c.nome, p) >= LIMIAR_PESSOA))
+    .map(comoProposta);
 }

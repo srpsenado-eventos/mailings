@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { extrairTabela } from "@/lib/scrape";
 
 const FORA = readFileSync(join(__dirname, "fixtures/senado-fora-de-exercicio.html"), "utf8");
@@ -95,4 +95,14 @@ describe("extrairTabela", () => {
     const c = extrairTabela(FORA, URL_FORA, { colunas: { nome: 0 }, secoes: ["Seção que não existe"] });
     expect(c.pessoas).toEqual([]);
   });
+});
+
+test("fora de exercício por tipo: a tabela dos titulares pelo índice cadastrado, com UF e motivo; a outra tabela fica fora (spec 2026-10-23 §5)", () => {
+  // A página por tipo publica a tabela dos titulares primeiro: índice 0. A Task 8 cadastra o
+  // mesmo valor no catálogo e o seu teste repete este literal.
+  const INDICE_TITULARES = 0;
+  const html = readFileSync(resolve(__dirname, "fixtures/senado-por-tipo.html"), "utf-8");
+  const c = extrairTabela(html, "https://www25.senado.leg.br/web/senadores/fora-de-exercicio/-/f/por-tipo", { indice: INDICE_TITULARES, colunas: { nome: 0, uf: 2, motivo: 3 } });
+  expect(c.pessoas).toHaveLength(3);
+  expect(c.pessoas[0]).toMatchObject({ uf: expect.stringMatching(/^[A-Z]{2}$/), contexto: expect.any(String) });
 });

@@ -1,0 +1,232 @@
+import { describe, expect, test } from "vitest";
+import { detalhesDoContato } from "@/lib/painel";
+import { comparacaoCargoExPresidente, OBSERVACAO_PERIODO, PERIODO_PRESIDENCIA } from "@/lib/regras-cargo";
+import { REGRAS_NOME } from "@/data/regras-nome";
+import { rotuloAchado, textoCoerencia } from "@/lib/tratamento";
+import type { ContatoPlanilha, ResultadoContato, ResultadoGrupo } from "@/lib/types";
+
+const SENADO = "Ex-Presidentes do Congresso";
+const REPUBLICA = "Ex-Presidentes da República";
+
+const exPresidente = (cargo: string, grupo = SENADO): ContatoPlanilha => ({ nome: "Rui Fictício", grupo, cargo });
+
+describe("REGRAS_NOME: cargo com período dos ex-presidentes", () => {
+  test("os dois grupos de ex-presidentes têm o cargo do formato do GT", () => {
+    // Assert
+    expect(REGRAS_NOME[SENADO]?.cargoComPeriodo).toBe("Presidente do Congresso Nacional");
+    expect(REGRAS_NOME[SENADO]?.formaDoPeriodo).toBe("no_periodo_ou_em_ano");
+    expect(REGRAS_NOME[REPUBLICA]?.formaDoPeriodo).toBeUndefined();
+    expect(REGRAS_NOME[REPUBLICA]?.cargoComPeriodo).toBe("Presidente da República Federativa do Brasil");
+  });
+});
+
+describe("PERIODO_PRESIDENCIA", () => {
+  test.each(["de 2019 a 2021", "de 1995 a 1997 e de 2009 a 2011", "de 1995 a 1997, de 2003 a 2005 e de 2009 a 2011"])(
+    "aceita %s",
+    (periodo) => {
+      // Assert
+      expect(PERIODO_PRESIDENCIA.test(periodo)).toBe(true);
+    },
+  );
+
+  test.each(["de AAAA a AAAA", "de 19 a 21", "2019 a 2021", "de 2019 a 2021 e", "de 2019"])("recusa %s", (periodo) => {
+    // Assert
+    expect(PERIODO_PRESIDENCIA.test(periodo)).toBe(false);
+  });
+});
+
+describe("comparacaoCargoExPresidente", () => {
+  test('"Ex-Presidente do Senado Federal" diverge, com o formato do GT como esperado', () => {
+    // Act
+    const [c, ...resto] = comparacaoCargoExPresidente(exPresidente("Ex-Presidente do Senado Federal"), SENADO);
+
+    // Assert
+    expect(resto).toEqual([]);
+    expect(c).toEqual({
+      campo: "cargo",
+      valorPlanilha: "Ex-Presidente do Senado Federal",
+      valorEsperado: "Presidente do Congresso Nacional no período de AAAA a AAAA",
+      situacao: "divergente",
+      origemValor: "coerencia",
+      achado: "cargo_ex_presidente",
+      observacao: OBSERVACAO_PERIODO,
+    });
+    expect(OBSERVACAO_PERIODO).toBe("Informar o período da presidência");
+  });
+
+  test.each(["ex presidente do Senado", "EX-PRESIDENTE DO SENADO FEDERAL", "Ex-Presidenta do Senado", "  Ex - Presidente do Senado"])(
+    '"%s" também diverge',
+    (cargo) => {
+      // Act
+      const r = comparacaoCargoExPresidente(exPresidente(cargo), SENADO);
+
+      // Assert
+      expect(r.map((x) => x.achado)).toEqual(["cargo_ex_presidente"]);
+    },
+  );
+
+  test("na República o esperado é o cargo da República", () => {
+    // Act
+    const [c] = comparacaoCargoExPresidente(exPresidente("Ex-Presidente da República", REPUBLICA), REPUBLICA);
+
+    // Assert
+    expect(c.valorEsperado).toBe("Presidente da República Federativa do Brasil de AAAA a AAAA");
+  });
+
+  test.each([
+    "Presidente do Congresso Nacional no período de 2017 a 2019",
+    "presidente do congresso nacional no periodo de 2019 a 2019",
+    "Presidente do Congresso Nacional no período de 2009 a 2013 e de 2015 a 2017",
+    "Presidente do Congresso Nacional no período de 1995 a 1997, de 2003 a 2005 e de 2009 a 2011",
+    "Presidente do Congresso Nacional em 2001",
+  ])('cargo no formato do GT não gera achado: "%s"', (cargo) => {
+    // Assert
+    expect(comparacaoCargoExPresidente(exPresidente(cargo), SENADO)).toEqual([]);
+  });
+
+  test.each([
+    "Presidente do Congresso Nacional no período de AAAA a AAAA",
+    "Presidente do Congresso Nacional no período de 2021 a 2019",
+    "Presidente do Congresso Nacional no período de 1995 a 1997 e de 2011 a 2009",
+    "Presidente do Congresso Nacional no período de 2019",
+    "Presidente do Congresso Nacional em AAAA",
+  ])('período fora do formato diverge: "%s"', (cargo) => {
+    // Act
+    const r = comparacaoCargoExPresidente(exPresidente(cargo), SENADO);
+
+    // Assert
+    expect(r.map((x) => x.achado)).toEqual(["cargo_ex_presidente"]);
+    expect(r[0].valorEsperado).toBe("Presidente do Congresso Nacional no período de AAAA a AAAA");
+  });
+
+  test.each([
+    "Presidente do Congresso Nacional",
+    "Presidente do Senado Federal de 2019 a 2021",
+    "Presidente do Congresso Nacional de 2019 a 2021",
+    "Presidente do Congresso Nacional 2019 a 2021",
+    "Senador",
+    "Presidente do Congresso Nacional no período de 2019 a 2021 (licenciado)",
+    "Ex-Presidente do Congresso Nacional no período de 2019 a 2021",
+  ])('todo cargo fora do formato diverge, mesmo sem "Ex": "%s"', (cargo) => {
+    // Act
+    const r = comparacaoCargoExPresidente(exPresidente(cargo), SENADO);
+
+    // Assert
+    expect(r.map((x) => x.achado)).toEqual(["cargo_ex_presidente"]);
+    expect(r[0].valorEsperado).toBe("Presidente do Congresso Nacional no período de AAAA a AAAA");
+    expect(r[0].observacao).toBe(OBSERVACAO_PERIODO);
+  });
+
+  test("na República, o cargo sem período diverge com o esperado da República", () => {
+    // Act
+    const [c] = comparacaoCargoExPresidente(exPresidente("Presidente da República", REPUBLICA), REPUBLICA);
+
+    // Assert
+    expect(c.valorEsperado).toBe("Presidente da República Federativa do Brasil de AAAA a AAAA");
+  });
+
+  test("cargo vazio, ou só espaços, não é desta regra (o painel já acusa \"Cargo vazio\")", () => {
+    // Assert
+    expect(comparacaoCargoExPresidente(exPresidente(""), SENADO)).toEqual([]);
+    expect(comparacaoCargoExPresidente(exPresidente("   "), SENADO)).toEqual([]);
+    expect(comparacaoCargoExPresidente({ nome: "Rui Fictício", grupo: SENADO }, SENADO)).toEqual([]);
+  });
+
+  test("outro grupo, ou sem grupo canônico, não é acusado", () => {
+    // Assert
+    expect(comparacaoCargoExPresidente(exPresidente("Ex-Senador"), "Senadores")).toEqual([]);
+    expect(comparacaoCargoExPresidente(exPresidente("Ex-Presidente do Senado Federal"), undefined)).toEqual([]);
+  });
+
+  test("não muta o contato", () => {
+    // Arrange
+    const contato = Object.freeze(exPresidente("Ex-Presidente do Senado Federal"));
+
+    // Act + Assert
+    expect(() => comparacaoCargoExPresidente(contato, SENADO)).not.toThrow();
+    expect(contato.cargo).toBe("Ex-Presidente do Senado Federal");
+  });
+});
+
+describe("período escrito com traço", () => {
+  test.each([
+    ["Presidente do Congresso Nacional no período de 1991- 1993", "1991- 1993"],
+    ["Presidente do Congresso Nacional no período de 1991-1993", "1991-1993"],
+    ["Presidente do Congresso Nacional no período de 1991 – 1993", "1991 – 1993"],
+    ["Presidente do Congresso Nacional no período de 1991 — 1993", "1991 — 1993"],
+  ])('"%s" aponta o traço e traz os anos no esperado', (cargo, trecho) => {
+    // Act
+    const [achado] = comparacaoCargoExPresidente(exPresidente(cargo), SENADO);
+
+    // Assert
+    expect(achado).toMatchObject({
+      situacao: "divergente",
+      achado: "cargo_ex_presidente",
+      valorEsperado: "Presidente do Congresso Nacional no período de 1991 a 1993",
+      observacao: 'Período com traço (' + trecho + '): usar "a" entre os anos (1991 a 1993)',
+    });
+  });
+
+  test("dois períodos com traço corrigem os dois e citam os dois", () => {
+    // Act
+    const [achado] = comparacaoCargoExPresidente(exPresidente("Presidente do Congresso Nacional no período de 1995-1997 e de 2009-2011"), SENADO);
+
+    // Assert
+    expect(achado.valorEsperado).toBe("Presidente do Congresso Nacional no período de 1995 a 1997 e de 2009 a 2011");
+    expect(achado.observacao).toBe('Período com traço (1995-1997, 2009-2011): usar "a" entre os anos (1995 a 1997, 2009 a 2011)');
+  });
+
+  test("traço com o resto também fora do formato aponta o traço e mantém o marcador no esperado", () => {
+    // Act
+    const [achado] = comparacaoCargoExPresidente(exPresidente("Ex-Presidente do Congresso Nacional 1991-1993"), SENADO);
+
+    // Assert
+    expect(achado.valorEsperado).toBe("Presidente do Congresso Nacional no período de AAAA a AAAA");
+    expect(achado.observacao).toBe('Período com traço (1991-1993): usar "a" entre os anos (1991 a 1993)');
+  });
+
+  test("traço com os anos invertidos não propõe período inválido", () => {
+    // Act
+    const [achado] = comparacaoCargoExPresidente(exPresidente("Presidente do Congresso Nacional no período de 2021-2019"), SENADO);
+
+    // Assert
+    expect(achado.valorEsperado).toBe("Presidente do Congresso Nacional no período de AAAA a AAAA");
+  });
+
+  test("o cartão do cargo oferece copiar só quando o esperado traz os anos", () => {
+    // Arrange
+    const cartaoDo = (cargo: string) => {
+      const comparacoes = comparacaoCargoExPresidente(exPresidente(cargo), SENADO);
+      const c = { contato: exPresidente(cargo), semaforo: "amarelo", score: 1, comparacoes, camposDivergentes: [], origem: "oficial" } as unknown as ResultadoContato;
+      return detalhesDoContato(c, { grupo: SENADO, contatos: [c], novos: [] } as unknown as ResultadoGrupo).find((d) => d.campo === "cargo");
+    };
+
+    // Act e Assert
+    expect(cartaoDo("Presidente do Congresso Nacional no período de 1991- 1993")?.copiavel).toBe("Presidente do Congresso Nacional no período de 1991 a 1993");
+    expect(cartaoDo("Presidente do Congresso Nacional")?.copiavel).toBeUndefined();
+  });
+
+  test("sem traço a observação continua pedindo o período", () => {
+    // Act
+    const [achado] = comparacaoCargoExPresidente(exPresidente("Presidente do Congresso Nacional"), SENADO);
+
+    // Assert
+    expect(achado.observacao).toBe(OBSERVACAO_PERIODO);
+  });
+});
+
+describe("texto do achado cargo_ex_presidente", () => {
+  test("leva o cargo esperado e a observação, para a tela e o export", () => {
+    // Arrange
+    const [c] = comparacaoCargoExPresidente(exPresidente("Ex-Presidente do Senado Federal"), SENADO);
+
+    // Act
+    const texto = textoCoerencia(c);
+
+    // Assert
+    expect(rotuloAchado("cargo_ex_presidente")).toBe("Cargo de ex-presidente fora do formato do GT");
+    expect(texto).toBe(
+      "Cargo de ex-presidente fora do formato do GT (Presidente do Congresso Nacional no período de AAAA a AAAA). Informar o período da presidência",
+    );
+  });
+});

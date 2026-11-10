@@ -1,19 +1,40 @@
 import { describe, expect, test } from "vitest";
 import {
+  avisoUrlCaida,
+  camposDoEndereco,
   cartoesDoResumo,
   contarContatos,
+  contarNumeroNaBase,
   detalhesDoContato,
+  estadoDaFonteDoGrupo,
   etiquetasDoContato,
   filtrarGrupos,
+  FILTROS,
   linhasDoEndereco,
   montarRetrato,
   motivoDoContato,
+  procedenciaDoContato,
   procedenciaNomeCargo,
+  resumoDoGrupo,
   situacaoDoContato,
+  textoCabecalhoWeb,
   textoDataHora,
   textoEnderecoParaCopiar,
+  textoIndividuais,
+  textoNumeroNaBase,
+  textoReaproveitada,
+  textoSituacaoDosGrupos,
+  TEXTO_FONTE_PROVISORIA_CAMPANHA,
+  TEXTO_FONTE_PROVISORIA_NOTICIA,
+  textoProvisoriaNaProcedencia,
+  textosProvisorias,
+  textoAlternativa,
+  textoMudanca,
+  textoUrlCaida,
 } from "@/lib/painel";
+import { ColunaFaltanteError } from "@/lib/planilha";
 import type {
+  BaseEnderecos,
   ComparacaoCampo,
   EnderecoEstruturado,
   ResultadoAnalise,
@@ -73,8 +94,8 @@ describe("etiquetasDoContato", () => {
       ],
     });
     const etiquetas = etiquetasDoContato(c, grupoComFonte);
-    expect(etiquetas.find((e) => e.campo === "cargo")).toEqual({ campo: "cargo", texto: "Cargo diverge", tom: "atencao" });
-    expect(etiquetas.find((e) => e.campo === "tratamento")).toEqual({ campo: "tratamento", texto: "Tratamento sem regra", tom: "neutro" });
+    expect(etiquetas.find((e) => e.campo === "cargo")).toMatchObject({ campo: "cargo", texto: "Cargo diverge", tom: "atencao" });
+    expect(etiquetas.find((e) => e.campo === "tratamento")).toMatchObject({ campo: "tratamento", texto: "Tratamento sem regra", tom: "neutro" });
   });
 
   test("cargo que o site não informa não ganha etiqueta", () => {
@@ -105,6 +126,22 @@ describe("etiquetasDoContato", () => {
     expect(t.some((x) => x.startsWith("Nome") || x.startsWith("Cargo"))).toBe(false);
   });
 
+  test("possível saída com achado da Camada C no cargo (ex-presidente) mostra 'Cargo diverge'", () => {
+    const c = contato({
+      semaforo: "vermelho", possivelSaida: true,
+      contato: { nome: "Rui Fictício", grupo: "Ex-Presidentes do Congresso", cargo: "Ex-Presidente do Senado Federal" },
+      comparacoes: [{
+        campo: "cargo", valorPlanilha: "Ex-Presidente do Senado Federal", valorEsperado: "Presidente do Senado Federal de AAAA a AAAA",
+        situacao: "divergente", origemValor: "coerencia", achado: "cargo_ex_presidente", observacao: "Informar o período da presidência",
+      }],
+    });
+    expect(textos(c, grupoComFonte).slice(0, 2)).toEqual(["Sem par na fonte", "Cargo diverge"]);
+    const cargo = detalhesDoContato(c, grupoComFonte).find((d) => d.campo === "cargo");
+    expect(cargo?.coerencias).toEqual([
+      "Cargo de ex-presidente fora do formato do GT (Presidente do Senado Federal de AAAA a AAAA). Informar o período da presidência",
+    ]);
+  });
+
   test("possível saída com achado da Camada C no nome mostra as duas coisas (contrato herdado de celulaDivergencias)", () => {
     const c = contato({
       semaforo: "vermelho", possivelSaida: true,
@@ -119,7 +156,7 @@ describe("etiquetasDoContato", () => {
       comparacoes: [diverge("tratamento", "protocolo", "Senhora", "Vossa Excelência"), confere("enderecamento", "protocolo")],
     });
     const etiquetas = etiquetasDoContato(c, grupoSemFonte);
-    expect(etiquetas.find((e) => e.campo === "nome")).toEqual({ campo: "nome", texto: "Nome não verificado", tom: "neutro" });
+    expect(etiquetas.find((e) => e.campo === "nome")).toMatchObject({ campo: "nome", texto: "Nome não verificado", tom: "neutro" });
     expect(etiquetas.find((e) => e.campo === "cargo")?.texto).toBe("Cargo não verificado");
     expect(etiquetas.find((e) => e.campo === "tratamento")?.texto).toBe("Tratamento diverge");
   });
@@ -127,19 +164,19 @@ describe("etiquetasDoContato", () => {
   test("endereço: a_completar é neutro, pendente é atenção, nao_verificado é neutro, sem_base não aparece", () => {
     const com = (situacao: NonNullable<ResultadoContato["endereco"]>["situacao"]) =>
       etiquetasDoContato(contato({ endereco: { situacao, achados: [] } }), grupoComFonte).find((e) => e.campo === "endereco");
-    expect(com("a_completar")).toEqual({ campo: "endereco", texto: "Endereço a completar", tom: "neutro" });
-    expect(com("pendente")).toEqual({ campo: "endereco", texto: "Endereço a confirmar", tom: "atencao" });
-    expect(com("nao_verificado")).toEqual({ campo: "endereco", texto: "Endereço não verificado", tom: "neutro" });
+    expect(com("a_completar")).toMatchObject({ campo: "endereco", texto: "Endereço a completar", tom: "neutro" });
+    expect(com("pendente")).toMatchObject({ campo: "endereco", texto: "Endereço a confirmar", tom: "atencao" });
+    expect(com("nao_verificado")).toMatchObject({ campo: "endereco", texto: "Endereço não verificado", tom: "neutro" });
     expect(com("sem_base")).toBeUndefined();
   });
 });
 
 describe("situacaoDoContato", () => {
   test("ordem: possível saída, sem fonte, não verificado, tudo confere, N a revisar", () => {
-    expect(situacaoDoContato(contato({ possivelSaida: true, semaforo: "vermelho" }), grupoComFonte)).toEqual({ texto: "Possível saída", tom: "ruim" });
-    expect(situacaoDoContato(contato({ semaforo: "vermelho" }), grupoSemFonte)).toEqual({ texto: "Sem fonte", tom: "neutro" });
-    expect(situacaoDoContato(contato({ semaforo: "indeterminado" }), grupoInacessivel)).toEqual({ texto: "Não verificado", tom: "neutro" });
-    expect(situacaoDoContato(contato({ comparacoes: [confere("nome", "pagina")] }), grupoComFonte)).toEqual({ texto: "Tudo confere", tom: "ok" });
+    expect(situacaoDoContato(contato({ possivelSaida: true, semaforo: "vermelho" }), grupoComFonte)).toMatchObject({ texto: "Possível saída", tom: "ruim" });
+    expect(situacaoDoContato(contato({ semaforo: "vermelho" }), grupoSemFonte)).toMatchObject({ texto: "Sem fonte", tom: "neutro" });
+    expect(situacaoDoContato(contato({ semaforo: "indeterminado" }), grupoInacessivel)).toMatchObject({ texto: "Não verificado", tom: "neutro" });
+    expect(situacaoDoContato(contato({ comparacoes: [confere("nome", "pagina")] }), grupoComFonte)).toMatchObject({ texto: "Nada a revisar", tom: "neutro" });
   });
 
   test("conta só etiquetas de atenção ou ruim; 'Endereço a completar' não entra", () => {
@@ -148,7 +185,7 @@ describe("situacaoDoContato", () => {
       comparacoes: [diverge("cargo", "pagina", "a", "b"), diverge("tratamento", "protocolo", "a", "b")],
       endereco: { situacao: "a_completar", achados: ["sem_bairro"] },
     });
-    expect(situacaoDoContato(c, grupoComFonte)).toEqual({ texto: "2 a revisar", tom: "atencao" });
+    expect(situacaoDoContato(c, grupoComFonte)).toMatchObject({ texto: "2 a revisar", tom: "atencao" });
   });
 
   test("endereço pendente sozinho é '1 a revisar'", () => {
@@ -166,6 +203,44 @@ describe("motivoDoContato", () => {
     expect(motivoDoContato(contato({}), grupoComFonte)).toBeUndefined();
   });
 });
+
+describe("grupos de lista e neutros: linha e cabeçalho", () => {
+  const grupoLista: ResultadoGrupo = { grupo: "Senadores eleitos - Posse Presidencial 2027", semFonte: false, fiscalizacao: "lista", contatos: [], novos: [] };
+  const grupoNeutro: ResultadoGrupo = { grupo: "Convidados do presidente eleito - Posse 2027", semFonte: false, fiscalizacao: "neutro", contatos: [], novos: [] };
+
+  test("contato fora da lista mostra o motivo da comparação com a planilha, nunca fonte que não respondeu", () => {
+    // Arrange
+    const motivo = "Não está na lista de Senadores eleitos - Posse Presidencial 2027 (planilha do TSE de 28/10)";
+    const c = contato({ semaforo: "indeterminado", observacao: motivo });
+
+    // Act
+    const texto = motivoDoContato(c, grupoLista);
+    const situacao = situacaoDoContato(c, grupoLista);
+
+    // Assert
+    expect(texto).toBe(motivo);
+    expect(situacao.explicacao).toBe("Grupo comparado com a planilha, não com página oficial");
+    expect(situacao.explicacao).not.toBe("A fonte oficial não pôde ser lida nesta varredura");
+  });
+
+  test("sem a lista nesta varredura e eleito a conferir saem com o próprio motivo", () => {
+    expect(motivoDoContato(contato({ semaforo: "indeterminado", observacao: "Sem a lista nesta varredura" }), grupoLista)).toBe("Sem a lista nesta varredura");
+    expect(motivoDoContato(contato({ semaforo: "indeterminado", observacao: "Eleito a conferir: grupo do convite ainda não decidido" }), grupoLista))
+      .toBe("Eleito a conferir: grupo do convite ainda não decidido");
+  });
+
+  test("cabeçalho do grupo diz como ele é fiscalizado; grupo de fonte não tem texto próprio", () => {
+    expect(estadoDaFonteDoGrupo(grupoNeutro)).toBe("Sem fonte oficial (grupo de convidados)");
+    expect(estadoDaFonteDoGrupo(grupoLista)).toBe("Comparado com a planilha (TSE/Câmara)");
+    expect(estadoDaFonteDoGrupo(grupoComFonte)).toBeUndefined();
+  });
+});
+
+const cartao = (c: ResultadoContato, campo: string) => {
+  const achado = detalhesDoContato(c, grupoComFonte).find((x) => x.campo === campo);
+  if (!achado) throw new Error(`sem cartão de ${campo}`);
+  return achado;
+};
 
 describe("detalhesDoContato", () => {
   test("um cartão por campo com comparação, com origem certa e valor copiável só quando diverge", () => {
@@ -189,26 +264,38 @@ describe("detalhesDoContato", () => {
 
   test("site que não informa o cargo diz isso no cartão", () => {
     const c = contato({ comparacoes: [{ campo: "cargo", valorPlanilha: "Ministra", situacao: "fonte_nao_informa", origemValor: "pagina" }] });
-    expect(detalhesDoContato(c, grupoComFonte)[0].valorReferencia).toBe("o site não informa");
+    expect(cartao(c, "cargo").valorReferencia).toBe("o site não informa");
   });
 
   test("achados de coerência entram no cartão do campo, com o texto de textoCoerencia", () => {
     const c = contato({ comparacoes: [confere("tratamento", "protocolo", "Senhora"), coerencia("tratamento", "genero_cargo_tratamento")] });
-    const d = detalhesDoContato(c, grupoComFonte);
-    expect(d).toHaveLength(1);
-    expect(d[0].coerencias).toEqual(["gênero do Cargo discorda do Tratamento"]);
+    expect(cartao(c, "tratamento").coerencias).toEqual(["gênero do Cargo discorda do Tratamento"]);
   });
 
   test("campo só com achado de coerência (sem comparação de valor) ainda ganha cartão", () => {
     const c = contato({ comparacoes: [coerencia("enderecamento", "campo_vazio", "")] });
-    const d = detalhesDoContato(c, grupoComFonte);
-    expect(d[0]).toMatchObject({ campo: "enderecamento", valorPlanilha: "", origem: "Tabela de protocolo diz", valorReferencia: "" });
-    expect(d[0].coerencias[0]).toBe("campo vazio (Endereçamento)");
+    const d = cartao(c, "enderecamento");
+    expect(d).toMatchObject({ campo: "enderecamento", valorPlanilha: "", origem: "Tabela de protocolo diz", valorReferencia: "" });
+    expect(d.coerencias[0]).toBe("campo vazio (Endereçamento)");
   });
 
   test("campo vazio com valor de protocolo não duplica (coerenciasVisiveis colapsa)", () => {
     const c = contato({ comparacoes: [diverge("tratamento", "protocolo", "", "Vossa Excelência"), coerencia("tratamento", "campo_vazio", "")] });
-    expect(detalhesDoContato(c, grupoComFonte)[0].coerencias).toEqual([]);
+    expect(cartao(c, "tratamento").coerencias).toEqual([]);
+  });
+
+  test("os quatro campos fiscalizados aparecem sempre, mesmo sem comparação, com o valor do cadastro", () => {
+    const c = contato({ semaforo: "vermelho", possivelSaida: true, comparacoes: [] });
+    const d = detalhesDoContato(c, grupoComFonte);
+    expect(d.map((x) => x.campo)).toEqual(["nome", "cargo", "tratamento", "enderecamento"]);
+    expect(d.map((x) => x.valorPlanilha)).toEqual(["Ana", "Ministra", "Senhora", "A Sua Excelência a Senhora"]);
+    expect(d.every((x) => x.valorReferencia === "")).toBe(true);
+  });
+
+  test("campo fiscalizado vazio no cadastro aparece com valor vazio, não some", () => {
+    const c = contato({ contato: { nome: "Ana", grupo: "ORG" } });
+    expect(cartao(c, "cargo").valorPlanilha).toBe("");
+    expect(cartao(c, "tratamento").valorPlanilha).toBe("");
   });
 });
 
@@ -222,6 +309,11 @@ describe("filtrarGrupos", () => {
     { ...grupoSemFonte, contatos: [semFonte] },
   ];
   const nomes = (gs: ResultadoGrupo[]) => gs.flatMap((g) => g.contatos.map((c) => c.contato.nome));
+
+  test("a_bloquear está em FILTROS e não traz novos", () => {
+    expect(FILTROS).toContainEqual({ id: "a_bloquear", rotulo: "A bloquear no Posse" });
+    expect(filtrarGrupos(grupos, "a_bloquear", "").flatMap((g) => g.novos)).toEqual([]);
+  });
 
   test("tudo: devolve tudo, inclusive novos", () => {
     const r = filtrarGrupos(grupos, "tudo", "");
@@ -261,6 +353,20 @@ describe("filtrarGrupos", () => {
   test("contarContatos soma os contatos dos grupos", () => {
     expect(contarContatos(grupos)).toBe(4);
   });
+
+  test("a eleição de destino outra_casa não muda a situação do contato", () => {
+    const sem = contato({});
+    const com = contato({ eleicao: { casa: "camara", destino: "outra_casa", projecao: false, uf: "MA", situacaoTse: "Eleito", statusMandato: "Mandato novo (atual senador)", nomeUrna: "Ana" } });
+    expect(situacaoDoContato(com, grupoComFonte)).toEqual(situacaoDoContato(sem, grupoComFonte));
+  });
+
+  test("filtro da eleição 'reeleitos' passa por filtrarGrupos e não traz novos", () => {
+    const reeleita = contato({ contato: { nome: "Reeleita Teste", grupo: "ORG" }, eleicao: { casa: "senado", destino: "reeleito", projecao: false, uf: "MA", situacaoTse: "Eleito", statusMandato: "Reeleição", nomeUrna: "Reeleita Teste" } });
+    const gs: ResultadoGrupo[] = [{ ...grupoComFonte, contatos: [reeleita, verde], novos: [{ nome: "Nova", cargo: "Ministra", origem: "pagina" }] }];
+    const r = filtrarGrupos(gs, "reeleitos", "");
+    expect(nomes(r)).toEqual(["Reeleita Teste"]);
+    expect(r[0].novos).toEqual([]);
+  });
 });
 
 describe("cartoesDoResumo", () => {
@@ -268,7 +374,7 @@ describe("cartoesDoResumo", () => {
     const cartoes = cartoesDoResumo({
       total: 10, verde: 4, amarelo: 2, vermelho: 3, novo: 1, indeterminado: 1,
       enderecosAConfirmar: 5, possivelSaida: 2, contatosSemFonte: 1,
-      gruposSemFonte: 1, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+      gruposSemFonte: 1, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0,
     });
     expect(cartoes).toEqual([
       { rotulo: "Conferem", valor: 4 },
@@ -313,7 +419,7 @@ describe("textoDataHora", () => {
 describe("montarRetrato", () => {
   const resultado: ResultadoAnalise = {
     arquivoNome: "c.xlsx", grupos: [],
-    resumo: { total: 0, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0, gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0 },
+    resumo: { total: 0, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0, gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0 },
   };
 
   test("com as duas planilhas", () => {
@@ -342,5 +448,569 @@ describe("procedenciaNomeCargo", () => {
 
   test("grupo sem fonte não tem linha de procedência", () => {
     expect(procedenciaNomeCargo(grupoSemFonte)).toBeUndefined();
+  });
+});
+
+describe("situação: Tudo confere × Nada a revisar", () => {
+  test("todas as etiquetas verdes → Tudo confere", () => {
+    const c = contato({
+      comparacoes: [confere("nome", "pagina"), confere("cargo", "pagina"), confere("tratamento", "protocolo"), confere("enderecamento", "protocolo")],
+      endereco: { situacao: "completo", achados: [] },
+    });
+    expect(situacaoDoContato(c, grupoComFonte)).toMatchObject({ texto: "Tudo confere", tom: "ok" });
+  });
+
+  test("uma etiqueta neutra e nada a revisar → Nada a revisar", () => {
+    const c = contato({
+      comparacoes: [confere("nome", "pagina"), confere("cargo", "pagina"), { campo: "tratamento", valorPlanilha: "Senhora", situacao: "sem_regra", origemValor: "protocolo" }, confere("enderecamento", "protocolo")],
+      endereco: { situacao: "a_completar", achados: ["sem_bairro"] },
+    });
+    const s = situacaoDoContato(c, grupoComFonte);
+    expect(s).toMatchObject({ texto: "Nada a revisar", tom: "neutro" });
+    expect(s.explicacao).toContain("não puderam ser conferidos");
+  });
+});
+
+describe("cargo vazio", () => {
+  test.each(["", "   ", undefined])("cargo %j vira 'Cargo vazio' em atenção, sem etiquetas de protocolo, e conta como a revisar", (cargo) => {
+    const c = contato({
+      contato: { nome: "Ana", grupo: "ORG", cargo, tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" },
+      comparacoes: [confere("nome", "pagina"), { campo: "tratamento", valorPlanilha: "Senhora", situacao: "sem_regra", origemValor: "protocolo" }, { campo: "enderecamento", valorPlanilha: "x", situacao: "sem_regra", origemValor: "protocolo" }],
+    });
+    const t = textos(c, grupoComFonte);
+    expect(t).toContain("Cargo vazio");
+    expect(t.some((x) => x.startsWith("Tratamento") || x.startsWith("Endereçamento"))).toBe(false);
+    expect(etiquetasDoContato(c, grupoComFonte).find((e) => e.campo === "cargo")?.tom).toBe("atencao");
+    expect(situacaoDoContato(c, grupoComFonte).texto).toBe("1 a revisar");
+  });
+});
+
+describe("cargo vazio e Camada A", () => {
+  const semCargo = { nome: "Ana", grupo: "ORG", cargo: "", tratamento: "Senhor(a)", enderecamento: "A Sua Excelência a Senhora" };
+
+  test("forma genérica no tratamento continua aparecendo e conta na situação", () => {
+    const c = contato({ semaforo: "amarelo", contato: semCargo, comparacoes: [coerencia("tratamento", "forma_generica", "Senhor(a)")] });
+    const t = textos(c, grupoComFonte);
+    expect(t).toContain("Cargo vazio");
+    expect(t).toContain("Tratamento diverge");
+    expect(situacaoDoContato(c, grupoComFonte).texto).toBe("2 a revisar");
+  });
+
+  test("tudo coerente e sem cargo: nenhuma etiqueta de tratamento ou endereçamento", () => {
+    const c = contato({ contato: { ...semCargo, tratamento: "Senhora" }, comparacoes: [confere("nome", "pagina")] });
+    expect(textos(c, grupoComFonte).some((x) => x.startsWith("Tratamento") || x.startsWith("Endereçamento"))).toBe(false);
+  });
+
+  test("cargo vazio com possível saída: 'Sem par na fonte' primeiro, depois 'Cargo vazio'", () => {
+    const c = contato({ semaforo: "vermelho", possivelSaida: true, contato: { ...semCargo, tratamento: "Senhora" } });
+    expect(textos(c, grupoComFonte).slice(0, 2)).toEqual(["Sem par na fonte", "Cargo vazio"]);
+    expect(situacaoDoContato(c, grupoComFonte).texto).toBe("Possível saída");
+  });
+
+  test("grupo sem fonte e cargo vazio: situação 'Sem fonte', etiqueta 'Cargo vazio' continua", () => {
+    const c = contato({ semaforo: "vermelho", contato: { ...semCargo, tratamento: "Senhora" } });
+    expect(situacaoDoContato(c, grupoSemFonte).texto).toBe("Sem fonte");
+    expect(textos(c, grupoSemFonte)).toContain("Cargo vazio");
+  });
+
+  test("sem regra com cargo vazio explica que o cadastro não informa o cargo, sem aspas vazias", () => {
+    const c = contato({
+      contato: { ...semCargo, tratamento: "Senhora" },
+      comparacoes: [{ campo: "cargo", valorPlanilha: "", situacao: "sem_regra", origemValor: "pagina" }],
+    });
+    const cargo = detalhesDoContato(c, grupoComFonte).find((d) => d.campo === "cargo");
+    expect(cargo?.etiqueta?.explicacao).toBe("O cadastro não informa o cargo; sem ele não há regra de protocolo");
+  });
+});
+
+describe("filtro de ressalva × situação 'a revisar'", () => {
+  test("todo contato com situação 'N a revisar' passa pelo filtro de ressalva", () => {
+    const vazio = { nome: "Vazio", grupo: "ORG", cargo: "", tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" };
+    const contatos = [
+      contato({ contato: { ...vazio, nome: "Verde" , cargo: "Ministra" }, comparacoes: [confere("nome", "pagina"), confere("cargo", "pagina")] }),
+      contato({ contato: { ...vazio, nome: "Amarelo", cargo: "Ministra" }, semaforo: "amarelo", comparacoes: [diverge("cargo", "pagina", "a", "b")] }),
+      contato({ contato: { ...vazio, nome: "Vermelho" }, semaforo: "vermelho", possivelSaida: true }),
+      contato({ contato: vazio, comparacoes: [confere("nome", "pagina")] }),
+      contato({ contato: { ...vazio, nome: "Pendente", cargo: "Ministra" }, endereco: { situacao: "pendente", achados: ["sem_numero"] } }),
+    ];
+    const g: ResultadoGrupo = { ...grupoComFonte, contatos, novos: [] };
+    const passam = filtrarGrupos([g], "ressalva", "").flatMap((x) => x.contatos.map((c) => c.contato.nome));
+    const aRevisar = contatos.filter((c) => /^\d+ a revisar$/.test(situacaoDoContato(c, g).texto)).map((c) => c.contato.nome);
+    expect(aRevisar).toContain("Vazio");
+    for (const nome of aRevisar) expect(passam).toContain(nome);
+  });
+});
+
+describe("explicações", () => {
+  test("endereço a confirmar lista os achados reais, na ordem", () => {
+    const c = contato({ endereco: { situacao: "pendente", achados: ["sem_numero", "cep_ausente"] } });
+    const e = etiquetasDoContato(c, grupoComFonte).find((x) => x.campo === "endereco");
+    expect(e?.explicacao).toBe("Precisa de confirmação por telefone: sem número; sem CEP");
+  });
+
+  test("sem regra cita o cargo", () => {
+    const c = contato({ comparacoes: [{ campo: "tratamento", valorPlanilha: "Senhora", situacao: "sem_regra", origemValor: "protocolo" }] });
+    expect(etiquetasDoContato(c, grupoComFonte).find((x) => x.campo === "tratamento")?.explicacao)
+      .toBe('O cargo "Ministra" não foi encontrado na tabela de protocolo; nada foi conferido');
+  });
+
+  test("a completar explica pelos achados reais, na ordem", () => {
+    const explicacao = (achados: NonNullable<ResultadoContato["endereco"]>["achados"]) =>
+      etiquetasDoContato(contato({ endereco: { situacao: "a_completar", achados } }), grupoComFonte).find((x) => x.campo === "endereco")?.explicacao;
+    expect(explicacao(["cep_recuperavel"])).toBe("Pode ser completado na conferência dos Correios (Fase 2): CEP com dígito faltando (zero à esquerda; confirmar nos Correios)");
+    expect(explicacao(["sem_bairro", "cep_recuperavel"])).toBe("Pode ser completado na conferência dos Correios (Fase 2): sem bairro (sai do CEP); CEP com dígito faltando (zero à esquerda; confirmar nos Correios)");
+  });
+
+  test("a completar fala do bairro; sem par na fonte fala da composição", () => {
+    const a = contato({ endereco: { situacao: "a_completar", achados: ["sem_bairro"] } });
+    expect(etiquetasDoContato(a, grupoComFonte).find((x) => x.campo === "endereco")?.explicacao).toContain("bairro");
+    const s = contato({ possivelSaida: true, semaforo: "vermelho" });
+    expect(etiquetasDoContato(s, grupoComFonte)[0].explicacao).toContain("composição oficial");
+  });
+
+  test("toda etiqueta tem explicação não vazia", () => {
+    const c = contato({
+      semaforo: "amarelo",
+      comparacoes: [confere("nome", "pagina"), diverge("cargo", "pagina", "a", "b"), diverge("tratamento", "protocolo", "a", "b"), confere("enderecamento", "protocolo")],
+      endereco: { situacao: "nao_verificado", achados: ["nome_ambiguo"] },
+    });
+    for (const e of etiquetasDoContato(c, grupoComFonte)) expect(e.explicacao.length).toBeGreaterThan(10);
+  });
+});
+
+describe("filtro por grupo", () => {
+  const a = contato({ contato: { nome: "Ana", grupo: "A" } });
+  const b = contato({ contato: { nome: "Bia", grupo: "B" }, semaforo: "vermelho", possivelSaida: true });
+  const b2 = contato({ contato: { nome: "Bruno", grupo: "B" } });
+  const grupos: ResultadoGrupo[] = [
+    { ...grupoComFonte, grupo: "A", contatos: [a], novos: [] },
+    { ...grupoComFonte, grupo: "B", contatos: [b, b2], novos: [] },
+  ];
+  test("só o grupo escolhido, e os outros filtros valem dentro dele", () => {
+    expect(filtrarGrupos(grupos, "tudo", "", "B").map((g) => g.grupo)).toEqual(["B"]);
+    expect(filtrarGrupos(grupos, "saida", "", "B")[0].contatos.map((c) => c.contato.nome)).toEqual(["Bia"]);
+    expect(filtrarGrupos(grupos, "tudo", "bruno", "B")[0].contatos).toHaveLength(1);
+    expect(filtrarGrupos(grupos, "saida", "", "A")).toEqual([]);
+  });
+  test("sem grupo (undefined ou vazio) é como hoje", () => {
+    expect(filtrarGrupos(grupos, "tudo", "")).toHaveLength(2);
+    expect(filtrarGrupos(grupos, "tudo", "", "")).toHaveLength(2);
+  });
+});
+
+describe("cabeçalho do modo web", () => {
+  test("diz quando a varredura foi feita e quando foi publicada", () => {
+    const t = textoCabecalhoWeb("2026-10-03T14:20:22.969Z", "2026-10-04T10:05:00.000Z");
+    expect(t).toMatch(/^Varredura feita na máquina do GT em \d\d\/\d\d, \d\dh\d\d\. Publicada em \d\d\/\d\d, \d\dh\d\d\.$/);
+  });
+  test("sem publicadoEm (retrato antigo) omite a segunda frase", () => {
+    expect(textoCabecalhoWeb("2026-10-03T14:20:22.969Z")).toMatch(/^Varredura feita na máquina do GT em \d\d\/\d\d, \d\dh\d\d\.$/);
+  });
+});
+
+describe("número do endereço acima do limite", () => {
+  const endereco = (numero: string | undefined): EnderecoEstruturado => ({
+    contatoId: "7", logradouro: "Praça dos Três Poderes", numero, complemento: "Anexo II",
+    bairro: "Zona Cívico-Administrativa", cep: "70165-900", cidade: "Brasília", uf: "DF", prioritario: true,
+  });
+  const comNumero = (nome: string, numero: string | undefined) =>
+    contato({ contato: { nome, grupo: "ORG", cargo: "Ministra" }, endereco: { situacao: "completo", achados: [], endereco: endereco(numero) } });
+  const longo = comNumero("Ana Longa", "Sala 12");
+  const noLimite = comNumero("Bia Limite", "Sala 1");
+
+  test("filtro 'numero' deixa só quem passa de 6 caracteres, mesmo em retrato gravado antes da regra", () => {
+    const grupos: ResultadoGrupo[] = [{ ...grupoComFonte, contatos: [longo, noLimite, comNumero("Caio Vazio", undefined)], novos: [{ nome: "Nova", cargo: "Ministra", origem: "pagina" }] }];
+    const r = filtrarGrupos(grupos, "numero", "");
+    expect(r[0].contatos.map((c) => c.contato.nome)).toEqual(["Ana Longa"]);
+    expect(r[0].novos).toEqual([]);
+  });
+
+  test("a linha ganha a etiqueta 'Número: 7 de 6' em atenção, e o contato entra na ressalva", () => {
+    const e = etiquetasDoContato(longo, grupoComFonte).find((x) => x.texto === "Número: 7 de 6");
+    expect(e).toMatchObject({ campo: "endereco", tom: "atencao" });
+    expect(e?.explicacao).toContain("contando espaços e sinais");
+    expect(textos(noLimite, grupoComFonte).some((t) => t.startsWith("Número:"))).toBe(false);
+    const grupos: ResultadoGrupo[] = [{ ...grupoComFonte, contatos: [longo, noLimite] }];
+    expect(filtrarGrupos(grupos, "numero", "")[0].contatos).toHaveLength(1);
+    expect(filtrarGrupos(grupos, "ressalva", "").flatMap((g) => g.contatos.map((c) => c.contato.nome))).toContain("Ana Longa");
+  });
+
+  test("camposDoEndereco lista campo a campo e marca o Número com a conta e o trecho que sobra", () => {
+    const campos = camposDoEndereco(longo.endereco ?? { situacao: "sem_base", achados: [] });
+    expect(campos.map((c) => c.rotulo)).toEqual(["Logradouro", "Número", "Complemento", "Bairro", "Cidade / UF", "CEP"]);
+    const numero = campos[1];
+    expect(numero).toMatchObject({ valor: "Sala 12", tom: "atencao", excedente: "2" });
+    expect(numero.nota).toBe("7 caracteres, contando espaços e sinais; o máximo é 6 (1 a mais)");
+    expect(campos[0]).toEqual({ rotulo: "Logradouro", valor: "Praça dos Três Poderes" });
+    expect(campos[4].valor).toBe("Brasília - DF");
+  });
+
+  test("número no limite não é marcado; campos com achado levam o rótulo do achado", () => {
+    expect(camposDoEndereco(noLimite.endereco ?? { situacao: "sem_base", achados: [] })[1]).toEqual({ rotulo: "Número", valor: "Sala 1" });
+    const campos = camposDoEndereco({ situacao: "pendente", achados: ["sem_numero", "cep_invalido", "sem_logradouro"], endereco: { contatoId: "1", cep: "123", prioritario: true } });
+    expect(campos[0]).toMatchObject({ valor: "", tom: "atencao", nota: "sem logradouro" });
+    expect(campos[1]).toMatchObject({ valor: "", tom: "atencao", nota: "sem número" });
+    expect(campos[5]).toMatchObject({ valor: "123", tom: "atencao", nota: "CEP inválido" });
+  });
+
+  test("sem linha escolhida não há campo a mostrar", () => {
+    expect(camposDoEndereco({ situacao: "pendente", achados: ["sem_linha"] })).toEqual([]);
+  });
+});
+
+describe("resumoDoGrupo", () => {
+  test("conta contatos, a revisar, possíveis saídas e propostas de inclusão; zero some", () => {
+    const g: ResultadoGrupo = {
+      ...grupoComFonte,
+      contatos: [
+        contato({ comparacoes: [confere("nome", "pagina"), confere("cargo", "pagina"), confere("tratamento", "protocolo"), confere("enderecamento", "protocolo")] }),
+        contato({ semaforo: "amarelo", comparacoes: [confere("nome", "pagina"), diverge("cargo", "pagina", "Ministra", "Ministra Presidente")] }),
+        contato({ semaforo: "vermelho", possivelSaida: true }),
+      ],
+      novos: [{ nome: "Nova", cargo: "Ministra", origem: "pagina" }],
+    };
+    expect(resumoDoGrupo(g)).toBe("3 contatos · 1 a revisar · 1 possível saída · 1 a incluir");
+    expect(resumoDoGrupo({ ...grupoComFonte, contatos: [g.contatos[0]] })).toBe("1 contato");
+  });
+});
+
+describe("montarRetrato com a base de endereços", () => {
+  const resultado = { arquivoNome: "c.xlsx", grupos: [], resumo: {} } as unknown as ResultadoAnalise;
+  const baseEnderecos: BaseEnderecos = { cabecalho: ["x", "Contato Id", "Endereço Id", "Numero"], linhas: [[null, 1, 10, "LOTE 12"]] };
+
+  test("grava a base e as contagens do Número", () => {
+    const r = montarRetrato(resultado, { contatos: { nome: "c.xlsx", linhas: 1 }, baseEnderecos }, new Date());
+    expect(r.baseEnderecos).toEqual(baseEnderecos);
+    expect(r.numeroNaBase).toEqual({ enderecos: 1, acimaDoLimite: 1, contatos: 1, foraDaPosse: 1, naoPrioritarios: 0 });
+  });
+
+  test("base sem a coluna Numero não derruba a varredura: guarda a base e deixa a contagem de fora", () => {
+    const semNumero: BaseEnderecos = { cabecalho: ["x", "Contato Id", "Endereço Id"], linhas: [[null, 1, 10]] };
+    const r = montarRetrato(resultado, { contatos: { nome: "c.xlsx", linhas: 1 }, baseEnderecos: semNumero }, new Date());
+    expect(r.baseEnderecos).toEqual(semNumero);
+    expect("numeroNaBase" in r).toBe(false);
+  });
+
+  test("sem a base, os dois campos ficam ausentes", () => {
+    const r = montarRetrato(resultado, { contatos: { nome: "c.xlsx", linhas: 1 } }, new Date());
+    expect("baseEnderecos" in r).toBe(false);
+    expect("numeroNaBase" in r).toBe(false);
+  });
+});
+
+describe("contarNumeroNaBase", () => {
+  const cabecalho = ["lixo", "Contato Id", "Endereço Id", "Numero"];
+  function contatoNoGrupo(id: string, enderecoId?: string): ResultadoContato {
+    return {
+      contato: { nome: `Pessoa ${id}`, grupo: "G", id },
+      semaforo: "verde", comparacoes: [], camposDivergentes: [],
+      ...(enderecoId ? { endereco: { endereco: { contatoId: id, enderecoId, prioritario: true } } } : {}),
+    } as unknown as ResultadoContato;
+  }
+  const grupos = [{ grupo: "G", contatos: [contatoNoGrupo("1", "10"), contatoNoGrupo("2")] }] as unknown as ResultadoGrupo[];
+
+  test("conta endereços na base, os acima de 6 e os Contato Id distintos entre eles", () => {
+    const base: BaseEnderecos = { cabecalho, linhas: [[null, 1, 10, "LOTE 12"], [null, 1, 11, "CASA 1234"], [null, 2, 20, "12"], [null, 3, 30, "ABCDEFG"]] };
+    const n = contarNumeroNaBase(base, grupos);
+    expect(n).toMatchObject({ enderecos: 4, acimaDoLimite: 3, contatos: 2 });
+  });
+
+  test("endereço acima de 6 que o painel mostra não conta como fora do painel", () => {
+    const base: BaseEnderecos = { cabecalho, linhas: [[null, 1, 10, "LOTE 12"]] };
+    expect(contarNumeroNaBase(base, grupos)).toMatchObject({ foraDaPosse: 0, naoPrioritarios: 0 });
+  });
+
+  test("fora do painel: contato fora do retrato é fora da posse; contato do retrato é não prioritário", () => {
+    const base: BaseEnderecos = { cabecalho, linhas: [[null, 1, 11, "CASA 1234"], [null, 2, 20, "LOTE 12"], [null, 3, 30, "LOTE 99"], [null, 3, 31, "LOTE 98"]] };
+    expect(contarNumeroNaBase(base, grupos)).toMatchObject({ acimaDoLimite: 4, foraDaPosse: 2, naoPrioritarios: 2 });
+  });
+
+  test("compara os Ids como texto, com número e texto equivalentes", () => {
+    const base: BaseEnderecos = { cabecalho, linhas: [[null, "1", "10", "LOTE 12"]] };
+    expect(contarNumeroNaBase(base, grupos)).toMatchObject({ foraDaPosse: 0, naoPrioritarios: 0 });
+  });
+
+  test("Id vazio na base não conta como Id de contato nem de endereço do painel", () => {
+    const semId = { contato: { nome: "Sem Id", grupo: "G" }, semaforo: "verde", comparacoes: [], camposDivergentes: [] } as unknown as ResultadoContato;
+    const g = [{ grupo: "G", contatos: [contatoNoGrupo("2"), semId] }] as unknown as ResultadoGrupo[];
+    const base: BaseEnderecos = { cabecalho, linhas: [[null, null, null, "LOTE 12"]] };
+    expect(contarNumeroNaBase(base, g)).toMatchObject({ foraDaPosse: 1, naoPrioritarios: 0 });
+  });
+
+  test("base sem a coluna Numero lança ColunaFaltanteError", () => {
+    expect(() => contarNumeroNaBase({ cabecalho: ["a"], linhas: [] }, grupos)).toThrow(ColunaFaltanteError);
+  });
+});
+
+describe("textoNumeroNaBase", () => {
+  const base = { enderecos: 100, acimaDoLimite: 5, contatos: 4, foraDaPosse: 0, naoPrioritarios: 0 };
+
+  test("sem endereços fora do painel, mostra só o total", () => {
+    expect(textoNumeroNaBase(base)).toBe("Número acima de 6 na base inteira: 5 endereços");
+  });
+
+  test("detalha os fora do painel somando os dois grupos", () => {
+    expect(textoNumeroNaBase({ ...base, foraDaPosse: 2, naoPrioritarios: 3 })).toBe(
+      "Número acima de 6 na base inteira: 5 endereços (5 fora do painel: 2 fora da Posse, 3 não prioritários)",
+    );
+  });
+
+  test("usa o singular quando há um só", () => {
+    expect(textoNumeroNaBase({ ...base, acimaDoLimite: 1, foraDaPosse: 0, naoPrioritarios: 1 })).toBe(
+      "Número acima de 6 na base inteira: 1 endereço (1 fora do painel: 0 fora da Posse, 1 não prioritário)",
+    );
+  });
+});
+
+describe("fontes individuais no painel (spec 2026-10-15 §6.1)", () => {
+  const grupoIndividuais: ResultadoGrupo = { grupo: "Ministros de Estado", fonteUrl: "https://www.gov.br/planalto/lista", semFonte: false, contatos: [], novos: [], individuais: { lidas: 36, caidas: 2 } };
+  const contato: ResultadoContato = {
+    contato: { nome: "Ana", grupo: "Ministros de Estado", cargo: "Ministra de Estado do Exemplo" },
+    semaforo: "verde", score: 1, origem: "oficial", fonteUrl: "https://www.gov.br/exemplo/ministra",
+    comparacoes: [
+      { campo: "nome", valorPlanilha: "Ana", valorEsperado: "Ana", situacao: "confere", origemValor: "pagina", fonteUrl: "https://www.gov.br/exemplo/ministra" },
+      { campo: "cargo", valorPlanilha: "Ministra de Estado do Exemplo", situacao: "nao_verificado", fonteUrl: "https://www.gov.br/planalto/lista" },
+    ],
+    camposDivergentes: [],
+  };
+
+  test("nao_verificado vira etiqueta neutra 'Cargo não verificado' e não pede revisão", () => {
+    const etiquetas = etiquetasDoContato(contato, grupoIndividuais);
+    expect(etiquetas.find((e) => e.campo === "cargo")).toMatchObject({ texto: "Cargo não verificado", tom: "neutro" });
+    expect(situacaoDoContato(contato, grupoIndividuais).texto).toBe("Nada a revisar");
+  });
+
+  test("detalhe traz a URL da fonte de cada campo e o texto de não verificado", () => {
+    const d = detalhesDoContato(contato, grupoIndividuais);
+    expect(d.find((x) => x.campo === "nome")?.url).toBe("https://www.gov.br/exemplo/ministra");
+    expect(d.find((x) => x.campo === "cargo")).toMatchObject({ url: "https://www.gov.br/planalto/lista", valorReferencia: "não verificado nesta varredura" });
+    expect(d.find((x) => x.campo === "tratamento")?.url).toBeUndefined();
+  });
+
+  test("procedência por contato: nome pela individual, cargo pela geral; grupo comum mantém a linha única", () => {
+    expect(procedenciaDoContato(contato, grupoIndividuais)).toEqual([
+      { rotulo: "Nome", texto: "https://www.gov.br/exemplo/ministra", url: "https://www.gov.br/exemplo/ministra", lida: true },
+      { rotulo: "Cargo", texto: "https://www.gov.br/planalto/lista", url: "https://www.gov.br/planalto/lista", lida: false },
+    ]);
+    expect(procedenciaDoContato({ ...contato, comparacoes: [], fonteUrl: undefined }, grupoComFonte)).toEqual([
+      { rotulo: "Nome e cargo", texto: "https://orgao.gov.br", url: "https://orgao.gov.br", lida: true },
+    ]);
+  });
+
+  test("procedência: campo não verificado sai 'lida: false', campo conferido sai 'lida: true'", () => {
+    const invertido: ResultadoContato = {
+      ...contato,
+      comparacoes: [
+        { campo: "nome", valorPlanilha: "Ana", situacao: "nao_verificado", fonteUrl: "https://www.gov.br/exemplo/ministra" },
+        { campo: "cargo", valorPlanilha: "Ministra de Estado do Exemplo", valorEsperado: "Ministra de Estado do Exemplo", situacao: "confere", origemValor: "pagina", fonteUrl: "https://www.gov.br/planalto/lista" },
+      ],
+    };
+    expect(procedenciaDoContato(invertido, grupoIndividuais).map((l) => [l.rotulo, l.lida])).toEqual([["Nome", false], ["Cargo", true]]);
+  });
+
+  test("governador sem fonte individual sai 'Sem fonte' com a observação como motivo, não 'Nada a revisar'", () => {
+    const grupoGov: ResultadoGrupo = { grupo: "Governadores", semFonte: false, contatos: [], novos: [], individuais: { lidas: 22, caidas: 0 } };
+    const semFonte: ResultadoContato = {
+      contato: { nome: "Beto", grupo: "Governadores", cargo: "Governador do Estado de Mato Grosso" },
+      semaforo: "vermelho", score: 0, origem: "oficial",
+      comparacoes: [],
+      camposDivergentes: [{ campo: "fonte", valorPlanilha: "sem URL cadastrada" }],
+      observacao: "Sem fonte individual para a UF MT",
+    };
+    expect(situacaoDoContato(semFonte, grupoGov)).toMatchObject({ texto: "Sem fonte", tom: "neutro" });
+    expect(motivoDoContato(semFonte, grupoGov)).toBe("Sem fonte individual para a UF MT");
+  });
+
+  test("motivo do contato indeterminado num grupo com individuais é a observação dele", () => {
+    const caido: ResultadoContato = { ...contato, semaforo: "indeterminado", observacao: "Página individual inacessível: HTTP 403" };
+    expect(motivoDoContato(caido, grupoIndividuais)).toBe("Página individual inacessível: HTTP 403");
+  });
+
+  test("textoIndividuais", () => {
+    expect(textoIndividuais({ lidas: 22, caidas: 0 })).toBe("22 páginas individuais lidas");
+    expect(textoIndividuais({ lidas: 36, caidas: 2 })).toBe("36 páginas individuais lidas · 2 inacessíveis");
+    expect(textoIndividuais({ lidas: 1, caidas: 1 })).toBe("1 página individual lida · 1 inacessível");
+  });
+});
+
+describe("memória de leitura no painel (spec 2026-10-20 §7)", () => {
+  const LIDA_EM_16 = "2026-10-16T15:50:29.000Z";
+
+  test("textoReaproveitada descreve a data e o motivo de hoje", () => {
+    expect(textoReaproveitada({ url: "https://x", lidaEm: LIDA_EM_16, motivo: "HTTP 403" })).toBe("Leitura de 16/10 reaproveitada: hoje a página não respondeu (HTTP 403)");
+    expect(textoReaproveitada({ url: "https://x", lidaEm: LIDA_EM_16, motivo: "página casou 2 de 10 contatos" })).toBe("Leitura de 16/10 reaproveitada: hoje a página casou 2 de 10 contatos");
+    expect(textoReaproveitada({ url: "https://x", lidaEm: LIDA_EM_16, motivo: "não trouxe ninguém" })).toBe("Leitura de 16/10 reaproveitada: hoje a página não trouxe ninguém");
+  });
+
+  test("textoIndividuais com reaproveitadas; zero some; retrato antigo sem o campo continua igual", () => {
+    expect(textoIndividuais({ lidas: 38, caidas: 2, reaproveitadas: 4 })).toBe("38 páginas individuais lidas · 4 reaproveitadas · 2 inacessíveis");
+    expect(textoIndividuais({ lidas: 0, caidas: 0, reaproveitadas: 1 })).toBe("0 páginas individuais lidas · 1 reaproveitada");
+    expect(textoIndividuais({ lidas: 36, caidas: 2 })).toBe("36 páginas individuais lidas · 2 inacessíveis");
+  });
+
+  test("procedência do grupo comum reaproveitado leva leituraDe", () => {
+    const g: ResultadoGrupo = { ...grupoComFonte, reaproveitada: { url: "https://orgao.gov.br", lidaEm: LIDA_EM_16, motivo: "HTTP 403" } };
+    expect(procedenciaDoContato(contato({}), g)).toEqual([{ rotulo: "Nome e cargo", texto: "https://orgao.gov.br", url: "https://orgao.gov.br", lida: true, leituraDe: LIDA_EM_16 }]);
+    expect(procedenciaDoContato(contato({}), grupoComFonte)[0].leituraDe).toBeUndefined();
+  });
+
+  test("procedência por contato: leituraDe na linha do nome (página individual) e na do cargo (geral reaproveitada)", () => {
+    const g: ResultadoGrupo = { grupo: "Ministros de Estado", fonteUrl: "https://www.gov.br/planalto/lista", semFonte: false, contatos: [], novos: [], individuais: { lidas: 36, caidas: 0, reaproveitadas: 2 }, reaproveitada: { url: "https://www.gov.br/planalto/lista", lidaEm: LIDA_EM_16, motivo: "HTTP 429" } };
+    const c: ResultadoContato = {
+      ...contato({}), fonteUrl: "https://www.gov.br/exemplo/ministra", leituraDe: "2026-10-19T10:00:00.000Z",
+      comparacoes: [
+        { campo: "nome", valorPlanilha: "Ana", valorEsperado: "Ana", situacao: "confere", origemValor: "pagina", fonteUrl: "https://www.gov.br/exemplo/ministra" },
+        { campo: "cargo", valorPlanilha: "Ministra", valorEsperado: "Ministra", situacao: "confere", origemValor: "pagina", fonteUrl: "https://www.gov.br/planalto/lista" },
+      ],
+    };
+    expect(procedenciaDoContato(c, g).map((l) => [l.rotulo, l.leituraDe])).toEqual([["Nome", "2026-10-19T10:00:00.000Z"], ["Cargo", LIDA_EM_16]]);
+  });
+
+  test("textoSituacaoDosGrupos omite zeros, põe 'grupo(s)' na primeira parte e sai vazio com tudo zero", () => {
+    expect(textoSituacaoDosGrupos({ gruposSemFonte: 3, gruposFonteInacessivel: 1, gruposViaPesquisaAmpla: 2, gruposReaproveitados: 2 })).toBe("3 grupos sem fonte · 1 inacessível · 2 via IA · 2 com leitura reaproveitada");
+    expect(textoSituacaoDosGrupos({ gruposFonteInacessivel: 1 })).toBe("1 grupo inacessível");
+    expect(textoSituacaoDosGrupos({ gruposViaPesquisaAmpla: 4, gruposReaproveitados: 1 })).toBe("4 grupos via IA · 1 com leitura reaproveitada");
+    expect(textoSituacaoDosGrupos({})).toBe("");
+  });
+
+  test("cartoesDoResumo não ganha cartão novo", () => {
+    expect(cartoesDoResumo({ gruposReaproveitados: 5 }).map((c) => c.rotulo)).toEqual(["Conferem", "Com divergência", "Possível saída", "Não verificados", "Propostas de inclusão", "Endereços a confirmar"]);
+  });
+});
+
+describe("textos da leitura resiliente (spec 2026-10-23 §6)", () => {
+  test("cabeçalhos", () => {
+    expect(textoAlternativa({ url: "https://x", urlPrincipal: "https://p", motivoPrincipal: "HTTP 404" })).toBe("Lida pela URL alternativa; a principal não respondeu (HTTP 404)");
+    expect(textoUrlCaida({ desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" })).toBe("Fonte caída há 2 coletas, desde 19/10: conferir se o endereço mudou");
+    expect(textoMudanca({ lidaEm: "2026-10-16T12:00:00.000Z", trocados: 7, total: 10 })).toBe("Composição mudou: 7 de 10 nomes não estavam na leitura de 16/10; confira");
+    expect(TEXTO_FONTE_PROVISORIA_NOTICIA).toBe("Fonte provisória: notícia");
+    expect(TEXTO_FONTE_PROVISORIA_CAMPANHA).toBe("Fonte provisória: site de campanha");
+  });
+
+  test("textosProvisorias: um texto por tipo presente entre os contatos; true de retrato antigo é notícia (spec 2026-10-26)", () => {
+    const g = (provs: ResultadoContato["provisoria"][]): ResultadoGrupo => ({ grupo: "G", semFonte: false, novos: [], contatos: provs.map((p) => contato(p ? { provisoria: p } : {})) });
+    expect(textosProvisorias(g([undefined, undefined]))).toEqual([]);
+    expect(textosProvisorias(g(["campanha", undefined, "campanha"]))).toEqual(["Fonte provisória: site de campanha"]);
+    expect(textosProvisorias(g([true, "noticia"]))).toEqual(["Fonte provisória: notícia"]);
+    expect(textosProvisorias(g(["campanha", true]))).toEqual(["Fonte provisória: notícia", "Fonte provisória: site de campanha"]);
+  });
+
+  test("textoProvisoriaNaProcedencia", () => {
+    expect(textoProvisoriaNaProcedencia("noticia")).toBe("fonte provisória: notícia");
+    expect(textoProvisoriaNaProcedencia("campanha")).toBe("fonte provisória: site de campanha");
+  });
+
+  test("avisoUrlCaida só com coletas >= 2 e URL presente", () => {
+    const falhas = { "https://a": { desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "x" }, "https://b": { desde: "2026-10-19T12:00:00.000Z", coletas: 1, motivo: "x" } };
+    expect(avisoUrlCaida(falhas, "https://a")).toMatch(/^Fonte caída há 2 coletas/);
+    expect(avisoUrlCaida(falhas, "https://b")).toBeUndefined();
+    expect(avisoUrlCaida(undefined, "https://a")).toBeUndefined();
+    expect(avisoUrlCaida(falhas, undefined)).toBeUndefined();
+  });
+
+  test("textoIndividuais não repete as provisórias (o cabeçalho já diz 'Fonte provisória: notícia')", () => {
+    expect(textoIndividuais({ lidas: 24, caidas: 1, provisorias: 2 })).toBe("24 páginas individuais lidas · 1 inacessível");
+    expect(textoIndividuais({ lidas: 24, caidas: 0, provisorias: 1 })).toBe("24 páginas individuais lidas");
+  });
+
+  test("textoSituacaoDosGrupos com mudança e URLs caídas", () => {
+    expect(textoSituacaoDosGrupos({ gruposSemFonte: 3, gruposComMudanca: 1, urlsCaidasRepetidas: 2 })).toBe("3 grupos sem fonte · 1 com mudança de composição · 2 URLs caídas há 2 ou mais coletas");
+    expect(textoSituacaoDosGrupos({ urlsCaidasRepetidas: 1 })).toBe("1 URL caída há 2 ou mais coletas");
+  });
+
+  test("procedência do contato: alternativa, provisória e URL caída", () => {
+    const PRINCIPAL = "https://www.gov.br/exemplo/ministra";
+    const ALTERNATIVA = "https://www.gov.br/exemplo/gabinete/ministra-1";
+    const g: ResultadoGrupo = { grupo: "Governadores", semFonte: false, contatos: [], novos: [], individuais: { lidas: 1, caidas: 0, provisorias: 1 } };
+    const c = contato({
+      fonteUrl: ALTERNATIVA,
+      alternativa: { url: ALTERNATIVA, urlPrincipal: PRINCIPAL, motivoPrincipal: "HTTP 404" },
+      provisoria: true,
+      comparacoes: [{ ...confere("nome", "pagina", "Ana"), fonteUrl: ALTERNATIVA }],
+    });
+    // Quem entra em `falhas` é a principal: a alternativa respondeu.
+    const falhas = { [PRINCIPAL]: { desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" } };
+    const linhas = procedenciaDoContato(c, g, falhas);
+    // `provisoria: true` de retrato antigo é lido como notícia.
+    expect(linhas[0]).toMatchObject({ rotulo: "Nome", alternativa: true, provisoria: "noticia", caida: expect.stringMatching(/^Fonte caída há 2 coletas/) });
+    expect(procedenciaDoContato({ ...c, provisoria: "campanha" }, g)[0].provisoria).toBe("campanha");
+    // Sem `falhas` (retrato antigo) não há aviso; sem alternativa nem provisória, nada a mais.
+    expect(procedenciaDoContato(c, g)[0].caida).toBeUndefined();
+    expect(procedenciaDoContato(contato({ fonteUrl: PRINCIPAL, comparacoes: [{ ...confere("nome", "pagina", "Ana"), fonteUrl: PRINCIPAL }] }), g, { [PRINCIPAL]: { ...falhas[PRINCIPAL], coletas: 1 } })).toEqual([
+      { rotulo: "Nome", texto: PRINCIPAL, url: PRINCIPAL, lida: true },
+    ]);
+  });
+
+  test("procedência do grupo comum: alternativa e URL caída pela fonteUrl do grupo", () => {
+    const g: ResultadoGrupo = { ...grupoComFonte, alternativa: { url: "https://alt.gov.br", urlPrincipal: "https://orgao.gov.br", motivoPrincipal: "HTTP 404" } };
+    const falhas = { "https://orgao.gov.br": { desde: "2026-10-19T12:00:00.000Z", coletas: 3, motivo: "HTTP 404" } };
+    expect(procedenciaDoContato(contato({}), g, falhas)[0]).toMatchObject({ rotulo: "Nome e cargo", alternativa: true, caida: "Fonte caída há 3 coletas, desde 19/10: conferir se o endereço mudou" });
+  });
+});
+
+describe("tratamento e endereçamento pela maioria dos pares (spec 2026-10-30 §3.4)", () => {
+  const OBSERVACAO = "Pela maioria dos pares: 6 de 7 no grupo usam Senhor";
+  const pares = (situacao: "confere" | "divergente", planilha: string): ComparacaoCampo => ({
+    campo: "tratamento", valorPlanilha: planilha, valorEsperado: "Senhor", situacao, origemValor: "pares", observacao: OBSERVACAO,
+  });
+
+  test("divergente dos pares: etiqueta 'Tratamento diverge' explicada pela observação; cartão com a maioria e o valor a copiar", () => {
+    // Arrange
+    const c = contato({ semaforo: "amarelo", comparacoes: [pares("divergente", "Doutor")] });
+
+    // Act
+    const etiqueta = etiquetasDoContato(c, grupoComFonte).find((e) => e.campo === "tratamento");
+    const d = cartao(c, "tratamento");
+
+    // Assert
+    expect(etiqueta).toMatchObject({ texto: "Tratamento diverge", tom: "atencao", explicacao: OBSERVACAO });
+    expect(d).toMatchObject({ origem: "Maioria dos pares diz", valorReferencia: "Senhor", copiavel: "Senhor", observacao: OBSERVACAO });
+  });
+
+  test("confere pelos pares: etiqueta 'Tratamento confere' explicada pela observação, sem valor a copiar", () => {
+    const c = contato({ comparacoes: [pares("confere", "Senhor")] });
+    const etiqueta = etiquetasDoContato(c, grupoComFonte).find((e) => e.campo === "tratamento");
+    expect(etiqueta).toMatchObject({ texto: "Tratamento confere", tom: "ok", explicacao: OBSERVACAO });
+    expect(cartao(c, "tratamento").copiavel).toBeUndefined();
+  });
+
+  test("protocolo fixo do GT: o cartão diz 'Regra do GT diz' e não 'Tabela de protocolo diz'", () => {
+    const c = contato({ comparacoes: [diverge("tratamento", "regra_gt", "Senhor", "Excelentíssimo Senhor")] });
+    expect(cartao(c, "tratamento")).toMatchObject({ origem: "Regra do GT diz", valorReferencia: "Excelentíssimo Senhor", copiavel: "Excelentíssimo Senhor" });
+  });
+
+  test("comparação da tabela de protocolo não ganha observação no cartão", () => {
+    const c = contato({ comparacoes: [diverge("tratamento", "protocolo", "Doutor", "Senhor")] });
+    expect(cartao(c, "tratamento")).toMatchObject({ origem: "Tabela de protocolo diz" });
+    expect(cartao(c, "tratamento").observacao).toBeUndefined();
+  });
+});
+
+describe("nome acima do limite do Posse (STM, spec 2026-11-04 §3.5)", () => {
+  const TEXTO_COMPLETO = "Nome com 51 caracteres, acima do limite de 50 do Posse: abreviar o sobrenome, nunca a patente (regra do GT de 04/11)";
+  const limite: ComparacaoCampo = {
+    campo: "nome", valorPlanilha: "A".repeat(51), situacao: "divergente", origemValor: "coerencia",
+    achado: "nome_acima_do_limite", observacao: TEXTO_COMPLETO,
+  };
+  const c = contato({ semaforo: "amarelo", comparacoes: [confere("nome", "pagina"), limite] });
+
+  test("a etiqueta curta aparece ao lado de 'Nome confere', com o texto completo na explicação", () => {
+    const etiquetas = etiquetasDoContato(c, grupoComFonte).filter((e) => e.campo === "nome");
+    expect(etiquetas).toEqual([
+      expect.objectContaining({ texto: "Nome confere", tom: "ok" }),
+      { campo: "nome", texto: "Nome com 51 caracteres, acima do limite de 50 do Posse", tom: "atencao", explicacao: TEXTO_COMPLETO },
+    ]);
+  });
+
+  test("a situação fica em atenção e o detalhe traz o texto completo em coerencias", () => {
+    expect(situacaoDoContato(c, grupoComFonte).tom).toBe("atencao");
+    const nome = detalhesDoContato(c, grupoComFonte).find((d) => d.campo === "nome");
+    expect(nome?.coerencias).toEqual([TEXTO_COMPLETO]);
+    expect(nome?.etiqueta?.texto).toBe("Nome confere");
+  });
+
+  test("possível saída também mostra a etiqueta do limite", () => {
+    const saida = contato({ semaforo: "vermelho", possivelSaida: true, comparacoes: [limite] });
+    expect(textos(saida, grupoComFonte)).toContain("Nome com 51 caracteres, acima do limite de 50 do Posse");
   });
 });

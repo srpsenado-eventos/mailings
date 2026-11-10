@@ -1,7 +1,8 @@
-import { normalizarTexto } from "@/lib/normalize";
+import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import { sugerirGrupos } from "@/lib/match";
 import { CATALOGO } from "@/data/catalogo";
-import type { FonteCatalogo, GrupoCadastro, GrupoCatalogo } from "@/lib/types";
+import type { ContatoPlanilha, FonteCatalogo, FonteIndividual, GrupoCadastro, GrupoCatalogo } from "@/lib/types";
+import { ufDoContato } from "@/lib/uf";
 
 /**
  * Quebra o rótulo "Grupo" da planilha em segmentos normalizados.
@@ -10,7 +11,7 @@ import type { FonteCatalogo, GrupoCadastro, GrupoCatalogo } from "@/lib/types";
  * Sessão Especial; ...; Ministros do STF"). Cada segmento é um grupo candidato
  * que pode ter fonte oficial cadastrada.
  */
-function segmentarGrupo(grupoNome: string): string[] {
+export function segmentarGrupo(grupoNome: string): string[] {
   return grupoNome
     .split(";")
     .map((s) => normalizarTexto(s))
@@ -20,7 +21,7 @@ function segmentarGrupo(grupoNome: string): string[] {
 const TAMANHO_MIN_SEGMENTO = 3;
 
 /** Casa um nome de grupo normalizado contra um segmento da planilha. */
-function casaSegmento(nomeNorm: string, seg: string): boolean {
+export function casaSegmento(nomeNorm: string, seg: string): boolean {
   if (seg.length < TAMANHO_MIN_SEGMENTO) return false; // guarda contra "pr" casar "presidente..."
   if (nomeNorm === seg) return true;
   // Contenção: a sigla curta da planilha ("cnj") cabe no nome formal cadastrado
@@ -64,8 +65,12 @@ export interface FonteResolvida {
   grupoCanonico?: string;
   /** TODAS as fontes ativas do grupo dono da primária, na ordem do catálogo. A 1ª é a primária. */
   fontes: FonteCatalogo[];
+  /** Fontes individuais ativas do grupo dono, na ordem do catálogo. Vazio quando o grupo não tem. */
+  fontesIndividuais: readonly FonteIndividual[];
   /** Faixa de UFs do grupo casado, quando cadastrada. Filtra proposta de inclusão. */
   ufs?: readonly string[];
+  /** O grupo casado não recebe proposta de inclusão (regra do GT de 05/11). */
+  semInclusao?: true;
   /** `responsavel1` do grupo casado, quando cadastrado. Só o nome. */
   responsavel?: string;
   /** Quando nada casa: nomes cadastrados mais próximos, para orientar o usuário. */
@@ -98,11 +103,11 @@ export function resolverGrupoEFonte(
   catalogo: readonly GrupoCatalogo[] = CATALOGO,
 ): FonteResolvida {
   const segmentos = segmentarGrupo(grupoNome);
-  if (segmentos.length === 0) return { fontes: [], sugestoes: [] };
+  if (segmentos.length === 0) return { fontes: [], fontesIndividuais: [], sugestoes: [] };
 
   const casados = gruposQueCasam(catalogo, segmentos);
   if (casados.length === 0) {
-    return { fontes: [], sugestoes: sugerirGrupos(segmentos, catalogo.map((g) => g.nome)) };
+    return { fontes: [], fontesIndividuais: [], sugestoes: sugerirGrupos(segmentos, catalogo.map((g) => g.nome)) };
   }
 
   // O rótulo da planilha pode casar VÁRIOS grupos ("Ministros do STF; Ministros do TSE",
@@ -110,20 +115,44 @@ export function resolverGrupoEFonte(
   // fontes do grupo DONO da primária — juntar as páginas de órgãos diferentes numa
   // composição só inventaria composição e faria autoridade de um órgão "confirmar" a de
   // outro. Os demais casados continuam servindo só para escolher qual é esse dono.
-  const dono = casados.find((g) => g.fontes.some((f) => f.ativo));
+  const temFonteAtiva = (g: GrupoCatalogo) =>
+    g.fontes.some((f) => f.ativo) || (g.fontesIndividuais ?? []).some((f) => f.ativo);
+  const dono = casados.find(temFonteAtiva);
   const grupo = dono ?? casados[0];
   const fontes = grupo.fontes.filter((f) => f.ativo);
   return {
     grupoCanonico: grupo.nome,
     fontes,
+    fontesIndividuais: (grupo.fontesIndividuais ?? []).filter((f) => f.ativo),
     ...(grupo.ufs ? { ufs: grupo.ufs } : {}),
+    ...(grupo.semInclusao ? { semInclusao: true as const } : {}),
     ...(grupo.responsavel1 ? { responsavel: grupo.responsavel1 } : {}),
     sugestoes: [],
   };
 }
 
+/**
+ * A fonte individual de UM contato (spec 2026-10-15 §4.1). Chave por UF: a UF do contato
+ * (`ufDoContato`). Chave por nome: igualdade após `normalizarNome`, a mesma régua da
+ * comparação do campo Nome — nome parcial não casa, e o remédio é alinhar o Contatos ou a
+ * chave. Só fontes ativas; a chave é única por grupo, então a primeira que casa é a única.
+ */
+export function fonteIndividualDe(
+  contato: ContatoPlanilha,
+  fontes: readonly FonteIndividual[],
+): FonteIndividual | undefined {
+  const uf = ufDoContato(contato);
+  const nome = normalizarNome(contato.nome);
+  return fontes.find((f) => {
+    if (!f.ativo) return false;
+    if ("uf" in f.chave) return uf !== undefined && f.chave.uf === uf;
+    return nome.length > 0 && normalizarNome(f.chave.nome) === nome;
+  });
+}
+
 function mapearGrupo(grupo: GrupoCatalogo): GrupoCadastro {
   const fonteAtiva = grupo.fontes.find((f) => f.ativo);
+  const individuais = (grupo.fontesIndividuais ?? []).filter((f) => f.ativo).length;
   return {
     nome: grupo.nome,
     responsavel1: grupo.responsavel1,
@@ -133,7 +162,9 @@ function mapearGrupo(grupo: GrupoCatalogo): GrupoCadastro {
     emailResp2: grupo.emailResp2,
     emailBackup: grupo.emailBackup,
     fonteUrl: fonteAtiva?.url,
-    temFonte: fonteAtiva !== undefined,
+    temFonte: fonteAtiva !== undefined || individuais > 0,
+    fontesIndividuais: individuais,
+    ...(fonteAtiva?.campos ? { camposFontePrimaria: fonteAtiva.campos } : {}),
   };
 }
 

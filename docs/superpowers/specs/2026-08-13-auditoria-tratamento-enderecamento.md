@@ -35,6 +35,8 @@ Contagem da aba, que o gerador precisa reproduzir exatamente:
  =38 entradas reais
 ```
 
+**Adendo de 2026-11-04:** a fonte passa a ser a tabela v02 (`PP27_TabelaTratamentos_v02 - REGRA GERAL.xlsx`, copiada para o caminho fixo do gerador). Mudança: Governador, Prefeito, Presidente de Assembleia Legislativa / Câmara Legislativa e Presidente de Câmara Municipal passam a 'Senhor(a)' na nominata e no vocativo; o endereçamento não muda. Versão anterior guardada como `Posse2027_TabelaTratamentos_v01-2026-09-15.xlsx`.
+
 ## Decisões do usuário
 
 | Questão | Decisão |

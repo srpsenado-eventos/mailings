@@ -1,8 +1,10 @@
 import * as cheerio from "cheerio";
 import { Agent } from "undici";
-import { normalizarTexto, nucleoDeNome } from "@/lib/normalize";
+import { PDFParse } from "pdf-parse";
+import { normalizarNome, normalizarTexto, nucleoDeNome } from "@/lib/normalize";
 import { CARGOS } from "@/lib/cargos";
-import type { ConteudoFonte, PessoaSite, ExtracaoTabela } from "@/lib/types";
+import type { ConteudoFonte, PessoaSite, ExtracaoTabela, CliqueAntes } from "@/lib/types";
+import { colherDestaquesPorLinha, comDestaque, type DestaquesPorLinha } from "@/lib/scrape-destaque";
 
 export class ScrapeError extends Error {
   constructor(
@@ -85,9 +87,37 @@ const ABERTURAS_DE_CARGO = new Set([
   "titular", "substituto", "substituta", "interino", "interina", "adjunto", "adjunta",
 ]);
 
+/**
+ * Palavras do léxico de cargos. A entrada composta ("vice-presidente") entra pelas partes,
+ * porque o texto é comparado quebrado também no hífen.
+ */
+const PALAVRAS_DE_CARGO = new Set<string>(CARGOS.flatMap((c) => c.split("-")));
+
+/** Prefixos que não mudam o papel: "subprocurador", "vicepresidente". */
+const PREFIXO_DE_CARGO = /^(sub|vice)(?=[a-z])/;
+
+/**
+ * Um token é cargo quando, sem o prefixo "sub" ou "vice", é palavra do léxico ou o seu
+ * plural ("ministros", "conselheiros", "embaixadores").
+ */
+function ehTokenDeCargo(token: string): boolean {
+  const base = token.replace(PREFIXO_DE_CARGO, "");
+  return [base, base.replace(/s$/, ""), base.replace(/es$/, "")].some((t) => PALAVRAS_DE_CARGO.has(t));
+}
+
+/**
+ * O trecho cita um cargo do léxico, comparado por TOKEN inteiro (quebrando em tudo o que
+ * não é letra: espaço, hífen, barra, parêntese, como em "Ministro(a)" e
+ * "ministro/secretário"). A busca por substring casava o nome do órgão: "Sobre a Corregedoria" contém
+ * "corregedor" e virava cargo, um "novo" falso no TCU. "Corregedoria", "Diretoria",
+ * "Procuradoria", "Defensoria", "Ouvidoria" e "Prefeitura" não são cargo;
+ * "Procurador-Geral", "Ministro-Substituto", "Subprocurador", "Vice-Presidente" e
+ * "Ex-Ministro" são.
+ */
 function contemCargo(valor: string): boolean {
-  const norm = normalizarTexto(valor);
-  return CARGOS.some((c) => norm.includes(c));
+  return normalizarTexto(valor)
+    .split(/[^a-z]+/)
+    .some((token) => token !== "" && ehTokenDeCargo(token));
 }
 
 /** Trecho curto o bastante para ser rótulo de cargo, e que cita um cargo do léxico. */
@@ -119,16 +149,45 @@ function ehTrechoDeCargo(valor: string): boolean {
   return ehCargoCurto(valor) || ehCargoPorInteiro(valor);
 }
 
+/**
+ * Linha de chamada de link ("Ver Galeria de Governadores", "Saiba mais", "Clique aqui"): abre com
+ * verbo no imperativo e cita um cargo só como assunto do link. Nunca é cargo nem nome de pessoa.
+ */
+const VERBOS_DE_CHAMADA = new Set(["ver", "veja", "acesse", "saiba", "conheca", "clique"]);
+function ehLinhaDeChamada(valor: string): boolean {
+  const primeiro = normalizarTexto(valor).split(" ")[0] ?? "";
+  return VERBOS_DE_CHAMADA.has(primeiro);
+}
+
 /** Trecho com cara de nome próprio: 2+ tokens significativos, todos capitalizados. */
 function pareceNome(valor: string): boolean {
   if (valor.length < 5 || valor.length > 70) return false;
   if (valor.includes(":") || /\d/.test(valor)) return false;
-  if (ehRotulo(valor) || ehTrechoDeCargo(valor)) return false;
+  if (ehRotulo(valor) || ehTrechoDeCargo(valor) || ehLinhaDeChamada(valor)) return false;
   const tokens = valor.split(" ").filter(Boolean);
   if (tokens.length < 2) return false;
   if (ABERTURAS_DE_CARGO.has(normalizarTexto(tokens[0]))) return false;
   const significativos = tokens.filter((t) => !CONECTOR.test(t));
   return significativos.length >= 2 && significativos.every((t) => /^[A-ZÀ-Ý]/.test(t));
+}
+
+/** Segunda parte de um título composto ("Ministro-Substituto", "Secretário-Adjunto"). */
+const QUALIFICADORES_DE_TITULO = new Set([
+  "substituto", "substituta", "adjunto", "adjunta", "auxiliar", "interino", "interina", "titular",
+]);
+
+/**
+ * Tira do começo da linha um título composto `<cargo>-<qualificador>` ("Ministro-Substituto
+ * Weder de Oliveira" → "Weder de Oliveira"), como o tratamento de uma palavra já é tirado.
+ * Sem isto os três substitutos do TCU eram linhas de CARGO, não de pessoa: saíam da
+ * composição e ainda votavam a orientação da página.
+ */
+function semTituloComposto(linha: string): string {
+  const [primeiro = "", ...resto] = linha.trim().split(/\s+/);
+  const partes = normalizarTexto(primeiro).split("-");
+  const ehComposto =
+    partes.length === 2 && PALAVRAS_DE_CARGO.has(partes[0]) && QUALIFICADORES_DE_TITULO.has(partes[1]);
+  return ehComposto ? resto.join(" ") : linha;
 }
 
 /**
@@ -141,7 +200,7 @@ function pareceNome(valor: string): boolean {
  */
 function nomeDaLinha(linha: string): string | undefined {
   if (pareceNome(linha)) return linha;
-  const nucleo = nucleoDeNome(linha);
+  const nucleo = nucleoDeNome(semTituloComposto(linha));
   return pareceNome(nucleo) ? nucleo : undefined;
 }
 
@@ -154,20 +213,51 @@ function ehNome(linha: string): boolean {
  * Fulano de Tal" contém "Ministro" e mesmo assim é a linha do nome.
  */
 function ehCargo(linha: string): boolean {
-  return ehTrechoDeCargo(linha) && !ehNome(linha);
+  return ehTrechoDeCargo(linha) && !ehLinhaDeChamada(linha) && !ehNome(linha);
+}
+
+/**
+ * Marca interna de linha que veio de um título (h1..h6). Caractere de uso privado:
+ * nunca aparece em página real, e sai do texto antes de qualquer uso.
+ */
+const MARCA_TITULO = "\uE000";
+const TAGS_TITULO = "h1,h2,h3,h4,h5,h6";
+
+interface LinhasDaPagina {
+  linhas: string[];
+  /** Índices, em `linhas`, das que vieram de um título. */
+  titulos: ReadonlySet<number>;
 }
 
 /** Quebra o corpo em linhas limpas, inserindo separador entre blocos antes do .text(). */
-function extrairLinhas($: RaizCheerio): string[] {
+function extrairLinhas($: RaizCheerio): LinhasDaPagina {
+  // `<br>` primeiro: o título pode ter mais de uma linha, e cada uma leva a marca.
+  // O título vira texto plano marcado ANTES dos separadores: um `<a>` dentro do h2 geraria
+  // "\n" entre a marca e o texto e a linha do título ficaria vazia.
   $("br").replaceWith("\n");
+  $(TAGS_TITULO).each((_, el) => {
+    const alvo = $(el);
+    alvo.text(
+      alvo
+        .text()
+        .split("\n")
+        .map((l) => MARCA_TITULO + l)
+        .join("\n"),
+    );
+  });
   $(TAGS_SEPARAR).each((_, el) => {
     $(el).prepend("\n").append("\n");
   });
-  return $("body")
-    .text()
-    .split("\n")
-    .map((l) => l.replace(/\s+/g, " ").trim())
-    .filter((l) => l.length > 0);
+  const linhas: string[] = [];
+  const titulos = new Set<number>();
+  for (const bruta of $("body").text().split("\n")) {
+    const ehTitulo = bruta.includes(MARCA_TITULO);
+    const linha = bruta.replaceAll(MARCA_TITULO, "").replace(/\s+/g, " ").trim();
+    if (linha.length === 0) continue;
+    if (ehTitulo) titulos.add(linhas.length);
+    linhas.push(linha);
+  }
+  return { linhas, titulos };
 }
 
 /** Ordinal que abre a linha em lista numerada ("01 - Fulano de Tal"). */
@@ -201,6 +291,38 @@ function pessoaEmLinhaUnica(linha: string): PessoaSite | undefined {
 type OrientacaoDoCargo = "depois" | "antes";
 
 /**
+ * Como a página publica o cargo, medido nela mesma. Um título (h1..h6) logo antes de UM
+ * nome é título de seção ("Ministros" acima da lista do TCU) e não conta como cargo; só
+ * quando a página repete o título antes de nomes seguidos (o STM publica o cargo em `h5`,
+ * e o nome em `h6`) o título é o próprio cargo, e então vale como tal.
+ */
+interface LeituraDeCargo {
+  orientacao: OrientacaoDoCargo;
+  /** A página publica o cargo como título repetido acima do nome (STM). */
+  tituloEhCargo: boolean;
+}
+
+/**
+ * Quantos pares consecutivos a página precisa ter para o título contar como cargo. Um par
+ * consecutivo = dois nomes seguidos, cada um logo abaixo de um título-cargo (STM: h5 cargo
+ * + h6 nome, repetido). Título de seção abre uma lista de muitos nomes; título-cargo se
+ * repete antes de cada nome.
+ */
+const MIN_PARES_TITULO_CARGO = 1;
+
+/**
+ * Linha de cargo espremida entre dois nomes: pode ser de qualquer um dos dois e não diz
+ * nada sobre a orientação. Numa lista simples "nome, cargo, nome, cargo" todo cargo do meio
+ * é assim; o voto sai só das pontas sem ambiguidade (o primeiro cargo acima do primeiro
+ * nome, ou o último cargo abaixo do último nome), e o empate mantém "depois". Foi o que
+ * virou a página real do TCU: uma linha "cargo" logo acima de "Composição do TCU" dava o
+ * terceiro voto "antes" contra dois "depois", que também eram ambíguos.
+ */
+function cargoEntreNomes(linhas: string[], j: number): boolean {
+  return j > 0 && j + 1 < linhas.length && ehNome(linhas[j - 1]) && ehNome(linhas[j + 1]);
+}
+
+/**
  * Mede a própria página antes de montar as pessoas. STF, STJ, STM, TST, TSE,
  * Câmara e Defensoria põem o nome primeiro e o cargo embaixo; a página de
  * Ministros de Estado do Planalto faz o contrário — o cargo em negrito e o nome
@@ -208,26 +330,67 @@ type OrientacaoDoCargo = "depois" | "antes";
  * cargo do ministro SEGUINTE, e um homem chegava a sair rotulado "Ministra".
  * Vence o padrão majoritário da página; empate ou nenhuma adjacência mantém
  * "depois", que é o comportamento já validado pelas outras fontes.
+ * Título nunca conta como cargo "depois"; como cargo "antes", só quando se repete.
+ * Linha de cargo comum entre dois nomes não vota (ver `cargoEntreNomes`).
  */
-function orientacaoDoCargo(linhas: string[]): OrientacaoDoCargo {
+function orientacaoDoCargo(linhas: string[], titulos: ReadonlySet<number>): LeituraDeCargo {
   let antes = 0;
+  let antesPorTitulo = 0;
+  // Ordem do nome entre os nomes da página (e não a distância em linhas: no STM há
+  // data de nomeação e outras linhas entre um nome e o título seguinte).
+  let ordemDoNome = -1;
+  let ultimaOrdemAposTitulo = Number.NEGATIVE_INFINITY;
+  let paresDeTitulo = 0;
   let depois = 0;
   for (let i = 0; i < linhas.length; i++) {
     if (pessoaEmLinhaUnica(linhas[i]) !== undefined) continue;
     if (!ehNome(linhas[i])) continue;
-    if (i > 0 && ehCargo(linhas[i - 1])) antes++;
-    if (i + 1 < linhas.length && ehCargo(linhas[i + 1])) depois++;
+    ordemDoNome++;
+    if (i > 0 && ehCargo(linhas[i - 1])) {
+      if (titulos.has(i - 1)) {
+        antesPorTitulo++;
+        if (ultimaOrdemAposTitulo === ordemDoNome - 1) paresDeTitulo++;
+        ultimaOrdemAposTitulo = ordemDoNome;
+      } else if (!cargoEntreNomes(linhas, i - 1)) {
+        antes++;
+      }
+    }
+    const proxima = i + 1;
+    if (
+      proxima < linhas.length &&
+      !titulos.has(proxima) &&
+      ehCargo(linhas[proxima]) &&
+      !linhaRotuladaComOutraPessoa(linhas[proxima]) &&
+      !cargoEntreNomes(linhas, proxima)
+    ) {
+      depois++;
+    }
   }
-  return antes > depois ? "antes" : "depois";
+  const tituloEhCargo = paresDeTitulo >= MIN_PARES_TITULO_CARGO;
+  const totalAntes = tituloEhCargo ? antes + antesPorTitulo : antes;
+  return { orientacao: totalAntes > depois ? "antes" : "depois", tituloEhCargo };
+}
+
+/**
+ * Linha "Rótulo: Fulano" (Sergipe: "Secretário Especial de Gabinete: Tiago ..."): o cargo
+ * pertence à pessoa que vem depois dos dois-pontos, nunca ao nome de cima. Só vale quando o resto
+ * é mesmo um nome: "Cargo: Ministro do Tribunal" ou "Endereço: ..." não deslocam cargo de ninguém.
+ */
+function linhaRotuladaComOutraPessoa(linha: string): boolean {
+  const resto = /^[^:]{1,80}:\s*(\S.*)$/.exec(linha)?.[1]?.trim();
+  return resto !== undefined && pareceNome(resto) && !ehTrechoDeCargo(resto);
 }
 
 /** Janela curta para frente: o cargo vem logo abaixo do nome. */
-function indiceDoCargoDepois(linhas: string[], i: number): number | undefined {
+function indiceDoCargoDepois(linhas: string[], i: number, titulos: ReadonlySet<number>): number | undefined {
   for (let j = i + 1; j < Math.min(i + 3, linhas.length); j++) {
+    // Um título abre outra seção: "Ministros-Substitutos" não é o cargo do último ministro
+    // da lista anterior, e "Corregedoria" não é o cargo do item de menu que o antecede.
+    if (titulos.has(j)) break;
     // a linha da PRÓXIMA pessoa encerra a janela: no STJ ela cita um cargo
     // ("Fulano - Diretor-Geral da ENFAM") e era adotada como cargo desta.
     if (pessoaEmLinhaUnica(linhas[j]) !== undefined || ehNome(linhas[j])) break;
-    if (ehCargo(linhas[j])) return j;
+    if (ehCargo(linhas[j])) return linhaRotuladaComOutraPessoa(linhas[j]) ? undefined : j;
   }
   return undefined;
 }
@@ -235,38 +398,48 @@ function indiceDoCargoDepois(linhas: string[], i: number): number | undefined {
 /**
  * Só a linha imediatamente anterior, e só enquanto nenhuma outra pessoa já a
  * tiver tomado: numa página cargo-antes-do-nome um mesmo título não pode servir
- * a dois nomes.
+ * a dois nomes. Título de seção ("Ministros") não é cargo; título repetido (STM) é.
  */
 function indiceDoCargoAntes(
   linhas: string[],
   i: number,
   consumidas: ReadonlySet<number>,
+  titulos: ReadonlySet<number>,
+  tituloEhCargo: boolean,
 ): number | undefined {
   const j = i - 1;
   if (j < 0 || consumidas.has(j)) return undefined;
-  return ehCargo(linhas[j]) ? j : undefined;
+  if (titulos.has(j) && !tituloEhCargo) return undefined;
+  return ehCargo(linhas[j]) && !linhaRotuladaComOutraPessoa(linhas[j]) ? j : undefined;
 }
 
-/** Segmenta linhas em pessoas: linha-nome + cargo adjacente, do lado que a página usa. */
-function segmentarPessoas(linhas: string[]): PessoaSite[] {
+/**
+ * Segmenta linhas em pessoas: linha-nome + cargo adjacente, do lado que a página usa. Com
+ * `destaques` (fonte `nomeEmDestaque`), cada pessoa leva as partes em negrito da sua linha.
+ */
+function segmentarPessoas(
+  linhas: string[],
+  titulos: ReadonlySet<number>,
+  destaques?: DestaquesPorLinha,
+): PessoaSite[] {
   const pessoas: PessoaSite[] = [];
-  const orientacao = orientacaoDoCargo(linhas);
+  const { orientacao, tituloEhCargo } = orientacaoDoCargo(linhas, titulos);
   const consumidas = new Set<number>();
   for (let i = 0; i < linhas.length; i++) {
     const emLinhaUnica = pessoaEmLinhaUnica(linhas[i]);
     if (emLinhaUnica) {
-      pessoas.push(emLinhaUnica);
+      pessoas.push(comDestaque(emLinhaUnica, linhas[i], destaques));
       continue;
     }
     const nome = nomeDaLinha(linhas[i]);
     if (nome === undefined) continue;
     const indiceCargo =
       orientacao === "antes"
-        ? indiceDoCargoAntes(linhas, i, consumidas)
-        : indiceDoCargoDepois(linhas, i);
+        ? indiceDoCargoAntes(linhas, i, consumidas, titulos, tituloEhCargo)
+        : indiceDoCargoDepois(linhas, i, titulos);
     if (indiceCargo !== undefined) consumidas.add(indiceCargo);
     const cargo = indiceCargo === undefined ? undefined : linhas[indiceCargo];
-    pessoas.push({ nome, cargo, contexto: linhas[i] });
+    pessoas.push(comDestaque({ nome, cargo, contexto: linhas[i] }, linhas[i], destaques));
   }
   return pessoas;
 }
@@ -296,6 +469,9 @@ const PALAVRAS_MOLDURA =
  */
 const MAX_FRACAO_MOLDURA = 0.8;
 
+/** Marcação do conteúdo principal da página: o bloco que a contém nunca é moldura. */
+const CONTEUDO_PRINCIPAL = "main, [role=main]";
+
 function tamanhoDoTexto(texto: string): number {
   return texto.replace(/\s+/g, " ").trim().length;
 }
@@ -314,28 +490,219 @@ function removerMoldura($: RaizCheerio): void {
       PALAVRAS_MOLDURA.test(marcas);
     if (!ehMoldura) return;
     if (tamanhoDoTexto(alvo.text()) / total >= MAX_FRACAO_MOLDURA) return;
+    // Bloco que contém o conteúdo principal não é moldura, por menor que seja a fração. A
+    // página do PGR (Plone) rendeu 112 caracteres e nenhuma pessoa em 23/10; a causa provável,
+    // reproduzida em tests/fixtures/mpf-pgr.html, é o miolo dentro do bloco do menu lateral
+    // ("menu-lateral"), que o menu principal e o rodapé deixam abaixo de 80% do texto.
+    // O próprio conteúdo principal também nunca é moldura: na página real do PGR (27/10) o
+    // miolo é `<main class="row row-offcanvas ...">`, e "offcanvas" apagava o main inteiro.
+    if (alvo.is(CONTEUDO_PRINCIPAL) || alvo.find(CONTEUDO_PRINCIPAL).length > 0) return;
     alvo.remove();
   });
 }
 
+/**
+ * Caracteres que encerram, para trás, o trecho em que se procura o nome antes do marcador.
+ * O parêntese entra porque o próprio marcador do TST é "(convocado)".
+ */
+const SEPARADORES_DO_MARCADOR = /[·,;:(|]/;
+/** Palavra que pode compor nome próprio: começa em maiúscula e só tem letras, apóstrofo ou hífen. */
+const PALAVRA_DE_NOME = /^[A-ZÀ-Ý][\p{L}'’-]*$/u;
+/**
+ * Inicial abreviada ("B." em "João B. Silva"): faz parte do nome, mas não conta como parte
+ * significativa. Sem ela o nome parava antes da inicial, sobrava só "Silva" e o convocado sumia.
+ */
+const INICIAL_DO_NOME = /^[A-ZÀ-Ý]\.$/;
+
+/** Palavra de cargo, inclusive composta ("Vice-Presidente", "Procurador-Geral"). */
+function ehPalavraDeCargo(palavra: string): boolean {
+  return normalizarTexto(palavra)
+    .split("-")
+    .some((parte) => parte !== "" && ehTokenDeCargo(parte));
+}
+
+/** O que o marcador acrescenta ao cargo: "(convocado)" → "convocado"; "**" → nada. */
+function sufixoDoMarcador(marcador: string): string {
+  return marcador.replace(/[()*]/g, "").trim();
+}
+
+/**
+ * Qualificadores que, logo depois da palavra de cargo, continuam o cargo e não abrem o nome
+ * ("Desembargador Federal Olindo Menezes", "Desembargadora do Trabalho Fulana Silva"). Os
+ * convocados do STJ vêm em boa parte dos TRFs; sem isto o nome saía "Federal Olindo Menezes",
+ * não casava o contato e virava possível saída falsa e "novo" falso. Formas normalizadas.
+ */
+const QUALIFICADORES_DO_CARGO: readonly (readonly string[])[] = [
+  ["federal"], ["do", "trabalho"], ["substituto"], ["substituta"], ["convocado"], ["convocada"],
+];
+
+/** Posição logo depois dos qualificadores do cargo que começam em `inicio` (podem ser vários seguidos). */
+function depoisDosQualificadores(palavras: readonly string[], inicio: number): number {
+  let i = inicio;
+  for (;;) {
+    const qualificador = QUALIFICADORES_DO_CARGO.find((q) =>
+      q.every((parte, k) => i + k < palavras.length && normalizarTexto(palavras[i + k]) === parte),
+    );
+    if (!qualificador) return i;
+    i += qualificador.length;
+  }
+}
+
+/** Onde começa o nome que fecha `palavras` e a palavra de cargo que o antecede, se houver. */
+interface LimitesDoNome {
+  inicio: number;
+  palavraDeCargo?: string;
+}
+
+/** Nome: maiúsculas e conectivos minúsculos do fim para trás, parando no cargo. */
+function limitesDoNome(palavras: readonly string[]): LimitesDoNome {
+  let inicio = palavras.length;
+  while (inicio > 0) {
+    const palavra = palavras[inicio - 1];
+    const conectivoMinusculo = CONECTOR.test(palavra) && palavra === palavra.toLowerCase();
+    const ehDoNome = PALAVRA_DE_NOME.test(palavra) || INICIAL_DO_NOME.test(palavra);
+    if (!conectivoMinusculo && (!ehDoNome || ehPalavraDeCargo(palavra))) break;
+    inicio -= 1;
+  }
+  const anterior = inicio > 0 ? palavras[inicio - 1] : undefined;
+  const palavraDeCargo = anterior !== undefined && ehPalavraDeCargo(anterior) ? anterior : undefined;
+  if (palavraDeCargo !== undefined) inicio = depoisDosQualificadores(palavras, inicio);
+  // Conectivo não abre nome: "de Fulano Silva" vira "Fulano Silva".
+  while (inicio < palavras.length && CONECTOR.test(palavras[inicio])) inicio += 1;
+  return { inicio, ...(palavraDeCargo !== undefined ? { palavraDeCargo } : {}) };
+}
+
+/**
+ * A pessoa cujo nome fecha `trecho` (o texto entre o separador anterior e o marcador). O cargo
+ * só existe quando há palavra de cargo antes do nome (com ou sem qualificador no meio):
+ * "Desembargador" + "(convocado)" dá "Desembargador convocado"; o qualificador não entra.
+ */
+function pessoaAntesDoMarcador(trecho: string, marcador: string): PessoaSite | undefined {
+  const palavras = trecho.trim().split(/\s+/).filter(Boolean);
+  const { inicio, palavraDeCargo } = limitesDoNome(palavras);
+  const nome = palavras.slice(inicio);
+  if (nome.filter((p) => !CONECTOR.test(p) && !INICIAL_DO_NOME.test(p)).length < 2) return undefined;
+  const cargo =
+    palavraDeCargo !== undefined ? `${palavraDeCargo} ${sufixoDoMarcador(marcador)}`.trim() : undefined;
+  return { nome: nome.join(" "), ...(cargo ? { cargo } : {}), origem: "pagina" };
+}
+
+interface OcorrenciaDeMarcador {
+  indice: number;
+  marcador: string;
+}
+
+/** Posições de cada marcador na linha, na ordem do texto. */
+function ocorrenciasDosMarcadores(linha: string, textos: readonly string[]): OcorrenciaDeMarcador[] {
+  const achadas: OcorrenciaDeMarcador[] = [];
+  for (const marcador of textos) {
+    if (marcador === "") continue;
+    for (let i = linha.indexOf(marcador); i >= 0; i = linha.indexOf(marcador, i + marcador.length)) {
+      achadas.push({ indice: i, marcador });
+    }
+  }
+  return achadas.sort((a, b) => a.indice - b.indice);
+}
+
+/** Posição do último separador em `texto`, ou -1. */
+function ultimoSeparador(texto: string): number {
+  for (let i = texto.length - 1; i >= 0; i -= 1) {
+    if (SEPARADORES_DO_MARCADOR.test(texto[i])) return i;
+  }
+  return -1;
+}
+
+/**
+ * Extração por marcador (spec 2026-10-23 §5.2): só são pessoas os nomes seguidos de um dos
+ * `textos` cadastrados ("(convocado)" no TST, "**" no PDF do STJ). Para cada ocorrência, o
+ * nome é a sequência final de palavras em maiúscula do trecho anterior na mesma linha, com
+ * duas ou mais partes significativas. Nome repetido entra uma vez. Função pura.
+ */
+export function extrairPorMarcador(texto: string, textos: readonly string[]): PessoaSite[] {
+  const pessoas: PessoaSite[] = [];
+  const vistos = new Set<string>();
+  for (const linha of texto.split(/\r?\n/)) {
+    for (const { indice, marcador } of ocorrenciasDosMarcadores(linha, textos)) {
+      const antes = linha.slice(0, indice);
+      const pessoa = pessoaAntesDoMarcador(antes.slice(ultimoSeparador(antes) + 1), marcador);
+      if (!pessoa) continue;
+      const chave = normalizarNome(pessoa.nome);
+      if (vistos.has(chave)) continue;
+      vistos.add(chave);
+      pessoas.push(pessoa);
+    }
+  }
+  return pessoas;
+}
+
+/** Opções de extração de conteúdo (HTML ou PDF). */
+export interface OpcoesExtracao {
+  /** Textos que marcam as pessoas do grupo; presentes, só elas são extraídas. */
+  marcador?: readonly string[];
+  /** Cada pessoa leva `nomeDestaque`, as partes em negrito do nome (spec 2026-10-30 §3.1). */
+  nomeEmDestaque?: boolean;
+}
+
 /** Extrai texto limpo + destaques + pessoas estruturadas de um HTML já baixado. Função pura. */
-export function extrairConteudo(html: string, url: string): ConteudoFonte {
+export function extrairConteudo(html: string, url: string, opcoes: OpcoesExtracao = {}): ConteudoFonte {
   const $ = cheerio.load(html);
   $("script, style, noscript").remove();
   removerMoldura($);
 
   // destaques ANTES de mutar o DOM (extrairLinhas insere "\n").
   const destaquesBrutos: string[] = [];
-  $("strong, b").each((_, el) => {
+  // Títulos h1–h3 também: a página individual do gov.br põe o nome político no `h1`
+  // (spec 2026-10-23 §4.1). O filtro `ehNome` abaixo tira "Composição" e afins.
+  $("strong, b, h1, h2, h3").each((_, el) => {
     const txt = $(el).text().replace(/\s+/g, " ").trim();
     if (txt) destaquesBrutos.push(txt);
   });
 
-  const linhas = extrairLinhas($);
-  const pessoas = segmentarPessoas(linhas);
+  // Também antes de mutar o DOM: o negrito de cada linha, para o nome em destaque.
+  const destaquesPorLinha = opcoes.nomeEmDestaque ? colherDestaquesPorLinha($, TAGS_SEPARAR) : undefined;
+
+  const { linhas, titulos } = extrairLinhas($);
+  const pessoas = opcoes.marcador?.length
+    ? extrairPorMarcador(linhas.join("\n"), opcoes.marcador)
+    : segmentarPessoas(linhas, titulos, destaquesPorLinha);
   const destaques = [...new Set(destaquesBrutos.filter(ehNome))];
 
   return { url, textoLimpo: linhas.join(" "), destaques, pessoas };
+}
+
+/** Lê o texto de um PDF. Injetável, para os testes não dependerem do pdf-parse. */
+export type LeitorPdf = (bytes: Uint8Array) => Promise<string>;
+
+/** Leitor real, com pdf-parse. Copia os bytes (o pdf.js pode tomar o buffer) e sempre libera o documento. */
+export const lerTextoPdf: LeitorPdf = async (bytes) => {
+  const parser = new PDFParse({ data: new Uint8Array(bytes) });
+  try {
+    return (await parser.getText()).text;
+  } finally {
+    await parser.destroy();
+  }
+};
+
+/** Data da composição publicada no PDF ("Composição – 21/10/2026"). */
+const DATA_DA_COMPOSICAO = /Composição\s*[–-]\s*(\d{2}\/\d{2}\/\d{4})/;
+
+/**
+ * Conteúdo de uma fonte em PDF (spec 2026-10-23 §5.1, composição do STJ). Sem marcador não
+ * há como separar pessoa de texto num PDF: volta só o texto. Com marcador, cada pessoa leva
+ * no contexto a data da composição, quando o PDF a traz.
+ */
+export async function extrairConteudoPdf(
+  bytes: Uint8Array,
+  url: string,
+  opcoes: OpcoesExtracao = {},
+  lerPdf: LeitorPdf = lerTextoPdf,
+): Promise<ConteudoFonte> {
+  const texto = await lerPdf(bytes);
+  const data = DATA_DA_COMPOSICAO.exec(texto)?.[1];
+  const pessoas = opcoes.marcador?.length
+    ? extrairPorMarcador(texto, opcoes.marcador).map((p) => (data ? { ...p, contexto: `Composição – ${data}` } : p))
+    : [];
+  return { url, textoLimpo: texto, destaques: [], pessoas };
 }
 
 /**
@@ -396,22 +763,39 @@ export function extrairTabela(html: string, url: string, cfg: ExtracaoTabela): C
 export interface OpcoesRaspagem {
   /** Extração estruturada declarada no catálogo. Ausente → extração de texto padrão. */
   tabela?: ExtracaoTabela;
+  /** Só os nomes seguidos de um destes textos são pessoas (spec 2026-10-23 §5.2). */
+  marcador?: readonly string[];
+  /** "pdf": a fonte é um PDF, lido pelo pdf-parse (spec 2026-10-23 §5.1). Ausente → HTML. */
+  tipo?: "html" | "pdf";
+  /** O nome esperado é a parte em negrito (spec 2026-10-30 §3.1). Só vale na extração de texto. */
+  nomeEmDestaque?: boolean;
+  /** Só a sessão com janela usa: texto do elemento a clicar antes de ler (GT de 05/11). `fetch` ignora. */
+  clicarAntes?: CliqueAntes;
   timeoutMs?: number;
 }
 
 /**
- * Baixa a página e extrai o conteúdo. Lança ScrapeError em falha de rede/timeout.
+ * Baixa a página (ou o PDF) e extrai o conteúdo. Lança ScrapeError em falha de rede/timeout.
  * Tenta TLS estrito primeiro; só em erro de certificado repete com TLS relaxado.
  */
 export async function raspar(url: string, opcoes: OpcoesRaspagem = {}): Promise<ConteudoFonte> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opcoes.timeoutMs ?? 15000);
+  const extracao: OpcoesExtracao = {
+    ...(opcoes.marcador ? { marcador: opcoes.marcador } : {}),
+    ...(opcoes.nomeEmDestaque ? { nomeEmDestaque: true } : {}),
+  };
   try {
-    const html = await baixarHtml(url, ctrl.signal);
+    if (opcoes.tipo === "pdf") {
+      const bytes = await comRetryTls((dispatcher) => requisitarBytes(url, ctrl.signal, dispatcher));
+      if (bytes.length === 0) throw new ScrapeError(url, "PDF vazio");
+      return await extrairConteudoPdf(bytes, url, extracao);
+    }
+    const html = await comRetryTls((dispatcher) => requisitar(url, ctrl.signal, dispatcher));
     if (!html.trim()) throw new ScrapeError(url, "HTML vazio");
     return opcoes.tabela
       ? extrairTabela(html, url, opcoes.tabela)
-      : extrairConteudo(html, url);
+      : extrairConteudo(html, url, extracao);
   } catch (err) {
     if (err instanceof ScrapeError) throw err;
     throw new ScrapeError(url, err instanceof Error ? err.message : "erro desconhecido");
@@ -420,13 +804,13 @@ export async function raspar(url: string, opcoes: OpcoesRaspagem = {}): Promise<
   }
 }
 
-/** Faz o fetch e devolve o HTML, com retry de TLS relaxado em erro de certificado. */
-async function baixarHtml(url: string, signal: AbortSignal): Promise<string> {
+/** Faz a requisição; só em erro de certificado repete com TLS relaxado. */
+async function comRetryTls<T>(requisicao: (dispatcher?: Agent) => Promise<T>): Promise<T> {
   try {
-    return await requisitar(url, signal);
+    return await requisicao();
   } catch (err) {
     if (ehErroDeCertificado(err)) {
-      return await requisitar(url, signal, agenteTlsRelaxado);
+      return await requisicao(agenteTlsRelaxado);
     }
     throw err;
   }
@@ -468,10 +852,22 @@ export function decodificarCorpo(
 }
 
 /** Uma requisição HTTP; lança ScrapeError em status não-OK. */
-async function requisitar(url: string, signal: AbortSignal, dispatcher?: Agent): Promise<string> {
+async function buscar(url: string, signal: AbortSignal, dispatcher?: Agent): Promise<Response> {
   const opcoes: RequestInitComDispatcher = { signal, headers: HEADERS_NAVEGADOR };
   if (dispatcher) opcoes.dispatcher = dispatcher;
   const resp = await fetch(url, opcoes);
   if (!resp.ok) throw new ScrapeError(url, `HTTP ${resp.status}`);
+  return resp;
+}
+
+/** O corpo decodificado como texto, no charset declarado. */
+async function requisitar(url: string, signal: AbortSignal, dispatcher?: Agent): Promise<string> {
+  const resp = await buscar(url, signal, dispatcher);
   return decodificarCorpo(await resp.arrayBuffer(), resp.headers.get("content-type"));
+}
+
+/** O corpo em bytes, sem decodificar (PDF). */
+async function requisitarBytes(url: string, signal: AbortSignal, dispatcher?: Agent): Promise<Uint8Array> {
+  const resp = await buscar(url, signal, dispatcher);
+  return comoBytes(await resp.arrayBuffer());
 }

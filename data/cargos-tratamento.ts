@@ -1,8 +1,9 @@
 /**
  * Exceções de casamento cargo → tabela de protocolo.
  *
- * Chave: o cargo **como aparece na planilha** do Sistema Contatos, normalizado
- * (minúsculas, sem acento — o mesmo que `normalizarTexto` produz).
+ * Chave: o cargo **como aparece na planilha** do Sistema Contatos, normalizado e no
+ * masculino, como `neutralizarGenero(normalizarTexto(cargo))` produz (minúsculas, sem
+ * acento, "senadora" vira "senador").
  * Valor: o `cargoDestinatario` exato de uma entrada de `data/tratamentos.ts`.
  *
  * A exceção tem precedência sobre o casamento exato e sobre a similaridade. Serve para

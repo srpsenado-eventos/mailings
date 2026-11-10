@@ -8,9 +8,13 @@ const CLASSES: Record<Tom, string> = {
 };
 
 /** Etiqueta curta de estado (campo conferido, situação da linha). Só apresentação. */
-export function Etiqueta({ texto, tom }: { texto: string; tom: Tom }) {
+/** `quebra`: deixa o texto longo quebrar linha em vez de invadir a coluna ao lado. */
+export function Etiqueta({ texto, tom, explicacao, quebra = false }: { texto: string; tom: Tom; explicacao?: string; quebra?: boolean }) {
   return (
-    <span className={`inline-block whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${CLASSES[tom]}`}>
+    <span
+      title={explicacao}
+      className={`${quebra ? "inline whitespace-normal" : "inline-block whitespace-nowrap"} cursor-default rounded-full px-2.5 py-0.5 text-xs font-medium ${CLASSES[tom]}`}
+    >
       {texto}
     </span>
   );

@@ -2,9 +2,12 @@ import { describe, expect, test } from "vitest";
 import {
   resolverRegra,
   comparacoesProtocolo,
+  comparacoesCoerencia,
   linhaDeEnderecamento,
   formaNominal,
 } from "@/lib/tratamento";
+import { REGRAS_TRATAMENTO } from "@/data/tratamentos";
+import { comparacoesTratamento } from "@/lib/match";
 import type { ContatoPlanilha, RegraTratamento } from "@/lib/types";
 
 function regra(cargoDestinatario: string, vocativo: string, enderecamento = ""): RegraTratamento {
@@ -19,7 +22,7 @@ const REGRAS: RegraTratamento[] = [
   ),
   regra(
     "Governador",
-    "Excelentíssimo Senhor(a) Governador(a)",
+    "Senhor(a) Governador(a)",
     "A Sua Excelência o(a) Senhor(a)\n[Nome]\nGovernador(a) do Estado",
   ),
   regra("Vereador", "Senhor(a) Vereador(a)"),
@@ -481,5 +484,164 @@ describe("resolverRegra — tabela real, sem tabela injetada (guarda-corpo)", ()
     // ponto final; não há fronteira apertada entre masculino e feminino aqui hoje. Ver
     // relatório da correção para a divergência completa.
     expect(resolverRegra("Embaixadora de Gana")?.cargoDestinatario).toBe("Embaixador");
+  });
+});
+
+describe("resolverRegra: gênero não muda a regra encontrada (tabela real)", () => {
+  test.each([
+    ["Senadora", "Senador"],
+    ["Encarregada de Negócios", "Encarregado de Negócios"],
+    ["Governadora do Estado do Acre", "Governador do Estado do Acre"],
+  ])("%s resolve igual a %s", (feminino, masculino) => {
+    expect(resolverRegra(feminino)?.cargoDestinatario).toBe(resolverRegra(masculino)?.cargoDestinatario);
+  });
+
+  test("Senadora encontra a regra de Senador (hoje caía em sem regra)", () => {
+    expect(resolverRegra("Senadora")).toBeDefined();
+    expect(resolverRegra("Senadora")?.cargoDestinatario).toBe(resolverRegra("Senador")?.cargoDestinatario);
+  });
+});
+
+describe("Senadora com tratamento e endereçamento femininos (tabela real)", () => {
+  test("Camada B confere tratamento e endereçamento, e a Camada A não acha nada", () => {
+    // Arrange
+    const contato: ContatoPlanilha = { nome: "Ana", grupo: "Senadores", cargo: "Senadora", tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" };
+    // Act
+    const protocolo = comparacoesProtocolo(contato);
+    // Assert
+    expect(protocolo.find((c) => c.campo === "tratamento")?.situacao).toBe("confere");
+    expect(protocolo.find((c) => c.campo === "enderecamento")?.situacao).toBe("confere");
+    expect(comparacoesCoerencia(contato)).toEqual([]);
+  });
+});
+
+describe("resolverRegra — Ministro de Estado pelo prefixo (2026-10-27)", () => {
+  const primeiraLinha = (cargo: string) => resolverRegra(cargo)?.cargoDestinatario.split("\n")[0];
+
+  test("cargo que começa com 'Ministro de Estado' usa a regra de Ministro de Estado, por longo que seja o nome da pasta", () => {
+    for (const cargo of [
+      "Ministro de Estado da Justiça e Segurança Pública",
+      "Ministro de Estado das Relações Exteriores",
+      "Ministro de Estado do Empreendedorismo, da Microempresa e da Empresa de Pequeno Porte",
+      "Ministro de Estado Chefe do Gabinete de Segurança Institucional da Presidência da República",
+    ]) expect(primeiraLinha(cargo)).toBe("Ministro de Estado");
+  });
+
+  test("'Ministra de Estado' também, sem acento e em maiúsculas", () => {
+    expect(primeiraLinha("Ministra de Estado da Casa Civil da Presidência da República")).toBe("Ministro de Estado");
+    expect(primeiraLinha("MINISTRA DE ESTADO DA GESTAO E DA INOVACAO EM SERVICOS PUBLICOS")).toBe("Ministro de Estado");
+  });
+
+  test("Advogado-Geral da União tem status de ministro e usa a mesma regra", () => {
+    expect(primeiraLinha("Advogado-Geral da União")).toBe("Ministro de Estado");
+    expect(primeiraLinha("Advogada-Geral da União")).toBe("Ministro de Estado");
+  });
+
+  test("substituto e interino não herdam a regra do titular pelo prefixo", () => {
+    expect(primeiraLinha("Ministro de Estado Substituto da Fazenda")).not.toBe("Ministro de Estado");
+    expect(primeiraLinha("Ministro de Estado Interino da Saúde")).not.toBe("Ministro de Estado");
+  });
+
+});
+
+describe("resolverRegra — Governador e Vice-Governador pelo prefixo (spec 2026-10-30 §3.4)", () => {
+  const primeiraLinha = (cargo: string) => resolverRegra(cargo)?.cargoDestinatario.split("\n")[0];
+
+  test("'Governador(a) do Estado de …' e do Distrito Federal usam a regra Governador da tabela", () => {
+    expect(primeiraLinha("Governador do Estado de São Paulo")).toBe("Governador");
+    expect(primeiraLinha("Governadora do Estado do Rio Grande do Norte")).toBe("Governador");
+    expect(primeiraLinha("Governadora do Distrito Federal")).toBe("Governador");
+  });
+
+  test("'Vice-Governador do Estado de …' usa a regra Vice-Governador, nunca a do titular", () => {
+    expect(primeiraLinha("Vice-Governador do Estado de Goiás")).toBe("Vice-Governador");
+    expect(primeiraLinha("Vice-Governadora do Distrito Federal")).toBe("Vice-Governador");
+  });
+
+  test("ex-governador e governadoria não herdam a regra pelo prefixo", () => {
+    expect(primeiraLinha("Ex-Governador do Estado de Goiás")).not.toBe("Governador");
+    expect(primeiraLinha("Governadoria do Estado de Goiás")).not.toBe("Governador");
+  });
+
+  test("governador com o cadastro da tabela confere no tratamento e no endereçamento", () => {
+    const protocolo = comparacoesProtocolo({
+      nome: "Fulano", grupo: "Governadores", cargo: "Governador do Estado de Sergipe",
+      tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor",
+    });
+    expect(protocolo.map((c) => c.situacao)).toEqual(["confere", "confere"]);
+  });
+});
+
+describe("comparacoesProtocolo — Governador pela tabela real v02 (04/11)", () => {
+  test("tabela v02: Senhor e o endereçamento da tabela conferem, sem exigir Excelentíssimo", () => {
+    const c = contato({ cargo: "Governador do Estado do Acre", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" });
+    const comps = comparacoesProtocolo(c, REGRAS_TRATAMENTO);
+    expect(comps.find((x) => x.campo === "tratamento")?.situacao).toBe("confere");
+    expect(comps.find((x) => x.campo === "enderecamento")?.situacao).toBe("confere");
+  });
+
+  test("tabela v02: Excelentíssimo Senhor no tratamento do governador diverge, com Senhor(a) como esperado", () => {
+    const c = contato({ cargo: "Governador do Estado do Acre", tratamento: "Excelentíssimo Senhor", enderecamento: "A Sua Excelência o Senhor" });
+    const trat = comparacoesProtocolo(c, REGRAS_TRATAMENTO).find((x) => x.campo === "tratamento");
+    expect(trat?.situacao).toBe("divergente");
+    expect(trat?.valorEsperado).toBe("Senhor(a)");
+  });
+});
+
+describe("presidente de tribunal aceita Excelentíssimo(a) Senhor(a) (spec 2026-11-05 §2.4)", () => {
+  function contatoDe(cargo: string, tratamento: string, grupo: string): ContatoPlanilha {
+    return { nome: "Fulano de Tal", cargo, tratamento, grupo };
+  }
+  function tratamentoDe(c: ContatoPlanilha, grupo: string) {
+    return comparacoesTratamento(c, grupo).find((x) => x.campo === "tratamento");
+  }
+
+  test("presidente do STF com 'Excelentíssimo Senhor' confere", () => {
+    const c = contatoDe("Presidente do Supremo Tribunal Federal", "Excelentíssimo Senhor", "Ministros do STF");
+    expect(tratamentoDe(c, "Ministros do STF")?.situacao).toBe("confere");
+  });
+
+  test("presidente do STM mulher com 'Excelentíssima Senhora' confere", () => {
+    const c = contatoDe("Presidente do Superior Tribunal Militar", "Excelentíssima Senhora", "Ministros do STM");
+    expect(tratamentoDe(c, "Ministros do STM")?.situacao).toBe("confere");
+  });
+
+  test("presidente do STM mulher com 'Excelentíssimo Senhor' continua divergente", () => {
+    const c = contatoDe("Presidente do Superior Tribunal Militar", "Excelentíssimo Senhor", "Ministros do STM");
+    c.enderecamento = "À Excelentíssima Senhora";
+    expect(tratamentoDe(c, "Ministros do STM")?.situacao).toBe("divergente");
+  });
+
+  test("vice-presidente do STF com 'Excelentíssimo Senhor' não vira confere por esta regra", () => {
+    const c = contatoDe("Vice-Presidente do Supremo Tribunal Federal", "Excelentíssimo Senhor", "Ministros do STF");
+    expect(tratamentoDe(c, "Ministros do STF")?.situacao).not.toBe("confere");
+  });
+
+  test("presidente do STF com 'Doutor' continua divergente", () => {
+    const c = contatoDe("Presidente do Supremo Tribunal Federal", "Doutor", "Ministros do STF");
+    expect(tratamentoDe(c, "Ministros do STF")?.situacao).toBe("divergente");
+  });
+
+  test("presidente do STJ com 'Excelentíssimo Senhor' continua sem_regra", () => {
+    const c = contatoDe("Presidente do Superior Tribunal de Justiça", "Excelentíssimo Senhor", "Ministros do STJ");
+    expect(tratamentoDe(c, "Ministros do STJ")?.situacao).toBe("sem_regra");
+  });
+});
+
+describe("comparacoesProtocolo — convocados seguem o critério dos ministros", () => {
+  test.each([
+    ["Desembargador convocado do Superior Tribunal de Justiça", "Senhor", "A Sua Excelência o Senhor"],
+    ["Desembargadora convocada do Tribunal Superior do Trabalho", "Senhora", "A Sua Excelência a Senhora"],
+  ])("%s confere tratamento e endereçamento", (cargo, tratamento, enderecamento) => {
+    const [t, e] = comparacoesProtocolo(contato({ cargo, tratamento, enderecamento }));
+    expect(t.situacao).toBe("confere");
+    expect(e.situacao).toBe("confere");
+  });
+
+  test("tratamento Doutor no convocado diverge", () => {
+    const [t] = comparacoesProtocolo(
+      contato({ cargo: "Desembargador convocado do Superior Tribunal de Justiça", tratamento: "Doutor" }),
+    );
+    expect(t.situacao).toBe("divergente");
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   normalizarTexto,
   removerTratamentos,
+  semTratamentoDeEmbaixada,
   normalizarNome,
   nucleoDeNome,
 } from "@/lib/normalize";
@@ -76,5 +77,34 @@ describe("nucleoDeNome", () => {
 describe("normalizarNome", () => {
   test("combina remoção de tratamento + normalização", () => {
     expect(normalizarNome("Dr. José Antônio")).toBe("jose antonio");
+  });
+});
+
+describe("tratamento de embaixada (spec 2026-11-05 §7.1)", () => {
+  test.each([
+    ["SE Sr. Noguchi Yasushi", "Noguchi Yasushi"],
+    ["SE Sra. Fulana de Tal", "Fulana de Tal"],
+    ["S.E. Sr. Beltrano", "Beltrano"],
+    ["se sra Maria Souza", "Maria Souza"],
+  ])('removerTratamentos tira o prefixo de "%s"', (nome, esperado) => {
+    // Act + Assert
+    expect(removerTratamentos(nome)).toBe(esperado);
+    expect(semTratamentoDeEmbaixada(nome)).toBe(esperado);
+  });
+
+  test.each(["Se Bastião Silva", "Sebastião Lima", "SE"])('"%s" não muda', (nome) => {
+    // Act + Assert
+    expect(removerTratamentos(nome)).toBe(nome);
+    expect(semTratamentoDeEmbaixada(nome)).toBe(nome);
+  });
+
+  test("semTratamentoDeEmbaixada tira só o prefixo de embaixada, não Ministro nem Dr.", () => {
+    // Act + Assert
+    expect(semTratamentoDeEmbaixada("Dr. João Souza")).toBe("Dr. João Souza");
+  });
+
+  test("normalizarNome ignora o prefixo", () => {
+    // Act + Assert
+    expect(normalizarNome("SE Sr. Noguchi Yasushi")).toBe(normalizarNome("Noguchi Yasushi"));
   });
 });

@@ -1,0 +1,2 @@
+# PDF é binário: o checkout no Windows (core.autocrlf) não pode trocar LF por CRLF e desalinhar o xref.
+*.pdf binary

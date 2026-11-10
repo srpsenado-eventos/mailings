@@ -1,19 +1,28 @@
 "use client";
 import { useState } from "react";
 import { Etiqueta } from "@/components/etiqueta";
+import { MarcarBloqueio } from "@/components/marcar-bloqueio";
 import { rotuloAchadoEndereco } from "@/lib/endereco";
+import { diaMes } from "@/lib/memoria-leitura";
 import {
+  camposDoEndereco,
   detalhesDoContato,
+  EXPLICACAO_NOVO,
   etiquetaDeEndereco,
   etiquetasDoContato,
-  linhasDoEndereco,
   motivoDoContato,
-  procedenciaNomeCargo,
+  procedenciaDoContato,
   situacaoDoContato,
   textoDataHora,
   textoEnderecoParaCopiar,
+  textoProvisoriaNaProcedencia,
+  type CampoEndereco,
+  type Etiqueta as EtiquetaPainel,
 } from "@/lib/painel";
-import type { ResultadoContato, ResultadoGrupo, Retrato } from "@/lib/types";
+import { destacaLinha, detalheDaEleicao, detalheDoGoverno, etiquetasDeEleicao, etiquetasDeGoverno } from "@/lib/painel-eleicao";
+import { EXPLICACAO_FONTE_PROPRIA, fontePropria, TEXTO_FONTE_PROPRIA } from "@/lib/painel-fonte-propria";
+import type { AcaoBloqueio } from "@/lib/repetidos-decisoes";
+import type { EleicaoContato, EleicaoGovernoContato, ResultadoContato, ResultadoGrupo, Retrato } from "@/lib/types";
 
 const COLUNAS = "grid grid-cols-[minmax(0,2.2fr)_minmax(0,1.3fr)_minmax(0,2.6fr)_minmax(0,1fr)] items-start gap-4 px-4 py-3";
 
@@ -39,6 +48,46 @@ function BotaoCopiar({ texto }: { texto: string }) {
   );
 }
 
+/**
+ * "Fonte própria · abrir": a pessoa veio de outra página do órgão, não da fonte do cabeçalho
+ * (convocados do TST e do STJ, senadores fora de exercício). O clique no link não abre o detalhe.
+ */
+function FontePropria({ url }: { url: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <Etiqueta texto={TEXTO_FONTE_PROPRIA} tom="neutro" explicacao={EXPLICACAO_FONTE_PROPRIA} />
+      <a href={url} target="_blank" rel="noreferrer" title={url} className="text-xs text-acao underline" onClick={(e) => e.stopPropagation()}>abrir</a>
+    </span>
+  );
+}
+
+function ValorDoCampo({ campo }: { campo: CampoEndereco }) {
+  if (!campo.valor) return <span className="text-cinza">(vazio)</span>;
+  if (!campo.excedente) return <>{campo.valor}</>;
+  const cabe = campo.valor.slice(0, campo.valor.length - campo.excedente.length);
+  return (
+    <span className="whitespace-pre">
+      {cabe}<mark className="rounded-sm bg-atencao-fundo px-0.5 text-atencao underline decoration-2">{campo.excedente}</mark>
+    </span>
+  );
+}
+
+function CamposDoEndereco({ campos }: { campos: CampoEndereco[] }) {
+  return (
+    <dl className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+      {campos.map((campo) => (
+        <div key={campo.rotulo} className="contents">
+          <dt className="text-xs leading-6 text-cinza-claro">{campo.rotulo}</dt>
+          <dd className={campo.tom === "atencao" ? "font-medium text-atencao" : "font-medium"}>
+            <ValorDoCampo campo={campo} />
+            {campo.nota && <span className={`ml-2 text-xs font-normal ${campo.tom === "atencao" ? "text-atencao" : "text-cinza"}`}>{campo.nota}</span>}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function BlocoEndereco({ c, retrato }: { c: ResultadoContato; retrato: Retrato }) {
   const a = c.endereco;
   if (!a || a.situacao === "sem_base") return null;
@@ -47,7 +96,7 @@ function BlocoEndereco({ c, retrato }: { c: ResultadoContato; retrato: Retrato }
     <div className="rounded-lg border border-atencao-borda bg-[#fffdf8] p-4">
       <div className="flex items-center gap-2">
         <span className="text-sm font-semibold">Endereço</span>
-        {etiqueta && <Etiqueta texto={etiqueta.texto} tom={etiqueta.tom} />}
+        {etiqueta && <Etiqueta texto={etiqueta.texto} tom={etiqueta.tom} explicacao={etiqueta.explicacao} />}
         {retrato.planilhaEnderecos && (
           <span className="ml-auto text-xs text-cinza-claro">{retrato.planilhaEnderecos.nome}{a.endereco?.enderecoId ? ` · id ${a.endereco.enderecoId}` : ""}</span>
         )}
@@ -61,9 +110,7 @@ function BlocoEndereco({ c, retrato }: { c: ResultadoContato; retrato: Retrato }
           <div className="text-xs text-cinza-claro">No relatório de endereços</div>
           {a.endereco ? (
             <>
-              <div className="mt-1 text-sm font-medium leading-relaxed">
-                {linhasDoEndereco(a.endereco).map((l, i) => <div key={i}>{l}</div>)}
-              </div>
+              <CamposDoEndereco campos={camposDoEndereco(a)} />
               <BotaoCopiar texto={textoEnderecoParaCopiar(a.endereco)} />
             </>
           ) : (
@@ -79,9 +126,51 @@ function BlocoEndereco({ c, retrato }: { c: ResultadoContato; retrato: Retrato }
   );
 }
 
-function Detalhe({ c, g, retrato }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato }) {
+function BlocoEleicao({ e }: { e: EleicaoContato }) {
+  const d = detalheDaEleicao(e);
+  return (
+    <div className={`rounded-lg border p-4 ${e.destino === "outra_casa" ? "border-atencao-borda bg-atencao-fundo/40" : "border-borda bg-cartao"}`}>
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-semibold">Eleição 2026</span>
+        {etiquetasDeEleicao(e).map((x) => <Etiqueta key={x.texto} texto={x.texto} tom={x.tom} explicacao={x.explicacao} />)}
+      </div>
+      <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+        {d.linhas.map((l) => (
+          <div key={l.rotulo} className="contents">
+            <dt className="text-xs leading-6 text-cinza-claro">{l.rotulo}</dt>
+            <dd>{l.valor}</dd>
+          </div>
+        ))}
+      </dl>
+      {d.orientacao && <p className="mt-2 text-sm font-medium text-atencao">{d.orientacao}</p>}
+    </div>
+  );
+}
+
+function BlocoGoverno({ e }: { e: EleicaoGovernoContato }) {
+  const d = detalheDoGoverno(e);
+  return (
+    <div className={`rounded-lg border p-4 ${e.destino === "outro_cargo" ? "border-atencao-borda bg-atencao-fundo/40" : "border-borda bg-cartao"}`}>
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-semibold">Eleição 2026 — governo</span>
+        {etiquetasDeGoverno(e).map((x) => <Etiqueta key={x.texto} texto={x.texto} tom={x.tom} explicacao={x.explicacao} />)}
+      </div>
+      <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-sm">
+        {d.linhas.map((l) => (
+          <div key={l.rotulo} className="contents">
+            <dt className="text-xs leading-6 text-cinza-claro">{l.rotulo}</dt>
+            <dd>{l.valor}</dd>
+          </div>
+        ))}
+      </dl>
+      {d.orientacao && <p className="mt-2 text-sm font-medium text-atencao">{d.orientacao}</p>}
+    </div>
+  );
+}
+
+function Detalhe({ c, g, retrato, eleicaoLigada }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato; eleicaoLigada: boolean }) {
   const cartoes = detalhesDoContato(c, g);
-  const p = procedenciaNomeCargo(g);
+  const procedencia = procedenciaDoContato(c, g, retrato.falhas);
   return (
     <div className="space-y-4 border-t border-separador bg-fundo/60 px-4 py-4">
       {cartoes.length > 0 && (
@@ -90,25 +179,29 @@ function Detalhe({ c, g, retrato }: { c: ResultadoContato; g: ResultadoGrupo; re
             <div key={d.campo} className="rounded-lg border border-borda bg-cartao p-3.5">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold">{d.rotulo}</span>
-                {d.etiqueta && <Etiqueta texto={d.etiqueta.texto.replace(`${d.rotulo} `, "")} tom={d.etiqueta.tom} />}
+                {d.etiqueta && <Etiqueta texto={d.etiqueta.texto.replace(`${d.rotulo} `, "")} tom={d.etiqueta.tom} explicacao={d.etiqueta.explicacao} />}
               </div>
               <div className="mt-2 text-xs text-cinza-claro">No cadastro</div>
               <div className="text-sm">{d.valorPlanilha || "(vazio)"}</div>
               <div className="mt-2 text-xs text-cinza-claro">{d.origem}</div>
               <div className="text-sm font-medium">{d.valorReferencia || "—"}</div>
+              {d.observacao && <div className="mt-1 text-xs text-cinza-claro">{d.observacao}</div>}
               {d.copiavel && <BotaoCopiar texto={d.copiavel} />}
+              {d.url && <a href={d.url} target="_blank" rel="noreferrer" className="mt-1 block text-[11px] text-acao underline break-all">abrir a página desta referência</a>}
               {d.coerencias.map((t) => <div key={t} className="mt-1.5 text-xs text-atencao">{t}</div>)}
             </div>
           ))}
         </div>
       )}
       <BlocoEndereco c={c} retrato={retrato} />
+      {eleicaoLigada && c.eleicao && <BlocoEleicao e={c.eleicao} />}
+      {eleicaoLigada && c.eleicaoGoverno && <BlocoGoverno e={c.eleicaoGoverno} />}
       <div>
       <h3 className="text-xs font-semibold uppercase tracking-wide text-cinza-claro">De onde veio cada resposta</h3>
       <ul className="mt-1 text-xs leading-relaxed text-cinza">
-        {p && (
-          <li>Nome e cargo: {p.url ? <a href={p.url} target="_blank" rel="noreferrer" className="text-acao underline">{p.texto}</a> : p.texto}, lido em {textoDataHora(retrato.geradoEm)}</li>
-        )}
+        {procedencia.map((p) => (
+          <li key={p.rotulo}>{p.rotulo}: {p.url ? <a href={p.url} target="_blank" rel="noreferrer" className="text-acao underline">{p.texto}</a> : p.texto}{p.leituraDe ? `, leitura de ${diaMes(p.leituraDe)} reaproveitada` : p.lida ? `, lido em ${textoDataHora(retrato.geradoEm)}` : ", não lida nesta varredura"}{p.alternativa && ", pela URL alternativa"}{p.provisoria && `, ${textoProvisoriaNaProcedencia(p.provisoria)}`}{p.caida && `, ${p.caida}`}</li>
+        ))}
         <li>Tratamento e endereçamento: tabela de protocolo (Posse2027_TabelaTratamentos.xlsx)</li>
         {retrato.planilhaEnderecos && <li>Endereço: {retrato.planilhaEnderecos.nome}</li>}
       </ul>
@@ -117,32 +210,41 @@ function Detalhe({ c, g, retrato }: { c: ResultadoContato; g: ResultadoGrupo; re
   );
 }
 
-export function LinhaContato({ c, g, retrato }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato }) {
+/** `fosca`: linha atenuada pela decisão do GT (spec 2026-10-30 §4.1.3); o texto continua legível e a auditoria, igual. */
+export function LinhaContato({ c, g, retrato, eleicaoLigada = false, repeticoes, fosca = false, bloqueio, modo = "local" }: { c: ResultadoContato; g: ResultadoGrupo; retrato: Retrato; eleicaoLigada?: boolean; repeticoes?: readonly EtiquetaPainel[]; fosca?: boolean; bloqueio?: AcaoBloqueio; modo?: "local" | "web" }) {
   const [aberto, setAberto] = useState(false);
-  const etiquetas = etiquetasDoContato(c, g);
+  const etiquetas = [...(repeticoes ?? []), ...etiquetasDoContato(c, g), ...(eleicaoLigada ? [...etiquetasDeEleicao(c.eleicao), ...etiquetasDeGoverno(c.eleicaoGoverno)] : [])];
   const situacao = situacaoDoContato(c, g);
   const motivo = motivoDoContato(c, g);
   const subtitulo = motivo ?? [c.contato.tratamento, c.contato.enderecamento].filter(Boolean).join(" · ");
+  const urlPropria = fontePropria(c.fonteUrl, g);
   return (
-    <div className="border-t border-separador">
-      <div className={COLUNAS}>
-        <button type="button" aria-expanded={aberto} onClick={() => setAberto((v) => !v)} className="text-left">
+    <div className={`border-t border-separador ${eleicaoLigada && destacaLinha(c.eleicao, c.eleicaoGoverno) ? "border-l-4 border-l-atencao" : ""} ${fosca ? "opacity-60" : ""}`}>
+      <div className={`${COLUNAS} cursor-pointer hover:bg-fundo/60`} onClick={() => setAberto((v) => !v)}>
+        <button type="button" aria-expanded={aberto} className="text-left">
           <span className="block text-sm font-medium text-tinta">{c.contato.nome}</span>
           {subtitulo && <span className={`block text-xs ${motivo ? "text-atencao" : "text-cinza"}`}>{subtitulo}</span>}
         </button>
         <div className="text-sm text-cinza">{c.contato.cargo ?? "—"}</div>
-        <div className="flex flex-wrap gap-1.5">
-          {etiquetas.map((e) => <Etiqueta key={`${e.campo}-${e.texto}`} texto={e.texto} tom={e.tom} />)}
+        <div>
+          <div className="flex flex-wrap gap-1.5">
+            {etiquetas.map((e) => <Etiqueta key={`${e.campo}-${e.texto}`} texto={e.texto} tom={e.tom} explicacao={e.explicacao} quebra={repeticoes?.includes(e)} />)}
+            {urlPropria && <FontePropria url={urlPropria} />}
+          </div>
+          {bloqueio && <MarcarBloqueio acao={bloqueio} modo={modo} />}
         </div>
-        <div><Etiqueta texto={situacao.texto} tom={situacao.tom} /></div>
+        <div><Etiqueta texto={situacao.texto} tom={situacao.tom} explicacao={situacao.explicacao} /></div>
       </div>
-      {aberto && <Detalhe c={c} g={g} retrato={retrato} />}
+      {aberto && <Detalhe c={c} g={g} retrato={retrato} eleicaoLigada={eleicaoLigada} />}
     </div>
   );
 }
 
-/** `nota`: fonte rotulada ("fora de exercício: Ocupação de cargo de ministro"), quando a pessoa veio de uma fonte secundária. */
-export function LinhaNovo({ nome, cargo, viaIa, nota }: { nome: string; cargo?: string; viaIa: boolean; nota?: string }) {
+/**
+ * `nota`: fonte rotulada ("fora de exercício: Ocupação de cargo de ministro"), quando a pessoa veio
+ * de uma fonte secundária. `fonteUrl`: a página dela, mostrada só quando difere da principal do grupo.
+ */
+export function LinhaNovo({ nome, cargo, viaIa, nota, fonteUrl }: { nome: string; cargo?: string; viaIa: boolean; nota?: string; fonteUrl?: string }) {
   return (
     <div className="border-t border-separador">
       <div className={COLUNAS}>
@@ -152,8 +254,9 @@ export function LinhaNovo({ nome, cargo, viaIa, nota }: { nome: string; cargo?: 
         </div>
         <div className="text-sm text-cinza">—</div>
         <div className="flex flex-wrap gap-1.5">
-          {cargo && <Etiqueta texto={`Site: ${cargo}${viaIa ? " (via IA)" : ""}`} tom="neutro" />}
+          {cargo && <Etiqueta texto={`Site: ${cargo}${viaIa ? " (via IA)" : ""}`} tom="neutro" explicacao={EXPLICACAO_NOVO} />}
           {nota && <Etiqueta texto={nota} tom="neutro" />}
+          {fonteUrl && <FontePropria url={fonteUrl} />}
         </div>
         <div><Etiqueta texto="Avaliar inclusão" tom="atencao" /></div>
       </div>

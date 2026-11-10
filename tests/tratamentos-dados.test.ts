@@ -44,4 +44,13 @@ describe("tabela de protocolo real (data/tratamentos.ts)", () => {
     );
     expect(militares?.cargoDestinatario).toContain("General de Exército");
   });
+
+  test("tabela v02 (04/11): Governador, Prefeito e presidentes de casa legislativa sem Excelentíssimo; endereçamento mantido", () => {
+    const por = (cargo: string) => REGRAS_TRATAMENTO.find((r) => r.cargoDestinatario === cargo)!;
+    for (const cargo of ["Governador", "Prefeito", "Presidente da Assembleia Legislativa / Câmara Legislativa", "Presidente de Câmara Municipal"]) {
+      expect(por(cargo).nominata.startsWith("Senhor(a)")).toBe(true);
+      expect(por(cargo).vocativo.startsWith("Senhor(a)")).toBe(true);
+      expect(por(cargo).enderecamento.startsWith("A Sua Excelência o(a) Senhor(a)")).toBe(true);
+    }
+  });
 });

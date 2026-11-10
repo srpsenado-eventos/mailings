@@ -1,28 +1,17 @@
-import Link from "next/link";
-import { redirect } from "next/navigation";
+import { carregarRetrato } from "@/app/carregar-retrato";
 import { Painel } from "@/components/painel";
-import { armazemPadrao, RetratoIlegivelError } from "@/lib/armazem";
-import type { Retrato } from "@/lib/types";
+import { avisoDoParametro } from "@/lib/decisoes-coleta";
 
-// Lê o arquivo a cada abertura: o retrato muda fora do ciclo de build.
+// Lê a cada abertura: o retrato muda fora do ciclo de build.
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
-  let retrato: Retrato | undefined;
-  try {
-    retrato = await armazemPadrao().lerRetrato();
-  } catch (err) {
-    if (err instanceof RetratoIlegivelError) {
-      return (
-        <main className="mx-auto max-w-3xl px-6 py-12">
-          <h1 className="font-serif text-3xl font-semibold">O último retrato não pôde ser lido</h1>
-          <p className="mt-2 text-sm text-cinza">O arquivo .fiscal/retrato.json existe, mas não é um retrato válido. Faça uma nova varredura; ela substitui o arquivo.</p>
-          <Link href="/nova-varredura" className="mt-6 inline-block rounded-lg bg-acao px-5 py-2.5 text-sm font-semibold text-white">Nova varredura</Link>
-        </main>
-      );
-    }
-    throw err;
-  }
-  if (!retrato) redirect("/nova-varredura");
-  return <Painel retrato={retrato} />;
+export default async function Home({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const carga = await carregarRetrato("/");
+  if ("aviso" in carga) return carga.aviso;
+  // Aviso de decisões: o do carregador (arquivo ilegível) e o da varredura que acabou (`?aviso=decisoes`).
+  const avisoDaVarredura = avisoDoParametro((await searchParams).aviso);
+  const aviso = [carga.avisoDecisoes, avisoDaVarredura].filter(Boolean).join(" ") || undefined;
+  // O painel não usa a base de endereços (só o /prodasen) nem a memória de leitura; não vão ao cliente.
+  const { baseEnderecos: _base, leituras: _leituras, ...retratoDoPainel } = carga.retrato;
+  return <Painel retrato={retratoDoPainel} modo={carga.modo} podePublicar={carga.podePublicar} aviso={aviso} decisoes={carga.decisoes} />;
 }

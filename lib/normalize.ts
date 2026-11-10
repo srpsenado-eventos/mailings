@@ -12,6 +12,8 @@ export function normalizarTexto(valor: string): string {
 const TRATAMENTOS = [
   "exmo.", "exma.", "excelentíssimo", "excelentíssima",
   "sr.", "sra.", "dr.", "dra.",
+  // Embaixadores: "SE Sr." e "S.E. Sra." (chaveToken tira os pontos). "SE" sozinho nunca é prefixo.
+  "se sr.", "se sra.",
   "senador", "senadora", "deputado", "deputada",
   "ministro", "ministra", "presidente", "governador", "governadora",
   "vereador", "vereadora", "prefeito", "prefeita", "desembargador", "desembargadora",
@@ -35,7 +37,7 @@ const PATENTES = [
  * Forma comparável de um token de prefixo: sem acento, sem caixa, sem pontuação
  * e sem a flexão de gênero entre parênteses ("Ministro(a)" → "ministro").
  */
-function chaveToken(token: string): string {
+export function chaveToken(token: string): string {
   return normalizarTexto(token)
     .replace(/\((?:a|o|as|os)\)$/, "")
     .replace(/[.,;:]/g, "");
@@ -63,6 +65,14 @@ export function removerTratamentos(nome: string): string {
   return tokens.join(" ");
 }
 
+/** Só o prefixo de embaixada ("SE Sr.", "S.E. Sra."), sem tocar em "Ministro", "Dr." etc. */
+export function semTratamentoDeEmbaixada(nome: string): string {
+  const compacto = nome.replace(/\s+/g, " ").trim();
+  const tokens = compacto.split(" ");
+  if (tokens.length < 3 || chaveToken(tokens[0]) !== "se") return compacto;
+  return ["sr", "sra"].includes(chaveToken(tokens[1])) ? tokens.slice(2).join(" ") : compacto;
+}
+
 /**
  * Rótulos de ficha que alguns portais grudam no fim da linha do nome
  * ("Fulano de Tal Data de nomeação: 21/03/2018").
@@ -85,4 +95,32 @@ export function nucleoDeNome(linha: string): string {
 /** Pipeline padrão para comparar nomes: sem tratamento + normalizado. */
 export function normalizarNome(nome: string): string {
   return normalizarTexto(removerTratamentos(nome));
+}
+
+/** Letras do nome com os acentos: sem tratamento, sem caixa, sem pontuação e com espaços colapsados. */
+function letrasComAcento(nome: string): string {
+  return removerTratamentos(nome)
+    .normalize("NFC")
+    .toLocaleLowerCase("pt-BR")
+    .replace(/[^\p{L}\p{M}\p{N}]+/gu, " ")
+    .trim();
+}
+
+/** Os dois nomes têm os mesmos acentos? Cedilha conta como acento; caixa e pontuação, não. */
+export function mesmosAcentos(a: string, b: string): boolean {
+  return letrasComAcento(a) === letrasComAcento(b);
+}
+
+/**
+ * Igualdade do nome para o veredito (regra do Clovis de 06/11): como `normalizarNome`, mas o acento
+ * conta, nos dois sentidos. Só o veredito do campo usa esta forma: achar a pessoa continua por
+ * `normalizarNome`, senão diferença de acento viraria possível saída.
+ */
+export function mesmaGrafiaDeNome(a: string, b: string): boolean {
+  return normalizarNome(a) === normalizarNome(b) && mesmosAcentos(a, b);
+}
+
+/** Os dois nomes são iguais e só o acento os separa. */
+export function soAcentoDiverge(a: string, b: string): boolean {
+  return normalizarNome(a) === normalizarNome(b) && !mesmosAcentos(a, b);
 }

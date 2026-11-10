@@ -1,13 +1,64 @@
 import { NextRequest, NextResponse } from "next/server";
 import { analisar, type Dependencias } from "@/lib/analise";
 import { parsePayloadAnalise, PayloadInvalidoError } from "@/lib/analise-payload";
-import { armazemPadrao } from "@/lib/armazem";
+import { armazemPadrao, type Armazem } from "@/lib/armazem";
+import { armazemDecisoesPadrao, atualizarDecisoes } from "@/lib/armazem-decisoes";
+import { AVISO_DECISOES_NAO_ATUALIZADAS, registrarColetasDoRetrato } from "@/lib/decisoes-coleta";
+import type { HistoricoDecisoes } from "@/lib/decisoes";
+import { aplicarEleicao } from "@/lib/eleitos";
 import { resolverGrupoEFonte } from "@/lib/catalogo";
+import { aplicarListas } from "@/lib/grupos-lista";
+import { diaMes, falhasDoRetrato, memoriaDoRetrato } from "@/lib/memoria-leitura";
+import { modoDoApp } from "@/lib/modo";
+import { origemPermitida } from "@/lib/origem";
 import { montarRetrato } from "@/lib/painel";
-import { raspar } from "@/lib/scrape";
+import { abrirSessao } from "@/lib/navegador";
+import { comRepeticao, RASPADORES_PADRAO, rasparFonte } from "@/lib/raspagem";
 import { extrairComposicao, diagnosticarIa } from "@/lib/gemini";
+import type { Retrato } from "@/lib/types";
 
 const AVISO_NAO_GUARDADO = "A varredura terminou, mas o retrato não pôde ser guardado: na próxima abertura o app não a terá.";
+
+/**
+ * Situação no Contatos de cada caso decidido (spec 2026-10-30 §4.1.4), só com o retrato guardado.
+ * Falha vira `avisoDecisoes` (campo próprio: `aviso` quer dizer "retrato não guardado" para a tela)
+ * e não derruba a varredura; o arquivo de decisões ilegível não é sobrescrito.
+ */
+async function registrarColetaNasDecisoes(retrato: Retrato): Promise<string | undefined> {
+  try {
+    await atualizarDecisoes(armazemDecisoesPadrao(), (h) => registrarColetasDoRetrato(h, retrato));
+    return undefined;
+  } catch (err) {
+    // Só o motivo técnico: nada de nomes no log.
+    console.error("[/api/analise] decisões não atualizadas:", err instanceof Error ? err.message : "erro desconhecido");
+    return AVISO_DECISOES_NAO_ATUALIZADAS;
+  }
+}
+
+/**
+ * Decisões do GT para a classificação dos eleitos (spec 2026-10-30 §4.1.1), lidas antes de gravar o
+ * retrato. Ilegível vira "sem decisões": os eleitos seguem a regra e a coleta, depois, avisa.
+ */
+async function lerDecisoesParaEleicao(): Promise<HistoricoDecisoes | undefined> {
+  try {
+    return await armazemDecisoesPadrao().ler();
+  } catch (err) {
+    // Só o motivo técnico: nada de nomes no log.
+    console.error("[/api/analise] decisões ilegíveis, eleitos classificados sem elas:", err instanceof Error ? err.message : "erro desconhecido");
+    return undefined;
+  }
+}
+
+/** Retrato anterior, só para a memória de leitura e as falhas por URL: ausente ou ilegível vale como "sem memória" (spec 2026-10-20 §10). */
+async function lerRetratoAnterior(armazem: Armazem): Promise<Retrato | undefined> {
+  try {
+    return await armazem.lerRetrato();
+  } catch (err) {
+    // Só o motivo técnico: o retrato tem PII e nunca vai para o log.
+    console.error("[/api/analise] retrato anterior ilegível, varredura sem memória:", err instanceof Error ? err.message : "erro desconhecido");
+    return undefined;
+  }
+}
 
 /**
  * Recebe os contatos (e, opcionalmente, os endereços) já extraídos no navegador, varre as
@@ -16,6 +67,9 @@ const AVISO_NAO_GUARDADO = "A varredura terminou, mas o retrato não pôde ser g
  * `analisar`, `montarRetrato` e o `Armazem` são.
  */
 export async function POST(req: NextRequest) {
+  if (!origemPermitida(req.headers)) return NextResponse.json({ ok: false, message: "Origem não permitida." }, { status: 403 });
+  // A Vercel nunca lê fonte (spec 2026-10-02 §6.5): em modo web a rota não existe.
+  if (modoDoApp() === "web") return NextResponse.json({ ok: false, message: "Não disponível." }, { status: 404 });
   try {
     let corpo: unknown;
     try {
@@ -24,15 +78,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, message: "Corpo inválido (esperado JSON)." }, { status: 400 });
     }
 
-    const { arquivoNome, contatos, arquivoEnderecosNome, enderecos } = parsePayloadAnalise(corpo);
+    const { arquivoNome, contatos, arquivoEnderecosNome, enderecos, eleitos, deputadosAtuais, governadores, arquivosEleicao, baseEnderecos } = parsePayloadAnalise(corpo);
 
-    const deps: Dependencias = {
-      resolverFonte: (grupo) => resolverGrupoEFonte(grupo),
-      raspar: (fonte) => raspar(fonte.url, fonte.tabela ? { tabela: fonte.tabela } : {}),
-      extrairComposicao: (grupoCanonico, textoLimpo) => extrairComposicao(grupoCanonico, textoLimpo),
-    };
+    // Memória de leitura por página (spec 2026-10-20 §6): a do retrato anterior, reconstruída
+    // quando ele é de antes do mecanismo. O mesmo relógio vale para a validade e para a data das leituras.
+    // As falhas por URL do retrato anterior contam as coletas seguidas em que cada URL caiu
+    // (spec 2026-10-23 §3.4).
+    const agora = new Date();
+    const armazem = armazemPadrao();
+    const anterior = await lerRetratoAnterior(armazem);
+    const leiturasAnteriores = memoriaDoRetrato(anterior, agora);
+    const falhasAnteriores = falhasDoRetrato(anterior);
 
-    const resultado = await analisar(arquivoNome, contatos, deps, enderecos);
+    // Sessão do Chrome com janela para as fontes `navegador: "janela"` (spec 2026-10-15 §4.2):
+    // aberta uma vez por varredura, lançada só se alguma fonte precisar, fechada sempre.
+    const sessao = abrirSessao();
+    let analisado;
+    try {
+      const deps: Dependencias = {
+        resolverFonte: (grupo) => resolverGrupoEFonte(grupo),
+        // Repetição com espera para falhas transitórias (30 s, 120 s); a fonte "janela" passa
+        // direto, porque a sessão já tem ritmo e repetição próprios (spec 2026-10-23 §3.2).
+        raspar: comRepeticao((fonte) => rasparFonte(fonte, { ...RASPADORES_PADRAO, porJanela: (url, opcoes) => sessao.raspar(url, opcoes) })),
+        extrairComposicao: (grupoCanonico, textoLimpo) => extrairComposicao(grupoCanonico, textoLimpo),
+        leiturasAnteriores,
+        falhasAnteriores,
+        agora: () => agora,
+      };
+      analisado = await analisar(arquivoNome, contatos, deps, enderecos);
+    } finally {
+      await sessao.fechar();
+    }
+    // Eleição 2026: passada posterior, eixo próprio (spec 2026-10-05 §4.3).
+    // A decisão do GT vence a regra na classificação dos eleitos (spec 2026-10-30 §4.1.1).
+    const comEleicao = eleitos || deputadosAtuais || governadores
+      ? aplicarEleicao(analisado, eleitos ?? [], arquivosEleicao ?? [], deputadosAtuais, governadores, await lerDecisoesParaEleicao())
+      : analisado;
+    // Grupos de modo `lista` comparados com as planilhas desta varredura (spec 2026-10-30 §4.6).
+    const resultado = aplicarListas(comEleicao, diaMes(agora.toISOString()));
     const retrato = montarRetrato(
       resultado,
       {
@@ -40,22 +123,26 @@ export async function POST(req: NextRequest) {
         ...(enderecos
           ? { enderecos: { nome: arquivoEnderecosNome ?? "endereços", linhas: enderecos.length } }
           : {}),
+        ...(baseEnderecos ? { baseEnderecos } : {}),
       },
       new Date(),
     );
 
     let aviso: string | undefined;
     try {
-      await armazemPadrao().gravarRetrato(retrato);
+      await armazem.gravarRetrato(retrato);
     } catch (err) {
       // Só o motivo técnico: o retrato tem PII e nunca vai para o log.
       console.error("[/api/analise] retrato não guardado:", err instanceof Error ? err.message : "erro desconhecido");
       aviso = AVISO_NAO_GUARDADO;
     }
+    const avisoDecisoes = aviso ? undefined : await registrarColetaNasDecisoes(retrato);
 
     // Diagnóstico temporário (não-PII): só roda com ?diag=1 (custo zero no fluxo normal).
     const diag = req.nextUrl.searchParams.get("diag") === "1" ? await diagnosticarIa() : undefined;
-    return NextResponse.json({ ok: true, retrato, ...(aviso ? { aviso } : {}), ...(diag ? { diag } : {}) });
+    // A base inteira tem PII e a memória só interessa à máquina: ambas já estão no arquivo local.
+    const { baseEnderecos: _baseGuardada, leituras: _memoria, ...retratoDaResposta } = retrato;
+    return NextResponse.json({ ok: true, retrato: retratoDaResposta, ...(aviso ? { aviso } : {}), ...(avisoDecisoes ? { avisoDecisoes } : {}), ...(diag ? { diag } : {}) });
   } catch (err) {
     if (err instanceof PayloadInvalidoError) {
       return NextResponse.json({ ok: false, message: err.message }, { status: 422 });

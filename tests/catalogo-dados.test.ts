@@ -1,14 +1,202 @@
 import { describe, expect, test } from "vitest";
 import { CATALOGO } from "@/data/catalogo";
+import { normalizarNome } from "@/lib/normalize";
+import { resolverGrupoEFonte } from "@/lib/catalogo";
+
+// Tabela dos titulares em `/fora-de-exercicio/-/f/por-tipo`: a primeira das duas (fixture de
+// 23/10, tests/scrape-tabela.test.ts).
+const INDICE_TITULARES = 0;
 
 describe("catálogo real (data/catalogo.ts)", () => {
-  test("tem os 33 grupos migrados do banco", () => {
-    expect(CATALOGO).toHaveLength(33);
+  test("tem os 35 grupos (33 migrados do banco + Governadores Eleitos + Senadores titulares fora de exercício)", () => {
+    expect(CATALOGO).toHaveLength(35);
   });
 
-  test("tem as 24 fontes cadastradas (21 migradas do banco + 3 de fora de exercício)", () => {
+  test("tem as 26 fontes de grupo (24 − 3 de fora de exercício nos Senadores + grupo novo, TST /orgaos, STJ PDF, PGR e Ex-Presidentes do Congresso)", () => {
     const total = CATALOGO.reduce((n, g) => n + g.fontes.length, 0);
-    expect(total).toBe(24);
+    expect(total).toBe(26);
+  });
+
+  describe("planilha de 23/10 (spec 2026-10-23 §5)", () => {
+    test("Senadores titulares fora de exercício: grupo novo, tabela por tipo, propõe inclusão", () => {
+      const g = CATALOGO.find((x) => x.nome === "Senadores titulares fora de exercício")!;
+      expect(g.fontes).toEqual([{ url: "https://www25.senado.leg.br/web/senadores/fora-de-exercicio/-/f/por-tipo", ativo: true, propoeInclusao: true, tabela: { indice: INDICE_TITULARES, colunas: { nome: 0, uf: 2, motivo: 3 }, secoes: ["Assunção de cargo", "Licença com convocação de suplente"] } }]);
+    });
+
+    test("o rótulo da base de 27/10 casa o grupo dos senadores titulares fora de exercício, e não os de Senadores", () => {
+      const r = resolverGrupoEFonte("Senadores titulares fora de exercício - Posse 2027");
+      expect(r.grupoCanonico).toBe("Senadores titulares fora de exercício");
+      expect(r.fontes.map((f) => f.url)).toEqual(["https://www25.senado.leg.br/web/senadores/fora-de-exercicio/-/f/por-tipo"]);
+    });
+
+    test("Ex-Presidentes do Congresso resolve o grupo canônico com a fonte nova-republica; o nome antigo não resolve mais", () => {
+      const novo = resolverGrupoEFonte("Ex-Presidentes do Congresso");
+      expect(novo.grupoCanonico).toBe("Ex-Presidentes do Congresso");
+      expect(novo.fontes.map((f) => f.url)).toEqual(["https://www25.senado.leg.br/web/senadores/nova-republica"]);
+      const antigo = resolverGrupoEFonte("Ex-Presidentes do Senado");
+      expect(antigo.grupoCanonico).not.toBe("Ex-Presidentes do Congresso");
+      expect(antigo.fontes).toEqual([]);
+      expect(antigo.sugestoes).toContain("Ex-Presidentes do Congresso");
+    });
+
+    test("TST: /ministros primária e /orgaos por marcador propondo convocados", () => {
+      const tst = CATALOGO.find((g) => g.nome === "Ministros do TST")!;
+      expect(tst.fontes.map((f) => f.url)).toEqual(["https://www.tst.jus.br/ministros", "https://www.tst.jus.br/orgaos"]);
+      expect(tst.fontes[1]).toMatchObject({ ativo: true, rotulo: "convocado", propoeInclusao: true, marcador: { textos: ["(convocado)", "(convocada)"] } });
+    });
+
+    test("STJ: a página dos ministros marca o nome em destaque; o PDF dos convocados não", () => {
+      const stj = CATALOGO.find((g) => g.nome === "Ministros do STJ")!;
+      expect(stj.fontes[0]).toMatchObject({ url: "https://www.stj.jus.br/web/verMinistrosSTJ?parametro=1", ativo: true, nomeEmDestaque: true });
+      expect(stj.fontes[1].nomeEmDestaque).toBeUndefined();
+      expect(CATALOGO.flatMap((g) => g.fontes).filter((f) => f.nomeEmDestaque).length).toBe(1);
+    });
+
+    test("STJ: segunda fonte é o PDF da composição, por marcador **", () => {
+      const stj = CATALOGO.find((g) => g.nome === "Ministros do STJ")!;
+      expect(stj.fontes[1]).toMatchObject({ url: "https://www.stj.jus.br/sites/portalp/SiteAssets/Paginas/Institucional/Composicao/Composicao-do-STJ.pdf", ativo: true, tipo: "pdf", rotulo: "convocado", propoeInclusao: true, marcador: { textos: ["**"] } });
+    });
+
+    test("PGR e Ex-Presidentes do Congresso ganharam fonte", () => {
+      expect(CATALOGO.find((g) => g.nome === "Procurador-Geral da República")?.fontes).toEqual([{ url: "https://www.mpf.mp.br/o-mpf/o-mpf/membros/procurador-geral-da-republica", ativo: true }]);
+      expect(CATALOGO.find((g) => g.nome === "Ex-Presidentes do Congresso")?.fontes).toEqual([{ url: "https://www25.senado.leg.br/web/senadores/nova-republica", ativo: true }]);
+    });
+
+    test("tipo pdf, marcador e urlAlternativa só onde a spec manda; alternativas em domínio oficial", () => {
+      const fontes = CATALOGO.flatMap((g) => g.fontes);
+      expect(fontes.filter((f) => f.tipo === "pdf")).toHaveLength(1);
+      expect(fontes.filter((f) => f.marcador)).toHaveLength(2);
+      expect(fontes.some((f) => "nomesDoContatos" in f)).toBe(false);
+      const alternativas = CATALOGO.flatMap((g) => [...g.fontes, ...(g.fontesIndividuais ?? [])]).flatMap((f) => (f.urlAlternativa ? [f.urlAlternativa] : []));
+      expect(alternativas).toHaveLength(6);
+      expect(alternativas.every((u) => /^https:\/\/[a-z0-9.-]+\.gov\.br\//.test(u))).toBe(true);
+    });
+
+    test("ajuste de 26/10: link da planilha de 23/10 é a principal nos quatro ministérios; AC lê a página da governadoria (GT de 05/11)", () => {
+      const ind = CATALOGO.flatMap((g) => g.fontesIndividuais ?? []);
+      const principalDe = (nome: string) => ind.find((f) => "nome" in f.chave && f.chave.nome === nome);
+      expect(principalDe("Miriam Belchior")?.url).toBe("https://www.gov.br/casacivil/pt-br/composicao/gabinete-do-ministro/quem-e-quem-1");
+      expect(principalDe("Margareth Menezes da Purificação")?.url).toBe("https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra/margareth-menezes-1");
+      expect(principalDe("José Mucio Monteiro Filho")?.url).toBe("https://www.gov.br/defesa/pt-br/composicao/gabinete-do-ministro/jose-mucio-monteiro-filho");
+      expect(principalDe("Rachel Barros de Oliveira")?.url).toBe("https://www.gov.br/igualdaderacial/pt-br/composicao/gabinete-da-ministra/rachel-barros-de-oliveira");
+      const ac = ind.find((f) => "uf" in f.chave && f.chave.uf === "AC");
+      expect(ac).toMatchObject({ url: "https://estado.ac.gov.br/orgao-entidades/governadoria/", urlAlternativa: "https://agencia.ac.gov.br/governadora/" });
+    });
+  });
+
+  test("navegador headless só no MS e no MT (governadores) e no TCU; 'janela' no gov.br federal e em AM, RR e RJ", () => {
+    const headless = CATALOGO.flatMap((g) => [
+      ...g.fontes.filter((f) => f.navegador === true).map((f) => f.url),
+      ...(g.fontesIndividuais ?? []).filter((f) => f.navegador === true).map((f) => f.url),
+    ]);
+    expect(headless).toEqual(["https://www.transparencia.ms.gov.br/#/QuemEQuem", "https://portal.mt.gov.br/conheca-mato-grosso/governo", "https://portal.tcu.gov.br/autoridades"]);
+    const janela = CATALOGO.flatMap((g) => [
+      ...g.fontes.filter((f) => f.navegador === "janela").map((f) => f.url),
+      ...(g.fontesIndividuais ?? []).filter((f) => f.navegador === "janela").map((f) => f.url),
+    ]);
+    const estaduais = janela.filter((u) => !u.startsWith("https://www.gov.br/"));
+    expect(estaduais).toEqual([
+      "https://www.transparencia.am.gov.br/estrutura-organizacional/",
+      "https://transparencia.rr.gov.br/principaiscargos",
+      "https://www.rj.gov.br/pagina/sobre-o-governo9806",
+    ]);
+    // 38 ministros + a geral do Planalto + as 3 entradas de Embaixadores (mesma lista do MRE).
+    expect(janela.length - estaduais.length).toBe(42);
+  });
+
+  describe("fontes individuais (spec 2026-10-15)", () => {
+    const DOMINIO_OFICIAL = /^https:\/\/[a-z0-9.-]+\.(gov|jus|leg|mp|def)\.br(\/|$)/i;
+    const comIndividuais = CATALOGO.filter((g) => (g.fontesIndividuais ?? []).length > 0);
+
+    test("só Governadores, Governadores Eleitos e Ministros de Estado têm fontes individuais", () => {
+      expect(comIndividuais.map((g) => g.nome).sort()).toEqual(["Governadores", "Governadores Eleitos", "Ministros de Estado"]);
+    });
+
+    test("Governadores Eleitos: 3 sites de campanha (ES, RN, TO), provisórios, só nome, válidos até 5/1/2027 (spec 2026-10-26)", () => {
+      const g = CATALOGO.find((x) => x.nome === "Governadores Eleitos")!;
+      expect(g.fontes).toEqual([]);
+      expect(g.fontesIndividuais).toEqual([
+        { url: "https://lorenzopazolini10.com.br/", ativo: true, chave: { uf: "ES" }, campos: ["nome"], provisoria: "campanha", validaAte: "2027-01-05" },
+        { url: "https://cadudelula.com.br/", ativo: true, chave: { uf: "RN" }, campos: ["nome"], provisoria: "campanha", validaAte: "2027-01-05" },
+        { url: "https://vicentinho45.com.br/", ativo: true, chave: { uf: "TO" }, campos: ["nome"], provisoria: "campanha", validaAte: "2027-01-05" },
+      ]);
+    });
+
+    test("site de campanha (domínio não oficial) só nas três individuais de Governadores Eleitos", () => {
+      const todas = CATALOGO.flatMap((g) => [...g.fontes.map((f) => ({ grupo: g.nome, url: f.url, provisoria: undefined as unknown })), ...(g.fontesIndividuais ?? []).map((f) => ({ grupo: g.nome, url: f.url, provisoria: f.provisoria as unknown }))]);
+      const campanha = todas.filter((f) => f.provisoria === "campanha");
+      expect(campanha.map((f) => f.grupo)).toEqual(["Governadores Eleitos", "Governadores Eleitos", "Governadores Eleitos"]);
+      const individuais = CATALOGO.flatMap((g) => g.fontesIndividuais ?? []);
+      const naoOficiais = individuais.filter((f) => !DOMINIO_OFICIAL.test(f.url));
+      expect(naoOficiais.map((f) => f.url)).toEqual(campanha.map((f) => f.url));
+      expect(individuais.filter((f) => f.validaAte).map((f) => f.url)).toEqual(campanha.map((f) => f.url));
+    });
+
+    test("Governadores: 27 individuais ativas, por UF, nome e cargo, sem fonte de grupo", () => {
+      const g = CATALOGO.find((x) => x.nome === "Governadores")!;
+      expect(g.fontes).toEqual([]);
+      const ind = g.fontesIndividuais ?? [];
+      expect(ind).toHaveLength(27);
+      expect(ind.every((f) => f.ativo && "uf" in f.chave && f.campos.length === 2)).toBe(true);
+      const ufs = ind.map((f) => ("uf" in f.chave ? f.chave.uf : "")).sort();
+      expect(ufs).toEqual(["AC","AL","AM","AP","BA","CE","DF","ES","GO","MA","MG","MS","MT","PA","PB","PE","PI","PR","RJ","RN","RO","RR","RS","SC","SE","SP","TO"]);
+    });
+
+    test("Governadores têm fonte individual em AC, MT, MG, RS e SC com a URL do GT de 05/11", () => {
+      const ind = CATALOGO.find((x) => x.nome === "Governadores")!.fontesIndividuais ?? [];
+      const da = (uf: string) => ind.find((f) => "uf" in f.chave && f.chave.uf === uf);
+      expect(da("AC")).toMatchObject({ url: "https://estado.ac.gov.br/orgao-entidades/governadoria/", urlAlternativa: "https://agencia.ac.gov.br/governadora/" });
+      expect(da("MT")).toMatchObject({ url: "https://portal.mt.gov.br/conheca-mato-grosso/governo", navegador: true });
+      expect(da("MG")?.url).toBe("https://www.mg.gov.br/governador/mateus-simoes-de-almeida");
+      expect(da("RS")?.url).toBe("https://www.estado.rs.gov.br/governador");
+      expect(da("SC")?.url).toBe("https://agenda.scc.sc.gov.br/site/colegiado-de-governo");
+      for (const uf of ["AC", "MT", "MG", "RS", "SC"]) {
+        expect(da(uf)?.ativo).toBe(true);
+        expect(da(uf)?.campos).toEqual(["nome", "cargo"]);
+      }
+    });
+
+    test("Governadores: provisórias (notícia) só em PE e DF, com nome e cargo, sem validade", () => {
+      const ind = CATALOGO.find((x) => x.nome === "Governadores")!.fontesIndividuais ?? [];
+      expect(ind.filter((f) => f.provisoria && f.provisoria !== "noticia")).toEqual([]);
+      expect(ind.filter((f) => f.validaAte)).toEqual([]);
+      const provisorias = ind.filter((f) => f.provisoria === "noticia");
+      expect(provisorias.map((f) => ("uf" in f.chave ? f.chave.uf : "")).sort()).toEqual(["DF", "PE"]);
+      expect(provisorias.every((f) => f.campos.join(",") === "nome,cargo")).toBe(true);
+    });
+
+    test("Ministros de Estado: geral é lista de cargos com janela; 38 individuais por nome; AGU e CGU cobrem cargo", () => {
+      const g = CATALOGO.find((x) => x.nome === "Ministros de Estado")!;
+      expect(g.fontes).toHaveLength(1);
+      expect(g.fontes[0]).toMatchObject({ ativo: true, casamento: "cargo", campos: ["cargo"], navegador: "janela" });
+      const ind = g.fontesIndividuais ?? [];
+      expect(ind).toHaveLength(38);
+      expect(ind.every((f) => f.ativo && "nome" in f.chave && f.navegador === "janela")).toBe(true);
+      const cobremCargo = ind.filter((f) => f.campos.includes("cargo")).map((f) => f.url).sort();
+      expect(cobremCargo).toEqual([
+        "https://www.gov.br/agu/pt-br/acesso-a-informacao/institucional/quem",
+        "https://www.gov.br/cgu/pt-br/composicao/ministro",
+      ]);
+    });
+
+    test("toda individual é de domínio oficial (salvo o site de campanha), tem campos com 'nome' e chave única no grupo", () => {
+      for (const g of comIndividuais) {
+        const ind = g.fontesIndividuais ?? [];
+        expect(ind.filter((f) => f.provisoria !== "campanha" && !DOMINIO_OFICIAL.test(f.url)).map((f) => f.url)).toEqual([]);
+        expect(ind.filter((f) => f.campos.length === 0 || !f.campos.includes("nome")).map((f) => f.url)).toEqual([]);
+        const chaves = ind.map((f) => ("uf" in f.chave ? `uf:${f.chave.uf}` : `nome:${normalizarNome(f.chave.nome)}`));
+        expect(new Set(chaves).size).toBe(chaves.length);
+      }
+    });
+
+    test("fonte 'casamento: cargo' só existe em grupo com individual ativa, e cobre só cargo", () => {
+      for (const g of CATALOGO) {
+        for (const f of g.fontes.filter((x) => x.casamento === "cargo")) {
+          expect(f.campos).toEqual(["cargo"]);
+          expect((g.fontesIndividuais ?? []).some((i) => i.ativo)).toBe(true);
+        }
+      }
+    });
   });
 
   test("todo grupo tem nome não-vazio", () => {
@@ -36,26 +224,10 @@ describe("catálogo real (data/catalogo.ts)", () => {
   describe("grupos de Senadores", () => {
     const senadores = CATALOGO.filter((g) => g.nome.startsWith("Senadores ("));
 
-    test("são três e cada um tem as duas fontes, na ordem", () => {
+    test("são três e cada um lê só a lista em exercício (fora de exercício virou grupo próprio em 23/10)", () => {
       expect(senadores).toHaveLength(3);
       for (const g of senadores) {
-        expect(g.fontes.map((f) => f.url)).toEqual([
-          "https://www25.senado.leg.br/web/senadores/em-exercicio",
-          "https://www25.senado.leg.br/web/senadores/fora-de-exercicio",
-        ]);
-      }
-    });
-
-    test("só a fonte de fora de exercício propõe inclusão, e ela tem rótulo e seções", () => {
-      for (const g of senadores) {
-        const [primaria, secundaria] = g.fontes;
-        expect(primaria.propoeInclusao).toBeUndefined();
-        expect(secundaria.propoeInclusao).toBe(true);
-        expect(secundaria.rotulo).toBe("fora de exercício");
-        expect(secundaria.tabela?.secoes).toEqual([
-          "Assunção de cargo",
-          "Licença com convocação de suplente",
-        ]);
+        expect(g.fontes.map((f) => f.url)).toEqual(["https://www25.senado.leg.br/web/senadores/em-exercicio"]);
       }
     });
 
@@ -71,5 +243,35 @@ describe("catálogo real (data/catalogo.ts)", () => {
       expect(faixaDe("Senadores (Maranhão ao Piauí)")).toEqual(["MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI"]);
       expect(faixaDe("Senadores (Rio a Tocantins)")).toEqual(["RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"]);
     });
+  });
+});
+
+describe("Presidente da Câmara (2026-10-27)", () => {
+  test("a fonte é a página do deputado que preside a Câmara, não a Mesa Diretora", () => {
+    const g = CATALOGO.find((x) => x.nome === "Presidente da Câmara dos Deputados")!;
+    expect(g.fontes).toEqual([{ url: "https://www.camara.leg.br/deputados/160674", ativo: true }]);
+  });
+});
+
+describe("fontes que clicam antes de ler (GT de 05/11)", () => {
+  const individuais = CATALOGO.flatMap((g) => g.fontesIndividuais ?? []);
+  test("Roraima clica no título do governador e vai pela janela", () => {
+    const rr = individuais.find((f) => "uf" in f.chave && f.chave.uf === "RR")!;
+    expect(rr.clicarAntes).toEqual({ texto: "Governador do Estado de Roraima", prova: "Ocupado por" });
+    expect(rr.navegador).toBe("janela");
+  });
+  test("toda fonte com clicarAntes é lida pela janela", () => {
+    const comClique = individuais.filter((f) => f.clicarAntes !== undefined);
+    expect(comClique.length).toBeGreaterThan(0);
+    expect(comClique.every((f) => f.navegador === "janela")).toBe(true);
+  });
+
+  test("só os grupos de Embaixadores não recebem proposta de inclusão (regra do GT de 05/11)", () => {
+    const marcados = CATALOGO.filter((g) => g.semInclusao).map((g) => g.nome);
+    expect(marcados).toHaveLength(3);
+    expect(marcados.every((n) => n.startsWith("Embaixadores"))).toBe(true);
+    expect(CATALOGO.filter((g) => g.nome.startsWith("Embaixadores")).every((g) => g.semInclusao === true)).toBe(true);
+    expect(resolverGrupoEFonte("Embaixadores (Filipinas até Noruega)").semInclusao).toBe(true);
+    expect(resolverGrupoEFonte("Ministros do STF").semInclusao).toBeUndefined();
   });
 });

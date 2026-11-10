@@ -1,0 +1,121 @@
+import { describe, expect, test } from "vitest";
+import { enxugarParaPublicar } from "@/lib/publicar";
+import type { Retrato, ResultadoContato } from "@/lib/types";
+
+const contato: ResultadoContato = {
+  contato: { nome: "Ana Maria Política Completa", grupo: "ORG", cargo: "Presidente", tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora", telefone: "(61) 99999-0000", email: "ana@exemplo.gov.br", redeSocial: "@ana", endereco: "Praça dos Três Poderes" },
+  semaforo: "verde",
+  comparacoes: [
+    { campo: "nome", valorPlanilha: "Ana Maria Política Completa", situacao: "confere", origemValor: "pagina" },
+    { campo: "telefone", valorPlanilha: "(61) 99999-0000", situacao: "fonte_nao_informa", origemValor: "pagina" },
+    { campo: "email", valorPlanilha: "ana@exemplo.gov.br", situacao: "fonte_nao_informa", origemValor: "pagina" },
+  ],
+  camposDivergentes: [],
+} as unknown as ResultadoContato;
+
+const retrato: Retrato = {
+  arquivoNome: "c.xlsx",
+  grupos: [{ grupo: "ORG", contatos: [contato], novos: [], semFonte: false, fonteInacessivel: false } as unknown as Retrato["grupos"][number]],
+  resumo: { total: 1 } as unknown as Retrato["resumo"],
+  sugestoesCadastro: [],
+  geradoEm: "2026-10-03T14:20:22.969Z",
+  planilhaContatos: { nome: "c.xlsx", linhas: 1 },
+} as unknown as Retrato;
+
+describe("enxugarParaPublicar", () => {
+  test("remove a foto do contato", () => {
+    const comFoto: Retrato = {
+      ...retrato,
+      grupos: [{ ...retrato.grupos[0], contatos: [{ ...contato, contato: { ...contato.contato, foto: "data:image/png;base64,AAAA" } }] }],
+    };
+    const p = enxugarParaPublicar(comFoto, "2026-10-04T10:00:00.000Z");
+    expect(p.grupos[0].contatos[0].contato.foto).toBeUndefined();
+    expect(JSON.stringify(p)).not.toMatch(/base64/);
+  });
+  test("remove telefone, e-mail e rede social do contato e as comparações de telefone e e-mail", () => {
+    const p = enxugarParaPublicar(retrato, "2026-10-04T10:00:00.000Z");
+    const c = p.grupos[0].contatos[0];
+    expect(c.contato.telefone).toBeUndefined();
+    expect(c.contato.email).toBeUndefined();
+    expect(c.contato.redeSocial).toBeUndefined();
+    expect(c.comparacoes.map((x) => x.campo)).toEqual(["nome"]);
+    expect(JSON.stringify(p)).not.toMatch(/99999-0000|ana@exemplo|@ana/);
+  });
+  test("mantém nome, cargo, tratamento, endereçamento e endereço, e carimba publicadoEm", () => {
+    const p = enxugarParaPublicar(retrato, "2026-10-04T10:00:00.000Z");
+    const c = p.grupos[0].contatos[0].contato;
+    expect(c).toMatchObject({ nome: "Ana Maria Política Completa", cargo: "Presidente", tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora", endereco: "Praça dos Três Poderes" });
+    expect(p.publicadoEm).toBe("2026-10-04T10:00:00.000Z");
+    expect(p.geradoEm).toBe(retrato.geradoEm);
+  });
+  test("não muta o retrato de entrada", () => {
+    enxugarParaPublicar(retrato, "2026-10-04T10:00:00.000Z");
+    expect(retrato.grupos[0].contatos[0].contato.telefone).toBe("(61) 99999-0000");
+    expect(retrato.grupos[0].contatos[0].comparacoes).toHaveLength(3);
+  });
+
+  test("deputado com campo extra desconhecido não leva esse campo à web (lista de permitidos)", () => {
+    const comExtra = {
+      ...retrato,
+      eleicao: {
+        arquivos: [], eleitos: [], camaraNoContatos: false,
+        deputadosAtuais: [{ uf: "MA", nomeParlamentar: "C", nomeCivil: "C D", sexo: "F", condicao: "Titular", idCamara: "1", campoNovo: "segredo-ficticio" }],
+      },
+    } as unknown as Retrato;
+    const pub = enxugarParaPublicar(comExtra, "2026-10-05T12:00:00.000Z");
+    expect(pub.eleicao?.deputadosAtuais).toEqual([{ uf: "MA", nomeParlamentar: "C", nomeCivil: "C D", sexo: "F", condicao: "Titular", idCamara: "1" }]);
+    expect(JSON.stringify(pub)).not.toContain("segredo-ficticio");
+  });
+
+  test("o retrato publicado leva os deputados atuais, mas sem e-mail, telefone, prédio e sala", () => {
+    const comEleicao: Retrato = {
+      ...retrato,
+      eleicao: {
+        arquivos: ["atuais.xlsx"], eleitos: [], camaraNoContatos: false,
+        deputadosAtuais: [{
+          uf: "MA", nomeParlamentar: "C", nomeCivil: "C D", partido: "PX", eleicao2026: "Reeleito deputado federal",
+          email: "c@camara.leg.br", telefone: "3215-0000", predio: "Anexo Ficticio", sala: "sala-ficticia-9",
+        }],
+      },
+    } as unknown as Retrato;
+    const pub = enxugarParaPublicar(comEleicao, "2026-10-05T12:00:00.000Z");
+    expect(pub.eleicao?.arquivos).toEqual(["atuais.xlsx"]);
+    expect(pub.eleicao?.deputadosAtuais).toEqual([
+      { uf: "MA", nomeParlamentar: "C", nomeCivil: "C D", partido: "PX", eleicao2026: "Reeleito deputado federal" },
+    ]);
+    const json = JSON.stringify(pub);
+    for (const dado of ["camara.leg.br", "3215-0000", "Anexo Ficticio", "sala-ficticia-9"]) expect(json).not.toContain(dado);
+    expect(comEleicao.eleicao?.deputadosAtuais?.[0].email).toBe("c@camara.leg.br");
+  });
+  test("o retrato publicado não leva a memória de leitura (spec 2026-10-20 §6)", () => {
+    const comLeituras = {
+      ...retrato,
+      leituras: { "https://orgao.gov.br": { url: "https://orgao.gov.br", lidaEm: "2026-10-16T15:50:29.000Z", conteudo: { url: "https://orgao.gov.br", textoLimpo: "Texto da página guardada", destaques: [], pessoas: [{ nome: "Pessoa Guardada" }] } } },
+    } as unknown as Retrato;
+    const pub = enxugarParaPublicar(comLeituras, "2026-10-20T18:00:00.000Z");
+    expect("leituras" in pub).toBe(false);
+    expect(JSON.stringify(pub)).not.toContain("Pessoa Guardada");
+    expect(comLeituras.leituras).toBeDefined();
+  });
+});
+
+describe("enxugarParaPublicar com a base de endereços", () => {
+  const numeroNaBase = { enderecos: 3, acimaDoLimite: 2, contatos: 2, foraDaPosse: 1, naoPrioritarios: 0 };
+  const comBase: Retrato = {
+    ...retrato,
+    baseEnderecos: { cabecalho: ["x", "Contato Id", "Numero"], linhas: [[null, 7, "LOTE 12"]] },
+    numeroNaBase,
+  } as unknown as Retrato;
+
+  test("o retrato publicado perde a base inteira e mantém só as contagens", () => {
+    const pub = enxugarParaPublicar(comBase, "2026-10-06T12:00:00.000Z");
+    expect("baseEnderecos" in pub).toBe(false);
+    expect(pub.numeroNaBase).toEqual(numeroNaBase);
+    expect(JSON.stringify(pub)).not.toContain("LOTE 12");
+  });
+
+  test("não muta o retrato de entrada", () => {
+    enxugarParaPublicar(comBase, "2026-10-06T12:00:00.000Z");
+    expect(comBase.baseEnderecos?.linhas).toHaveLength(1);
+  });
+});

@@ -29,7 +29,7 @@ const analise: ResultadoAnalise = {
   ],
   resumo: {
     total: 1, verde: 0, amarelo: 1, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-    gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+    gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0,
   },
 };
 
@@ -70,7 +70,7 @@ describe("resultadoParaLinhas", () => {
       ],
       resumo: {
         total: 0, verde: 0, amarelo: 0, vermelho: 0, novo: 1, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0,
       },
     };
     const linha = resultadoParaLinhas(analise)[0];
@@ -108,7 +108,7 @@ describe("resultadoParaLinhas", () => {
       ],
       resumo: {
         total: 1, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 1, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+        gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0,
       },
     };
 
@@ -152,7 +152,7 @@ describe("resultadoParaLinhas", () => {
       ],
       resumo: {
         total: 1, verde: 0, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 1, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-        gruposSemFonte: 0, gruposFonteInacessivel: 1, gruposViaPesquisaAmpla: 0,
+        gruposSemFonte: 0, gruposFonteInacessivel: 1, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0,
       },
     };
 
@@ -205,7 +205,7 @@ function analiseCom(comparacoes: ComparacaoCampo[], contato: ContatoPlanilha): R
     ],
     resumo: {
       total: 1, verde: 0, amarelo: 1, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-      gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+      gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0,
     },
   };
 }
@@ -217,8 +217,8 @@ describe("colunas de tratamento e endereçamento", () => {
       [
         {
           campo: "tratamento",
-          valorPlanilha: "Senhor Governador",
-          valorEsperado: "Excelentíssimo Senhor Governador",
+          valorPlanilha: "Excelentíssimo Senhor Governador",
+          valorEsperado: "Senhor Governador",
           situacao: "divergente",
           origemValor: "protocolo",
         },
@@ -230,8 +230,8 @@ describe("colunas de tratamento e endereçamento", () => {
     const linhas = resultadoParaLinhas(analise);
 
     // Assert
-    expect(linhas[0]["Tratamento (planilha)"]).toBe("Senhor Governador");
-    expect(linhas[0]["Tratamento (protocolo)"]).toBe("Excelentíssimo Senhor Governador");
+    expect(linhas[0]["Tratamento (planilha)"]).toBe("Excelentíssimo Senhor Governador");
+    expect(linhas[0]["Tratamento (protocolo)"]).toBe("Senhor Governador");
   });
 
   test("linha de coerência não ocupa o par de colunas do campo", () => {
@@ -450,7 +450,7 @@ function analiseComContato(over: Partial<ResultadoContato>): ResultadoAnalise {
     ],
     resumo: {
       total: 1, verde: 1, amarelo: 0, vermelho: 0, novo: 0, indeterminado: 0, enderecosAConfirmar: 0, possivelSaida: 0, contatosSemFonte: 0,
-      gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0,
+      gruposSemFonte: 0, gruposFonteInacessivel: 0, gruposViaPesquisaAmpla: 0, gruposReaproveitados: 0, urlsCaidasRepetidas: 0, gruposComMudanca: 0,
     },
   };
 }
@@ -522,5 +522,162 @@ describe("colunas do endereço auditado", () => {
     // Assert
     expect(linha["Endereço (montado)"]).toBe("");
     expect(linha["Endereço (situação)"]).toBe("a confirmar");
+  });
+});
+
+describe("fontes individuais no export (spec 2026-10-15 §6.2)", () => {
+  const comIndividual: ResultadoAnalise = {
+    ...analise,
+    grupos: [{
+      grupo: "Ministros de Estado", fonteUrl: "https://www.gov.br/planalto/lista", semFonte: false, novos: [],
+      contatos: [{
+        contato: { nome: "Ana", grupo: "Ministros de Estado", cargo: "Ministra X" },
+        semaforo: "verde", score: 1, origem: "oficial", fonteUrl: "https://www.gov.br/x/ministra",
+        comparacoes: [
+          { campo: "nome", valorPlanilha: "Ana", valorEsperado: "Ana", situacao: "confere", origemValor: "pagina", fonteUrl: "https://www.gov.br/x/ministra" },
+          { campo: "cargo", valorPlanilha: "Ministra X", situacao: "nao_verificado", fonteUrl: "https://www.gov.br/planalto/lista" },
+        ],
+        camposDivergentes: [],
+      }],
+    }],
+  };
+
+  test("Fonte é a individual; 'Fonte do cargo' é a geral; cargo não verificado sai com o texto", () => {
+    const linha = resultadoParaLinhas(comIndividual)[0];
+    expect(linha).toMatchObject({ Fonte: "https://www.gov.br/x/ministra", "Fonte do cargo": "https://www.gov.br/planalto/lista", "Cargo (site)": "não verificado" });
+  });
+
+  test("'Fonte do cargo' fica vazia quando é a mesma página da Fonte, e existe em toda linha", () => {
+    const linhas = resultadoParaLinhas(analise);
+    expect(linhas[0]["Fonte do cargo"]).toBe("");
+    expect(Object.keys(linhas[0])).toContain("Fonte do cargo");
+  });
+});
+
+describe("memória de leitura no export (spec 2026-10-20 §7)", () => {
+  test("grupo reaproveitado leva a anotação na observação de cada contato, junto com a ressalva de fonte", () => {
+    const comMemoria: ResultadoAnalise = {
+      ...analise,
+      grupos: [{ ...analise.grupos[0], reaproveitada: { url: "https://orgao.gov.br", lidaEm: "2026-10-16T15:50:29.000Z", motivo: "HTTP 403" }, erroFonte: "fora de exercício: HTTP 403" }],
+    };
+    const linha = resultadoParaLinhas(comMemoria)[0];
+    expect(linha.Observacao).toBe("Leitura de 16/10 reaproveitada (HTTP 403) · fonte não respondeu — fora de exercício: HTTP 403");
+  });
+  test("sem erroFonte, só a anotação", () => {
+    const comMemoria: ResultadoAnalise = {
+      ...analise,
+      grupos: [{ ...analise.grupos[0], reaproveitada: { url: "https://orgao.gov.br", lidaEm: "2026-10-16T15:50:29.000Z", motivo: "página casou 2 de 10 contatos" } }],
+    };
+    expect(resultadoParaLinhas(comMemoria)[0].Observacao).toBe("Leitura de 16/10 reaproveitada (página casou 2 de 10 contatos)");
+  });
+  test("contato com página individual reaproveitada leva a data na observação", () => {
+    const comIndividual: ResultadoAnalise = {
+      ...analise,
+      grupos: [{ ...analise.grupos[0], contatos: [{ ...analise.grupos[0].contatos[0], leituraDe: "2026-10-19T10:00:00.000Z" }] }],
+    };
+    expect(resultadoParaLinhas(comIndividual)[0].Observacao).toBe("Leitura de 19/10 reaproveitada");
+  });
+});
+
+describe("leitura resiliente no export (spec 2026-10-23 §6)", () => {
+  test("ressalvas da leitura resiliente na coluna Observacao (spec 2026-10-23 §6)", () => {
+    const resiliente: ResultadoAnalise = {
+      ...analise,
+      grupos: [{
+        ...analise.grupos[0],
+        alternativa: { url: "https://orgao.gov.br/alternativa", urlPrincipal: "https://orgao.gov.br", motivoPrincipal: "HTTP 404" },
+        mudouFormato: { lidaEm: "2026-10-16T12:00:00.000Z", trocados: 7, total: 10 },
+        contatos: [{ ...analise.grupos[0].contatos[0], alternativa: { url: "https://orgao.gov.br/alternativa", urlPrincipal: "https://orgao.gov.br", motivoPrincipal: "HTTP 404" }, provisoria: true }],
+      }],
+      falhas: { "https://orgao.gov.br": { desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" } },
+    };
+    const linhas = resultadoParaLinhas(resiliente);
+    expect(linhas[0].Observacao).toContain("Lida pela URL alternativa; a principal não respondeu (HTTP 404)");
+    expect(linhas[0].Observacao).toContain("Composição mudou: ");
+    expect(linhas[0].Observacao).toContain("Fonte caída há 2 coletas");
+    expect(linhas[0].Observacao).toContain("Fonte provisória: notícia");
+    expect(linhas[0].Observacao).toContain("Lida pela URL alternativa (HTTP 404)");
+  });
+
+  test("grupo inacessível com URL caída leva só o aviso de URL caída; sem falhas, nada muda", () => {
+    const inacessivel: ResultadoAnalise = {
+      ...analise,
+      grupos: [{ ...analise.grupos[0], fonteInacessivel: true, erroFonte: "HTTP 404" }],
+      falhas: { "https://orgao.gov.br": { desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" } },
+    };
+    expect(resultadoParaLinhas(inacessivel)[0].Observacao).toBe("Fonte caída há 2 coletas, desde 19/10: conferir se o endereço mudou");
+    expect(resultadoParaLinhas({ ...inacessivel, falhas: undefined })[0].Observacao).toBe("");
+  });
+
+  test("fonte provisória só na linha do contato que tem (PE), não nos demais governadores do grupo", () => {
+    const base = analise.grupos[0].contatos[0];
+    const governadores: ResultadoAnalise = {
+      ...analise,
+      grupos: [{
+        ...analise.grupos[0],
+        individuais: { lidas: 2, caidas: 0, provisorias: 1 },
+        contatos: [
+          { ...base, contato: { ...base.contato, nome: "Governador De Goiás" } },
+          { ...base, contato: { ...base.contato, nome: "Governadora De Pernambuco" }, provisoria: true },
+        ],
+      }],
+    };
+    const [go, pe] = resultadoParaLinhas(governadores);
+    expect(go.Observacao).not.toContain("Fonte provisória: notícia");
+    expect(pe.Observacao).toBe("Fonte provisória: notícia");
+  });
+
+  test("site de campanha na linha do contato; true de retrato antigo sai como notícia (spec 2026-10-26)", () => {
+    const base = analise.grupos[0].contatos[0];
+    const eleitos: ResultadoAnalise = {
+      ...analise,
+      grupos: [{
+        ...analise.grupos[0],
+        individuais: { lidas: 2, caidas: 0, provisorias: 2 },
+        contatos: [
+          { ...base, contato: { ...base.contato, nome: "Eleito Do Espírito Santo" }, provisoria: "campanha" },
+          { ...base, contato: { ...base.contato, nome: "Governadora Antiga" }, provisoria: true },
+        ],
+      }],
+    };
+    const [es, antiga] = resultadoParaLinhas(eleitos);
+    expect(es.Observacao).toBe("Fonte provisória: site de campanha");
+    expect(antiga.Observacao).toBe("Fonte provisória: notícia");
+  });
+
+  test("individual lida pela alternativa: o aviso de URL caída vem da principal, que é a que entra em falhas", () => {
+    const PRINCIPAL = "https://pe.gov.br/governadora";
+    const ALT = "https://pe.gov.br/governadora-alternativa";
+    const base = analise.grupos[0].contatos[0];
+    const individual: ResultadoAnalise = {
+      ...analise,
+      grupos: [{
+        ...analise.grupos[0],
+        fonteUrl: undefined,
+        individuais: { lidas: 1, caidas: 0 },
+        contatos: [{ ...base, fonteUrl: ALT, alternativa: { url: ALT, urlPrincipal: PRINCIPAL, motivoPrincipal: "HTTP 404" } }],
+      }],
+      falhas: { [PRINCIPAL]: { desde: "2026-10-19T12:00:00.000Z", coletas: 2, motivo: "HTTP 404" } },
+    };
+    expect(resultadoParaLinhas(individual)[0].Observacao).toBe("Lida pela URL alternativa (HTTP 404) · Fonte caída há 2 coletas, desde 19/10: conferir se o endereço mudou");
+  });
+});
+
+describe("tratamento pela maioria dos pares no export (spec 2026-10-30 §3.4)", () => {
+  test("a coluna (protocolo) traz o valor da maioria com a contagem dos pares", () => {
+    const analise = analiseCom(
+      [
+        {
+          campo: "tratamento",
+          valorPlanilha: "Doutor",
+          valorEsperado: "Senhor",
+          situacao: "divergente",
+          origemValor: "pares",
+          observacao: "Pela maioria dos pares: 6 de 7 no grupo usam Senhor",
+        },
+      ],
+      { nome: "Ana", grupo: "ORG" },
+    );
+    expect(resultadoParaLinhas(analise)[0]["Tratamento (protocolo)"]).toBe("Senhor (maioria dos pares: 6 de 7)");
   });
 });

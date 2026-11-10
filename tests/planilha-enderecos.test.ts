@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import * as XLSX from "xlsx";
-import { lerPlanilhaEnderecos } from "@/lib/planilha-enderecos";
+import { lerBaseEnderecos, lerPlanilhaEnderecos } from "@/lib/planilha-enderecos";
 import { ColunaFaltanteError } from "@/lib/planilha";
 
 function montarXlsx(linhas: Record<string, string>[]): ArrayBuffer {
@@ -65,5 +65,42 @@ describe("lerPlanilhaEnderecos", () => {
     } catch (err) {
       expect((err as ColunaFaltanteError).colunas).toEqual(["contato id"]);
     }
+  });
+});
+
+describe("lerBaseEnderecos", () => {
+  function montarAoa(linhas: unknown[][]): ArrayBuffer {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), "Folha1");
+    return XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+  }
+
+  test("guarda o cabeçalho em texto e as células como foram lidas (número continua número)", () => {
+    const base = lerBaseEnderecos(montarAoa([
+      ["&nbsp;", "Contato Id", "Numero"],
+      [null, 4711, "LOTE 12"],
+      [null, "A9", 15],
+    ]));
+    expect(base.cabecalho).toEqual(["&nbsp;", "Contato Id", "Numero"]);
+    expect(base.linhas).toEqual([[null, 4711, "LOTE 12"], [null, "A9", 15]]);
+  });
+
+  test("descarta a linha sem valor da 2ª coluna em diante (null e texto vazio contam como vazio)", () => {
+    const base = lerBaseEnderecos(montarAoa([
+      ["x", "Contato Id", "Numero"],
+      ["lixo", null, ""],
+      [null, 1, "10"],
+      [null, null, null],
+    ]));
+    expect(base.linhas).toEqual([[null, 1, "10"]]);
+  });
+
+  test("preenche com null a célula ausente no fim da linha", () => {
+    const base = lerBaseEnderecos(montarAoa([["x", "Contato Id", "Numero"], [null, 2]]));
+    expect(base.linhas).toEqual([[null, 2, null]]);
+  });
+
+  test("planilha sem linhas devolve cabeçalho vazio e nenhuma linha", () => {
+    expect(lerBaseEnderecos(montarAoa([]))).toEqual({ cabecalho: [], linhas: [] });
   });
 });

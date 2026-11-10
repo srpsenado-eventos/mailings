@@ -1,0 +1,561 @@
+import { describe, expect, it } from "vitest";
+import {
+  GRUPO_DEPUTADOS_ELEITOS,
+  GRUPO_DEPUTADOS_FEDERAIS,
+  GRUPO_GOVERNADORES_ELEITOS,
+} from "@/data/grupos-posse";
+import {
+  acharCaso,
+  BloqueioSemDecisaoError,
+  bloqueioVigente,
+  casosDaPessoa,
+  DecisaoInvalidaError,
+  grupoEquivalente,
+  gruposABloquear,
+  gruposAtuaisParaOCaso,
+  HISTORICO_VAZIO,
+  quadroDeBloqueio,
+  registrar,
+  registrarBloqueio,
+  registrarColetas,
+  situacaoDoCaso,
+  textoDasPendencias,
+  vigente,
+  type CasoDecidido,
+  type HistoricoDecisoes,
+  type RegistroBloqueio,
+  type RegistroManual,
+} from "@/lib/decisoes";
+
+const STF = "Ministros do STF";
+const TSE = "Ministros do TSE";
+const STJ = "Ministros do STJ";
+
+function congelar<T>(valor: T): T {
+  if (valor !== null && typeof valor === "object") {
+    Object.values(valor as Record<string, unknown>).forEach(congelar);
+    Object.freeze(valor);
+  }
+  return valor;
+}
+
+function manual(parcial: Partial<RegistroManual> & Pick<RegistroManual, "tipo">): RegistroManual {
+  return {
+    data: "2026-10-29",
+    quem: "GT (planilha de 29/10)",
+    observacao: "",
+    validacao: "validado",
+    grupos: [],
+    ...parcial,
+  };
+}
+
+function casoCom(...registros: RegistroManual[]): CasoDecidido {
+  return { id: "x", nome: "X", chaves: ["x"], registros };
+}
+
+const NUNES_MARQUES = manual({ tipo: "mesma_pessoa", convidaPor: TSE, grupos: [STF, TSE] });
+
+describe("grupoEquivalente", () => {
+  it("apelido: o nome antigo Ex-Presidentes do Senado devolve Ex-Presidentes do Congresso", () => {
+    expect(grupoEquivalente("Ex-Presidentes do Senado", "contatos")).toBe("Ex-Presidentes do Congresso");
+  });
+
+  it("rótulo do Contatos com espaço e caixa diferentes vira o rótulo oficial do agrupador", () => {
+    // Arrange
+    const rotulo = "  governadores ELEITOS - Posse Presidencial 2027 ";
+    // Act
+    const grupo = grupoEquivalente(rotulo, "contatos");
+    // Assert
+    expect(grupo).toBe(GRUPO_GOVERNADORES_ELEITOS);
+  });
+
+  it("rótulo do Contatos fora do agrupador volta aparado", () => {
+    expect(grupoEquivalente(" Ministros do STF ", "contatos")).toBe(STF);
+  });
+
+  it("a planilha da Câmara vale como o grupo Deputados Federais", () => {
+    expect(grupoEquivalente("Câmara", "camara")).toBe(GRUPO_DEPUTADOS_FEDERAIS);
+  });
+
+  it("o eleito vale como o seu grupo de destino", () => {
+    expect(grupoEquivalente("Eleição 2026", "eleicao", GRUPO_DEPUTADOS_ELEITOS)).toBe(GRUPO_DEPUTADOS_ELEITOS);
+  });
+
+  it("eleito sem grupo de destino devolve o grupo informado", () => {
+    expect(grupoEquivalente("Eleição 2026", "eleicao")).toBe("Eleição 2026");
+  });
+
+  it("grupo de destino vazio vale como ausente", () => {
+    expect(grupoEquivalente("Eleição 2026", "eleicao", "")).toBe("Eleição 2026");
+  });
+});
+
+describe("registrar e acharCaso", () => {
+  it("dois registros com formas diferentes do nome ficam no mesmo caso, achado pelas duas chaves", () => {
+    // Arrange
+    const primeiro = registrar(HISTORICO_VAZIO, "Ministro Kassio Nunes Marques", ["Ministro Kassio Nunes Marques"], NUNES_MARQUES);
+    // Act
+    const segundo = registrar(
+      primeiro,
+      "Nunes Marques",
+      ["Nunes Marques", "Kassio Nunes Marques"],
+      manual({ tipo: "mesma_pessoa", convidaPor: TSE, grupos: [STF, TSE], data: "2026-10-30" }),
+    );
+    // Assert
+    expect(segundo.casos).toHaveLength(1);
+    const caso = segundo.casos[0];
+    expect(caso.id).toBe("kassio nunes marques#ministros do stf|ministros do tse");
+    expect(caso.registros).toHaveLength(2);
+    expect(caso.chaves).toEqual(expect.arrayContaining(["kassio nunes marques", "nunes marques"]));
+    expect(acharCaso(segundo, ["Kassio Nunes Marques"])).toBe(caso);
+    expect(acharCaso(segundo, ["Nunes Marques"])).toBe(caso);
+  });
+
+  it("nome sem caso registrado não acha nada", () => {
+    const h = registrar(HISTORICO_VAZIO, "Davi Alcolumbre", ["Davi Alcolumbre"], manual({ tipo: "nao_recebe_convite" }));
+    expect(acharCaso(h, ["Rodrigo Pacheco"])).toBeUndefined();
+  });
+
+  it("mesmo nome com grupos diferentes cria dois casos, cada um com o seu vigente", () => {
+    // Arrange
+    const exPresidente = manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Ex-Presidentes do Congresso", "Senadores"] });
+    const filho = manual({ tipo: "pessoas_diferentes", grupos: ["Senadores", GRUPO_DEPUTADOS_ELEITOS] });
+    // Act
+    const h1 = registrar(HISTORICO_VAZIO, "Jader Barbalho", ["Jader Barbalho"], exPresidente);
+    const h2 = registrar(h1, "Jader Barbalho", ["Jader Barbalho"], filho);
+    // Assert
+    expect(h2.casos).toHaveLength(2);
+    expect(vigente(h2.casos[0])?.tipo).toBe("mesma_pessoa");
+    expect(vigente(h2.casos[1])?.tipo).toBe("pessoas_diferentes");
+    expect(h2.casos[0].id).not.toBe(h2.casos[1].id);
+    expect(acharCaso(h2, ["Jader Barbalho"], ["Senadores", "Ex-Presidentes do Congresso"])).toBe(h2.casos[0]);
+    expect(acharCaso(h2, ["Jader Barbalho"], [GRUPO_DEPUTADOS_ELEITOS])).toBe(h2.casos[1]);
+  });
+
+  it("com dois casos do mesmo nome, achar sem grupos ou com empate de grupos não acha nada", () => {
+    // Arrange
+    const h1 = registrar(HISTORICO_VAZIO, "Jader Barbalho", [], manual({ tipo: "mesma_pessoa", grupos: ["A", "B"] }));
+    const h2 = registrar(h1, "Jader Barbalho", [], manual({ tipo: "pessoas_diferentes", grupos: ["B", "C"] }));
+    // Act / Assert
+    expect(acharCaso(h2, ["Jader Barbalho"])).toBeUndefined();
+    expect(acharCaso(h2, ["Jader Barbalho"], ["B"])).toBeUndefined();
+    expect(acharCaso(h2, ["Jader Barbalho"], ["D"])).toBeUndefined();
+  });
+
+  it("casosDaPessoa devolve todos os casos da pessoa com algum grupo em comum", () => {
+    // Arrange
+    const h1 = registrar(HISTORICO_VAZIO, "Jader Barbalho", [], manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Ex-Presidentes do Congresso", "Senadores"] }));
+    const h2 = registrar(h1, "Jader Barbalho", [], manual({ tipo: "pessoas_diferentes", grupos: ["Senadores", GRUPO_DEPUTADOS_ELEITOS] }));
+    const todos = ["senadores", "Ex-Presidentes do Congresso", GRUPO_DEPUTADOS_ELEITOS];
+    // Act / Assert
+    expect(casosDaPessoa(h2, ["Jader Barbalho"], todos)).toEqual(h2.casos);
+    expect(casosDaPessoa(h2, ["Jader Barbalho"], ["Ex-Presidentes do Congresso", "Ministros do STF"])).toEqual([h2.casos[0]]);
+    expect(casosDaPessoa(h2, ["Jader Barbalho"], ["Senadores"])).toEqual(h2.casos);
+    expect(casosDaPessoa(h2, ["Outra Pessoa"], todos)).toEqual([]);
+    expect(casosDaPessoa(h2, ["Jader Barbalho"], ["Ministros do STF"])).toEqual([]);
+  });
+
+  it("gruposAtuaisParaOCaso tira o grupo que só outro caso da mesma pessoa cobre", () => {
+    // Arrange
+    const h1 = registrar(HISTORICO_VAZIO, "Jader Barbalho", [], manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Ex-Presidentes do Congresso", "Senadores"] }));
+    const h2 = registrar(h1, "Jader Barbalho", [], manual({ tipo: "pessoas_diferentes", outraPessoa: [GRUPO_DEPUTADOS_ELEITOS], grupos: ["Senadores", GRUPO_DEPUTADOS_ELEITOS] }));
+    const outro = registrar(HISTORICO_VAZIO, "Outra Pessoa", [], manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Ex-Presidentes do Congresso", "Senadores"] })).casos[0];
+    const [exPresidente, filho] = h2.casos;
+    const atuais = ["Senadores", "Ex-Presidentes do Congresso"];
+    // Act / Assert
+    expect(gruposAtuaisParaOCaso(exPresidente, atuais, h2.casos)).toEqual(atuais);
+    expect(gruposAtuaisParaOCaso(filho, atuais, h2.casos)).toEqual(["Senadores"]);
+    expect(situacaoDoCaso(filho, gruposAtuaisParaOCaso(filho, atuais, h2.casos))).toBe("sem_efeito");
+    expect(gruposAtuaisParaOCaso(filho, atuais, [filho, outro])).toEqual(atuais);
+  });
+
+  it("registro com os mesmos grupos, em outra ordem e caixa, acrescenta ao caso existente", () => {
+    // Arrange
+    const h1 = registrar(HISTORICO_VAZIO, "Nunes Marques", [], NUNES_MARQUES);
+    // Act
+    const h2 = registrar(h1, "Nunes Marques", [], manual({ tipo: "pessoas_diferentes", grupos: [" ministros do tse", STF] }));
+    // Assert
+    expect(h2.casos).toHaveLength(1);
+    expect(h2.casos[0].registros).toHaveLength(2);
+  });
+
+  it("decisão de caso reaberto, com os grupos antigos e um novo, acrescenta ao mesmo caso", () => {
+    // Arrange
+    const h1 = registrar(HISTORICO_VAZIO, "Nunes Marques", [], NUNES_MARQUES);
+    // Act
+    const h2 = registrar(h1, "Nunes Marques", [], manual({ tipo: "mesma_pessoa", convidaPor: TSE, grupos: [STF, TSE, STJ], data: "2026-11-02" }));
+    // Assert
+    expect(h2.casos).toHaveLength(1);
+    expect(situacaoDoCaso(h2.casos[0], [TSE, STJ])).toBe("pendente");
+  });
+
+  it("nome vazio depois da normalização lança DecisaoInvalidaError", () => {
+    expect(() => registrar(HISTORICO_VAZIO, "  Ministro ", [], NUNES_MARQUES)).toThrow(DecisaoInvalidaError);
+  });
+
+  it("mudar os grupos do registro depois de registrar não muda o histórico", () => {
+    // Arrange
+    const r = manual({ tipo: "mesma_pessoa", convidaPor: TSE, grupos: [STF, TSE] });
+    const h = registrar(HISTORICO_VAZIO, "Nunes Marques", [], r);
+    // Act
+    r.grupos.push(STJ);
+    // Assert
+    expect(vigente(h.casos[0])?.grupos).toEqual([STF, TSE]);
+  });
+
+  it("nomes diferentes sem chave em comum criam casos separados", () => {
+    // Arrange
+    const h1 = registrar(HISTORICO_VAZIO, "Davi Alcolumbre", ["Davi Alcolumbre"], manual({ tipo: "nao_recebe_convite" }));
+    // Act
+    const h2 = registrar(h1, "Eunício Oliveira", ["Eunício Oliveira"], manual({ tipo: "ajustar_contatos" }));
+    // Assert
+    expect(h2.casos.map((c) => c.id)).toEqual(["davi alcolumbre#", "eunicio oliveira#"]);
+  });
+});
+
+describe("vigente", () => {
+  it("vale o registro manual de data mais recente, mesmo gravado antes na ordem", () => {
+    // Arrange
+    const recente = manual({ tipo: "pessoas_diferentes", data: "2026-10-30" });
+    const antigo = manual({ tipo: "mesma_pessoa", data: "2026-10-26" });
+    // Act / Assert
+    expect(vigente(casoCom(recente, antigo))).toBe(recente);
+  });
+
+  it("no empate de data vale o último na ordem", () => {
+    const a = manual({ tipo: "pessoas_diferentes" });
+    const b = manual({ tipo: "mesma_pessoa" });
+    expect(vigente(casoCom(a, b))).toBe(b);
+  });
+
+  it("entradas de coleta não contam", () => {
+    const caso: CasoDecidido = {
+      id: "x",
+      nome: "X",
+      chaves: ["x"],
+      registros: [{ tipo: "coleta", data: "2026-10-30", situacao: "pendente", grupos: [] }],
+    };
+    expect(vigente(caso)).toBeUndefined();
+  });
+});
+
+describe("situacaoDoCaso", () => {
+  const nunes = casoCom(NUNES_MARQUES);
+
+  it("mesma_pessoa só no grupo do convite: tratado", () => {
+    expect(situacaoDoCaso(nunes, [TSE])).toBe("tratado");
+  });
+
+  it("mesma_pessoa ainda no grupo que não convida: pendente", () => {
+    expect(situacaoDoCaso(nunes, [STF, TSE])).toBe("pendente");
+  });
+
+  it("convidaPor com rótulo variante (espaço no fim, caixa diferente) acha o grupo do convite", () => {
+    // Arrange
+    const variante = casoCom(manual({ tipo: "mesma_pessoa", convidaPor: "ministros do TSE ", grupos: [STF, TSE] }));
+    const eleito = casoCom(manual({
+      tipo: "mesma_pessoa", convidaPor: "  SENADORES eleitos - Posse Presidencial 2027 ", grupos: ["Senadores eleitos - Posse Presidencial 2027"],
+    }));
+    // Act / Assert
+    expect(situacaoDoCaso(variante, [TSE])).toBe("tratado");
+    expect(situacaoDoCaso(variante, [STF, TSE])).toBe("pendente");
+    expect(situacaoDoCaso(eleito, ["Senadores eleitos - Posse Presidencial 2027"])).toBe("tratado");
+  });
+
+  it("decisão gravada com o nome antigo Ex-Presidentes do Senado não reabre com o nome novo", () => {
+    // Arrange
+    const caso = casoCom(manual({
+      tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Senadores", "Ex-Presidentes do Senado"],
+    }));
+    // Act / Assert
+    expect(situacaoDoCaso(caso, ["Senadores", "Ex-Presidentes do Congresso"])).toBe("pendente");
+    expect(situacaoDoCaso(caso, ["Senadores"])).toBe("tratado");
+  });
+
+  it("mesma_pessoa num grupo que não constava na decisão: reaberto", () => {
+    expect(situacaoDoCaso(nunes, [TSE, STJ])).toBe("reaberto");
+  });
+
+  it("nao_recebe_convite fora de todos os grupos: tratado; ainda em Senadores: pendente", () => {
+    // Arrange
+    const davi = casoCom(manual({ tipo: "nao_recebe_convite", grupos: ["Senadores"] }));
+    // Act / Assert
+    expect(situacaoDoCaso(davi, [])).toBe("tratado");
+    expect(situacaoDoCaso(davi, ["Senadores"])).toBe("pendente");
+  });
+
+  it("pessoas_diferentes com os mesmos grupos: sem efeito; com grupo novo: reaberto", () => {
+    const caso = casoCom(manual({ tipo: "pessoas_diferentes", grupos: [STF, TSE] }));
+    expect(situacaoDoCaso(caso, [STF, TSE])).toBe("sem_efeito");
+    expect(situacaoDoCaso(caso, [STF, STJ])).toBe("reaberto");
+  });
+
+  it("ajustar_contatos: tratado sem grupo ou só no grupo do convite; pendente com outro grupo da decisão", () => {
+    const caso = casoCom(manual({ tipo: "ajustar_contatos", convidaPor: TSE, grupos: [STF, TSE] }));
+    expect(situacaoDoCaso(caso, [])).toBe("tratado");
+    expect(situacaoDoCaso(caso, [TSE])).toBe("tratado");
+    expect(situacaoDoCaso(caso, [STF, TSE])).toBe("pendente");
+  });
+
+  it("ajustar_contatos sem grupo do convite fecha quando a pessoa fica em um grupo só ou em nenhum", () => {
+    const caso = casoCom(manual({ tipo: "ajustar_contatos", grupos: [STF, TSE] }));
+    expect(situacaoDoCaso(caso, [])).toBe("tratado");
+    expect(situacaoDoCaso(caso, [TSE])).toBe("tratado");
+    expect(situacaoDoCaso(caso, [STF, TSE])).toBe("pendente");
+  });
+
+  it("mesma_pessoa fora de todos os grupos: pendente, porque ainda falta o grupo do convite", () => {
+    expect(situacaoDoCaso(nunes, [])).toBe("pendente");
+  });
+
+  it("mesma_pessoa sem grupo do convite: pendente", () => {
+    const caso = casoCom(manual({ tipo: "mesma_pessoa", grupos: [STF, TSE] }));
+    expect(situacaoDoCaso(caso, [TSE])).toBe("pendente");
+  });
+
+  it("grupo do convite fora dos grupos do registro não reabre: só nele, tratado", () => {
+    // Arrange: eleita decidida para o grupo de destino, ainda não cadastrada nele na decisão
+    const caso = casoCom(
+      manual({ tipo: "mesma_pessoa", convidaPor: GRUPO_GOVERNADORES_ELEITOS, grupos: ["Governadores"] }),
+    );
+    // Act / Assert
+    expect(situacaoDoCaso(caso, [GRUPO_GOVERNADORES_ELEITOS])).toBe("tratado");
+    expect(situacaoDoCaso(caso, ["Governadores", GRUPO_GOVERNADORES_ELEITOS])).toBe("pendente");
+  });
+
+  it("caso sem registro manual: sem efeito", () => {
+    expect(situacaoDoCaso(casoCom(), [STF])).toBe("sem_efeito");
+  });
+
+  it("a decisão mais recente é a que vale", () => {
+    const caso = casoCom(
+      manual({ tipo: "mesma_pessoa", convidaPor: STF, grupos: [STF, TSE], data: "2026-10-26" }),
+      manual({ tipo: "mesma_pessoa", convidaPor: TSE, grupos: [STF, TSE], data: "2026-10-29" }),
+    );
+    expect(situacaoDoCaso(caso, [TSE])).toBe("tratado");
+  });
+});
+
+describe("registrarColetas", () => {
+  const base = registrar(HISTORICO_VAZIO, "Nunes Marques", ["Nunes Marques"], NUNES_MARQUES);
+
+  it("a mesma situação em duas coletas gera uma entrada só", () => {
+    // Arrange
+    const grupos = () => [STF, TSE];
+    // Act
+    const h1 = registrarColetas(base, grupos, "2026-10-30");
+    const h2 = registrarColetas(h1, grupos, "2026-10-31");
+    // Assert
+    expect(h2.casos[0].registros).toEqual([
+      NUNES_MARQUES,
+      { tipo: "coleta", data: "2026-10-30", situacao: "pendente", grupos: [STF, TSE], pendencias: ["bloqueio"] },
+    ]);
+  });
+
+  it("situação mudada acrescenta outra entrada", () => {
+    // Arrange
+    const h1 = registrarColetas(base, () => [STF, TSE], "2026-10-30");
+    // Act
+    const h2 = registrarColetas(h1, () => [TSE], "2026-11-02");
+    // Assert
+    expect(h2.casos[0].registros.slice(1)).toEqual([
+      { tipo: "coleta", data: "2026-10-30", situacao: "pendente", grupos: [STF, TSE], pendencias: ["bloqueio"] },
+      { tipo: "coleta", data: "2026-11-02", situacao: "tratado", grupos: [TSE] },
+    ]);
+  });
+
+  it("decisão nova depois da coleta volta a registrar a situação, mesmo igual", () => {
+    // Arrange
+    const h1 = registrarColetas(base, () => [STF, TSE], "2026-10-30");
+    const h2 = registrar(h1, "Nunes Marques", ["Nunes Marques"], manual({ ...NUNES_MARQUES, data: "2026-10-31" }));
+    // Act
+    const h3 = registrarColetas(h2, () => [STF, TSE], "2026-11-01");
+    // Assert
+    expect(h3.casos[0].registros.map((r) => r.tipo)).toEqual(["mesma_pessoa", "coleta", "mesma_pessoa", "coleta"]);
+  });
+
+  it("pessoas_diferentes sem grupo novo não gera entrada; com grupo novo gera a de reabertura", () => {
+    // Arrange
+    const h = registrar(HISTORICO_VAZIO, "Lucas Ribeiro", ["Lucas Ribeiro"], manual({ tipo: "pessoas_diferentes", grupos: [STF] }));
+    // Act
+    const semEfeito = registrarColetas(h, () => [STF], "2026-10-30");
+    const reaberto = registrarColetas(h, () => [STF, STJ], "2026-10-30");
+    // Assert
+    expect(semEfeito.casos[0].registros).toHaveLength(1);
+    expect(reaberto.casos[0].registros[1]).toEqual({
+      tipo: "coleta",
+      data: "2026-10-30",
+      situacao: "reaberto",
+      grupos: [STF, STJ],
+    });
+  });
+});
+
+describe("imutabilidade", () => {
+  it("nenhuma função muta a entrada", () => {
+    // Arrange
+    const r = congelar(manual({ tipo: "mesma_pessoa", convidaPor: TSE, grupos: [STF, TSE] }));
+    const vazio: HistoricoDecisoes = congelar({ versao: 1, casos: [] });
+    const h1 = congelar(registrar(vazio, "Ministro Kassio Nunes Marques", ["Kassio Nunes Marques"], r));
+    const nomes = congelar(["Nunes Marques", "Kassio Nunes Marques"]);
+    const atuais = congelar([STF, TSE]);
+    // Act
+    const h2 = congelar(registrar(h1, "Nunes Marques", nomes, r));
+    const h3 = registrarColetas(h2, () => atuais, "2026-10-30");
+    const caso = acharCaso(h3, nomes);
+    // Assert
+    expect(vazio.casos).toHaveLength(0);
+    expect(h1.casos[0].registros).toHaveLength(1);
+    expect(h2.casos[0].registros).toHaveLength(2);
+    expect(caso?.registros).toHaveLength(3);
+    expect(vigente(h2.casos[0])).toEqual(r);
+    expect(situacaoDoCaso(h2.casos[0], atuais)).toBe("pendente");
+  });
+});
+
+describe("bloqueio no Posse (spec 2026-11-04 §3.1)", () => {
+  const bloqueio = (grupo: string, data: string, tipo: "bloqueio" | "desbloqueio" = "bloqueio"): RegistroBloqueio =>
+    ({ tipo, grupo, data, quem: "Marina", observacao: "" });
+
+  it("gruposABloquear: mesma_pessoa tira o grupo do convite; nao_recebe_convite leva todos; os outros, nenhum", () => {
+    const d = manual({ tipo: "mesma_pessoa", convidaPor: "Ministros do TSE", grupos: ["Ministros do STJ", "Ministros do TSE"] });
+    expect(gruposABloquear(d, ["Ministros do STJ", "Ministros do TSE"])).toEqual(["Ministros do STJ"]);
+    expect(gruposABloquear(manual({ tipo: "nao_recebe_convite", grupos: ["Senadores"] }), ["Senadores", "Ex-Presidentes do Congresso"])).toEqual(["Senadores", "Ex-Presidentes do Congresso"]);
+    expect(gruposABloquear(manual({ tipo: "pessoas_diferentes", grupos: ["A", "B"] }), ["A", "B"])).toEqual([]);
+    expect(gruposABloquear(manual({ tipo: "ajustar_contatos", grupos: ["A", "B"] }), ["A", "B"])).toEqual([]);
+  });
+  it("bloqueioVigente: vale o último gravado do grupo, não a data; desbloqueio gravado depois desfaz; outro grupo não conta", () => {
+    const caso = registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "B", grupos: ["A", "B"] })).casos[0];
+    const comBloqueio = { ...caso, registros: [...caso.registros, bloqueio("A", "2026-11-05")] };
+    expect(bloqueioVigente(comBloqueio, "a ")?.data).toBe("2026-11-05");
+    expect(bloqueioVigente(comBloqueio, "B")).toBeUndefined();
+    const desfeito = { ...comBloqueio, registros: [...comBloqueio.registros, bloqueio("A", "2026-11-05", "desbloqueio")] };
+    expect(bloqueioVigente(desfeito, "A")).toBeUndefined();
+    const refeito = { ...desfeito, registros: [...desfeito.registros, bloqueio("A", "2026-11-06")] };
+    expect(bloqueioVigente(refeito, "A")?.data).toBe("2026-11-06");
+  });
+  it("bloqueioVigente: a ordem de gravação vence a data digitada nos dois sentidos", () => {
+    const caso = registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "B", grupos: ["A", "B"] })).casos[0];
+    const futuroDesfeito = { ...caso, registros: [...caso.registros, bloqueio("A", "2026-12-01"), bloqueio("A", "2026-11-05", "desbloqueio")] };
+    expect(bloqueioVigente(futuroDesfeito, "A")).toBeUndefined();
+    const refeitoComDataAnterior = { ...caso, registros: [...caso.registros, bloqueio("A", "2026-12-01", "desbloqueio"), bloqueio("A", "2026-11-05")] };
+    expect(bloqueioVigente(refeitoComDataAnterior, "A")?.data).toBe("2026-11-05");
+  });
+  it("grupo do convite gravado em variante é reconhecido pelo bloqueio na forma equivalente", () => {
+    const caso = registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "ministros do tse ", grupos: ["Ministros do STJ", "Ministros do TSE"] })).casos[0];
+    const comBloqueioNoConvite = { ...caso, registros: [...caso.registros, bloqueio("Ministros do TSE", "2026-11-05")] };
+    const quadro = quadroDeBloqueio(comBloqueioNoConvite, ["Ministros do STJ", "Ministros do TSE"]);
+    expect(quadro.bloqueios.some((b) => b.grupoDoConvite)).toBe(true);
+    expect(quadro.pendencias).toContain("desbloquear_convite");
+  });
+  it("quadroDeBloqueio: a bloquear sem bloqueio é pendência; bloqueado fecha; falta no convite é outra pendência", () => {
+    const caso = registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "B", grupos: ["A", "B"] })).casos[0];
+    expect(quadroDeBloqueio(caso, ["A", "B"])).toEqual({ aBloquear: ["A"], bloqueios: [{ grupo: "A", bloqueado: false }], pendencias: ["bloqueio"] });
+    expect(quadroDeBloqueio(caso, ["A"]).pendencias).toEqual(["bloqueio", "cadastrar_convite"]);
+    expect(quadroDeBloqueio(caso, ["B"])).toEqual({ aBloquear: [], bloqueios: [], pendencias: [] });
+    expect(quadroDeBloqueio(caso, [])).toEqual({ aBloquear: [], bloqueios: [], pendencias: ["cadastrar_convite"] });
+    const bloqueado = { ...caso, registros: [...caso.registros, bloqueio("A", "2026-11-05")] };
+    expect(quadroDeBloqueio(bloqueado, ["A", "B"])).toEqual({ aBloquear: ["A"], bloqueios: [{ grupo: "A", bloqueado: true, data: "2026-11-05" }], pendencias: [] });
+  });
+  it("quadroDeBloqueio: bloqueio registrado no grupo do convite pede desbloqueio", () => {
+    const caso = registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "B", grupos: ["A", "B"] })).casos[0];
+    const errado = { ...caso, registros: [...caso.registros, bloqueio("A", "2026-11-05"), bloqueio("B", "2026-11-05")] };
+    expect(quadroDeBloqueio(errado, ["A", "B"])).toEqual({
+      aBloquear: ["A"],
+      bloqueios: [{ grupo: "A", bloqueado: true, data: "2026-11-05" }, { grupo: "B", bloqueado: true, data: "2026-11-05", grupoDoConvite: true }],
+      pendencias: ["desbloquear_convite"],
+    });
+  });
+  it("quadroDeBloqueio: decisão nova que troca o convite reclassifica o bloqueio antigo como bloqueio no grupo do convite", () => {
+    const h1 = registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "B", grupos: ["A", "B"], data: "2026-10-26" }));
+    const comBloqueio = { ...h1.casos[0], registros: [...h1.casos[0].registros, bloqueio("A", "2026-11-05")] };
+    const h2 = registrar({ versao: 1, casos: [comBloqueio] }, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "A", grupos: ["A", "B"], data: "2026-11-10" }));
+    const q = quadroDeBloqueio(h2.casos[0], ["A", "B"]);
+    expect(q.aBloquear).toEqual(["B"]);
+    expect(q.bloqueios).toEqual([{ grupo: "B", bloqueado: false }, { grupo: "A", bloqueado: true, data: "2026-11-05", grupoDoConvite: true }]);
+    expect(q.pendencias).toEqual(["bloqueio", "desbloquear_convite"]);
+  });
+  it("quadroDeBloqueio: nao_recebe_convite só tem a pendência de bloqueio; caso reaberto não tem quadro", () => {
+    const caso = registrar(HISTORICO_VAZIO, "Rui Fictício", [], manual({ tipo: "nao_recebe_convite", grupos: ["A", "B"] })).casos[0];
+    expect(quadroDeBloqueio(caso, ["A", "B"]).pendencias).toEqual(["bloqueio"]);
+    expect(quadroDeBloqueio({ ...caso, registros: [...caso.registros, bloqueio("A", "2026-11-05"), bloqueio("B", "2026-11-05")] }, ["A", "B"]).pendencias).toEqual([]);
+    expect(quadroDeBloqueio(caso, ["A", "B", "C"])).toEqual({ aBloquear: [], bloqueios: [], pendencias: [] });
+  });
+  it("situacaoDoCaso: mesma_pessoa nos dois grupos é pendente até o bloqueio; bloqueada vira tratado; só no convite é tratado", () => {
+    const caso = registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "B", grupos: ["A", "B"] })).casos[0];
+    expect(situacaoDoCaso(caso, ["A", "B"])).toBe("pendente");
+    expect(situacaoDoCaso({ ...caso, registros: [...caso.registros, bloqueio("A", "2026-11-05")] }, ["A", "B"])).toBe("tratado");
+    expect(situacaoDoCaso(caso, ["B"])).toBe("tratado");
+    expect(situacaoDoCaso(caso, ["A", "B", "C"])).toBe("reaberto");
+  });
+  it("situacaoDoCaso: os retirados que voltam aos grupos da decisão não reabrem; ficam pendentes de bloqueio", () => {
+    const caso = registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "Ministros do TSE", grupos: ["Ministros do STJ", "Ministros do TSE"] })).casos[0];
+    expect(situacaoDoCaso(caso, ["Ministros do TSE"])).toBe("tratado");
+    expect(situacaoDoCaso(caso, ["Ministros do STJ", "Ministros do TSE"])).toBe("pendente");
+    expect(quadroDeBloqueio(caso, ["Ministros do STJ", "Ministros do TSE"]).pendencias).toEqual(["bloqueio"]);
+  });
+  it("situacaoDoCaso: nao_recebe_convite bloqueada em todos os grupos é tratado; mesma_pessoa sem convidaPor continua pendente", () => {
+    const caso = registrar(HISTORICO_VAZIO, "Rui Fictício", [], manual({ tipo: "nao_recebe_convite", grupos: ["A"] })).casos[0];
+    expect(situacaoDoCaso(caso, ["A"])).toBe("pendente");
+    expect(situacaoDoCaso({ ...caso, registros: [...caso.registros, bloqueio("A", "2026-11-05")] }, ["A"])).toBe("tratado");
+    const semConvite = registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", grupos: ["A", "B"] })).casos[0];
+    expect(situacaoDoCaso(semConvite, ["A"])).toBe("pendente");
+  });
+  it("registrarColetas grava as pendências e registra de novo quando só elas mudam", () => {
+    const h = registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "B", grupos: ["A", "B"] }));
+    const c1 = registrarColetas(h, () => ["A", "B"], "2026-11-05");
+    expect(c1.casos[0].registros.at(-1)).toEqual({ tipo: "coleta", data: "2026-11-05", situacao: "pendente", grupos: ["A", "B"], pendencias: ["bloqueio"] });
+    const c2 = registrarColetas(c1, () => ["A"], "2026-11-06");
+    expect(c2.casos[0].registros.at(-1)).toEqual({ tipo: "coleta", data: "2026-11-06", situacao: "pendente", grupos: ["A"], pendencias: ["bloqueio", "cadastrar_convite"] });
+    expect(registrarColetas(c2, () => ["A"], "2026-11-07")).toBe(c2);
+  });
+  it("coleta antiga sem pendencias conta como sem pendência; a mesma situação com pendência nova é mudança", () => {
+    const h = registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "B", grupos: ["A", "B"] }));
+    const antiga: HistoricoDecisoes = { versao: 1, casos: [{ ...h.casos[0], registros: [...h.casos[0].registros, { tipo: "coleta", data: "2026-10-30", situacao: "pendente", grupos: ["A", "B"] }] }] };
+    const nova = registrarColetas(antiga, () => ["A", "B"], "2026-11-05");
+    expect(nova.casos[0].registros).toHaveLength(3);
+    expect(nova.casos[0].registros.at(-1)).toMatchObject({ pendencias: ["bloqueio"] });
+  });
+  it("vigente ignora bloqueios e desbloqueios", () => {
+    const caso = registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "B", grupos: ["A", "B"], data: "2026-10-26" })).casos[0];
+    expect(vigente({ ...caso, registros: [...caso.registros, bloqueio("A", "2026-11-05")] })?.tipo).toBe("mesma_pessoa");
+  });
+  it("registrarBloqueio acrescenta ao caso dos grupos informados e recusa caso sem decisão", () => {
+    const h = registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "B", grupos: ["A", "B"] }));
+    const novo = registrarBloqueio(h, "Ana Fictícia", [], ["A", "B"], bloqueio("A", "2026-11-05"));
+    expect(novo.casos[0].registros.at(-1)).toEqual(bloqueio("A", "2026-11-05"));
+    expect(h.casos[0].registros).toHaveLength(1);
+    expect(() => registrarBloqueio(h, "Rui Fictício", [], ["A", "B"], bloqueio("A", "2026-11-05"))).toThrow(BloqueioSemDecisaoError);
+    expect(() => registrarBloqueio(h, "Ana Fictícia", [], ["A", "B"], bloqueio("  ", "2026-11-05"))).toThrow(DecisaoInvalidaError);
+  });
+  it("registrarBloqueio com dois casos da mesma pessoa vai ao caso dos grupos", () => {
+    const h = registrar(
+      registrar(HISTORICO_VAZIO, "Jader Fictício", [], manual({ tipo: "mesma_pessoa", convidaPor: "Senadores", grupos: ["Senadores", "Ex-Presidentes do Congresso"] })),
+      "Jader Fictício", [], manual({ tipo: "pessoas_diferentes", grupos: ["Senadores", "Deputados Federais"] }),
+    );
+    const novo = registrarBloqueio(h, "Jader Fictício", [], ["Senadores", "Ex-Presidentes do Congresso"], bloqueio("Ex-Presidentes do Congresso", "2026-11-05"));
+    expect(novo.casos.map((c) => c.registros.length)).toEqual([2, 1]);
+  });
+  it("textoDasPendencias junta na ordem fixa com ' · '", () => {
+    expect(textoDasPendencias(["bloqueio", "cadastrar_convite"])).toBe("Pendente de bloqueio no Posse · Pendente: a cadastrar no grupo do convite");
+    expect(textoDasPendencias([])).toBe("");
+  });
+  it("registrarBloqueio e quadroDeBloqueio não mutam a entrada", () => {
+    const h = congelar(registrar(HISTORICO_VAZIO, "Ana Fictícia", [], manual({ tipo: "mesma_pessoa", convidaPor: "B", grupos: ["A", "B"] })));
+    const atuais = congelar(["A", "B"]);
+    const novo = congelar(registrarBloqueio(h, "Ana Fictícia", [], ["A", "B"], congelar(bloqueio("A", "2026-11-05"))));
+    expect(quadroDeBloqueio(novo.casos[0], atuais).pendencias).toEqual([]);
+    expect(h.casos[0].registros).toHaveLength(1);
+  });
+  it("nao_recebe_convite ignora convidaPor: todos os grupos atuais são a bloquear e só há a pendência de bloqueio", () => {
+    const d = manual({ tipo: "nao_recebe_convite", convidaPor: "B", grupos: ["A", "B"] });
+    expect(gruposABloquear(d, ["A", "B"])).toEqual(["A", "B"]);
+    const caso = registrar(HISTORICO_VAZIO, "Rui Fictício", [], d).casos[0];
+    const soB = { ...caso, registros: [...caso.registros, bloqueio("B", "2026-11-05")] };
+    expect(quadroDeBloqueio(soB, ["A", "B"]).bloqueios).toEqual([{ grupo: "A", bloqueado: false }, { grupo: "B", bloqueado: true, data: "2026-11-05" }]);
+    expect(quadroDeBloqueio(soB, ["A", "B"]).pendencias).toEqual(["bloqueio"]);
+    const ambos = { ...soB, registros: [...soB.registros, bloqueio("A", "2026-11-05")] };
+    expect(quadroDeBloqueio(ambos, ["A", "B"]).pendencias).toEqual([]);
+  });
+});

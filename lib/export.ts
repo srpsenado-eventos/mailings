@@ -1,9 +1,13 @@
 import * as XLSX from "xlsx";
 import { coerenciasVisiveis, textoCoerencia, ROTULOS_CAMPO_TRATAMENTO } from "@/lib/tratamento";
 import { rotuloAchadoEndereco } from "@/lib/endereco";
+import { anotacaoReaproveitada, diaMes } from "@/lib/memoria-leitura";
+import { avisoUrlCaida, textoAlternativa, textoFonteProvisoria, textoMudanca, tipoProvisoria } from "@/lib/painel";
+import { contagemDosPares } from "@/lib/tratamento-pares";
 import type {
   AuditoriaEndereco,
   ComparacaoCampo,
+  FalhasPorUrl,
   ResultadoAnalise,
   ResultadoContato,
   ResultadoGrupo,
@@ -74,7 +78,12 @@ function valorEsperadoDe(c: ResultadoContato, campo: string): string {
   if (!comp) return "";
   if (comp.situacao === "fonte_nao_informa") return "fonte não informa";
   if (comp.situacao === "sem_regra") return "sem regra de protocolo";
+  if (comp.situacao === "nao_verificado") return "não verificado";
   const v = comp.valorEsperado ?? "";
+  if (v && comp.origemValor === "pares") {
+    const contagem = contagemDosPares(comp.observacao);
+    return contagem ? `${v} (maioria dos pares: ${contagem.n} de ${contagem.m})` : `${v} (maioria dos pares)`;
+  }
   return v && comp.origemValor === "conhecimento" ? `${v} (via IA — confira)` : v;
 }
 
@@ -83,30 +92,64 @@ function valorPlanilhaDe(c: ResultadoContato, campo: string): string {
   return comparacaoDe(c, campo)?.valorPlanilha ?? "";
 }
 
-/**
- * Observação do contato mais a ressalva do grupo, quando alguma fonte não respondeu.
- * Quem trabalha a partir do download precisa da mesma ressalva que a tela dá: sem ela, a
- * linha parece um veredito completo.
- */
-function observacaoCom(observacao: string | undefined, ressalva: string | undefined): string {
-  return [observacao, ressalva ? `fonte não respondeu — ${ressalva}` : undefined]
-    .filter(Boolean)
-    .join(" · ");
+/** URL da fonte do cargo quando é outra página que não a `Fonte` do contato (fontes individuais). */
+function fonteDoCargo(c: ResultadoContato): string {
+  const url = comparacaoDe(c, "cargo")?.fonteUrl;
+  return url && url !== c.fonteUrl ? url : "";
 }
 
 /**
- * Ressalva do grupo a repetir na linha de cada contato. No grupo inteiro inacessível a
- * observação do contato já diz que a fonte não pôde ser lida: repetir o motivo aqui daria
- * a mesma frase duas vezes na mesma célula. A tela suprime pelo mesmo motivo.
+ * Observação do contato mais as ressalvas do grupo (leitura reaproveitada, fonte que não
+ * respondeu). Quem trabalha a partir do download precisa das mesmas ressalvas que a tela dá:
+ * sem elas, a linha parece um veredito completo. A mesma frase não sai duas vezes na célula.
  */
-function ressalvaDoGrupo(g: ResultadoGrupo): string | undefined {
-  return g.fonteInacessivel ? undefined : g.erroFonte;
+function observacaoCom(observacao: string | undefined, ressalvas: readonly string[]): string {
+  return [...new Set([observacao, ...ressalvas].filter(Boolean))].join(" · ");
+}
+
+function primeiraMaiuscula(t: string): string {
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/**
+ * Ressalvas do grupo a repetir na linha de cada contato. No grupo inteiro inacessível a
+ * observação do contato já diz que a fonte não pôde ser lida: repetir o motivo aqui daria a
+ * mesma frase duas vezes na mesma célula. A tela suprime pelo mesmo motivo; só o aviso de URL
+ * caída em coletas seguidas continua, porque diz outra coisa (conferir o endereço; spec
+ * 2026-10-23 §6).
+ */
+function ressalvasDoGrupo(g: ResultadoGrupo, falhas: FalhasPorUrl | undefined): string[] {
+  const caida = avisoUrlCaida(falhas, g.fonteUrl);
+  if (g.fonteInacessivel) return caida ? [caida] : [];
+  return [
+    ...(g.reaproveitada ? [primeiraMaiuscula(anotacaoReaproveitada(g.reaproveitada))] : []),
+    ...(g.erroFonte ? [`fonte não respondeu — ${g.erroFonte}`] : []),
+    ...(g.mudouFormato ? [textoMudanca(g.mudouFormato)] : []),
+    ...(g.alternativa ? [textoAlternativa(g.alternativa)] : []),
+    ...(caida ? [caida] : []),
+  ];
+}
+
+/**
+ * Ressalvas da leitura resiliente que são do contato: página lida pela alternativa, fonte
+ * provisória (só na linha do contato que tem; os demais do grupo não), página individual caída
+ * em coletas seguidas. O aviso de URL caída é da principal, a que entra em `falhas`.
+ */
+function ressalvasDoContato(c: ResultadoContato, g: ResultadoGrupo, falhas: FalhasPorUrl | undefined): string[] {
+  const caida = g.individuais ? avisoUrlCaida(falhas, c.alternativa?.urlPrincipal ?? c.fonteUrl) : undefined;
+  const provisoria = tipoProvisoria(c.provisoria);
+  return [
+    ...(c.leituraDe ? [`Leitura de ${diaMes(c.leituraDe)} reaproveitada`] : []),
+    ...(c.alternativa ? [`Lida pela URL alternativa (${c.alternativa.motivoPrincipal})`] : []),
+    ...(provisoria ? [textoFonteProvisoria(provisoria)] : []),
+    ...(caida ? [caida] : []),
+  ];
 }
 
 export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, string>[] {
   const linhas: Record<string, string>[] = [];
   for (const g of analise.grupos) {
-    const ressalva = ressalvaDoGrupo(g);
+    const ressalvas = ressalvasDoGrupo(g, analise.falhas);
     for (const c of g.contatos) {
       const linha: Record<string, string> = {
         Grupo: g.grupo,
@@ -114,7 +157,12 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
         Divergencias: [...new Set(c.camposDivergentes.map((d) => d.campo))].join(", "),
         Origem: c.origem,
         Fonte: c.fonteUrl ?? "",
-        Observacao: observacaoCom(c.observacao, ressalva),
+        Observacao: observacaoCom(c.observacao, [
+          ...[comparacaoDe(c, "nome")?.observacao].filter((o): o is string => Boolean(o)),
+          ...ressalvasDoContato(c, g, analise.falhas),
+          ...ressalvas,
+        ]),
+        "Fonte do cargo": fonteDoCargo(c),
       };
       for (const f of CAMPOS) {
         linha[`${f.rotulo} (planilha)`] = valorPlanilhaDe(c, f.campo);
@@ -147,8 +195,9 @@ export function resultadoParaLinhas(analise: ResultadoAnalise): Record<string, s
         Fonte: novo.fonteUrl ?? g.fonteUrl ?? "",
         Observacao: observacaoCom(
           `Pessoa na fonte sem correspondência na planilha${situacao}`,
-          ressalva,
+          ressalvas,
         ),
+        "Fonte do cargo": "",
       };
       for (const f of CAMPOS) {
         linha[`${f.rotulo} (planilha)`] = "";

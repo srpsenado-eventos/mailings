@@ -1,0 +1,62 @@
+/**
+ * Agrupador da Posse 2027 (spec 2026-10-30 §4.5): os 28 grupos do Contatos, na ordem do Clovis,
+ * cada um com o rótulo exato do Contatos e o modo de fiscalização.
+ *
+ * - `fonte`: página oficial do catálogo, como sempre.
+ * - `lista`: comparado com as planilhas (TSE, Câmara), nunca com página nem IA (spec §4.6).
+ * - `neutro`: grupo de convidados, sem fonte oficial; fora das Camadas 1 e 2.
+ */
+export type ModoFiscalizacao = "fonte" | "lista" | "neutro";
+
+export interface GrupoPosse {
+  rotulo: string;
+  fiscalizacao: ModoFiscalizacao;
+  /** Rótulos que o Contatos ainda usa para o mesmo grupo (ex.: "Defensor"); casam como o rótulo oficial. */
+  apelidos?: readonly string[];
+}
+
+export const GRUPO_SENADORES_ELEITOS = "Senadores eleitos - Posse Presidencial 2027";
+export const GRUPO_DEPUTADOS_ELEITOS = "Deputado Federal eleitos - Posse Presidencial 2027";
+export const GRUPO_GOVERNADORES_ELEITOS = "Governadores eleitos - Posse Presidencial 2027";
+
+/** Igual a `NOME_GRUPO_DEPUTADOS` de `lib/painel-deputados.ts` (um teste confere). */
+export const GRUPO_DEPUTADOS_FEDERAIS = "Deputados Federais";
+export const GRUPO_SENADORES = "Senadores";
+export const GRUPO_GOVERNADORES = "Governadores";
+
+const fonte = (rotulo: string, apelidos?: readonly string[]): GrupoPosse => ({ rotulo, fiscalizacao: "fonte", ...(apelidos ? { apelidos } : {}) });
+const lista = (rotulo: string, apelidos?: readonly string[]): GrupoPosse => ({ rotulo, fiscalizacao: "lista", ...(apelidos ? { apelidos } : {}) });
+const neutro = (rotulo: string): GrupoPosse => ({ rotulo, fiscalizacao: "neutro" });
+
+export const GRUPOS_POSSE: readonly GrupoPosse[] = [
+  // O Contatos de 27/10 ainda grava este grupo como "Defensor" (Clovis, 2026-10-30).
+  fonte("Defensor Público Geral", ["Defensor"]),
+  fonte("Ministros do STF"),
+  fonte("Ministros do TSE"),
+  fonte("Ministros do STJ"),
+  fonte("Ex-Presidentes do Congresso", ["Ex-Presidentes do Senado"]),
+  fonte(GRUPO_GOVERNADORES),
+  fonte("Ministros do STM"),
+  fonte("Ministros do TST"),
+  fonte("Ministros do TCU"),
+  fonte("Presidente da República"),
+  fonte("Ministros de Estado"),
+  fonte("Embaixadores"),
+  fonte("Procurador-Geral da República"),
+  fonte("Presidente da Câmara dos Deputados"),
+  fonte(GRUPO_SENADORES),
+  fonte("Ex-Presidentes da República"),
+  fonte("Senadores titulares fora de exercício - Posse 2027"),
+  lista(GRUPO_GOVERNADORES_ELEITOS),
+  lista(GRUPO_SENADORES_ELEITOS),
+  // O Contatos grava este grupo no singular; é o mesmo grupo (Clovis, 2026-11-06).
+  lista(GRUPO_DEPUTADOS_FEDERAIS, ["Deputado Federal - Posse Presidencial 2027"]),
+  lista(GRUPO_DEPUTADOS_ELEITOS),
+  neutro("Ministros de Estado Indicados - Posse 2027"),
+  neutro("Convidados do presidente eleito - Posse 2027"),
+  neutro("Convidados do vice presidente eleito - Posse 2027"),
+  neutro("Convidado do presidente do Congresso e Câmara 2027"),
+  neutro("Familiares do presidente eleito e do vice - 2027"),
+  neutro("Chefes de Estado, Gov, Presidentes Parlam - 2027"),
+  neutro("Delegações estrangeiras e organismos intern - 2027"),
+];

@@ -80,3 +80,80 @@ describe("parsePayloadAnalise", () => {
     );
   });
 });
+
+describe("payload da eleição 2026", () => {
+  const base = { arquivoNome: "base.xlsx", contatos: [] };
+
+  test("aceita eleitos, deputados atuais e nomes dos arquivos", () => {
+    const p = parsePayloadAnalise({
+      ...base,
+      eleitos: [{ casa: "senado", uf: "MA", nomeUrna: "A", nomeCompleto: "A B", situacaoTse: "Eleito", statusMandato: "Reeleição", partido: "PXX", extra: 1 }],
+      deputadosAtuais: [{ uf: "MA", nomeParlamentar: "C", nomeCivil: "C D", email: "c@camara.leg.br" }],
+      arquivosEleicao: ["senado.xlsx", 7],
+    });
+    expect(p.eleitos).toEqual([{ casa: "senado", uf: "MA", nomeUrna: "A", nomeCompleto: "A B", situacaoTse: "Eleito", statusMandato: "Reeleição", partido: "PXX" }]);
+    expect(p.deputadosAtuais?.[0]).toMatchObject({ nomeParlamentar: "C", email: "c@camara.leg.br" });
+    expect(p.arquivosEleicao).toEqual(["senado.xlsx"]);
+  });
+
+  test("sem os campos da eleição, nada muda", () => {
+    const p = parsePayloadAnalise(base);
+    expect(p.eleitos).toBeUndefined();
+    expect(p.deputadosAtuais).toBeUndefined();
+  });
+
+  test("aceita governadores e descarta campos extras", () => {
+    const gov = { uf: "AC", nomeUrna: "A", nomeCompleto: "A B", situacaoTse: "Eleito", statusMandato: "Mandato novo", vice: "V", extra: 1 };
+    const p = parsePayloadAnalise({ ...base, governadores: { eleitos: [gov], segundoTurno: [] } });
+    expect(p.governadores).toEqual({
+      eleitos: [{ uf: "AC", nomeUrna: "A", nomeCompleto: "A B", situacaoTse: "Eleito", statusMandato: "Mandato novo", vice: "V" }],
+      segundoTurno: [],
+    });
+  });
+
+  test("governadores ausente continua ausente", () => {
+    expect(parsePayloadAnalise(base).governadores).toBeUndefined();
+  });
+
+  test("governadores com lista de eleitos inválida é recusado", () => {
+    expect(() => parsePayloadAnalise({ ...base, governadores: { eleitos: "x" } })).toThrow(PayloadInvalidoError);
+  });
+
+  test("casa desconhecida é recusada", () => {
+    expect(() => parsePayloadAnalise({ ...base, eleitos: [{ casa: "assembleia" }] })).toThrow(PayloadInvalidoError);
+  });
+
+  test("lista de eleitos que não é array é recusada", () => {
+    expect(() => parsePayloadAnalise({ ...base, eleitos: "x" })).toThrow(PayloadInvalidoError);
+  });
+});
+
+describe("payload da base de endereços inteira", () => {
+  const base = { arquivoNome: "c.xlsx", contatos: [] };
+  const baseEnderecos = { cabecalho: ["x", "Contato Id", "Numero"], linhas: [[null, 7, "LOTE 12"], [null, "8", 3]] };
+
+  test("aceita a base e a devolve igual", () => {
+    expect(parsePayloadAnalise({ ...base, baseEnderecos }).baseEnderecos).toEqual(baseEnderecos);
+  });
+
+  test("sem a base, o campo fica ausente", () => {
+    expect("baseEnderecos" in parsePayloadAnalise(base)).toBe(false);
+  });
+
+  test.each([
+    ["não é objeto", "texto"],
+    ["cabeçalho com item que não é texto", { cabecalho: ["a", 2], linhas: [] }],
+    ["cabeçalho que não é lista", { cabecalho: "a", linhas: [] }],
+    ["linhas que não é lista", { cabecalho: ["a"], linhas: "x" }],
+    ["linha que não é lista", { cabecalho: ["a"], linhas: ["x"] }],
+    ["célula booleana", { cabecalho: ["a"], linhas: [[true]] }],
+    ["célula objeto", { cabecalho: ["a"], linhas: [[{}]] }],
+  ])("recusa a base inválida: %s", (_nome, valor) => {
+    expect(() => parsePayloadAnalise({ ...base, baseEnderecos: valor })).toThrow(PayloadInvalidoError);
+  });
+
+  test("recusa a base com mais linhas que o teto", () => {
+    const linhas = Array.from({ length: 50_001 }, () => [null]);
+    expect(() => parsePayloadAnalise({ ...base, baseEnderecos: { cabecalho: ["a"], linhas } })).toThrow(PayloadInvalidoError);
+  });
+});

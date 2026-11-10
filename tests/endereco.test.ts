@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { auditarEndereco, formatarEnderecoContatos, indexarEnderecos, rotuloAchadoEndereco } from "@/lib/endereco";
+import { auditarEndereco, excessoDoNumero, formatarEnderecoContatos, indexarEnderecos, rotuloAchadoEndereco } from "@/lib/endereco";
 import type { ContatoPlanilha, EnderecoEstruturado } from "@/lib/types";
 
 const linha = (over: Partial<EnderecoEstruturado> = {}): EnderecoEstruturado => ({
@@ -67,6 +67,26 @@ describe("auditarEndereco", () => {
     expect(a.situacao).toBe("pendente");
     expect(a.achados).toContain("sem_numero");
     expect(a.formatado).toBeUndefined();
+  });
+
+  test("número com mais de 6 caracteres é pendência e não sai pronto para copiar", () => {
+    const a = auditarEndereco(contato({ id: "1" }), indexarEnderecos([linha({ numero: "Sala 12" })]));
+    expect(a.situacao).toBe("pendente");
+    expect(a.achados).toEqual(["numero_longo"]);
+    expect(a.formatado).toBeUndefined();
+  });
+
+  test("número com exatamente 6 caracteres passa", () => {
+    const a = auditarEndereco(contato({ id: "1" }), indexarEnderecos([linha({ numero: "Sala 1" })]));
+    expect(a.situacao).toBe("completo");
+    expect(a.achados).toEqual([]);
+  });
+
+  test("espaço e sinal contam no limite do número", () => {
+    expect(excessoDoNumero("12 / 3")).toBe(0);
+    expect(excessoDoNumero("12 / 34")).toBe(1);
+    expect(excessoDoNumero("1234567890")).toBe(4);
+    expect(excessoDoNumero(undefined)).toBe(0);
   });
 
   test("CEP vazio é pendência humana", () => {

@@ -8,6 +8,8 @@ interface OpcoesLista {
   aba?: string;
   semColunas?: string[];
   cepComoNumero?: boolean;
+  /** Acrescenta antes da lista uma aba de orientações, com cabeçalho sem TRATAMENTO e ENDERECAMENTO e dois exemplos fictícios. */
+  abaDeOrientacoesAntes?: boolean;
 }
 
 function paraBuffer(wb: XLSX.WorkBook): ArrayBuffer {
@@ -21,7 +23,7 @@ function umaAba(nome: string, aoa: unknown[][]): ArrayBuffer {
 }
 
 export function montarListaPadrao(linhas: Partial<Valores & { orgao: string }>[], opcoes: OpcoesLista = {}): ArrayBuffer {
-  const { linhaCabecalho = 8, aba = "Lista de Convidados", semColunas = [], cepComoNumero = false } = opcoes;
+  const { linhaCabecalho = 8, aba = "Lista de Convidados", semColunas = [], cepComoNumero = false, abaDeOrientacoesAntes = false } = opcoes;
   const cabecalho = CABECALHO_LISTA.map((r) => (semColunas.includes(r) ? "" : r));
   const dados = linhas.map((l, i) => {
     const cep = l.CEP ?? "";
@@ -33,7 +35,22 @@ export function montarListaPadrao(linhas: Partial<Valores & { orgao: string }>[]
     ];
   });
   const vazias = Array.from({ length: linhaCabecalho - 1 }, () => [] as unknown[]);
-  return umaAba(aba, [...vazias, cabecalho, ...dados]);
+  const aoaLista = [...vazias, cabecalho, ...dados];
+  if (!abaDeOrientacoesAntes) return umaAba(aba, aoaLista);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(orientacoes()), "Orientações de preenchimento");
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoaLista), aba);
+  return paraBuffer(wb);
+}
+
+function orientacoes(): unknown[][] {
+  const semGt = CABECALHO_LISTA.filter((c) => c !== "TRATAMENTO" && c !== "ENDERECAMENTO");
+  return [
+    ...Array.from({ length: 20 }, () => [] as unknown[]),
+    [], semGt,
+    [1, "Exemplo Um da Silva", "Órgão Fictício", "Cargo Fictício", "70000000", "Rua Exemplo", "1", "", "Centro", "Brasília", "DF"],
+    [2, "Exemplo Dois Souza", "Órgão Fictício", "Cargo Fictício", "70000001", "Rua Exemplo", "2", "", "Centro", "Brasília", "DF"],
+  ];
 }
 
 export function montarBaseGrupos(contatos: { id: string; nome: string; grupo: string; cargo?: string }[]): ArrayBuffer {

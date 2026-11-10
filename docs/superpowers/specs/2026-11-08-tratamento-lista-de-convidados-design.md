@@ -268,3 +268,46 @@ O que a etapa 1 implementou de modo diferente do texto acima, ou decidiu onde o 
 - Tratamento ou Endereçamento vazio fica só com o achado de campo obrigatório, sem o achado da tabela no mesmo campo.
 - Na comparação do endereço de quem já existe (§6.2), Número vazio e "S/N" são o mesmo.
 - O comando ignora, na pasta de eleitos, o arquivo de trava do Excel (`~$...`) e qualquer arquivo que a leitura de planilha não abra (linha "Referência ignorada: <arquivo> (<motivo>)"), diz qual base não foi reconhecida e avisa quando o grupo não está entre os 28 da Posse nem na base.
+
+## 15. Adendo de 09/11 (orientações do Clovis depois do piloto)
+
+Decisões do Clovis em 09/11, depois de rodar o comando sobre a lista piloto dos deputados eleitos e de comparar com a planilha que ele montou à mão no modelo do PRODASEN para os deputados em exercício. Quando este adendo e as seções anteriores discordam, vale o adendo.
+
+### 15.1 "Dr." e "Dra." só saem do nome no STM
+
+A regra do GT de retirar "Dr." e "Dra." vale **só para o grupo "Ministros do STM"**. Em qualquer outro grupo o nome vai como está na lista ou no site, com o "Dr." quando houver (10 deputados em exercício e 9 eleitos o trazem no nome parlamentar). Exmo., Exma., Sr., Sra., SE Sr. e SE Sra. continuam saindo em todo grupo: são tratamento, nunca nome. A regra "Título no nome" da aba Regras passa a dizer isso. A curadoria do nome recebe o grupo escolhido ao rodar; o grupo casa por `mesmoGrupo` (rótulo normalizado).
+
+### 15.2 A planilha do site da Câmara é entrada direta para "Deputados Federais"
+
+Para os deputados em exercício a lista não vem de ponto focal: vem do próprio site da Câmara (`deputado.xls`, o mesmo arquivo que a Nova varredura aceita no passo 3). O comando passa a aceitá-la como lista, reconhecida **pelas colunas** "Nome Parlamentar", "Titular/Suplente/Efetivado" e "Nome Civil" (as mesmas marcas de `lib/planilha-eleitos.ts`), em qualquer aba, e monta o arquivo do PRODASEN sem passar pelo modelo Padrão. O mapeamento é o que o Clovis fez à mão em 09/11 (513 linhas, conferido coluna a coluna), com a regra A no Número:
+
+| Campo do PRODASEN | Origem na planilha da Câmara |
+|---|---|
+| NOME | "Nome Parlamentar", como está no site (caixa mista, "Dr." incluído) |
+| TRATAMENTO | "Senhor" ou "Senhora", pelo gênero da coluna "Tratamento" da Câmara ("Exmo. Senhor Deputado" / "Exma. Senhora Deputada") |
+| ENDERECAMENTO | "A Sua Excelência o Senhor" / "A Sua Excelência a Senhora", pelo mesmo gênero |
+| CARGO | "Deputado Federal" / "Deputada Federal", pelo mesmo gênero |
+| CEP | o CEP da coluna "Endereço (complemento)" ("Brasília - DF - CEP 70160-900"), só dígitos; sem CEP legível, vazio, e a regra do CEP marca REVISAR |
+| LOGRADOURO | "Praça dos Três Poderes" |
+| NUMERO | `S/N` (regra A dos Correios: "Anexo 4" tem 7 caracteres e o limite é 6) |
+| COMPLEMENTO | "Anexo <Anexo>, Gabinete <Gabinete>" ("Anexo 4, Gabinete 414"); Anexo "0" segue a regra geral ("Anexo 0, Gabinete 20"), sem caso especial |
+| BAIRRO, CIDADE, UF | "Zona Cívico-Administrativa", "Brasília", "DF" |
+
+Entram **todos** os deputados em exercício: titulares, efetivados e suplentes em exercício (487 + 19 + 7 em 09/11). Gênero que a coluna "Tratamento" não decide deixa TRATAMENTO e ENDERECAMENTO vazios e CARGO "Deputado Federal": a linha cai em "Fora do arquivo: Tratamento ou Endereçamento vazio", como qualquer lista. A linha na Simulacao e na Revisoes é a linha da planilha da Câmara (cabeçalho na 1, dados da 2).
+
+O resto do fluxo não muda: a curadoria dos campos (§5) roda sobre os valores montados, a duplicidade é só contra a `BASE GRUPOS POSSE` (§6.1), a saída são os mesmos dois arquivos (§7). Duas diferenças: a referência "Consta na lista da Câmara" não é calculada quando a própria lista é a da Câmara (a referência do TSE continua: diz quem foi reeleito ou eleito para outro cargo em 2026); e o Resumo diz "planilha do site da Câmara (deputados em exercício), linhas 2 a N" no lugar de "aba 'Lista de Convidados'". A aba Regras ganha a regra "Lista da Câmara (deputados em exercício)" com o mapeamento acima. Nada do que a Câmara publica além dessas colunas (telefone, e-mail, aniversário, fax) vai para as saídas.
+
+Comando: `npm run convidados -- "<deputado.xls>" --grupo "Deputados Federais"`. O grupo continua sendo o escolhido ao rodar; a ferramenta não o força.
+
+### 15.3 O leitor do modelo Padrão prefere a aba "Lista de Convidados"
+
+Defeito achado em 09/11: o modelo Padrão real traz a aba "Orientações de preenchimento" **antes** da aba "Lista de Convidados", com uma tabela de exemplo de mesmo cabeçalho, e o leitor ficava na primeira aba com o cabeçalho (falhava com "Colunas obrigatórias ausentes: TRATAMENTO, ENDERECAMENTO", ou, com as colunas nas duas abas, leria os dois exemplos fictícios no lugar da lista). Regra nova: a aba cujo nome normalizado é "lista de convidados" é lida primeiro; só na falta dela vale a primeira aba com o cabeçalho, e uma aba cujo nome começa com "orientac" nunca é lida. O Resumo passa a dizer o nome da aba lida.
+
+### 15.4 Critérios de aceite do adendo
+
+1. Nome "Dr. Fulano Exemplo" no grupo "Deputados Federais" sai "Dr. Fulano Exemplo", sem regra aplicada; no grupo "Ministros do STM" sai "Fulano Exemplo" com "Nome: título removido (Dr.)". "Exma. Sra. Maria Exemplo" sai "Maria Exemplo" nos dois grupos.
+2. Planilha com as colunas da Câmara (fixture fictícia, 3 linhas: homem no Anexo 4, mulher no Anexo 3, Anexo 0): três linhas "Novo: importar" com NUMERO `S/N`, COMPLEMENTO "Anexo 4, Gabinete 414" / "Anexo 3, Gabinete 531" / "Anexo 0, Gabinete 20", CEP "70160900", LOGRADOURO "Praça dos Três Poderes", BAIRRO "Zona Cívico-Administrativa", CIDADE "Brasília", UF "DF", tratamento e cargo no gênero; nenhum achado de protocolo; coluna Referência sem "Consta na lista da Câmara".
+3. Linha da Câmara cuja coluna "Tratamento" não decide o gênero fica fora do arquivo, "Tratamento ou Endereçamento vazio".
+4. Rodar o comando sobre o `deputado.xls` real de 09/11 com `--grupo "Deputados Federais"` produz 513 linhas, todas "Novo: importar", sem REVISAR nem VALIDAR, e o arquivo de importação igual, coluna a coluna, à planilha manual do Clovis, exceto NUMERO/COMPLEMENTO (regra A) e CEP (70160900 em todas).
+5. Modelo Padrão com a aba "Orientações de preenchimento" antes da "Lista de Convidados", as duas com o cabeçalho: o leitor lê a lista, não o exemplo; sem a aba "Lista de Convidados", lê a primeira aba com o cabeçalho que não seja de orientações.
+6. Suíte verde, `npm run typecheck` e `npm run build` limpos; nenhum nome real em teste, log ou stdout.

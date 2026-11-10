@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { lerListaPadrao } from "../lib/convidados/lista";
+import { lerLista } from "../lib/convidados/lista";
 import { tratarLista } from "../lib/convidados/tratar";
 import { gerarConferencia, gerarImportacao } from "../lib/convidados/saida";
 import { maisRecente, nomeConferencia, nomeDaPastaDaRodada, nomeImportacao, sufixoDaData } from "../lib/convidados/rodada-nomes";
@@ -18,7 +18,7 @@ const ELEITOS_PADRAO = "../GT Posse/Eleitos 2026";
 const SAIDA_PADRAO = "../GT Posse/Contatos/Tratamento - Lista de Convidados";
 const NOME_MODELO = "Modelo_Importacao_Contatos_PRODASEN.xlsx";
 
-const USO = `Uso: npm run convidados -- "<lista.xlsx>" --grupo "<rótulo do grupo>" [--base <xlsx>] [--enderecos <xlsx>] [--eleitos <pasta>] [--saida <pasta>] [--modelo <xlsx>]`;
+const USO = `Uso: npm run convidados -- "<lista.xlsx | deputado.xls da Câmara>" --grupo "<rótulo do grupo>" [--base <xlsx>] [--enderecos <xlsx>] [--eleitos <pasta>] [--saida <pasta>] [--modelo <xlsx>]`;
 
 const ROTULOS_CONTAGEM: readonly (readonly [keyof Rodada["contagens"], string])[] = [
   ["linhas", "Linhas lidas"],
@@ -160,8 +160,12 @@ async function executar(opcoes: Opcoes): Promise<void> {
   const caminhoEnderecos = exigirArquivo(opcoes.enderecos ? resolve(raiz, opcoes.enderecos) : baseMaisRecente(raiz, "BASE ENDERECO", "Base de endereços"), "Base de endereços");
   const caminhoModelo = exigirArquivo(resolve(raiz, opcoes.modelo ?? join(saida, NOME_MODELO)), "Modelo de importação");
 
-  const linhas = lerOuFalhar(() => lerListaPadrao(lerBuffer(caminhoLista)), "Lista");
-  const { referencias, nomes: nomesRef } = lerReferencias(resolve(raiz, opcoes.eleitos));
+  const lida = lerOuFalhar(() => lerLista(lerBuffer(caminhoLista)), "Lista");
+  const linhas = lida.linhas;
+  const lidas = lerReferencias(resolve(raiz, opcoes.eleitos));
+  const nomesRef = lidas.nomes;
+  // A lista da Câmara é a própria referência dos deputados em exercício: "Consta na lista da Câmara" não se calcula.
+  const referencias = lida.origem === "camara" ? { ...lidas.referencias, deputados: [] } : lidas.referencias;
   const base = lerOuFalhar(() => lerPlanilha(lerBuffer(caminhoBase)), "Base do Contatos");
   const enderecos = lerOuFalhar(() => lerPlanilhaEnderecos(lerBuffer(caminhoEnderecos)), "Base de endereços");
   if (!grupoConhecido(opcoes.grupo, base)) {
@@ -179,7 +183,9 @@ async function executar(opcoes: Opcoes): Promise<void> {
     enderecosNome: basename(caminhoEnderecos),
     referencias: nomesRef,
     geradoEm: dataHora(agora),
-    origem: `comando: npm run convidados -- "${basename(caminhoLista)}" --grupo "${opcoes.grupo}"`,
+    origem: lida.origem,
+    aba: lida.aba,
+    comando: `comando: npm run convidados -- "${basename(caminhoLista)}" --grupo "${opcoes.grupo}"`,
   };
   const importacao = await gerarImportacao(rodada, lerBuffer(caminhoModelo));
   const conferencia = await gerarConferencia(rodada, meta);
@@ -193,6 +199,11 @@ async function executar(opcoes: Opcoes): Promise<void> {
   writeFileSync(join(pasta, arquivoConferencia), Buffer.from(conferencia));
 
   console.log(`Lista: ${meta.listaNome} (${rodada.contagens.linhas} linhas)`);
+  console.log(
+    lida.origem === "camara"
+      ? "Origem: planilha do site da Câmara (deputados em exercício)"
+      : `Origem: modelo Padrão (aba '${lida.aba}')`,
+  );
   console.log(`Grupo: ${opcoes.grupo}`);
   console.log(`Base: ${meta.baseNome}`);
   console.log(`Endereços: ${meta.enderecosNome}`);

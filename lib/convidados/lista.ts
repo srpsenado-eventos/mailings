@@ -1,6 +1,7 @@
 import * as XLSX from "xlsx";
 import { normalizarTexto } from "@/lib/normalize";
 import { ColunaFaltanteError } from "@/lib/planilha";
+import { abaDaListaDaCamara, lerListaDaCamara } from "./camara";
 import { CAMPOS_MODELO, type CampoModelo, type LinhaLista, type Valores } from "./tipos";
 
 /** Quantas linhas, do topo de cada aba, são varridas à procura do cabeçalho. */
@@ -39,9 +40,29 @@ function acharCabecalho(matriz: unknown[][]): number {
   return -1;
 }
 
+export interface ListaLida {
+  linhas: LinhaLista[];
+  aba: string;
+}
+
+const ABA_DA_LISTA = "lista de convidados";
+const PREFIXO_ORIENTACOES = "orientac";
+
+/** A aba "Lista de Convidados" primeiro, depois as demais na ordem do arquivo; aba de orientações nunca. */
+function abasParaLer(nomes: readonly string[]): string[] {
+  const normalizada = (n: string): string => normalizarTexto(n.trim());
+  const daLista = nomes.filter((n) => normalizada(n) === ABA_DA_LISTA);
+  const demais = nomes.filter((n) => normalizada(n) !== ABA_DA_LISTA && !normalizada(n).startsWith(PREFIXO_ORIENTACOES));
+  return [...daLista, ...demais];
+}
+
 export function lerListaPadrao(buffer: ArrayBuffer): LinhaLista[] {
+  return lerListaPadraoComAba(buffer).linhas;
+}
+
+export function lerListaPadraoComAba(buffer: ArrayBuffer): ListaLida {
   const wb = XLSX.read(buffer, { type: "array" });
-  for (const nomeAba of wb.SheetNames) {
+  for (const nomeAba of abasParaLer(wb.SheetNames)) {
     const matriz = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nomeAba], { header: 1, defval: "", raw: false, range: 0 });
     const posicao = acharCabecalho(matriz);
     if (posicao < 0) continue;
@@ -65,7 +86,23 @@ export function lerListaPadrao(buffer: ArrayBuffer): LinhaLista[] {
         orgao: colunaOrgao >= 0 ? texto(celulas[colunaOrgao]) : "",
       });
     });
-    return linhas;
+    return { linhas, aba: nomeAba };
   }
   throw new ColunaFaltanteError([ROTULO_NOME, "CEP"]);
+}
+
+export type OrigemLista = "padrao" | "camara";
+
+export interface ListaDeEntrada {
+  origem: OrigemLista;
+  aba: string;
+  linhas: LinhaLista[];
+}
+
+/** Reconhece pelas colunas se a lista é a planilha do site da Câmara; senão lê como modelo Padrão. */
+export function lerLista(buffer: ArrayBuffer): ListaDeEntrada {
+  const abaCamara = abaDaListaDaCamara(buffer);
+  if (abaCamara !== undefined) return { origem: "camara", aba: abaCamara, linhas: lerListaDaCamara(buffer) };
+  const { linhas, aba } = lerListaPadraoComAba(buffer);
+  return { origem: "padrao", aba, linhas };
 }

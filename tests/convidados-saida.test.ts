@@ -31,7 +31,7 @@ describe("nomes da rodada", () => {
   });
 });
 
-const meta = { listaNome: "Lista Exemplo.xlsx", primeiraLinha: 9, ultimaLinha: 19, baseNome: "BASE GRUPOS POSSE - 05 NOV 2026 15h.xlsx", enderecosNome: "BASE ENDERECO - 05 NOV 2026 15h.xlsx", referencias: ["deputado.xls"], geradoEm: "08/11/2026 10:00", origem: "comando" };
+const meta = { listaNome: "Lista Exemplo.xlsx", primeiraLinha: 9, ultimaLinha: 19, baseNome: "BASE GRUPOS POSSE - 05 NOV 2026 15h.xlsx", enderecosNome: "BASE ENDERECO - 05 NOV 2026 15h.xlsx", referencias: ["deputado.xls"], geradoEm: "08/11/2026 10:00", comando: "comando", origem: "padrao" as const, aba: "Lista de Convidados" };
 const abas = (buf: ArrayBuffer) => XLSX.read(buf, { type: "array" });
 
 describe("arquivo de importação", () => {
@@ -116,5 +116,25 @@ describe("arquivo de conferência", () => {
     expect(plano).toMatch(/Como ler/);
     expect(plano).toMatch(/Aba 'Regras': as regras aplicadas nesta rodada, na ordem\./);
     expect(plano).toMatch(/Grupo não vai no arquivo: é escolhido no Contatos/);
+  });
+});
+
+describe("origem da lista no Resumo e regra da Câmara", () => {
+  const conferencia = async (origem: "padrao" | "camara") => {
+    const wb = abas(await gerarConferencia(rodadaDoExemplo(), { ...meta, origem }));
+    return { wb, resumo: XLSX.utils.sheet_to_json<string[]>(wb.Sheets["Resumo"], { header: 1, defval: "" }) };
+  };
+  test("lista da Câmara diz planilha do site da Câmara", async () => {
+    const { resumo } = await conferencia("camara");
+    expect(resumo.find((l) => l[0] === "Lista recebida")?.[1]).toContain("planilha do site da Câmara");
+  });
+  test("modelo Padrão diz a aba lida", async () => {
+    const { resumo } = await conferencia("padrao");
+    expect(resumo.find((l) => l[0] === "Lista recebida")?.[1]).toContain("aba 'Lista de Convidados'");
+  });
+  test("a aba Regras traz a regra da lista da Câmara", async () => {
+    const { wb } = await conferencia("padrao");
+    const regras = XLSX.utils.sheet_to_json<string[]>(wb.Sheets["Regras"], { header: 1, defval: "" });
+    expect(regras.some((l) => l.includes("Lista da Câmara (deputados em exercício)"))).toBe(true);
   });
 });

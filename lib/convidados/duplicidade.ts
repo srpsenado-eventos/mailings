@@ -1,6 +1,6 @@
-import { grupoEquivalente } from "@/lib/decisoes";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
 import type { ContatoPlanilha, DeputadoAtual, EleitoPlanilha, EnderecoEstruturado, GovernadorPlanilha } from "@/lib/types";
+import { mesmoGrupo } from "./grupo";
 import { CONECTIVOS } from "./nome";
 import type { Achado, Ocorrencia, Valores } from "./tipos";
 
@@ -50,9 +50,7 @@ export function indexarBase(contatos: readonly ContatoPlanilha[]): IndiceBase {
   return { porNome };
 }
 
-export function mesmoGrupo(a: string, b: string): boolean {
-  return normalizarTexto(grupoEquivalente(a, "contatos")) === normalizarTexto(grupoEquivalente(b, "contatos"));
-}
+export { mesmoGrupo };
 
 export function tokensSignificativos(nomeNormalizado: string): string[] {
   return nomeNormalizado

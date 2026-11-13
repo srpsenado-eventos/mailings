@@ -406,6 +406,12 @@ export interface FonteCatalogo {
    * blocos da direção ("nome" / "Ministra-Presidente"), que dão a função como cargo. Só no STM.
    */
   gabinetes?: { prefixos: readonly string[]; cargo: string };
+  /**
+   * Página de uma só autoridade (GT de 13/11, comandantes das Forças): a composição é uma pessoa,
+   * cujo nome é o título principal da página (o primeiro `h1` com cara de nome; sem ele, o primeiro
+   * `h2`/`h3`), com tratamento e patente como a página escreve, e cujo cargo é este texto fixo.
+   */
+  pessoaUnica?: { cargo: string };
 }
 
 /** Chave que liga uma fonte individual ao contato: a UF do cargo, ou o nome como está no Contatos. */
@@ -456,7 +462,7 @@ export type TipoFonteProvisoria = "noticia" | "campanha";
 /** Uma fonte que o raspador sabe ler: o que `FonteCatalogo` e `FonteIndividual` têm em comum. */
 export type FonteLegivel = Pick<
   FonteCatalogo,
-  "url" | "tabela" | "navegador" | "urlAlternativa" | "tipo" | "marcador" | "nomeEmDestaque" | "gabinetes"
+  "url" | "tabela" | "navegador" | "urlAlternativa" | "tipo" | "marcador" | "nomeEmDestaque" | "gabinetes" | "pessoaUnica"
 > &
   Pick<FonteIndividual, "clicarAntes">;
 

@@ -6,6 +6,7 @@ import { CARGOS } from "@/lib/cargos";
 import type { ConteudoFonte, PessoaSite, ExtracaoTabela, CliqueAntes } from "@/lib/types";
 import { colherDestaquesPorLinha, comDestaque, type DestaquesPorLinha } from "@/lib/scrape-destaque";
 import { extrairPorGabinetes, type OpcoesGabinetes } from "@/lib/scrape-gabinetes";
+import { extrairPessoaUnica, type OpcoesPessoaUnica } from "@/lib/scrape-pessoa-unica";
 
 export class ScrapeError extends Error {
   constructor(
@@ -617,23 +618,42 @@ function ultimoSeparador(texto: string): number {
  * Extração por marcador (spec 2026-10-23 §5.2): só são pessoas os nomes seguidos de um dos
  * `textos` cadastrados ("(convocado)" no TST, "**" no PDF do STJ). Para cada ocorrência, o
  * nome é a sequência final de palavras em maiúscula do trecho anterior na mesma linha, com
- * duas ou mais partes significativas. Nome repetido entra uma vez. Função pura.
+ * duas ou mais partes significativas. Marcador que ocupa a linha inteira (comparado por
+ * `normalizarTexto`) é o cargo da pessoa da linha de cima, como a página escreve (GT de 13/11,
+ * chefe do EMCFA na composição da Defesa). Nome repetido entra uma vez. Função pura.
  */
 export function extrairPorMarcador(texto: string, textos: readonly string[]): PessoaSite[] {
   const pessoas: PessoaSite[] = [];
   const vistos = new Set<string>();
-  for (const linha of texto.split(/\r?\n/)) {
+  const registrar = (pessoa: PessoaSite): void => {
+    const chave = normalizarNome(pessoa.nome);
+    if (vistos.has(chave)) return;
+    vistos.add(chave);
+    pessoas.push(pessoa);
+  };
+  const linhas = texto.split(/\r?\n/);
+  linhas.forEach((linha, n) => {
+    const daLinhaPropria = pessoaDoMarcadorEmLinhaPropria(linhas, n, textos);
+    if (daLinhaPropria) {
+      registrar(daLinhaPropria);
+      return;
+    }
     for (const { indice, marcador } of ocorrenciasDosMarcadores(linha, textos)) {
       const antes = linha.slice(0, indice);
       const pessoa = pessoaAntesDoMarcador(antes.slice(ultimoSeparador(antes) + 1), marcador);
-      if (!pessoa) continue;
-      const chave = normalizarNome(pessoa.nome);
-      if (vistos.has(chave)) continue;
-      vistos.add(chave);
-      pessoas.push(pessoa);
+      if (pessoa) registrar(pessoa);
     }
-  }
+  });
   return pessoas;
+}
+
+/** A linha `n` é um marcador inteiro e a de cima é um nome: a pessoa, com a linha como cargo. */
+function pessoaDoMarcadorEmLinhaPropria(linhas: readonly string[], n: number, textos: readonly string[]): PessoaSite | undefined {
+  const linha = linhas[n].trim();
+  const alvo = normalizarTexto(linha);
+  if (n === 0 || alvo === "" || !textos.some((t) => normalizarTexto(t) === alvo)) return undefined;
+  const nome = linhas[n - 1].trim();
+  return pareceNome(nome) ? { nome, cargo: linha, origem: "pagina" } : undefined;
 }
 
 /** Opções de extração de conteúdo (HTML ou PDF). */
@@ -644,6 +664,8 @@ export interface OpcoesExtracao {
   nomeEmDestaque?: boolean;
   /** Só os gabinetes e os blocos da direção viram pessoa (spec 2026-11-13 §3.3, STM). */
   gabinetes?: OpcoesGabinetes;
+  /** Página de uma só autoridade: o título principal com o cargo fixo (GT de 13/11, comandantes). */
+  pessoaUnica?: OpcoesPessoaUnica;
 }
 
 /** Extrai texto limpo + destaques + pessoas estruturadas de um HTML já baixado. Função pura. */
@@ -654,6 +676,8 @@ export function extrairConteudo(html: string, url: string, opcoes: OpcoesExtraca
   // `ul.nav` que a moldura apaga (spec 2026-11-13 §3.3).
   const doGabinete = opcoes.gabinetes ? extrairPorGabinetes($, url, opcoes.gabinetes) : undefined;
   removerMoldura($);
+  // Depois da moldura: o título do cabeçalho ("Marinha do Brasil") não é a autoridade da página.
+  const daPessoaUnica = opcoes.pessoaUnica ? extrairPessoaUnica($, opcoes.pessoaUnica, pareceNome) : undefined;
 
   // destaques ANTES de mutar o DOM (extrairLinhas insere "\n").
   const destaquesBrutos: string[] = [];
@@ -670,6 +694,7 @@ export function extrairConteudo(html: string, url: string, opcoes: OpcoesExtraca
   const { linhas, titulos } = extrairLinhas($);
   const pessoas =
     doGabinete ??
+    daPessoaUnica ??
     (opcoes.marcador?.length
       ? extrairPorMarcador(linhas.join("\n"), opcoes.marcador)
       : segmentarPessoas(linhas, titulos, destaquesPorLinha));
@@ -781,6 +806,8 @@ export interface OpcoesRaspagem {
   clicarAntes?: CliqueAntes;
   /** Extração por gabinete (spec 2026-11-13 §3.3). Só vale na extração de HTML. */
   gabinetes?: OpcoesGabinetes;
+  /** Página de uma só autoridade (GT de 13/11). Só vale na extração de HTML. */
+  pessoaUnica?: OpcoesPessoaUnica;
   timeoutMs?: number;
 }
 
@@ -795,6 +822,7 @@ export async function raspar(url: string, opcoes: OpcoesRaspagem = {}): Promise<
     ...(opcoes.marcador ? { marcador: opcoes.marcador } : {}),
     ...(opcoes.nomeEmDestaque ? { nomeEmDestaque: true } : {}),
     ...(opcoes.gabinetes ? { gabinetes: opcoes.gabinetes } : {}),
+    ...(opcoes.pessoaUnica ? { pessoaUnica: opcoes.pessoaUnica } : {}),
   };
   try {
     if (opcoes.tipo === "pdf") {

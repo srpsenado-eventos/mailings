@@ -58,16 +58,24 @@ export interface ModoLancamento {
 export type Lancador = (caminhoChrome: string, modo?: ModoLancamento) => Promise<PaginaNavegador>;
 
 /**
- * O que a leitura pelo Chrome aplica da fonte: a tabela e o nome em destaque (spec 2026-10-30 §3.1).
- * `marcador` e `gabinetes` não se aplicam à janela: essas fontes (TST `/orgaos`, STM) são lidas por
- * `fetch` e não vão à janela no 403 (`janelaLeComoOFetch` em `lib/raspagem.ts`).
+ * O que a leitura pelo Chrome aplica da fonte: a tabela, o nome em destaque (spec 2026-10-30 §3.1)
+ * e, desde 13/11, o marcador e a pessoa única (Defesa e comandantes, fontes lidas pela janela).
+ * `gabinetes` não se aplica à janela: o STM é lido por `fetch`. As fontes com marcador ou gabinetes
+ * lidas por `fetch` continuam sem ir à janela no 403 (`janelaLeComoOFetch` em `lib/raspagem.ts`).
  */
-export type OpcoesExtracaoNavegador = Pick<OpcoesRaspagem, "tabela" | "nomeEmDestaque" | "clicarAntes">;
+export type OpcoesExtracaoNavegador = Pick<
+  OpcoesRaspagem,
+  "tabela" | "nomeEmDestaque" | "clicarAntes" | "marcador" | "pessoaUnica"
+>;
 
 /** O HTML montado pelo Chrome passa pelo MESMO extrator das outras fontes. */
 function extrairDoNavegador(html: string, url: string, opcoes: OpcoesExtracaoNavegador): ConteudoFonte {
   if (opcoes.tabela) return extrairTabela(html, url, opcoes.tabela);
-  return extrairConteudo(html, url, opcoes.nomeEmDestaque ? { nomeEmDestaque: true } : {});
+  return extrairConteudo(html, url, {
+    ...(opcoes.nomeEmDestaque ? { nomeEmDestaque: true } : {}),
+    ...(opcoes.marcador ? { marcador: opcoes.marcador } : {}),
+    ...(opcoes.pessoaUnica ? { pessoaUnica: opcoes.pessoaUnica } : {}),
+  });
 }
 
 export interface OpcoesNavegador {

@@ -170,6 +170,28 @@ function lancadorDeSessao(htmlPorUrl: Record<string, string | (() => Promise<str
   return { lancar, estado };
 }
 
+describe("marcador e pessoa única pela janela (GT de 13/11)", () => {
+  const URL_DEFESA = "https://www.gov.br/defesa/pt-br/composicao";
+  const URL_EB = "https://www.eb.mil.br/web/comandante-do-exercito";
+  const lerFixture = (nome: string) => readFileSync(path.resolve(__dirname, "fixtures", nome), "utf-8");
+
+  test("a sessão com janela aplica o marcador e a pessoa única", async () => {
+    // Arrange
+    const { lancar } = lancadorDeSessao({ [URL_DEFESA]: lerFixture("defesa-composicao.html"), [URL_EB]: lerFixture("comandante-exercito.html") });
+    const sessao = abrirSessao({ esperar: semEspera, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+
+    // Act
+    const defesa = await sessao.raspar(URL_DEFESA, { marcador: ["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"] });
+    const eb = await sessao.raspar(URL_EB, { pessoaUnica: { cargo: "Comandante do Exército Brasileiro" } });
+    await sessao.fechar();
+
+    // Assert
+    expect(defesa.pessoas.map((p) => p.cargo)).toEqual(["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"]);
+    expect(eb.pessoas).toHaveLength(1);
+    expect(eb.pessoas[0].cargo).toBe("Comandante do Exército Brasileiro");
+  });
+});
+
 describe("nome em destaque pelo navegador (spec 2026-10-30 §3.1)", () => {
   const URL_STJ = "https://www.stj.jus.br/web/verMinistrosSTJ?parametro=1";
   const HTML_STJ = decodificarCorpo(readFileSync(path.resolve(__dirname, "fixtures/stj-ministros.html")), "text/html;charset=ISO-8859-1");

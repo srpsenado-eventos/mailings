@@ -46,6 +46,11 @@ export function nomeEsperadoDaPagina(
   return nomeEsperadoComPrefixo(contato, grupoCanonico, semTratamentosProibidos(nomeDaPagina, proibidos), regras);
 }
 
+/** A regra de escrita do nome do grupo canônico, se houver. */
+export function regraDoGrupo(grupoCanonico: string | undefined): RegraNome | undefined {
+  return grupoCanonico ? REGRAS_NOME[grupoCanonico] : undefined;
+}
+
 /** O nome do cadastro confere com o esperado: mesma grafia e, nos grupos com a regra, a mesma patente. */
 export function nomeConfereComPatente(planilha: string, esperado: string, regra: RegraNome | undefined): boolean {
   return mesmaGrafiaDeNome(planilha, esperado) && (!regra?.patenteComoNoSite || mesmaPatente(planilha, esperado));

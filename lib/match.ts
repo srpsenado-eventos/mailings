@@ -34,8 +34,7 @@ import {
 import { comparacoesProtocoloFixo } from "@/lib/protocolo-fixo";
 import { ehItemInstitucional } from "@/lib/proposta-inclusao";
 import { comparacaoLimiteNome } from "@/lib/limite-nome";
-import { nomeConfereComPatente, nomeEsperadoDaPagina } from "@/lib/nome-patente";
-import { REGRAS_NOME } from "@/data/regras-nome";
+import { nomeConfereComPatente, nomeEsperadoDaPagina, regraDoGrupo } from "@/lib/nome-patente";
 import {
   comparacaoPrefixoNome,
   comparacaoRegraNome,
@@ -265,7 +264,7 @@ function situacaoNome(planilha: string, pessoa: PessoaSite, grupoCanonico?: stri
   // A grafia lembrada pela IA não é fonte: o acento (e a patente) só contam quando o nome veio de uma página.
   const igual = pessoa.origem === "conhecimento"
     ? normalizarNome(planilha) === normalizarNome(esperado)
-    : nomeConfereComPatente(planilha, esperado, grupoCanonico ? REGRAS_NOME[grupoCanonico] : undefined);
+    : nomeConfereComPatente(planilha, esperado, regraDoGrupo(grupoCanonico));
   return igual ? "confere" : "divergente";
 }
 
@@ -916,7 +915,7 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
   const comparacoes: ComparacaoCampo[] = [
     // Nome mais longo na página (R9) ou com outro acento: a pessoa está lá, mas o GT quer o nome
     // como o site o escreve; sai "divergente" (amarelo) com o nome da página para copiar.
-    achado.exato && mesmosAcentos(contato.nome, nomeDaPagina) && nomeConfereComPatente(contato.nome, nomeDaPagina, grupoCanonico ? REGRAS_NOME[grupoCanonico] : undefined)
+    achado.exato && mesmosAcentos(contato.nome, nomeDaPagina) && nomeConfereComPatente(contato.nome, nomeDaPagina, regraDoGrupo(grupoCanonico))
       ? { campo: "nome", valorPlanilha: contato.nome, valorEsperado: nomeEsperadoDaPagina(contato, grupoCanonico, nomeDaPagina), origemValor: "pagina", situacao: "confere", fonteUrl: url }
       : {
           campo: "nome",

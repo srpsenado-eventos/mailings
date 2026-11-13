@@ -502,3 +502,40 @@ describe("Patente como no site (spec 2026-11-13 §3.3)", () => {
     expect(nomeDe(r)?.situacao).toBe("confere");
   });
 });
+
+describe("Patente e acento na página individual (spec 2026-11-13 §3.3)", () => {
+  const fonteInd: FonteIndividual = { url: "https://www.exemplar.mil.br/ministro", ativo: true, chave: { nome: "Fulano de Tal" }, campos: ["nome"] };
+  const rodar = (nomeCadastro: string, nomePagina: string) => {
+    const conteudo: ConteudoFonte = {
+      url: fonteInd.url,
+      textoLimpo: `${nomePagina} Ministro do Tribunal. ${"Composição do tribunal, biografia e agenda oficial da autoridade. ".repeat(12)}`,
+      destaques: [nomePagina],
+      pessoas: [{ nome: nomePagina, cargo: "Ministro", origem: "pagina" }],
+    };
+    const v = compararContatoIndividual({
+      contato: { nome: nomeCadastro, grupo: GRUPO_STM, ...CADASTRO_OK },
+      fonte: fonteInd,
+      lida: { conteudo },
+      grupoCanonico: GRUPO_STM,
+    });
+    return v.resultado.comparacoes.find((c) => c.campo === "nome" && c.origemValor === "pagina");
+  };
+
+  test("patente diferente diverge com o nome da página e sem observação de acento", () => {
+    const nome = rodar("General de Exército Fulano de Tal", "Gen Ex Fulano de Tal");
+    expect(nome?.situacao).toBe("divergente");
+    expect(nome?.valorEsperado).toBe("Gen Ex Fulano de Tal");
+    expect(nome?.observacao).toBeUndefined();
+  });
+
+  test("acento diferente continua divergindo com a observação de acento", () => {
+    const nome = rodar("Gen Ex Fulano de Tal", "Gen Ex Fulanó de Tal");
+    expect(nome?.situacao).toBe("divergente");
+    expect(nome?.observacao).toBeDefined();
+  });
+
+  test("patente e acento iguais conferem", () => {
+    const nome = rodar("Gen Ex Fulano de Tal", "Gen Ex Fulano de Tal");
+    expect(nome?.situacao).toBe("confere");
+  });
+});

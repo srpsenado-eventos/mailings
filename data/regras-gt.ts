@@ -24,18 +24,6 @@ export const REGRAS_GT: readonly RegraGt[] = [
   },
   {
     data: "2026-11-04",
-    titulo: "STM: patentes",
-    texto: "As patentes serão pesquisadas pelo Daniel no site do STM. Se não encontrar, o GT consulta a ASPAR do Exército. Até lá, o Fiscal não audita patente.",
-    grupos: ["Ministros do STM"],
-  },
-  {
-    data: "2026-11-04",
-    titulo: "STM: abreviação",
-    texto: "Quando for preciso abreviar o nome, abreviar o sobrenome, nunca a patente.",
-    grupos: ["Ministros do STM"],
-  },
-  {
-    data: "2026-11-04",
     titulo: "Tratamento",
     texto: "Tabela de tratamentos v02 (REGRA GERAL): Governador, Prefeito, Presidente de Assembleia Legislativa / Câmara Legislativa e Presidente de Câmara Municipal passam a Senhor(a); o endereçamento não muda.",
     grupos: ["Governadores"],
@@ -69,5 +57,23 @@ export const REGRAS_GT: readonly RegraGt[] = [
     titulo: "Ex-Presidentes do Congresso",
     texto: "Cargo: Presidente do Congresso Nacional no período de AAAA a AAAA, ou em AAAA para um único ano. Tratamento Senhor e endereçamento A Sua Excelência o Senhor.",
     grupos: ["Ex-Presidentes do Congresso"],
+  },
+  {
+    data: "2026-11-13",
+    titulo: "TSE: tribunal de origem",
+    texto: "Membros do TSE que também são ministros do STF ou do STJ são convidados por esses tribunais; o Presidente do TSE é convidado pelo TSE; os juristas ficam no TSE.",
+    grupos: ["Ministros do STF", "Ministros do STJ", "Ministros do TSE"],
+  },
+  {
+    data: "2026-11-13",
+    titulo: "STM: patente como no site",
+    texto: "Patente como no site do STM (Quem é Quem), abreviada como lá; Dr. e Dra. não entram no nome; limite de 50 caracteres.",
+    grupos: ["Ministros do STM"],
+  },
+  {
+    data: "2026-11-13",
+    titulo: "Chefes de Estado",
+    texto: "Chefes de Estado, chefes de governo e presidentes de parlamento: tratamento Excelentíssimo(a) Senhor(a) e endereçamento A Sua Excelência o(a) Senhor(a), em paralelo às autoridades nacionais do mesmo nível.",
+    grupos: ["Chefes de Estado, Gov, Presidentes Parlam - 2027"],
   },
 ];

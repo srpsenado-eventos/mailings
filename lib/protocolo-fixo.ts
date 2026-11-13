@@ -1,13 +1,16 @@
-import { grupoDoAgrupador } from "@/lib/agrupador";
-import { segmentarGrupo } from "@/lib/catalogo";
+import { GRUPOS_POSSE } from "@/data/grupos-posse";
 import { neutralizarGenero } from "@/lib/cargos";
 import { normalizarTexto } from "@/lib/normalize";
 import { contatoEhFeminino } from "@/lib/tratamento";
 import type { ComparacaoCampo, ContatoPlanilha } from "@/lib/types";
 
 /**
- * Protocolo fixo dos presidentes do Congresso e da Câmara (spec 2026-11-05 §7.3, decisão do
- * Clovis). Vale por cima da tabela de protocolo e dos pares, só nesses cargos.
+ * Protocolo fixo (spec 2026-11-05 §7.3 e 2026-11-13 §3.5, decisões do Clovis). Vale por cima da
+ * tabela de protocolo e dos pares, nos presidentes ativos do Congresso e da Câmara, no grupo de
+ * ex-presidentes do Congresso e em todo o grupo dos Chefes de Estado.
+ *
+ * Não importa `lib/agrupador` nem `lib/catalogo`: `lib/match` importa este módulo e eles importam
+ * `lib/match`, e o ciclo deixaria `OBSERVACAO_SEM_FONTE_OFICIAL` indefinido na avaliação do agrupador.
  */
 
 const GRUPO_EX_PRESIDENTES = "Ex-Presidentes do Congresso";
@@ -23,9 +26,16 @@ export interface ProtocoloFixo {
   enderecamento: string;
 }
 
-/** Algum segmento do rótulo do Contatos resolve, pelo agrupador, para o grupo dos Chefes de Estado. */
+/** Rótulo oficial e apelidos do grupo dos Chefes de Estado, normalizados. */
+const ROTULOS_CHEFES_DE_ESTADO: ReadonlySet<string> = new Set(
+  GRUPOS_POSSE.filter((g) => g.rotulo === GRUPO_CHEFES_DE_ESTADO).flatMap((g) =>
+    [g.rotulo, ...(g.apelidos ?? [])].map(normalizarTexto),
+  ),
+);
+
+/** Algum segmento ("A; B") do rótulo do Contatos é o grupo dos Chefes de Estado. */
 function nosChefesDeEstado(grupo: string): boolean {
-  return segmentarGrupo(grupo).some((seg) => grupoDoAgrupador(seg)?.rotulo === GRUPO_CHEFES_DE_ESTADO);
+  return grupo.split(";").some((seg) => ROTULOS_CHEFES_DE_ESTADO.has(normalizarTexto(seg)));
 }
 
 function ativo(cargo: string | undefined): boolean {

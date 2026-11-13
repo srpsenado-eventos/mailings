@@ -34,12 +34,13 @@ import {
 import { comparacoesProtocoloFixo } from "@/lib/protocolo-fixo";
 import { ehItemInstitucional } from "@/lib/proposta-inclusao";
 import { comparacaoLimiteNome } from "@/lib/limite-nome";
+import { nomeConfereComPatente, nomeEsperadoDaPagina } from "@/lib/nome-patente";
+import { REGRAS_NOME } from "@/data/regras-nome";
 import {
   comparacaoPrefixoNome,
   comparacaoRegraNome,
   comparacoesCoerencia,
   comparacoesProtocolo,
-  nomeEsperadoComPrefixo,
 } from "@/lib/tratamento";
 import { comparacaoCargoExPresidente } from "@/lib/regras-cargo";
 
@@ -259,10 +260,12 @@ function situacaoPorPapel(valorPlanilha: string, valorEsperado: string): Situaca
  * Nome: o site é o parâmetro — confere só se igual normalizado ao nome esperado. Com destaque
  * (STJ), o esperado é o destaque: o nome completo da página diverge (spec 2026-10-30 §3.1).
  */
-function situacaoNome(planilha: string, pessoa: PessoaSite): SituacaoCampo {
+function situacaoNome(planilha: string, pessoa: PessoaSite, grupoCanonico?: string): SituacaoCampo {
   const esperado = nomeEsperado(pessoa);
-  // A grafia lembrada pela IA não é fonte: o acento só conta quando o nome veio de uma página.
-  const igual = pessoa.origem === "conhecimento" ? normalizarNome(planilha) === normalizarNome(esperado) : mesmaGrafiaDeNome(planilha, esperado);
+  // A grafia lembrada pela IA não é fonte: o acento (e a patente) só contam quando o nome veio de uma página.
+  const igual = pessoa.origem === "conhecimento"
+    ? normalizarNome(planilha) === normalizarNome(esperado)
+    : nomeConfereComPatente(planilha, esperado, grupoCanonico ? REGRAS_NOME[grupoCanonico] : undefined);
   return igual ? "confere" : "divergente";
 }
 
@@ -368,9 +371,9 @@ function montarResultado(
       campo: "nome",
       valorPlanilha: contato.nome,
       // Com a regra do prefixo (spec 2026-10-30 §3.3), o copiável leva o prefixo: nunca propõe tirá-lo.
-      valorEsperado: nomeEsperadoComPrefixo(contato, grupoCanonico, nomeEsperado(pessoa)),
+      valorEsperado: nomeEsperadoDaPagina(contato, grupoCanonico, nomeEsperado(pessoa)),
       origemValor: ov,
-      situacao: situacaoNome(contato.nome, pessoa),
+      situacao: situacaoNome(contato.nome, pessoa, grupoCanonico),
       ...(pessoa.origem !== "conhecimento" && soAcentoDiverge(contato.nome, nomeEsperado(pessoa)) ? { observacao: OBSERVACAO_ACENTO_NOME } : {}),
     },
   ];
@@ -913,16 +916,16 @@ export function compararContatoIndividual(e: EntradaIndividual): VereditoIndivid
   const comparacoes: ComparacaoCampo[] = [
     // Nome mais longo na página (R9) ou com outro acento: a pessoa está lá, mas o GT quer o nome
     // como o site o escreve; sai "divergente" (amarelo) com o nome da página para copiar.
-    achado.exato && mesmosAcentos(contato.nome, nomeDaPagina)
-      ? { campo: "nome", valorPlanilha: contato.nome, valorEsperado: nomeEsperadoComPrefixo(contato, grupoCanonico, nomeDaPagina), origemValor: "pagina", situacao: "confere", fonteUrl: url }
+    achado.exato && mesmosAcentos(contato.nome, nomeDaPagina) && nomeConfereComPatente(contato.nome, nomeDaPagina, grupoCanonico ? REGRAS_NOME[grupoCanonico] : undefined)
+      ? { campo: "nome", valorPlanilha: contato.nome, valorEsperado: nomeEsperadoDaPagina(contato, grupoCanonico, nomeDaPagina), origemValor: "pagina", situacao: "confere", fonteUrl: url }
       : {
           campo: "nome",
           valorPlanilha: contato.nome,
-          valorEsperado: achado.nomeNaPagina && nomeEsperadoComPrefixo(contato, grupoCanonico, achado.nomeNaPagina),
+          valorEsperado: achado.nomeNaPagina && nomeEsperadoDaPagina(contato, grupoCanonico, achado.nomeNaPagina),
           origemValor: "pagina",
           situacao: "divergente",
           fonteUrl: url,
-          ...(achado.exato ? { observacao: OBSERVACAO_ACENTO_NOME } : {}),
+          ...(achado.exato && !mesmosAcentos(contato.nome, nomeDaPagina) ? { observacao: OBSERVACAO_ACENTO_NOME } : {}),
         },
     ...cargoDe(cargo),
     ...comparacoesSemSite(contato),

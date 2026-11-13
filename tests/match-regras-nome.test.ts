@@ -464,3 +464,41 @@ describe("Nome acima de 50 caracteres no STM (Camada C, spec 2026-11-04 §3.5)",
     expect(achadosDe(r.comparacoes)).not.toContain("nome_acima_do_limite");
   });
 });
+
+describe("Patente como no site (spec 2026-11-13 §3.3)", () => {
+  const site = (nome: string): ConteudoFonte => ({ ...fonte, pessoas: [{ nome, cargo: "Ministro", origem: "pagina" }] });
+  const rodar = (nomeCadastro: string, nomePagina: string, grupo = GRUPO_STM) =>
+    compararGrupo("STM", [contato({ nome: nomeCadastro })], site(nomePagina), grupo).contatos[0];
+  const nomeDe = (r: ReturnType<typeof rodar>) => r.comparacoes.find((c) => c.campo === "nome" && c.origemValor === "pagina");
+
+  test("patente por extenso no cadastro × abreviada no site diverge com o nome da página, sem possível saída", () => {
+    const r = rodar("General de Exército Fulano de Tal", "Gen Ex Fulano de Tal");
+    expect(nomeDe(r)?.situacao).toBe("divergente");
+    expect(nomeDe(r)?.valorEsperado).toBe("Gen Ex Fulano de Tal");
+    expect(r.semaforo).toBe("amarelo");
+    expect(r.possivelSaida).toBeFalsy();
+  });
+
+  test("mesma patente nos dois lados confere", () => {
+    const r = rodar("Gen Ex Fulano de Tal", "Gen Ex Fulano de Tal");
+    expect(nomeDe(r)?.situacao).toBe("confere");
+  });
+
+  test("cadastro sem Dra. × site com Dra. confere e o esperado sai sem o tratamento", () => {
+    const r = rodar("Fulana de Tal", "Dra. Fulana de Tal");
+    expect(nomeDe(r)?.situacao).toBe("confere");
+    expect(nomeDe(r)?.valorEsperado).toBe("Fulana de Tal");
+  });
+
+  test("cadastro com Dra. diverge pelo tratamento acadêmico, com o esperado sem ele", () => {
+    const r = rodar("Dra. Fulana de Tal", "Dra. Fulana de Tal");
+    const c = r.comparacoes.find((x) => x.achado === "nome_tratamento_academico");
+    expect(c?.situacao).toBe("divergente");
+    expect(c?.valorEsperado).toBe("Fulana de Tal");
+  });
+
+  test("grupo sem a regra segue como hoje: por extenso × abreviada confere", () => {
+    const r = rodar("General de Exército Fulano de Tal", "Gen Ex Fulano de Tal", "Ministros do STF");
+    expect(nomeDe(r)?.situacao).toBe("confere");
+  });
+});

@@ -632,7 +632,7 @@ function temTratamentoProibido(nome: string, proibidos: readonly string[]): bool
  * para o cadastro. Remove só os tokens proibidos (comparação por token inteiro, nunca
  * substring: "Drummond" não é "Dr"), preservando os demais tokens e a ordem original.
  */
-function semTratamentosProibidos(nome: string, proibidos: readonly string[]): string {
+export function semTratamentosProibidos(nome: string, proibidos: readonly string[]): string {
   const proibidosSet = new Set(proibidos);
   return nome
     .split(/\s+/)

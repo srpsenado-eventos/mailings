@@ -65,7 +65,7 @@ export type Lancador = (caminhoChrome: string, modo?: ModoLancamento) => Promise
  */
 export type OpcoesExtracaoNavegador = Pick<
   OpcoesRaspagem,
-  "tabela" | "nomeEmDestaque" | "clicarAntes" | "marcador" | "pessoaUnica"
+  "tabela" | "nomeEmDestaque" | "clicarAntes" | "marcador" | "marcadorObrigatorio" | "pessoaUnica"
 >;
 
 /** O HTML montado pelo Chrome passa pelo MESMO extrator das outras fontes. */
@@ -74,6 +74,7 @@ function extrairDoNavegador(html: string, url: string, opcoes: OpcoesExtracaoNav
   return extrairConteudo(html, url, {
     ...(opcoes.nomeEmDestaque ? { nomeEmDestaque: true } : {}),
     ...(opcoes.marcador ? { marcador: opcoes.marcador } : {}),
+    ...(opcoes.marcadorObrigatorio ? { marcadorObrigatorio: true } : {}),
     ...(opcoes.pessoaUnica ? { pessoaUnica: opcoes.pessoaUnica } : {}),
   });
 }

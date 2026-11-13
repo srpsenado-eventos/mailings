@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
 import { extrairConteudo, extrairPorMarcador } from "@/lib/scrape";
+import { MOTIVO_PESSOA_UNICA_SEM_NOME } from "@/lib/scrape-pessoa-unica";
+import { MOTIVO_MARCADOR_SEM_PESSOA } from "@/lib/scrape-marcador";
 
 const fixture = (nome: string) => readFileSync(path.resolve(__dirname, "fixtures", nome), "utf-8");
 
@@ -43,9 +45,11 @@ describe("pessoaUnica: página de uma só autoridade (GT de 13/11)", () => {
     expect(c.pessoas.map((p) => p.nome)).toEqual(["Alte Esq Beltrano Pereira"]);
   });
 
-  test("nenhum título com cara de nome: ninguém (a fonte sai sem pessoas, nunca uma pessoa inventada)", () => {
+  test("nenhum título com cara de nome: a leitura falha (layout mudou), nunca uma pessoa inventada nem lista vazia", () => {
     const html = pagina(`<main><h1>Comandante</h1><p>Texto qualquer da página.</p></main>`);
-    expect(extrairConteudo(html, "https://exemplo.mil.br/comandante", opcoes).pessoas).toEqual([]);
+    expect(() => extrairConteudo(html, "https://exemplo.mil.br/comandante", opcoes)).toThrow(
+      expect.objectContaining({ motivo: MOTIVO_PESSOA_UNICA_SEM_NOME }),
+    );
   });
 
   test("Exército (recorte real): o h1 com 'Gen Ex' e o cargo como a página escreve", () => {
@@ -79,6 +83,19 @@ describe("marcador em linha própria (Defesa, chefe do EMCFA)", () => {
 
   test("linha do marcador sem nome na linha de cima não vira pessoa", () => {
     expect(extrairPorMarcador(`Composição\n${CARGO_EMCFA}`, [CARGO_EMCFA])).toEqual([]);
+  });
+
+  test("marcador obrigatório que não casa ninguém: a leitura falha (o texto do cargo mudou)", () => {
+    const html = fixture("defesa-composicao.html").replace(CARGO_EMCFA, "CHEFE DO EMCFA");
+    expect(() => extrairConteudo(html, URL_DEFESA, { marcador: [CARGO_EMCFA], marcadorObrigatorio: true })).toThrow(
+      expect.objectContaining({ motivo: MOTIVO_MARCADOR_SEM_PESSOA }),
+    );
+    expect(extrairConteudo(html, URL_DEFESA, { marcador: [CARGO_EMCFA] }).pessoas).toEqual([]);
+  });
+
+  test("marcador sem letras ou de uma palavra nunca vale em linha própria ('**' do STJ, '(convocado)' do TST)", () => {
+    expect(extrairPorMarcador("Fulano de Tal Souza\n**", ["**"])).toEqual([]);
+    expect(extrairPorMarcador("Fulano de Tal Souza\n(convocado)", ["(convocado)"])).toEqual([]);
   });
 
   test("o marcador no meio da linha continua como antes", () => {

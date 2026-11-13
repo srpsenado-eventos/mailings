@@ -1514,13 +1514,17 @@ describe("Comandantes das Forças Armadas e EMCFA de ponta a ponta: quatro fonte
     [URL_EB]: lerFixture("comandante-exercito.html"),
   };
   /** As fontes do próprio catálogo; página fora do mapa responde como a Cloudflare em 13/11. */
-  const depsCmd = (paginas: Record<string, string> = PAGINAS): Dependencias => ({
-    resolverFonte: (g) => resolverGrupoEFonte(g),
+  const depsCmd = (paginas: Record<string, string> = PAGINAS, comSemInclusao = true): Dependencias => ({
+    resolverFonte: (g) => {
+      const r = resolverGrupoEFonte(g);
+      return comSemInclusao ? r : { ...r, semInclusao: undefined };
+    },
     raspar: async (f) => {
       const html = paginas[f.url];
       if (html === undefined) throw new ScrapeError(f.url, BLOQUEIO);
       return extrairConteudo(html, f.url, {
         ...(f.marcador ? { marcador: f.marcador.textos } : {}),
+        ...(f.marcador?.obrigatorio ? { marcadorObrigatorio: true } : {}),
         ...(f.pessoaUnica ? { pessoaUnica: f.pessoaUnica } : {}),
       });
     },
@@ -1559,9 +1563,49 @@ describe("Comandantes das Forças Armadas e EMCFA de ponta a ponta: quatro fonte
     expect(nome.situacao).toBe("confere");
   });
 
-  test("ninguém da composição da Defesa vira proposta de inclusão (semInclusao)", async () => {
-    const r = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd());
-    expect(r.grupos[0].novos).toEqual([]);
+  test("ninguém da composição da Defesa vira proposta de inclusão, e é o semInclusao que garante", async () => {
+    // Arrange: um segundo nome na página com o mesmo cargo, sem contato no grupo.
+    const outro = "Alte Esq Sicrano Moura Brandão";
+    const defesa = PAGINAS[URL_DEFESA].replace(
+      "</ul>",
+      `<li><div class="item"><p class="nome-autoridade"><a>${outro}</a></p><p class="cargo-autoridade">CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS</p></div></li></ul>`,
+    );
+    const paginas = { ...PAGINAS, [URL_DEFESA]: defesa };
+
+    // Act
+    const com = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd(paginas));
+    const sem = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd(paginas, false));
+
+    // Assert
+    expect(com.grupos[0].novos).toEqual([]);
+    expect(sem.grupos[0].novos.map((n) => n.nome)).toEqual([outro]);
+  });
+
+  test("Marinha lida e o h1 do Exército sem nome (layout mudou): Exército indeterminado, nunca saída", async () => {
+    const paginas = {
+      ...PAGINAS,
+      [URL_MARINHA]: `<html><body><main><h1>${marinha.nome}</h1></main></body></html>`,
+      [URL_EB]: "<html><body><main><h1>Comandante</h1><p>Página em manutenção.</p></main></body></html>",
+    };
+    const r = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd(paginas));
+    const c = doContato(r, exercito.nome);
+    expect(c.possivelSaida).toBeFalsy();
+    expect(c.semaforo).toBe("indeterminado");
+    expect(r.grupos[0].erroFonte).toContain(URL_EB);
+    expect(doContato(r, marinha.nome).semaforo).toBe("verde");
+  });
+
+  test("Marinha lida e o cargo do EMCFA mudou na Defesa: chefe do EMCFA indeterminado, nunca saída", async () => {
+    const paginas = {
+      ...PAGINAS,
+      [URL_MARINHA]: `<html><body><main><h1>${marinha.nome}</h1></main></body></html>`,
+      [URL_DEFESA]: PAGINAS[URL_DEFESA].replace("CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS", "CHEFE DO EMCFA"),
+    };
+    const r = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd(paginas));
+    const c = doContato(r, emcfa.nome);
+    expect(c.possivelSaida).toBeFalsy();
+    expect(c.semaforo).toBe("indeterminado");
+    expect(r.grupos[0].erroFonte).toContain(URL_DEFESA);
   });
 
   test("as quatro páginas lidas: os quatro verdes", async () => {

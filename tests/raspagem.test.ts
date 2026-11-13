@@ -154,6 +154,12 @@ describe("HTTP 403 ao fetch vai para a janela (spec 2026-10-23 §3.1)", () => {
     await rasparFonte({ url: "https://www.marinha.mil.br/comandantedamarinha", navegador: "janela", pessoaUnica }, r);
     expect(r.porJanela).toHaveBeenCalledWith("https://www.marinha.mil.br/comandantedamarinha", { pessoaUnica });
   });
+  test("marcador obrigatório pela janela: a exigência chega à janela (Defesa, GT de 13/11)", async () => {
+    const r = raspadoresFalsos();
+    const url = "https://www.gov.br/defesa/pt-br/composicao";
+    await rasparFonte({ url, navegador: "janela", marcador: { textos: ["CHEFE DO EMCFA"], obrigatorio: true } }, r);
+    expect(r.porJanela).toHaveBeenCalledWith(url, { marcador: ["CHEFE DO EMCFA"], marcadorObrigatorio: true });
+  });
   test("fonte de pessoa única e 403 ao fetch: vai à janela, que aplica a opção", async () => {
     const r = raspadoresFalsos();
     const url = "https://www.eb.mil.br/web/comandante-do-exercito";

@@ -394,7 +394,14 @@ export interface FonteCatalogo {
   /** Ausente = HTML. "pdf": o corpo é lido por `extrairConteudoPdf` (spec 2026-10-23 §5.1). */
   tipo?: "html" | "pdf";
   /** Extração por marcador: só as pessoas cujo nome é seguido de um destes textos (spec 2026-10-23 §5.2). */
-  marcador?: { textos: readonly string[] };
+  marcador?: {
+    textos: readonly string[];
+    /**
+     * Nenhuma pessoa com o marcador é leitura quebrada, não lista vazia: a fonte falha e ninguém vira
+     * possível saída (GT de 13/11, Defesa: o chefe do EMCFA sempre está na página). Só na Defesa.
+     */
+    obrigatorio?: true;
+  };
   /**
    * O nome esperado é só a parte em negrito da página (spec 2026-10-30 §3.1, regra do GT
    * "STJ: usar as partes do nome em negrito"). Só no STJ.

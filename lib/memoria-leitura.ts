@@ -94,7 +94,7 @@ export function chaveDaLeitura(
     ...(fonte.nomeEmDestaque ? ["#destaque"] : []),
     ...(fonte.clicarAntes ? [`#clique:${JSON.stringify(fonte.clicarAntes.texto)}`] : []),
     ...(fonte.gabinetes ? [`#gabinetes:${JSON.stringify(fonte.gabinetes.prefixos)}`] : []),
-    ...(fonte.pessoaUnica ? [`#pessoaUnica:${fonte.pessoaUnica.cargo}`] : []),
+    ...(fonte.pessoaUnica ? [`#pessoaUnica:${JSON.stringify(fonte.pessoaUnica.cargo)}`] : []),
   ];
   return `${url}${sufixos.join("")}`;
 }

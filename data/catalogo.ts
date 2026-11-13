@@ -90,7 +90,7 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       // coleta até o Clovis indicar outra página; o grupo sai em leitura parcial e o comandante fica indeterminado, nunca saída.
       { url: "https://www.marinha.mil.br/comandantedamarinha", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Marinha" } },
       // Página montada por JavaScript (gov.br): lida pela janela; só o chefe do EMCFA, pelo cargo como a página escreve.
-      { url: "https://www.gov.br/defesa/pt-br/composicao", ativo: true, navegador: "janela", marcador: { textos: ["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"] } },
+      { url: "https://www.gov.br/defesa/pt-br/composicao", ativo: true, navegador: "janela", marcador: { textos: ["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"], obrigatorio: true } },
       { url: "https://www.eb.mil.br/web/comandante-do-exercito", ativo: true, pessoaUnica: { cargo: "Comandante do Exército Brasileiro" } },
       // Mesma verificação da Cloudflare da Marinha (13/11): falha esperada até o Clovis indicar outra página.
       { url: "https://www.fab.mil.br/a-forca-aerea/comandante/", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Aeronáutica" } },

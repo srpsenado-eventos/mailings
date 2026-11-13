@@ -4,7 +4,8 @@ import type { PessoaSite } from "@/lib/types";
 
 /**
  * Página de uma só autoridade (GT de 13/11, comandantes das Forças): a composição é uma pessoa,
- * cujo nome é o título principal da página e cujo cargo é o texto fixo do catálogo. O nome fica
+ * cujo nome é o título principal da página e cujo cargo é o texto fixo do catálogo; sem candidato a
+ * lista sai vazia e `extrairConteudo` lança `ScrapeError` (`MOTIVO_PESSOA_UNICA_SEM_NOME`). O nome fica
  * como a página escreve, com tratamento e patente. Função pura; este módulo não importa
  * `lib/scrape.ts`, que o chama de `extrairConteudo` (depois de tirar a moldura) e lhe passa o
  * teste de "parece nome".
@@ -15,7 +16,10 @@ export interface OpcoesPessoaUnica {
   cargo: string;
 }
 
-const compactar = (texto: string): string => texto.replace(/\s+/g, " ").trim();
+/** Motivo da página de autoridade única sem título com cara de nome: leitura quebrada (layout mudou). */
+export const MOTIVO_PESSOA_UNICA_SEM_NOME = "página de autoridade única sem o nome";
+
+const compactar =(texto: string): string => texto.replace(/\s+/g, " ").trim();
 
 /**
  * O primeiro `h1` com cara de nome; sem ele, o primeiro `h2`/`h3` com cara de nome. Título que

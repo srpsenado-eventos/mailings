@@ -111,7 +111,7 @@ describe("chaveDaLeitura (memória por forma de extração)", () => {
     expect(chaveDaLeitura(URL_A, { nomeEmDestaque: true, gabinetes })).toBe(`${URL_A}#destaque#gabinetes:["Gabinete Min.","Gabinete Min"]`);
   });
   test("pessoaUnica: sufixo #pessoaUnica com o cargo fixo (GT de 13/11)", () => {
-    expect(chaveDaLeitura(URL_A, { pessoaUnica: { cargo: "Comandante da Marinha" } })).toBe(`${URL_A}#pessoaUnica:Comandante da Marinha`);
+    expect(chaveDaLeitura(URL_A, { pessoaUnica: { cargo: "Comandante da Marinha" } })).toBe(`${URL_A}#pessoaUnica:"Comandante da Marinha"`);
   });
   test("nome em destaque: sufixo #destaque, para a leitura sem destaque não ser reaproveitada no lugar", () => {
     expect(chaveDaLeitura(URL_A, { nomeEmDestaque: true })).toBe(`${URL_A}#destaque`);

@@ -6,7 +6,8 @@ import { CARGOS } from "@/lib/cargos";
 import type { ConteudoFonte, PessoaSite, ExtracaoTabela, CliqueAntes } from "@/lib/types";
 import { colherDestaquesPorLinha, comDestaque, type DestaquesPorLinha } from "@/lib/scrape-destaque";
 import { extrairPorGabinetes, type OpcoesGabinetes } from "@/lib/scrape-gabinetes";
-import { extrairPessoaUnica, type OpcoesPessoaUnica } from "@/lib/scrape-pessoa-unica";
+import { extrairPessoaUnica, MOTIVO_PESSOA_UNICA_SEM_NOME, type OpcoesPessoaUnica } from "@/lib/scrape-pessoa-unica";
+import { MOTIVO_MARCADOR_SEM_PESSOA, pessoaDoMarcadorEmLinhaPropria, semNomeRepetido } from "@/lib/scrape-marcador";
 
 export class ScrapeError extends Error {
   constructor(
@@ -618,48 +619,29 @@ function ultimoSeparador(texto: string): number {
  * Extração por marcador (spec 2026-10-23 §5.2): só são pessoas os nomes seguidos de um dos
  * `textos` cadastrados ("(convocado)" no TST, "**" no PDF do STJ). Para cada ocorrência, o
  * nome é a sequência final de palavras em maiúscula do trecho anterior na mesma linha, com
- * duas ou mais partes significativas. Marcador que ocupa a linha inteira (comparado por
- * `normalizarTexto`) é o cargo da pessoa da linha de cima, como a página escreve (GT de 13/11,
- * chefe do EMCFA na composição da Defesa). Nome repetido entra uma vez. Função pura.
+ * duas ou mais partes significativas. O marcador em linha própria fica em `lib/scrape-marcador.ts`
+ * (GT de 13/11, Defesa). Nome repetido entra uma vez. Função pura.
  */
 export function extrairPorMarcador(texto: string, textos: readonly string[]): PessoaSite[] {
-  const pessoas: PessoaSite[] = [];
-  const vistos = new Set<string>();
-  const registrar = (pessoa: PessoaSite): void => {
-    const chave = normalizarNome(pessoa.nome);
-    if (vistos.has(chave)) return;
-    vistos.add(chave);
-    pessoas.push(pessoa);
-  };
   const linhas = texto.split(/\r?\n/);
-  linhas.forEach((linha, n) => {
-    const daLinhaPropria = pessoaDoMarcadorEmLinhaPropria(linhas, n, textos);
-    if (daLinhaPropria) {
-      registrar(daLinhaPropria);
-      return;
-    }
-    for (const { indice, marcador } of ocorrenciasDosMarcadores(linha, textos)) {
-      const antes = linha.slice(0, indice);
-      const pessoa = pessoaAntesDoMarcador(antes.slice(ultimoSeparador(antes) + 1), marcador);
-      if (pessoa) registrar(pessoa);
-    }
-  });
-  return pessoas;
-}
-
-/** A linha `n` é um marcador inteiro e a de cima é um nome: a pessoa, com a linha como cargo. */
-function pessoaDoMarcadorEmLinhaPropria(linhas: readonly string[], n: number, textos: readonly string[]): PessoaSite | undefined {
-  const linha = linhas[n].trim();
-  const alvo = normalizarTexto(linha);
-  if (n === 0 || alvo === "" || !textos.some((t) => normalizarTexto(t) === alvo)) return undefined;
-  const nome = linhas[n - 1].trim();
-  return pareceNome(nome) ? { nome, cargo: linha, origem: "pagina" } : undefined;
+  return semNomeRepetido(
+    linhas.flatMap((linha, n) => {
+      const daLinhaPropria = pessoaDoMarcadorEmLinhaPropria(linhas, n, textos, pareceNome);
+      if (daLinhaPropria) return [daLinhaPropria];
+      return ocorrenciasDosMarcadores(linha, textos).flatMap(({ indice, marcador }) => {
+        const antes = linha.slice(0, indice);
+        return pessoaAntesDoMarcador(antes.slice(ultimoSeparador(antes) + 1), marcador) ?? [];
+      });
+    }),
+  );
 }
 
 /** Opções de extração de conteúdo (HTML ou PDF). */
 export interface OpcoesExtracao {
   /** Textos que marcam as pessoas do grupo; presentes, só elas são extraídas. */
   marcador?: readonly string[];
+  /** Nenhuma pessoa com o marcador é leitura quebrada (`ScrapeError`), não lista vazia (GT de 13/11, Defesa). */
+  marcadorObrigatorio?: boolean;
   /** Cada pessoa leva `nomeDestaque`, as partes em negrito do nome (spec 2026-10-30 §3.1). */
   nomeEmDestaque?: boolean;
   /** Só os gabinetes e os blocos da direção viram pessoa (spec 2026-11-13 §3.3, STM). */
@@ -698,6 +680,12 @@ export function extrairConteudo(html: string, url: string, opcoes: OpcoesExtraca
     (opcoes.marcador?.length
       ? extrairPorMarcador(linhas.join("\n"), opcoes.marcador)
       : segmentarPessoas(linhas, titulos, destaquesPorLinha));
+  // Página de uma só autoridade, ou de marcador obrigatório, sem ninguém: leitura quebrada. Sem o erro,
+  // a fonte secundária vazia seria "ninguém a listar" e a autoridade viraria possível saída.
+  if (daPessoaUnica?.length === 0) throw new ScrapeError(url, MOTIVO_PESSOA_UNICA_SEM_NOME);
+  if (opcoes.marcadorObrigatorio && opcoes.marcador?.length && pessoas.length === 0) {
+    throw new ScrapeError(url, MOTIVO_MARCADOR_SEM_PESSOA);
+  }
   const destaques = [...new Set(destaquesBrutos.filter(ehNome))];
 
   return { url, textoLimpo: linhas.join(" "), destaques, pessoas };
@@ -798,6 +786,8 @@ export interface OpcoesRaspagem {
   tabela?: ExtracaoTabela;
   /** Só os nomes seguidos de um destes textos são pessoas (spec 2026-10-23 §5.2). */
   marcador?: readonly string[];
+  /** Nenhuma pessoa com o marcador é falha da leitura (GT de 13/11, Defesa). Só na extração de HTML. */
+  marcadorObrigatorio?: boolean;
   /** "pdf": a fonte é um PDF, lido pelo pdf-parse (spec 2026-10-23 §5.1). Ausente → HTML. */
   tipo?: "html" | "pdf";
   /** O nome esperado é a parte em negrito (spec 2026-10-30 §3.1). Só vale na extração de texto. */
@@ -820,6 +810,7 @@ export async function raspar(url: string, opcoes: OpcoesRaspagem = {}): Promise<
   const timer = setTimeout(() => ctrl.abort(), opcoes.timeoutMs ?? 15000);
   const extracao: OpcoesExtracao = {
     ...(opcoes.marcador ? { marcador: opcoes.marcador } : {}),
+    ...(opcoes.marcadorObrigatorio ? { marcadorObrigatorio: true } : {}),
     ...(opcoes.nomeEmDestaque ? { nomeEmDestaque: true } : {}),
     ...(opcoes.gabinetes ? { gabinetes: opcoes.gabinetes } : {}),
     ...(opcoes.pessoaUnica ? { pessoaUnica: opcoes.pessoaUnica } : {}),

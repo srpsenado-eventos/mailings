@@ -81,17 +81,12 @@ describe("catálogo real (data/catalogo.ts)", () => {
       expect(fontes.filter((f) => f.marcador)).toHaveLength(2);
       expect(fontes.some((f) => "nomesDoContatos" in f)).toBe(false);
       const alternativas = CATALOGO.flatMap((g) => [...g.fontes, ...(g.fontesIndividuais ?? [])]).flatMap((f) => (f.urlAlternativa ? [f.urlAlternativa] : []));
-      expect(alternativas).toHaveLength(6);
+      expect(alternativas).toEqual(["https://agencia.ac.gov.br/governadora/"]); // só AC: as dos ministérios saíram em 13/11
       expect(alternativas.every((u) => /^https:\/\/[a-z0-9.-]+\.gov\.br\//.test(u))).toBe(true);
     });
 
-    test("ajuste de 26/10: link da planilha de 23/10 é a principal nos quatro ministérios; AC lê a página da governadoria (GT de 05/11)", () => {
+    test("AC lê a página da governadoria, com a agência como alternativa (GT de 05/11)", () => {
       const ind = CATALOGO.flatMap((g) => g.fontesIndividuais ?? []);
-      const principalDe = (nome: string) => ind.find((f) => "nome" in f.chave && f.chave.nome === nome);
-      expect(principalDe("Miriam Belchior")?.url).toBe("https://www.gov.br/casacivil/pt-br/composicao/gabinete-do-ministro/quem-e-quem-1");
-      expect(principalDe("Margareth Menezes da Purificação")?.url).toBe("https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra/margareth-menezes-1");
-      expect(principalDe("José Mucio Monteiro Filho")?.url).toBe("https://www.gov.br/defesa/pt-br/composicao/gabinete-do-ministro/jose-mucio-monteiro-filho");
-      expect(principalDe("Rachel Barros de Oliveira")?.url).toBe("https://www.gov.br/igualdaderacial/pt-br/composicao/gabinete-da-ministra/rachel-barros-de-oliveira");
       const ac = ind.find((f) => "uf" in f.chave && f.chave.uf === "AC");
       expect(ac).toMatchObject({ url: "https://estado.ac.gov.br/orgao-entidades/governadoria/", urlAlternativa: "https://agencia.ac.gov.br/governadora/" });
     });
@@ -113,16 +108,16 @@ describe("catálogo real (data/catalogo.ts)", () => {
       "https://transparencia.rr.gov.br/principaiscargos",
       "https://www.rj.gov.br/pagina/sobre-o-governo9806",
     ]);
-    // 38 ministros + a geral do Planalto + as 3 entradas de Embaixadores (mesma lista do MRE).
-    expect(janela.length - estaduais.length).toBe(42);
+    // a geral do Planalto (Ministros de Estado) + as 3 entradas de Embaixadores (mesma lista do MRE).
+    expect(janela.length - estaduais.length).toBe(4);
   });
 
   describe("fontes individuais (spec 2026-10-15)", () => {
     const DOMINIO_OFICIAL = /^https:\/\/[a-z0-9.-]+\.(gov|jus|leg|mp|def)\.br(\/|$)/i;
     const comIndividuais = CATALOGO.filter((g) => (g.fontesIndividuais ?? []).length > 0);
 
-    test("só Governadores, Governadores Eleitos e Ministros de Estado têm fontes individuais", () => {
-      expect(comIndividuais.map((g) => g.nome).sort()).toEqual(["Governadores", "Governadores Eleitos", "Ministros de Estado"]);
+    test("só Governadores e Governadores Eleitos têm fontes individuais (Ministros de Estado saiu em 13/11)", () => {
+      expect(comIndividuais.map((g) => g.nome).sort()).toEqual(["Governadores", "Governadores Eleitos"]);
     });
 
     test("Governadores Eleitos: 3 sites de campanha (ES, RN, TO), provisórios, só nome, válidos até 5/1/2027 (spec 2026-10-26)", () => {
@@ -178,18 +173,10 @@ describe("catálogo real (data/catalogo.ts)", () => {
       expect(provisorias.every((f) => f.campos.join(",") === "nome,cargo")).toBe(true);
     });
 
-    test("Ministros de Estado: geral é lista de cargos com janela; 38 individuais por nome; AGU e CGU cobrem cargo", () => {
+    test("Ministros de Estado: a página do Planalto é a fonte única, lida pela janela, sem individuais (GT de 13/11)", () => {
       const g = CATALOGO.find((x) => x.nome === "Ministros de Estado")!;
-      expect(g.fontes).toHaveLength(1);
-      expect(g.fontes[0]).toMatchObject({ ativo: true, casamento: "cargo", campos: ["cargo"], navegador: "janela" });
-      const ind = g.fontesIndividuais ?? [];
-      expect(ind).toHaveLength(38);
-      expect(ind.every((f) => f.ativo && "nome" in f.chave && f.navegador === "janela")).toBe(true);
-      const cobremCargo = ind.filter((f) => f.campos.includes("cargo")).map((f) => f.url).sort();
-      expect(cobremCargo).toEqual([
-        "https://www.gov.br/agu/pt-br/acesso-a-informacao/institucional/quem",
-        "https://www.gov.br/cgu/pt-br/composicao/ministro",
-      ]);
+      expect(g.fontes).toEqual([{ url: "https://www.gov.br/planalto/pt-br/conheca-a-presidencia/ministros-e-ministras", ativo: true, navegador: "janela" }]);
+      expect(g.fontesIndividuais ?? []).toEqual([]);
     });
 
     test("toda individual é de domínio oficial (salvo o site de campanha), tem campos com 'nome' e chave única no grupo", () => {

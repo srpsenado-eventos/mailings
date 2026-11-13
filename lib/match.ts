@@ -31,6 +31,7 @@ import {
   tratamentoAceitoDoPresidente,
   type ContextoCargo,
 } from "@/lib/cargo-tribunal";
+import { GRUPOS_CARGO_PELA_PASTA, situacaoCargoPelaPasta } from "@/lib/cargo-pasta";
 import { comparacoesProtocoloFixo } from "@/lib/protocolo-fixo";
 import { ehItemInstitucional } from "@/lib/proposta-inclusao";
 import { comparacaoLimiteNome } from "@/lib/limite-nome";
@@ -383,7 +384,10 @@ function montarResultado(
       valorPlanilha: contato.cargo,
       valorEsperado: cargoEsperadoNoTribunal(contato.cargo, pessoa.cargo, contextoCargo),
       origemValor: ov,
-      situacao: situacaoCampo(contato.cargo, pessoa.cargo, contextoCargo),
+      situacao:
+        grupoCanonico && GRUPOS_CARGO_PELA_PASTA.includes(grupoCanonico) && pessoa.cargo !== undefined
+          ? situacaoCargoPelaPasta(contato.cargo, pessoa.cargo)
+          : situacaoCampo(contato.cargo, pessoa.cargo, contextoCargo),
     });
   }
   if (contato.endereco) {
@@ -721,7 +725,7 @@ export type ListaCargos = { url: string; cargos: readonly string[] } | { url: st
 /** Tokens que não distinguem uma pasta da outra: toda denominação de ministro os tem. */
 const TOKENS_GENERICOS_CARGO = new Set(["de", "da", "do", "das", "dos", "e", "em", "ministro", "ministra", "estado"]);
 
-function tokensDistintivos(valor: string): string[] {
+export function tokensDistintivos(valor: string): string[] {
   return tokensSignificativos(valor).filter((t) => !TOKENS_GENERICOS_CARGO.has(t));
 }
 

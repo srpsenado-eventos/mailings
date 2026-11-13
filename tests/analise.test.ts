@@ -1431,3 +1431,60 @@ describe("grupo sem proposta de inclusão (spec 2026-11-05 §2.5)", () => {
     expect(r.grupos[0].novos).toEqual([]);
   });
 });
+
+describe("Ministros de Estado de ponta a ponta: página do Planalto como fonte única, cargo pela pasta (GT de 13/11)", () => {
+  const URL_PLANALTO = "https://www.gov.br/planalto/pt-br/conheca-a-presidencia/ministros-e-ministras";
+  const GRUPO = "Ministros de Estado";
+  const html = readFileSync(join(__dirname, "fixtures", "ministros-estado.html"), "utf8");
+  const depsMin = (conteudoHtml: string, extra: Partial<Dependencias> = {}): Dependencias => ({
+    resolverFonte: () => ({
+      grupoCanonico: GRUPO,
+      fontes: [{ url: URL_PLANALTO, ativo: true, navegador: "janela" }],
+      fontesIndividuais: [],
+      sugestoes: [],
+    }),
+    raspar: async () => extrairConteudo(conteudoHtml, URL_PLANALTO),
+    extrairComposicao: async () => [],
+    ...extra,
+  });
+  const contato = (nome: string, cargo: string): ContatoPlanilha => ({ nome, grupo: GRUPO, cargo, ...CADASTRO_OK });
+  const casaCivil = contato("Miriam Belchior", "Ministra de Estado da Casa Civil da Presidência da República");
+  const defesa = contato("José Mucio Monteiro Filho", "Ministro de Estado da Defesa");
+  type Resultado = Awaited<ReturnType<typeof analisar>>;
+  const doContato = (r: Resultado, nome: string) => r.grupos[0].contatos.find((c) => c.contato.nome === nome)!;
+  const cargoDe = (r: Resultado, nome: string) => doContato(r, nome).comparacoes.find((c) => c.campo === "cargo")!;
+
+  test("nome e pasta iguais aos da página: cargo confere, sem possível saída", async () => {
+    const r = await analisar("c.xlsx", [casaCivil, defesa], depsMin(html));
+    expect(cargoDe(r, casaCivil.nome).situacao).toBe("confere");
+    expect(cargoDe(r, defesa.nome).situacao).toBe("confere");
+    expect(r.grupos[0].contatos.some((c) => c.possivelSaida)).toBe(false);
+  });
+
+  test("pasta trocada no Contatos: cargo diverge e a pasta da página vem como esperado", async () => {
+    const trocado = { ...defesa, cargo: "Ministro de Estado da Educação" };
+    const r = await analisar("c.xlsx", [casaCivil, trocado], depsMin(html));
+    const cargo = cargoDe(r, trocado.nome);
+    expect(cargo.situacao).toBe("divergente");
+    expect(cargo.valorEsperado).toBe("Ministro de Estado da Defesa");
+    expect(doContato(r, trocado.nome).semaforo).toBe("amarelo");
+  });
+
+  test("nome fora da página, com composição real: possível saída", async () => {
+    const r = await analisar("c.xlsx", [casaCivil, defesa, contato("Fulano Fora Da Pagina", "Ministro de Estado da Fazenda")], depsMin(html));
+    expect(doContato(r, "Fulano Fora Da Pagina").possivelSaida).toBe(true);
+    expect(doContato(r, casaCivil.nome).possivelSaida).toBeFalsy();
+  });
+
+  test("página vazia: grupo indeterminado, ninguém vira saída (regra de ouro)", async () => {
+    const r = await analisar("c.xlsx", [casaCivil, defesa], depsMin("<html><body></body></html>"));
+    expect(r.grupos[0].contatos.some((c) => c.possivelSaida)).toBe(false);
+    expect(r.grupos[0].contatos.every((c) => c.semaforo === "indeterminado")).toBe(true);
+  });
+
+  test("proposta de inclusão nunca vem do conhecimento da IA", async () => {
+    const ia = async () => [{ nome: "Pessoa Lembrada Pela IA", cargo: "Ministro de Estado da Fazenda", origem: "conhecimento" as const }];
+    const r = await analisar("c.xlsx", [casaCivil, defesa], depsMin(html, { extrairComposicao: ia }));
+    expect(r.grupos[0].novos.some((n) => n.nome === "Pessoa Lembrada Pela IA")).toBe(false);
+  });
+});

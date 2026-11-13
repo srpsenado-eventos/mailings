@@ -62,6 +62,19 @@ describe("catálogo real (data/catalogo.ts)", () => {
       expect(CATALOGO.find((g) => g.nome === "Ex-Presidentes do Congresso")?.fontes).toEqual([{ url: "https://www25.senado.leg.br/web/senadores/nova-republica", ativo: true }]);
     });
 
+    test("STM: página Quem é Quem por gabinete, e gabinetes só nela (GT de 13/11)", () => {
+      const stm = CATALOGO.find((g) => g.nome === "Ministros do STM")!;
+      expect(stm.fontes).toEqual([
+        {
+          url: "https://www.stm.jus.br/institucional/conheca-o-superior-tribunal-militar/quem-e-quem?view=default",
+          ativo: true,
+          gabinetes: { prefixos: ["Gabinete Min.", "Gabinete Min", "Gabinete Ministro", "Gabinete Ministra"], cargo: "Ministro(a)" },
+        },
+      ]);
+      const comGabinetes = CATALOGO.flatMap((g) => [...g.fontes, ...(g.fontesIndividuais ?? [])]).filter((f) => "gabinetes" in f && f.gabinetes);
+      expect(comGabinetes).toHaveLength(1);
+    });
+
     test("tipo pdf, marcador e urlAlternativa só onde a spec manda; alternativas em domínio oficial", () => {
       const fontes = CATALOGO.flatMap((g) => g.fontes);
       expect(fontes.filter((f) => f.tipo === "pdf")).toHaveLength(1);

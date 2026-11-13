@@ -105,6 +105,11 @@ describe("chaveDaLeitura (memória por forma de extração)", () => {
     expect(chaveDaLeitura(URL_A, { marcador: { textos: ["(convocado)", "(convocada)"] } })).toBe(`${URL_A}#marcador:["(convocado)","(convocada)"]`);
     expect(chaveDaLeitura(URL_A, { tipo: "pdf" })).toBe(`${URL_A}#pdf`);
   });
+  test("gabinetes: sufixo #gabinetes com os prefixos, para a extração de texto da mesma URL não ser reaproveitada", () => {
+    const gabinetes = { prefixos: ["Gabinete Min.", "Gabinete Min"], cargo: "Ministro(a)" };
+    expect(chaveDaLeitura(URL_A, { gabinetes })).toBe(`${URL_A}#gabinetes:["Gabinete Min.","Gabinete Min"]`);
+    expect(chaveDaLeitura(URL_A, { nomeEmDestaque: true, gabinetes })).toBe(`${URL_A}#destaque#gabinetes:["Gabinete Min.","Gabinete Min"]`);
+  });
   test("nome em destaque: sufixo #destaque, para a leitura sem destaque não ser reaproveitada no lugar", () => {
     expect(chaveDaLeitura(URL_A, { nomeEmDestaque: true })).toBe(`${URL_A}#destaque`);
   });

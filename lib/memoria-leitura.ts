@@ -78,13 +78,14 @@ export function ehLeituraGuardada(v: unknown): v is LeituraGuardada {
  * Presidente do Senado e como tabela pelos grupos de Senadores): cada forma guarda a sua
  * leitura, senão a última a gravar vence e a outra reaproveita uma extração que não é a dela.
  * A fonte de extração padrão fica sob a URL pura, para a memória já gravada continuar valendo.
- * Sufixos na ordem tabela, marcador, pdf, destaque, clique. `LeituraGuardada.url` continua a URL real.
+ * Sufixos na ordem tabela, marcador, pdf, destaque, clique, gabinetes. `LeituraGuardada.url` continua a URL real.
  * O `#destaque` (spec 2026-10-30 §3.1) separa a leitura com `nomeDestaque` da guardada antes
- * da marca, que não traz o destaque e não pode ser reaproveitada no lugar dela.
+ * da marca, que não traz o destaque e não pode ser reaproveitada no lugar dela. O `#gabinetes`
+ * (spec 2026-11-13 §3.3) separa a extração por gabinete da extração de texto da mesma URL.
  */
 export function chaveDaLeitura(
   url: string,
-  fonte: Pick<FonteLegivel, "tabela" | "marcador" | "tipo" | "nomeEmDestaque" | "clicarAntes">,
+  fonte: Pick<FonteLegivel, "tabela" | "marcador" | "tipo" | "nomeEmDestaque" | "clicarAntes" | "gabinetes">,
 ): string {
   const sufixos = [
     ...(fonte.tabela ? [`#tabela:${JSON.stringify(fonte.tabela)}`] : []),
@@ -92,6 +93,7 @@ export function chaveDaLeitura(
     ...(fonte.tipo === "pdf" ? ["#pdf"] : []),
     ...(fonte.nomeEmDestaque ? ["#destaque"] : []),
     ...(fonte.clicarAntes ? [`#clique:${JSON.stringify(fonte.clicarAntes.texto)}`] : []),
+    ...(fonte.gabinetes ? [`#gabinetes:${JSON.stringify(fonte.gabinetes.prefixos)}`] : []),
   ];
   return `${url}${sufixos.join("")}`;
 }

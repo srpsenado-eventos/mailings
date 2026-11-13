@@ -514,7 +514,7 @@ describe("comparacaoLimiteNome — STM, nome acima de 50 caracteres (spec 2026-1
   test("51 caracteres acusa com o texto da regra; 50 não; espaços nas pontas não contam", () => {
     const [c] = comparacaoLimiteNome(stm(de(51)), "Ministros do STM");
     expect(c).toEqual({ campo: "nome", valorPlanilha: de(51), situacao: "divergente", origemValor: "coerencia", achado: "nome_acima_do_limite",
-      observacao: "Nome com 51 caracteres, acima do limite de 50 do Posse: abreviar o sobrenome, nunca a patente (regra do GT de 04/11)" });
+      observacao: "Nome com 51 caracteres, acima do limite de 50 do Posse: patente como no site do STM (regra do GT de 13/11)" });
     expect(c.valorEsperado).toBeUndefined();
     expect(comparacaoLimiteNome(stm(de(50)), "Ministros do STM")).toEqual([]);
     expect(comparacaoLimiteNome(stm(`  ${de(50)}  `), "Ministros do STM")).toEqual([]);

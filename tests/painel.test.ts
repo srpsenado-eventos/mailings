@@ -987,7 +987,7 @@ describe("tratamento e endereçamento pela maioria dos pares (spec 2026-10-30 §
 });
 
 describe("nome acima do limite do Posse (STM, spec 2026-11-04 §3.5)", () => {
-  const TEXTO_COMPLETO = "Nome com 51 caracteres, acima do limite de 50 do Posse: abreviar o sobrenome, nunca a patente (regra do GT de 04/11)";
+  const TEXTO_COMPLETO = "Nome com 51 caracteres, acima do limite de 50 do Posse: patente como no site do STM (regra do GT de 13/11)";
   const limite: ComparacaoCampo = {
     campo: "nome", valorPlanilha: "A".repeat(51), situacao: "divergente", origemValor: "coerencia",
     achado: "nome_acima_do_limite", observacao: TEXTO_COMPLETO,

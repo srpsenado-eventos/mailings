@@ -38,17 +38,19 @@ function montarOpcoes(fonte: FonteLegivel): OpcoesRaspagem {
     ...(fonte.marcador ? { marcador: fonte.marcador.textos } : {}),
     ...(fonte.tipo ? { tipo: fonte.tipo } : {}),
     ...(fonte.nomeEmDestaque ? { nomeEmDestaque: true } : {}),
+    ...(fonte.gabinetes ? { gabinetes: fonte.gabinetes } : {}),
     ...(fonte.clicarAntes ? { clicarAntes: fonte.clicarAntes } : {}),
   };
 }
 
 /**
- * A janela só aplica a extração por tabela: o marcador e o PDF ficariam de fora, e a página
- * inteira entraria no lugar da lista filtrada (TST `/orgaos`: ~145 pessoas viraria dezenas de
- * inclusões falsas). Fonte assim não vai à janela no 403/401; vale o erro do fetch.
+ * A janela só aplica a extração por tabela: o marcador, o PDF e os gabinetes ficariam de fora, e
+ * a página inteira entraria no lugar da lista filtrada (TST `/orgaos`: ~145 pessoas viraria dezenas
+ * de inclusões falsas; STM: juízes e servidores). Fonte assim não vai à janela no 403/401; vale o
+ * erro do fetch.
  */
 function janelaLeComoOFetch(fonte: FonteLegivel): boolean {
-  return !fonte.marcador && fonte.tipo !== "pdf";
+  return !fonte.marcador && fonte.tipo !== "pdf" && !fonte.gabinetes;
 }
 
 export async function rasparFonte(fonte: FonteLegivel, raspadores: Raspadores = RASPADORES_PADRAO): Promise<ConteudoFonte> {

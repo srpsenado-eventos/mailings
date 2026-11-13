@@ -5,6 +5,7 @@ import { normalizarNome, normalizarTexto, nucleoDeNome } from "@/lib/normalize";
 import { CARGOS } from "@/lib/cargos";
 import type { ConteudoFonte, PessoaSite, ExtracaoTabela, CliqueAntes } from "@/lib/types";
 import { colherDestaquesPorLinha, comDestaque, type DestaquesPorLinha } from "@/lib/scrape-destaque";
+import { extrairPorGabinetes, type OpcoesGabinetes } from "@/lib/scrape-gabinetes";
 
 export class ScrapeError extends Error {
   constructor(
@@ -641,6 +642,8 @@ export interface OpcoesExtracao {
   marcador?: readonly string[];
   /** Cada pessoa leva `nomeDestaque`, as partes em negrito do nome (spec 2026-10-30 §3.1). */
   nomeEmDestaque?: boolean;
+  /** Só os gabinetes e os blocos da direção viram pessoa (spec 2026-11-13 §3.3, STM). */
+  gabinetes?: OpcoesGabinetes;
 }
 
 /** Extrai texto limpo + destaques + pessoas estruturadas de um HTML já baixado. Função pura. */
@@ -660,11 +663,15 @@ export function extrairConteudo(html: string, url: string, opcoes: OpcoesExtraca
 
   // Também antes de mutar o DOM: o negrito de cada linha, para o nome em destaque.
   const destaquesPorLinha = opcoes.nomeEmDestaque ? colherDestaquesPorLinha($, TAGS_SEPARAR) : undefined;
+  // Idem: os gabinetes são lidos no DOM original (spec 2026-11-13 §3.3).
+  const doGabinete = opcoes.gabinetes ? extrairPorGabinetes($, url, opcoes.gabinetes) : undefined;
 
   const { linhas, titulos } = extrairLinhas($);
-  const pessoas = opcoes.marcador?.length
-    ? extrairPorMarcador(linhas.join("\n"), opcoes.marcador)
-    : segmentarPessoas(linhas, titulos, destaquesPorLinha);
+  const pessoas =
+    doGabinete ??
+    (opcoes.marcador?.length
+      ? extrairPorMarcador(linhas.join("\n"), opcoes.marcador)
+      : segmentarPessoas(linhas, titulos, destaquesPorLinha));
   const destaques = [...new Set(destaquesBrutos.filter(ehNome))];
 
   return { url, textoLimpo: linhas.join(" "), destaques, pessoas };
@@ -771,6 +778,8 @@ export interface OpcoesRaspagem {
   nomeEmDestaque?: boolean;
   /** Só a sessão com janela usa: texto do elemento a clicar antes de ler (GT de 05/11). `fetch` ignora. */
   clicarAntes?: CliqueAntes;
+  /** Extração por gabinete (spec 2026-11-13 §3.3). Só vale na extração de HTML. */
+  gabinetes?: OpcoesGabinetes;
   timeoutMs?: number;
 }
 
@@ -784,6 +793,7 @@ export async function raspar(url: string, opcoes: OpcoesRaspagem = {}): Promise<
   const extracao: OpcoesExtracao = {
     ...(opcoes.marcador ? { marcador: opcoes.marcador } : {}),
     ...(opcoes.nomeEmDestaque ? { nomeEmDestaque: true } : {}),
+    ...(opcoes.gabinetes ? { gabinetes: opcoes.gabinetes } : {}),
   };
   try {
     if (opcoes.tipo === "pdf") {

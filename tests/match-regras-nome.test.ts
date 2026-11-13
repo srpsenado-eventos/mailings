@@ -539,3 +539,56 @@ describe("Patente e acento na página individual (spec 2026-11-13 §3.3)", () =>
     expect(nome?.situacao).toBe("confere");
   });
 });
+
+describe("STM pela página Quem é Quem, de ponta a ponta (spec 2026-11-13 §3.3)", () => {
+  const URL_STM = "https://www.stm.jus.br/institucional/conheca-o-superior-tribunal-militar/quem-e-quem?view=default";
+  const GABINETES = { prefixos: ["Gabinete Min.", "Gabinete Min", "Gabinete Ministro", "Gabinete Ministra"], cargo: "Ministro(a)" };
+  const pagina = extrairConteudo(readFileSync(resolve(__dirname, "fixtures/stm-quem-e-quem.html"), "utf-8"), URL_STM, { gabinetes: GABINETES });
+  const CARGO_MINISTRO = "Ministro do Superior Tribunal Militar";
+  const contatos: ContatoPlanilha[] = [
+    { nome: "Gen Ex Guido Amin Naves", cargo: CARGO_MINISTRO, grupo: "STM", ...CADASTRO_OK },
+    { nome: "General de Exército Lourival Carvalho Silva", cargo: CARGO_MINISTRO, grupo: "STM", ...CADASTRO_OK },
+    { nome: "Artur Vidigal de Oliveira", cargo: CARGO_MINISTRO, grupo: "STM", ...CADASTRO_OK },
+    { nome: "Ten Brig Ar Carlos Vuyk de Aquino", cargo: CARGO_MINISTRO, grupo: "STM", ...CADASTRO_OK },
+    {
+      nome: "Ministra Maria Elizabeth Guimarães Teixeira Rocha",
+      cargo: "Presidente do Superior Tribunal Militar",
+      grupo: "STM",
+      tratamento: "Senhora",
+      enderecamento: "A Sua Excelência a Senhora",
+    },
+  ];
+  const g = compararGrupo("STM", contatos, pagina, GRUPO_STM);
+  const campo = (i: number, nome: "nome" | "cargo") =>
+    g.contatos[i].comparacoes.find((c) => c.campo === nome && c.origemValor === "pagina");
+
+  test("patente abreviada igual à da página: verde", () => {
+    expect(g.contatos[0].semaforo).toBe("verde");
+    expect(campo(0, "nome")?.situacao).toBe("confere");
+  });
+
+  test("patente por extenso: amarelo, com o nome da página (abreviado) como esperado, sem possível saída", () => {
+    expect(g.contatos[1].semaforo).toBe("amarelo");
+    expect(campo(1, "nome")).toMatchObject({ situacao: "divergente", valorEsperado: "Gen Ex Lourival Carvalho Silva" });
+    expect(g.contatos[1].possivelSaida).toBeFalsy();
+  });
+
+  test("civil sem Dr.: verde, e o esperado sai sem o Dr da página", () => {
+    expect(g.contatos[2].semaforo).toBe("verde");
+    expect(campo(2, "nome")).toMatchObject({ situacao: "confere", valorEsperado: "Artur Vidigal de Oliveira" });
+  });
+
+  test("o cargo confere pela função de tribunal, inclusive a da direção (Ouvidor)", () => {
+    for (const i of [0, 1, 2, 3]) expect(campo(i, "cargo")?.situacao).toBe("confere");
+    expect(campo(3, "cargo")?.valorEsperado).toBe("Ouvidor");
+  });
+
+  test("presidente com Ministra no nome e cargo Presidente do STM confere com a Ministra-Presidente da página", () => {
+    expect(campo(4, "nome")?.situacao).toBe("confere");
+    expect(campo(4, "cargo")?.situacao).toBe("confere");
+  });
+
+  test("todos os cadastrados casam: nenhuma possível saída", () => {
+    expect(g.contatos.every((r) => !r.possivelSaida)).toBe(true);
+  });
+});

@@ -133,6 +133,21 @@ describe("HTTP 403 ao fetch vai para a janela (spec 2026-10-23 §3.1)", () => {
     await expect(rasparFonte({ url: "https://tst.jus.br/orgaos", marcador: { textos: ["(convocado)"] } }, r)).rejects.toMatchObject({ motivo: "HTTP 403" });
     expect(r.porJanela).not.toHaveBeenCalled();
   });
+  test("fonte por gabinetes e 403: vale o erro do fetch, a janela não é chamada (ela ignora os gabinetes)", async () => {
+    const r = raspadoresFalsos();
+    const url = "https://www.stm.jus.br/quem-e-quem";
+    r.porFetch.mockRejectedValue(new ScrapeError(url, "HTTP 403"));
+    r.porJanela.mockResolvedValue(comConteudo(url));
+    await expect(rasparFonte({ url, gabinetes: { prefixos: ["Gabinete Min"], cargo: "Ministro(a)" } }, r)).rejects.toMatchObject({ motivo: "HTTP 403" });
+    expect(r.porJanela).not.toHaveBeenCalled();
+  });
+  test("fonte por gabinetes: a opção chega ao fetch", async () => {
+    const r = raspadoresFalsos();
+    const gabinetes = { prefixos: ["Gabinete Min"], cargo: "Ministro(a)" };
+    r.porFetch.mockResolvedValue(comConteudo("https://www.stm.jus.br/quem-e-quem"));
+    await rasparFonte({ url: "https://www.stm.jus.br/quem-e-quem", gabinetes }, r);
+    expect(r.porFetch).toHaveBeenCalledWith("https://www.stm.jus.br/quem-e-quem", { gabinetes });
+  });
   test("fonte PDF e 403: vale o erro do fetch, a janela não é chamada (ela não lê PDF)", async () => {
     const r = raspadoresFalsos();
     r.porFetch.mockRejectedValue(new ScrapeError("https://stj.jus.br/lista.pdf", "HTTP 403"));

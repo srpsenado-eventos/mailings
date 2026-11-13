@@ -400,6 +400,12 @@ export interface FonteCatalogo {
    * "STJ: usar as partes do nome em negrito"). Só no STJ.
    */
   nomeEmDestaque?: true;
+  /**
+   * Extração por gabinete (spec 2026-11-13 §3.3, página "Quem é Quem" do STM): só o elemento cujo
+   * texto começa por um dos `prefixos` vira pessoa (nome = o resto, com `cargo` fixo), mais os
+   * blocos da direção ("nome" / "Ministra-Presidente"), que dão a função como cargo. Só no STM.
+   */
+  gabinetes?: { prefixos: readonly string[]; cargo: string };
 }
 
 /** Chave que liga uma fonte individual ao contato: a UF do cargo, ou o nome como está no Contatos. */
@@ -450,7 +456,7 @@ export type TipoFonteProvisoria = "noticia" | "campanha";
 /** Uma fonte que o raspador sabe ler: o que `FonteCatalogo` e `FonteIndividual` têm em comum. */
 export type FonteLegivel = Pick<
   FonteCatalogo,
-  "url" | "tabela" | "navegador" | "urlAlternativa" | "tipo" | "marcador" | "nomeEmDestaque"
+  "url" | "tabela" | "navegador" | "urlAlternativa" | "tipo" | "marcador" | "nomeEmDestaque" | "gabinetes"
 > &
   Pick<FonteIndividual, "clicarAntes">;
 

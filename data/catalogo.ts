@@ -419,7 +419,13 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp2: "ramena.schleier@senado.leg.br",
     emailBackup: "adriana.conceicao.santos@senado.leg.br",
     fontes: [
-      { url: "https://www.stm.jus.br/institucional/conheca-o-superior-tribunal-militar/composicao-da-corte?view=default", ativo: true },
+      // Página "Quem é Quem" (GT de 13/11, spec 2026-11-13 §3.3), conferida com fetch em 13/11 (200).
+      // Só os gabinetes dos ministros e os blocos da direção viram pessoa; a patente fica como o site a escreve.
+      {
+        url: "https://www.stm.jus.br/institucional/conheca-o-superior-tribunal-militar/quem-e-quem?view=default",
+        ativo: true,
+        gabinetes: { prefixos: ["Gabinete Min.", "Gabinete Min", "Gabinete Ministro", "Gabinete Ministra"], cargo: "Ministro(a)" },
+      },
     ],
   },
   {

@@ -34,7 +34,7 @@ describe("export das autoridades em mais de um grupo", () => {
       "Convidar pelo grupo": "Ministros do STF",
       "Cargo do convite": "Ministra do Supremo Tribunal Federal",
       "Nível na Nominata": "4.9 Ministros do Supremo Tribunal Federal",
-      Motivo: "Ministros do STF (4.9) antes de Ministros do TSE (5.9)",
+      Motivo: "Membro do TSE convidado pelo tribunal de origem (regra do GT de 13/11)",
       "Grupos em que está": "Ministros do STF: Ministra do Supremo Tribunal Federal (4.9); Ministros do TSE: Ministra do Tribunal Superior Eleitoral (5.9)",
       Origem: "Contatos",
       "Eleição 2026": "",

@@ -36,19 +36,24 @@ function montarOpcoes(fonte: FonteLegivel): OpcoesRaspagem {
   return {
     ...(fonte.tabela ? { tabela: fonte.tabela } : {}),
     ...(fonte.marcador ? { marcador: fonte.marcador.textos } : {}),
+    ...(fonte.marcador?.obrigatorio ? { marcadorObrigatorio: true } : {}),
     ...(fonte.tipo ? { tipo: fonte.tipo } : {}),
     ...(fonte.nomeEmDestaque ? { nomeEmDestaque: true } : {}),
+    ...(fonte.gabinetes ? { gabinetes: fonte.gabinetes } : {}),
+    ...(fonte.pessoaUnica ? { pessoaUnica: fonte.pessoaUnica } : {}),
     ...(fonte.clicarAntes ? { clicarAntes: fonte.clicarAntes } : {}),
   };
 }
 
 /**
- * A janela só aplica a extração por tabela: o marcador e o PDF ficariam de fora, e a página
- * inteira entraria no lugar da lista filtrada (TST `/orgaos`: ~145 pessoas viraria dezenas de
- * inclusões falsas). Fonte assim não vai à janela no 403/401; vale o erro do fetch.
+ * A janela não lê PDF nem aplica os gabinetes; o marcador ela aplica desde 13/11 (Defesa), mas a
+ * fonte com marcador lida por `fetch` segue sem ir à janela no 403, como antes. Sem isso a
+ * extração ficaria de fora, e a página inteira entraria no lugar da lista filtrada (TST `/orgaos`:
+ * ~145 pessoas viraria dezenas de inclusões falsas; STM: juízes e servidores). Fonte assim não vai
+ * à janela no 403/401; vale o erro do fetch.
  */
 function janelaLeComoOFetch(fonte: FonteLegivel): boolean {
-  return !fonte.marcador && fonte.tipo !== "pdf";
+  return !fonte.marcador && fonte.tipo !== "pdf" && !fonte.gabinetes;
 }
 
 export async function rasparFonte(fonte: FonteLegivel, raspadores: Raspadores = RASPADORES_PADRAO): Promise<ConteudoFonte> {

@@ -83,7 +83,22 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp1: "cleria.rosa@senado.leg.br",
     emailResp2: "MARIAINE@senado.leg.br",
     emailBackup: "beatriz.silveira@senado.leg.br",
-    fontes: [],
+    // GT de 13/11: os comandantes das três Forças e o chefe do EMCFA, cada um na página do seu órgão.
+    // A Defesa lista ministro, secretários e outros que não são deste grupo: ninguém vira proposta de inclusão.
+    // A primária é a do Exército, lida por `fetch`: o link "abrir" e o texto da IA saem de uma página que responde.
+    fontes: [
+      { url: "https://www.eb.mil.br/web/comandante-do-exercito", ativo: true, pessoaUnica: { cargo: "Comandante do Exército Brasileiro" } },
+      // Página montada por JavaScript (gov.br): lida pela janela; só o chefe do EMCFA, pelo cargo como a página escreve.
+      { url: "https://www.gov.br/defesa/pt-br/composicao", ativo: true, navegador: "janela", marcador: { textos: ["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"], obrigatorio: true } },
+      // Verificação anti-robô da Cloudflare medida em 13/11: falha ao fetch e à janela, em toda coleta, até o Clovis
+      // indicar outra página. O grupo sai em leitura parcial e o comandante fica indeterminado, ou "≈ via IA" quando há
+      // ANTHROPIC_API_KEY e a IA o resgata; nunca saída.
+      { url: "https://www.marinha.mil.br/comandantedamarinha", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Marinha" } },
+      // Mesma verificação da Cloudflare da Marinha (13/11): falha ao fetch e à janela; indeterminado, ou "≈ via IA" com a
+      // IA ligada, até o Clovis indicar outra página.
+      { url: "https://www.fab.mil.br/a-forca-aerea/comandante/", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Aeronáutica" } },
+    ],
+    semInclusao: true,
   },
   {
     nome: "Defensor Público Geral da União",
@@ -274,104 +289,13 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp1: "sarah.costa@senado.leg.br",
     emailResp2: "agatha.assis@senado.leg.br",
     emailBackup: "thiago.pinto@senado.leg.br",
+    // Decisão do GT de 13/11: a página do Planalto é a fonte única do nome e do cargo (a pasta);
+    // as 38 páginas individuais saíram. Histórico no git (PR desta branch).
     fontes: [
-      // Autorizada pelo Clovis em 2026-09-15 (trocou https://www.gov.br/pt-br/orgaos-do-governo,
-      // que lista MINISTÉRIOS sem nomes). Desde o spec 2026-10-15 é só a LISTA DE DENOMINAÇÕES
-      // DE CARGO (`casamento: "cargo"`): o nome e a permanência de cada ministro saem da página
-      // individual abaixo. A página responde CAPTCHA ao fetch do Node e ao Chrome headless,
-      // e vem inteira no Chrome com janela (medido em 2026-10-15): `navegador: "janela"`.
+      // Autorizada pelo Clovis em 2026-09-15. A página responde CAPTCHA ao fetch do Node e ao Chrome
+      // headless, e vem inteira no Chrome com janela (medido em 2026-10-15): `navegador: "janela"`.
       // Layout cargo numa linha e nome na seguinte, coberto por tests/fixtures/ministros-estado.html.
-      { url: "https://www.gov.br/planalto/pt-br/conheca-a-presidencia/ministros-e-ministras", ativo: true, campos: ["cargo"], casamento: "cargo", navegador: "janela" },
-    ],
-    // Spec 2026-10-15 §3.2: página de cada ministério, transcrita da planilha de conferência
-    // do GT (Referencia 2/Conferencia contatos 06_10.xlsx, aba "Sites Governo Estados",
-    // colunas F a H). A chave é o nome COMO ESTÁ NO CONTATOS (decisão do Clovis em
-    // 2026-10-15: 15 nomes da planilha não casavam com o do Contatos pela régua de igualdade
-    // normalizada (em geral a planilha trazia o nome mais longo)). O comentário de cada linha é o cargo da planilha,
-    // só para localizar a linha. AGU e CGU cobrem nome E cargo; as demais, só nome.
-    // `urlAlternativa` (planilha de 23/10, as cinco responderam 200 em 23/10): Casa Civil,
-    // Secom, Cultura, Defesa e Igualdade Racial. Só é lida quando a principal falha
-    // (spec 2026-10-23 §3.3). Em 2026-10-26, a pedido do Clovis, Casa Civil, Cultura, Defesa e
-    // Igualdade Racial passaram a ler primeiro o link principal da planilha de 23/10; a URL
-    // antiga, que confirmou o nome em 20/10, virou a alternativa.
-    fontesIndividuais: [
-      // Ministra de Estado da Casa Civil da Presidência da República
-      { url: "https://www.gov.br/casacivil/pt-br/composicao/gabinete-do-ministro/quem-e-quem-1", ativo: true, urlAlternativa: "https://www.gov.br/casacivil/pt-br/composicao/ministra", chave: { nome: "Miriam Belchior" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado da Secretaria-Geral da Presidência da República
-      { url: "https://www.gov.br/secretariageral/pt-br/composicao/ministro", ativo: true, chave: { nome: "Guilherme Castro Boulos" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado da Secretaria de Relações Institucionais da Presidência da República
-      { url: "https://www.gov.br/sri/pt-br/composicao/ministra-1", ativo: true, chave: { nome: "José Nobre Guimarães" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado da Secretaria de Comunicação Social da Presidência da República
-      { url: "https://www.gov.br/secom/pt-br/acesso-a-informacao/institucional/quem-e-quem", ativo: true, urlAlternativa: "https://www.gov.br/secom/pt-br/composicao/ministro-e-assistencia-direta/sidonio-cardoso-palmeira", chave: { nome: "Sidônio Cardoso Palmeira" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado Chefe do Gabinete de Segurança Institucional da Presidência da República
-      { url: "https://www.gov.br/gsi/pt-br/composicao/gabinete/ministro", ativo: true, chave: { nome: "Marcos Antonio Amaro Dos Santos" }, campos: ["nome"], navegador: "janela" },
-      // Advogado-Geral da União
-      { url: "https://www.gov.br/agu/pt-br/acesso-a-informacao/institucional/quem", ativo: true, chave: { nome: "Jorge Messias" }, campos: ["nome", "cargo"], navegador: "janela" },
-      // Ministro da Controladoria-Geral da União
-      { url: "https://www.gov.br/cgu/pt-br/composicao/ministro", ativo: true, chave: { nome: "Vinicius Marques de Carvalho" }, campos: ["nome", "cargo"], navegador: "janela" },
-      // Ministro de Estado da Agricultura e Pecuária
-      { url: "https://www.gov.br/agricultura/pt-br/composicao/ministro-e-staff/andre-carlos-alves-de-paula-filho", ativo: true, chave: { nome: "André Carlos Alves de Paula Filho" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado das Cidades
-      { url: "https://www.gov.br/cidades/pt-br/composicao/ministro-das-cidades", ativo: true, chave: { nome: "Vladimir Lima" }, campos: ["nome"], navegador: "janela" },
-      // Ministra de Estado da Ciência, Tecnologia e Inovação
-      { url: "https://www.gov.br/mcti/pt-br/acesso-a-informacao/institucional/quem-e-quem", ativo: true, chave: { nome: "Luciana Santos" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado das Comunicações
-      { url: "https://www.gov.br/mcom/pt-br/composicao/ministro", ativo: true, chave: { nome: "Frederico de Siqueira Filho" }, campos: ["nome"], navegador: "janela" },
-      // Ministra de Estado da Cultura
-      { url: "https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra/margareth-menezes-1", ativo: true, urlAlternativa: "https://www.gov.br/cultura/pt-br/composicao/gabinete-da-ministra", chave: { nome: "Margareth Menezes da Purificação" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado da Defesa
-      { url: "https://www.gov.br/defesa/pt-br/composicao/gabinete-do-ministro/jose-mucio-monteiro-filho", ativo: true, urlAlternativa: "https://www.gov.br/defesa/pt-br/composicao/quem-e-quem", chave: { nome: "José Mucio Monteiro Filho" }, campos: ["nome"], navegador: "janela" },
-      // Ministra de Estado do Desenvolvimento Agrário e Agricultura Familiar
-      { url: "https://www.gov.br/mda/pt-br/acesso-a-informacao/institucional/quem-e-quem/gabinete-da-ministra", ativo: true, chave: { nome: "Fernanda Machiaveli Morão de Oliveira" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado do Desenvolvimento e Assistência Social, Família e Combate à Fome
-      { url: "https://www.gov.br/mds/pt-br/composicao/ministro", ativo: true, chave: { nome: "Wellington Dias" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado do Desenvolvimento, Indústria, Comércio e Serviços
-      { url: "https://www.gov.br/mdic/pt-br/composicao/ministro/marcio-fernando-elias-rosa", ativo: true, chave: { nome: "Márcio Fernando Elias Rosa" }, campos: ["nome"], navegador: "janela" },
-      // Ministra de Estado dos Direitos Humanos e da Cidadania
-      { url: "https://www.gov.br/mdh/pt-br/composicao/quem-e-quem", ativo: true, chave: { nome: "JANINE MELLO DOS SANTOS" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado da Educação
-      { url: "https://www.gov.br/mec/pt-br/composicao/gabinete-do-ministro/leonardo-osvaldo-barchini-rosa", ativo: true, chave: { nome: "Leonardo Osvaldo Barchini Rosa" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado do Empreendedorismo, da Microempresa e da Empresa de Pequeno Porte
-      { url: "https://www.gov.br/memp/pt-br/composicao/ministro/marcio-franca?activeAccordion=accordion-panel-1", ativo: true, chave: { nome: "Paulo Henrique Rodrigues Pereira" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado do Esporte
-      { url: "https://www.gov.br/esporte/pt-br/composicao/Gabinete-do-Ministro/paulo-henrique-perna-cordeiro", ativo: true, chave: { nome: "Paulo Henrique Perna Cordeiro" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado da Fazenda
-      { url: "https://www.gov.br/fazenda/pt-br/composicao/ministro/dario-carnevalli-durigan", ativo: true, chave: { nome: "Dario Carnevalli Durigan" }, campos: ["nome"], navegador: "janela" },
-      // Ministra de Estado da Gestão e da Inovação em Serviços Públicos
-      { url: "https://www.gov.br/gestao/pt-br/composicao/quem-e-quem/ministra-e-orgaos-de-assistencia-direta", ativo: true, chave: { nome: "Esther Dweck" }, campos: ["nome"], navegador: "janela" },
-      // Ministra de Estado da Igualdade Racial
-      { url: "https://www.gov.br/igualdaderacial/pt-br/composicao/gabinete-da-ministra/rachel-barros-de-oliveira", ativo: true, urlAlternativa: "https://www.gov.br/igualdaderacial/pt-br/composicao/quem-e-quem", chave: { nome: "Rachel Barros de Oliveira" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado da Integração e do Desenvolvimento Regional
-      { url: "https://www.gov.br/mdr/pt-br/composicao/ministro-e-secretarios", ativo: true, chave: { nome: "Waldez Góes" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado da Justiça e Segurança Pública
-      { url: "https://www.gov.br/mj/pt-br/acesso-a-informacao/institucional/sumario/quemequem/gabinete-do-ministro-1", ativo: true, chave: { nome: "Wellington César Lima e Silva" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado do Meio Ambiente e Mudança do Clima
-      { url: "https://www.gov.br/mma/pt-br/composicao/gm/quem-e-quem", ativo: true, chave: { nome: "João Paulo Ribeiro Capobianco" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado de Minas e Energia
-      { url: "https://www.gov.br/mme/pt-br/composicao/gabinete-do-ministro/alexandre-silveira", ativo: true, chave: { nome: "Alexandre Silveira de Oliveira" }, campos: ["nome"], navegador: "janela" },
-      // Ministra de Estado das Mulheres
-      { url: "https://www.gov.br/mulheres/pt-br/composicao/ministra/marcia-lopes", ativo: true, chave: { nome: "Márcia Helena Carvalho Lopes" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado da Pesca e Aquicultura
-      { url: "https://www.gov.br/mpa/pt-br/acesso-a-informacao/institucional/quem-e-quem-3/gabinete-do-ministro/ministro", ativo: true, chave: { nome: "Rivetla Edipo Araujo Cruz" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado do Planejamento e Orçamento (o endereço ainda traz o nome da titular
-      // anterior, mas a página já mostra o titular atual, conferido em 2026-10-15)
-      { url: "https://www.gov.br/planejamento/pt-br/composicao/gabinete-do-ministro/simone-nassar-tebet", ativo: true, chave: { nome: "Bruno Moretti" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado de Portos e Aeroportos
-      { url: "https://www.gov.br/portos-e-aeroportos/pt-br/composicao/autoridades-1/tome-monteiro-da-franca?activeAccordion=accordion-panel-1", ativo: true, chave: { nome: "Tomé Monteiro da Franca" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado dos Povos Indígenas
-      { url: "https://www.gov.br/povosindigenas/pt-br/composicao/ministro-e-orgaos-de-assistencia-direta/ministro", ativo: true, chave: { nome: "Luiz Henrique Eloy Amado" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado da Previdência Social
-      { url: "https://www.gov.br/previdencia/pt-br/composicao/ministro-e-secretarios", ativo: true, chave: { nome: "Wolney Queiroz Maciel" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado das Relações Exteriores
-      { url: "https://www.gov.br/mre/pt-br/composicao/gabinete-do-ministro-das-relacoes-exteriores/embaixador-mauro-luiz-iecker-vieira", ativo: true, chave: { nome: "Embaixador Mauro Vieira" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado da Saúde
-      { url: "https://www.gov.br/saude/pt-br/composicao/ministro", ativo: true, chave: { nome: "Alexandre Rocha Santos Padilha" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado do Trabalho e Emprego
-      { url: "https://www.gov.br/trabalho-e-emprego/pt-br/composicao/quem-e-quem", ativo: true, chave: { nome: "Luiz Marinho" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado dos Transportes
-      { url: "https://www.gov.br/transportes/pt-br/composicao/quem-e-quem", ativo: true, chave: { nome: "GEORGE SANTORO" }, campos: ["nome"], navegador: "janela" },
-      // Ministro de Estado do Turismo
-      { url: "https://www.gov.br/turismo/pt-br/composicao/gabinete-do-ministro/gustavo-costa-feliciano?activeAccordion=", ativo: true, chave: { nome: "Gustavo Costa Feliciano" }, campos: ["nome"], navegador: "janela" },
+      { url: "https://www.gov.br/planalto/pt-br/conheca-a-presidencia/ministros-e-ministras", ativo: true, navegador: "janela" },
     ],
   },
   {
@@ -419,7 +343,13 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailResp2: "ramena.schleier@senado.leg.br",
     emailBackup: "adriana.conceicao.santos@senado.leg.br",
     fontes: [
-      { url: "https://www.stm.jus.br/institucional/conheca-o-superior-tribunal-militar/composicao-da-corte?view=default", ativo: true },
+      // Página "Quem é Quem" (GT de 13/11, spec 2026-11-13 §3.3), conferida com fetch em 13/11 (200).
+      // Só os gabinetes dos ministros e os blocos da direção viram pessoa; a patente fica como o site a escreve.
+      {
+        url: "https://www.stm.jus.br/institucional/conheca-o-superior-tribunal-militar/quem-e-quem?view=default",
+        ativo: true,
+        gabinetes: { prefixos: ["Gabinete Min.", "Gabinete Min", "Gabinete Ministro", "Gabinete Ministra"], cargo: "Ministro(a)" },
+      },
     ],
   },
   {

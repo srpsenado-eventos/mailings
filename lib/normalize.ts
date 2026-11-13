@@ -31,6 +31,7 @@ const PATENTES = [
   "tenente-brigadeiro do ar", "tenente-brigadeiro ar", "tenente-brigadeiro",
   "brigadeiro do ar", "brigadeiro", "marechal", "coronel",
   "gen ex", "gen div", "gen bda", "alte esq", "ten brig ar", "cel",
+  "ten brig do ar", "brig ar", "brig do ar",
 ];
 
 /**
@@ -43,10 +44,17 @@ export function chaveToken(token: string): string {
     .replace(/[.,;:]/g, "");
 }
 
+const emTokens = (lista: readonly string[]): string[][] =>
+  lista.map((prefixo) => prefixo.split(" ").map(chaveToken)).sort((a, b) => b.length - a.length);
+
+/** Tratamentos já em tokens (forma `chaveToken`), do mais longo para o mais curto. */
+export const TRATAMENTOS_EM_TOKENS: readonly string[][] = emTokens(TRATAMENTOS);
+
+/** Patentes já em tokens (forma `chaveToken`), do mais longo para o mais curto. */
+export const PATENTES_EM_TOKENS: readonly string[][] = emTokens(PATENTES);
+
 /** Prefixos removíveis já em tokens, do mais longo para o mais curto. */
-const PREFIXOS_REMOVIVEIS: readonly string[][] = [...TRATAMENTOS, ...PATENTES]
-  .map((prefixo) => prefixo.split(" ").map(chaveToken))
-  .sort((a, b) => b.length - a.length);
+const PREFIXOS_REMOVIVEIS: readonly string[][] = emTokens([...TRATAMENTOS, ...PATENTES]);
 
 /** Remove prefixos de tratamento e patente do início do nome, preservando a caixa original. */
 export function removerTratamentos(nome: string): string {

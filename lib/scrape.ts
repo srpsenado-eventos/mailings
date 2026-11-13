@@ -5,6 +5,9 @@ import { normalizarNome, normalizarTexto, nucleoDeNome } from "@/lib/normalize";
 import { CARGOS } from "@/lib/cargos";
 import type { ConteudoFonte, PessoaSite, ExtracaoTabela, CliqueAntes } from "@/lib/types";
 import { colherDestaquesPorLinha, comDestaque, type DestaquesPorLinha } from "@/lib/scrape-destaque";
+import { extrairPorGabinetes, type OpcoesGabinetes } from "@/lib/scrape-gabinetes";
+import { extrairPessoaUnica, type OpcoesPessoaUnica } from "@/lib/scrape-pessoa-unica";
+import { MOTIVO_MARCADOR_SEM_PESSOA, pessoaDoMarcadorEmLinhaPropria, semNomeRepetido } from "@/lib/scrape-marcador";
 
 export class ScrapeError extends Error {
   constructor(
@@ -616,38 +619,51 @@ function ultimoSeparador(texto: string): number {
  * Extração por marcador (spec 2026-10-23 §5.2): só são pessoas os nomes seguidos de um dos
  * `textos` cadastrados ("(convocado)" no TST, "**" no PDF do STJ). Para cada ocorrência, o
  * nome é a sequência final de palavras em maiúscula do trecho anterior na mesma linha, com
- * duas ou mais partes significativas. Nome repetido entra uma vez. Função pura.
+ * duas ou mais partes significativas. O marcador em linha própria fica em `lib/scrape-marcador.ts`
+ * (GT de 13/11, Defesa). Nome repetido entra uma vez. Função pura.
  */
 export function extrairPorMarcador(texto: string, textos: readonly string[]): PessoaSite[] {
-  const pessoas: PessoaSite[] = [];
-  const vistos = new Set<string>();
-  for (const linha of texto.split(/\r?\n/)) {
-    for (const { indice, marcador } of ocorrenciasDosMarcadores(linha, textos)) {
-      const antes = linha.slice(0, indice);
-      const pessoa = pessoaAntesDoMarcador(antes.slice(ultimoSeparador(antes) + 1), marcador);
-      if (!pessoa) continue;
-      const chave = normalizarNome(pessoa.nome);
-      if (vistos.has(chave)) continue;
-      vistos.add(chave);
-      pessoas.push(pessoa);
-    }
-  }
-  return pessoas;
+  const linhas = texto.split(/\r?\n/);
+  return semNomeRepetido(
+    linhas.flatMap((linha, n) => {
+      const daLinhaPropria = pessoaDoMarcadorEmLinhaPropria(linhas, n, textos, pareceNome);
+      if (daLinhaPropria) return [daLinhaPropria];
+      return ocorrenciasDosMarcadores(linha, textos).flatMap(({ indice, marcador }) => {
+        const antes = linha.slice(0, indice);
+        return pessoaAntesDoMarcador(antes.slice(ultimoSeparador(antes) + 1), marcador) ?? [];
+      });
+    }),
+  );
 }
 
 /** Opções de extração de conteúdo (HTML ou PDF). */
 export interface OpcoesExtracao {
   /** Textos que marcam as pessoas do grupo; presentes, só elas são extraídas. */
   marcador?: readonly string[];
+  /** Nenhuma pessoa com o marcador é leitura quebrada (`ScrapeError`), não lista vazia (GT de 13/11, Defesa). */
+  marcadorObrigatorio?: boolean;
   /** Cada pessoa leva `nomeDestaque`, as partes em negrito do nome (spec 2026-10-30 §3.1). */
   nomeEmDestaque?: boolean;
+  /** Só os gabinetes e os blocos da direção viram pessoa (spec 2026-11-13 §3.3, STM). */
+  gabinetes?: OpcoesGabinetes;
+  /** Página de uma só autoridade: o título principal com o cargo fixo (GT de 13/11, comandantes). */
+  pessoaUnica?: OpcoesPessoaUnica;
 }
 
 /** Extrai texto limpo + destaques + pessoas estruturadas de um HTML já baixado. Função pura. */
 export function extrairConteudo(html: string, url: string, opcoes: OpcoesExtracao = {}): ConteudoFonte {
   const $ = cheerio.load(html);
   $("script, style, noscript").remove();
+  // Gabinetes antes da moldura: a aba "Ministros e Gabinetes", que ancora a lista, fica num
+  // `ul.nav` que a moldura apaga (spec 2026-11-13 §3.3).
+  const doGabinete = opcoes.gabinetes ? extrairPorGabinetes($, url, opcoes.gabinetes) : undefined;
   removerMoldura($);
+  // Depois da moldura: o título do cabeçalho ("Marinha do Brasil") não é a autoridade da página.
+  // Sem o cargo do catálogo ou sem nome: leitura quebrada. Sem o erro, a fonte secundária vazia seria
+  // "ninguém a listar" e a autoridade viraria possível saída.
+  const pessoaUnica = opcoes.pessoaUnica ? extrairPessoaUnica($, opcoes.pessoaUnica, pareceNome) : undefined;
+  if (pessoaUnica && "motivo" in pessoaUnica) throw new ScrapeError(url, pessoaUnica.motivo);
+  const daPessoaUnica = pessoaUnica?.pessoas;
 
   // destaques ANTES de mutar o DOM (extrairLinhas insere "\n").
   const destaquesBrutos: string[] = [];
@@ -662,9 +678,16 @@ export function extrairConteudo(html: string, url: string, opcoes: OpcoesExtraca
   const destaquesPorLinha = opcoes.nomeEmDestaque ? colherDestaquesPorLinha($, TAGS_SEPARAR) : undefined;
 
   const { linhas, titulos } = extrairLinhas($);
-  const pessoas = opcoes.marcador?.length
-    ? extrairPorMarcador(linhas.join("\n"), opcoes.marcador)
-    : segmentarPessoas(linhas, titulos, destaquesPorLinha);
+  const pessoas =
+    doGabinete ??
+    daPessoaUnica ??
+    (opcoes.marcador?.length
+      ? extrairPorMarcador(linhas.join("\n"), opcoes.marcador)
+      : segmentarPessoas(linhas, titulos, destaquesPorLinha));
+  // Marcador obrigatório sem ninguém: leitura quebrada, pelo mesmo motivo da pessoa única acima.
+  if (opcoes.marcadorObrigatorio && opcoes.marcador?.length && pessoas.length === 0) {
+    throw new ScrapeError(url, MOTIVO_MARCADOR_SEM_PESSOA);
+  }
   const destaques = [...new Set(destaquesBrutos.filter(ehNome))];
 
   return { url, textoLimpo: linhas.join(" "), destaques, pessoas };
@@ -765,12 +788,18 @@ export interface OpcoesRaspagem {
   tabela?: ExtracaoTabela;
   /** Só os nomes seguidos de um destes textos são pessoas (spec 2026-10-23 §5.2). */
   marcador?: readonly string[];
+  /** Nenhuma pessoa com o marcador é falha da leitura (GT de 13/11, Defesa). Só na extração de HTML. */
+  marcadorObrigatorio?: boolean;
   /** "pdf": a fonte é um PDF, lido pelo pdf-parse (spec 2026-10-23 §5.1). Ausente → HTML. */
   tipo?: "html" | "pdf";
   /** O nome esperado é a parte em negrito (spec 2026-10-30 §3.1). Só vale na extração de texto. */
   nomeEmDestaque?: boolean;
   /** Só a sessão com janela usa: texto do elemento a clicar antes de ler (GT de 05/11). `fetch` ignora. */
   clicarAntes?: CliqueAntes;
+  /** Extração por gabinete (spec 2026-11-13 §3.3). Só vale na extração de HTML. */
+  gabinetes?: OpcoesGabinetes;
+  /** Página de uma só autoridade (GT de 13/11). Só vale na extração de HTML. */
+  pessoaUnica?: OpcoesPessoaUnica;
   timeoutMs?: number;
 }
 
@@ -783,7 +812,10 @@ export async function raspar(url: string, opcoes: OpcoesRaspagem = {}): Promise<
   const timer = setTimeout(() => ctrl.abort(), opcoes.timeoutMs ?? 15000);
   const extracao: OpcoesExtracao = {
     ...(opcoes.marcador ? { marcador: opcoes.marcador } : {}),
+    ...(opcoes.marcadorObrigatorio ? { marcadorObrigatorio: true } : {}),
     ...(opcoes.nomeEmDestaque ? { nomeEmDestaque: true } : {}),
+    ...(opcoes.gabinetes ? { gabinetes: opcoes.gabinetes } : {}),
+    ...(opcoes.pessoaUnica ? { pessoaUnica: opcoes.pessoaUnica } : {}),
   };
   try {
     if (opcoes.tipo === "pdf") {

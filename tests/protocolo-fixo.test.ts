@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { comparacoesProtocoloFixo, protocoloFixo } from "@/lib/protocolo-fixo";
+import { comparacoesProtocoloFixo, GRUPO_CHEFES_DE_ESTADO, protocoloFixo } from "@/lib/protocolo-fixo";
 import { comparacoesTratamento } from "@/lib/match";
 import type { ContatoPlanilha } from "@/lib/types";
 
@@ -159,5 +159,59 @@ describe("comparacoesTratamento usa o protocolo fixo antes da tabela", () => {
     // Assert
     expect(a.filter((x) => x.situacao === "divergente")).toEqual([]);
     expect(b.filter((x) => x.campo === "tratamento" && x.situacao === "divergente").map((x) => x.valorEsperado)).toEqual(["Senhor"]);
+  });
+});
+
+describe("Chefes de Estado (spec 2026-11-13 §3.5)", () => {
+  const COMBINADO = `${GRUPO_CHEFES_DE_ESTADO}; Delegações estrangeiras e organismos intern - 2027`;
+
+  test("todo contato do grupo leva Excelentíssimo Senhor e A Sua Excelência o Senhor, seja qual for o cargo", () => {
+    for (const cargo of ["Presidente da República do Chile", "Primeiro-Ministro", "Rei", "Presidente do Parlamento Europeu", undefined]) {
+      // Act
+      const fixo = protocoloFixo(contato({ grupo: GRUPO_CHEFES_DE_ESTADO, cargo }), undefined);
+
+      // Assert
+      expect(fixo).toEqual({ tratamento: "Excelentíssimo Senhor", enderecamento: "A Sua Excelência o Senhor" });
+    }
+  });
+
+  test("feminino pelo cadastro vira Excelentíssima Senhora e A Sua Excelência a Senhora", () => {
+    // Act
+    const fixo = protocoloFixo(contato({ grupo: GRUPO_CHEFES_DE_ESTADO, cargo: "Rainha", tratamento: "Excelentíssima Senhora" }), undefined);
+
+    // Assert
+    expect(fixo).toEqual({ tratamento: "Excelentíssima Senhora", enderecamento: "A Sua Excelência a Senhora" });
+  });
+
+  test("rótulo combinado vale pelo segmento", () => {
+    // Act + Assert
+    expect(protocoloFixo(contato({ grupo: COMBINADO, cargo: "Rei" }), undefined)?.tratamento).toBe("Excelentíssimo Senhor");
+  });
+
+  test("comparacoesProtocoloFixo acusa 'Senhor' no grupo, com origemValor regra_gt", () => {
+    // Arrange
+    const c = contato({ grupo: GRUPO_CHEFES_DE_ESTADO, cargo: "Rei", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" });
+
+    // Act
+    const r = comparacoesProtocoloFixo(c, undefined);
+
+    // Assert
+    expect(r?.map((x) => [x.campo, x.situacao, x.valorEsperado, x.origemValor])).toEqual([
+      ["tratamento", "divergente", "Excelentíssimo Senhor", "regra_gt"],
+      ["enderecamento", "confere", "A Sua Excelência o Senhor", "regra_gt"],
+    ]);
+  });
+
+  test("comparacoesTratamento sem grupo canônico aplica a regra pelo grupo do contato", () => {
+    // Act
+    const r = comparacoesTratamento(contato({ grupo: GRUPO_CHEFES_DE_ESTADO, cargo: "Rei", tratamento: "Senhor" }), undefined);
+
+    // Assert
+    expect(r.find((x) => x.campo === "tratamento")?.valorEsperado).toBe("Excelentíssimo Senhor");
+  });
+
+  test("fora do grupo nada muda", () => {
+    // Act + Assert
+    expect(protocoloFixo(contato({ grupo: "Senadores", cargo: "Senador" }), undefined)).toBeUndefined();
   });
 });

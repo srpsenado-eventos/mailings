@@ -464,3 +464,131 @@ describe("Nome acima de 50 caracteres no STM (Camada C, spec 2026-11-04 §3.5)",
     expect(achadosDe(r.comparacoes)).not.toContain("nome_acima_do_limite");
   });
 });
+
+describe("Patente como no site (spec 2026-11-13 §3.3)", () => {
+  const site = (nome: string): ConteudoFonte => ({ ...fonte, pessoas: [{ nome, cargo: "Ministro", origem: "pagina" }] });
+  const rodar = (nomeCadastro: string, nomePagina: string, grupo = GRUPO_STM) =>
+    compararGrupo("STM", [contato({ nome: nomeCadastro })], site(nomePagina), grupo).contatos[0];
+  const nomeDe = (r: ReturnType<typeof rodar>) => r.comparacoes.find((c) => c.campo === "nome" && c.origemValor === "pagina");
+
+  test("patente por extenso no cadastro × abreviada no site diverge com o nome da página, sem possível saída", () => {
+    const r = rodar("General de Exército Fulano de Tal", "Gen Ex Fulano de Tal");
+    expect(nomeDe(r)?.situacao).toBe("divergente");
+    expect(nomeDe(r)?.valorEsperado).toBe("Gen Ex Fulano de Tal");
+    expect(r.semaforo).toBe("amarelo");
+    expect(r.possivelSaida).toBeFalsy();
+  });
+
+  test("mesma patente nos dois lados confere", () => {
+    const r = rodar("Gen Ex Fulano de Tal", "Gen Ex Fulano de Tal");
+    expect(nomeDe(r)?.situacao).toBe("confere");
+  });
+
+  test("cadastro sem Dra. × site com Dra. confere e o esperado sai sem o tratamento", () => {
+    const r = rodar("Fulana de Tal", "Dra. Fulana de Tal");
+    expect(nomeDe(r)?.situacao).toBe("confere");
+    expect(nomeDe(r)?.valorEsperado).toBe("Fulana de Tal");
+  });
+
+  test("cadastro com Dra. diverge pelo tratamento acadêmico, com o esperado sem ele", () => {
+    const r = rodar("Dra. Fulana de Tal", "Dra. Fulana de Tal");
+    const c = r.comparacoes.find((x) => x.achado === "nome_tratamento_academico");
+    expect(c?.situacao).toBe("divergente");
+    expect(c?.valorEsperado).toBe("Fulana de Tal");
+  });
+
+  test("grupo sem a regra segue como hoje: por extenso × abreviada confere", () => {
+    const r = rodar("General de Exército Fulano de Tal", "Gen Ex Fulano de Tal", "Ministros do STF");
+    expect(nomeDe(r)?.situacao).toBe("confere");
+  });
+});
+
+describe("Patente e acento na página individual (spec 2026-11-13 §3.3)", () => {
+  const fonteInd: FonteIndividual = { url: "https://www.exemplar.mil.br/ministro", ativo: true, chave: { nome: "Fulano de Tal" }, campos: ["nome"] };
+  const rodar = (nomeCadastro: string, nomePagina: string) => {
+    const conteudo: ConteudoFonte = {
+      url: fonteInd.url,
+      textoLimpo: `${nomePagina} Ministro do Tribunal. ${"Composição do tribunal, biografia e agenda oficial da autoridade. ".repeat(12)}`,
+      destaques: [nomePagina],
+      pessoas: [{ nome: nomePagina, cargo: "Ministro", origem: "pagina" }],
+    };
+    const v = compararContatoIndividual({
+      contato: { nome: nomeCadastro, grupo: GRUPO_STM, ...CADASTRO_OK },
+      fonte: fonteInd,
+      lida: { conteudo },
+      grupoCanonico: GRUPO_STM,
+    });
+    return v.resultado.comparacoes.find((c) => c.campo === "nome" && c.origemValor === "pagina");
+  };
+
+  test("patente diferente diverge com o nome da página e sem observação de acento", () => {
+    const nome = rodar("General de Exército Fulano de Tal", "Gen Ex Fulano de Tal");
+    expect(nome?.situacao).toBe("divergente");
+    expect(nome?.valorEsperado).toBe("Gen Ex Fulano de Tal");
+    expect(nome?.observacao).toBeUndefined();
+  });
+
+  test("acento diferente continua divergindo com a observação de acento", () => {
+    const nome = rodar("Gen Ex Fulano de Tal", "Gen Ex Fulanó de Tal");
+    expect(nome?.situacao).toBe("divergente");
+    expect(nome?.observacao).toBeDefined();
+  });
+
+  test("patente e acento iguais conferem", () => {
+    const nome = rodar("Gen Ex Fulano de Tal", "Gen Ex Fulano de Tal");
+    expect(nome?.situacao).toBe("confere");
+  });
+});
+
+describe("STM pela página Quem é Quem, de ponta a ponta (spec 2026-11-13 §3.3)", () => {
+  const URL_STM = "https://www.stm.jus.br/institucional/conheca-o-superior-tribunal-militar/quem-e-quem?view=default";
+  const GABINETES = { prefixos: ["Gabinete Min.", "Gabinete Min", "Gabinete Ministro", "Gabinete Ministra"], cargo: "Ministro(a)" };
+  const pagina = extrairConteudo(readFileSync(resolve(__dirname, "fixtures/stm-quem-e-quem.html"), "utf-8"), URL_STM, { gabinetes: GABINETES });
+  const CARGO_MINISTRO = "Ministro do Superior Tribunal Militar";
+  const contatos: ContatoPlanilha[] = [
+    { nome: "Gen Ex Guido Amin Naves", cargo: CARGO_MINISTRO, grupo: "STM", ...CADASTRO_OK },
+    { nome: "General de Exército Lourival Carvalho Silva", cargo: CARGO_MINISTRO, grupo: "STM", ...CADASTRO_OK },
+    { nome: "Artur Vidigal de Oliveira", cargo: CARGO_MINISTRO, grupo: "STM", ...CADASTRO_OK },
+    { nome: "Ten Brig Ar Carlos Vuyk de Aquino", cargo: CARGO_MINISTRO, grupo: "STM", ...CADASTRO_OK },
+    {
+      nome: "Ministra Maria Elizabeth Guimarães Teixeira Rocha",
+      cargo: "Presidente do Superior Tribunal Militar",
+      grupo: "STM",
+      tratamento: "Senhora",
+      enderecamento: "A Sua Excelência a Senhora",
+    },
+  ];
+  const g = compararGrupo("STM", contatos, pagina, GRUPO_STM);
+  const campo = (i: number, nome: "nome" | "cargo") =>
+    g.contatos[i].comparacoes.find((c) => c.campo === nome && c.origemValor === "pagina");
+
+  test("patente abreviada igual à da página: verde", () => {
+    expect(g.contatos[0].semaforo).toBe("verde");
+    expect(campo(0, "nome")?.situacao).toBe("confere");
+  });
+
+  test("patente por extenso: amarelo, com o nome da página (abreviado) como esperado, sem possível saída", () => {
+    expect(g.contatos[1].semaforo).toBe("amarelo");
+    expect(campo(1, "nome")).toMatchObject({ situacao: "divergente", valorEsperado: "Gen Ex Lourival Carvalho Silva" });
+    expect(g.contatos[1].possivelSaida).toBeFalsy();
+  });
+
+  test("civil sem Dr.: verde, e o esperado sai sem o Dr da página", () => {
+    expect(g.contatos[2].semaforo).toBe("verde");
+    expect(campo(2, "nome")).toMatchObject({ situacao: "confere", valorEsperado: "Artur Vidigal de Oliveira" });
+  });
+
+  test("o cargo confere pela função de tribunal, inclusive a da direção (Ouvidor)", () => {
+    for (const i of [0, 1, 2, 3]) expect(campo(i, "cargo")?.situacao).toBe("confere");
+    expect(campo(3, "cargo")?.valorEsperado).toBe("Ouvidor");
+  });
+
+  test("presidente com Ministra no nome e cargo Presidente do STM confere com a Ministra-Presidente da página", () => {
+    expect(campo(4, "nome")?.situacao).toBe("confere");
+    expect(campo(4, "cargo")?.situacao).toBe("confere");
+  });
+
+  test("todos os cadastrados casam: nenhuma possível saída", () => {
+    expect(g.contatos.every((r) => !r.possivelSaida)).toBe(true);
+  });
+});

@@ -93,7 +93,7 @@ describe("extrairConteudo (estruturado)", () => {
   });
 });
 
-describe("extrairConteudo (portal com menu fora de <nav>, caso STM)", () => {
+describe("extrairConteudo (portal com menu fora de <nav>, página antiga de composição do STM)", () => {
   const htmlStm = readFileSync(resolve(__dirname, "fixtures/stm-composicao.html"), "utf-8");
 
   /** Os 15 ministros da composição da Corte, pelo trecho pessoal do nome. */

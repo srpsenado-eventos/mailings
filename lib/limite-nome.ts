@@ -16,7 +16,7 @@ export function textoCurtoLimiteNome(n: number, limite: number): string {
 }
 
 export function textoLimiteNome(n: number, limite: number): string {
-  return `${textoCurtoLimiteNome(n, limite)}: abreviar o sobrenome, nunca a patente (regra do GT de 04/11)`;
+  return `${textoCurtoLimiteNome(n, limite)}: patente como no site do STM (regra do GT de 13/11)`;
 }
 
 /**

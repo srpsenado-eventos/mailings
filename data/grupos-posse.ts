@@ -41,6 +41,8 @@ export const GRUPOS_POSSE: readonly GrupoPosse[] = [
   fonte("Ministros do TCU"),
   fonte("Presidente da República"),
   fonte("Ministros de Estado"),
+  // GT de 13/11: grupo novo no Contatos (spec 2026-11-13 §3.4); posição provisória até o Clovis indicar.
+  fonte("Comandantes das Forças Armadas e EMCFA"),
   fonte("Embaixadores"),
   fonte("Procurador-Geral da República"),
   fonte("Presidente da Câmara dos Deputados"),

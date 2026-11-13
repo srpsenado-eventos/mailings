@@ -3,9 +3,11 @@ import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import { analisar, MOTIVO_LEITURA_SUSPEITA, type Dependencias } from "@/lib/analise";
 import { extrairConteudo, extrairTabela, ScrapeError } from "@/lib/scrape";
+import { MOTIVO_PESSOA_UNICA_SEM_CARGO } from "@/lib/scrape-pessoa-unica";
 import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { MOTIVO_NAVEGADOR_AUSENTE } from "@/lib/navegador";
 import { CATALOGO } from "@/data/catalogo";
+import { resolverGrupoEFonte } from "@/lib/catalogo";
 import { chaveDaLeitura, MOTIVO_SEM_NINGUEM } from "@/lib/memoria-leitura";
 import { MOTIVO_SEM_LISTA } from "@/lib/match";
 import { GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
@@ -1429,5 +1431,226 @@ describe("grupo sem proposta de inclusão (spec 2026-11-05 §2.5)", () => {
     const r = await analisar("c.xlsx", [contatos[0]], d);
     expect(r.grupos[0].viaPesquisaAmpla).toBe(true);
     expect(r.grupos[0].novos).toEqual([]);
+  });
+});
+
+describe("Ministros de Estado de ponta a ponta: página do Planalto como fonte única, cargo pela pasta (GT de 13/11)", () => {
+  const URL_PLANALTO = "https://www.gov.br/planalto/pt-br/conheca-a-presidencia/ministros-e-ministras";
+  const GRUPO = "Ministros de Estado";
+  const html = readFileSync(join(__dirname, "fixtures", "ministros-estado.html"), "utf8");
+  const depsMin = (conteudoHtml: string, extra: Partial<Dependencias> = {}): Dependencias => ({
+    resolverFonte: () => ({
+      grupoCanonico: GRUPO,
+      fontes: [{ url: URL_PLANALTO, ativo: true, navegador: "janela" }],
+      fontesIndividuais: [],
+      sugestoes: [],
+    }),
+    raspar: async () => extrairConteudo(conteudoHtml, URL_PLANALTO),
+    extrairComposicao: async () => [],
+    ...extra,
+  });
+  const contato = (nome: string, cargo: string): ContatoPlanilha => ({ nome, grupo: GRUPO, cargo, ...CADASTRO_OK });
+  const casaCivil = contato("Miriam Belchior", "Ministra de Estado da Casa Civil da Presidência da República");
+  const defesa = contato("José Mucio Monteiro Filho", "Ministro de Estado da Defesa");
+  type Resultado = Awaited<ReturnType<typeof analisar>>;
+  const doContato = (r: Resultado, nome: string) => r.grupos[0].contatos.find((c) => c.contato.nome === nome)!;
+  const cargoDe = (r: Resultado, nome: string) => doContato(r, nome).comparacoes.find((c) => c.campo === "cargo")!;
+
+  test("nome e pasta iguais aos da página: cargo confere, sem possível saída", async () => {
+    const r = await analisar("c.xlsx", [casaCivil, defesa], depsMin(html));
+    expect(cargoDe(r, casaCivil.nome).situacao).toBe("confere");
+    expect(cargoDe(r, defesa.nome).situacao).toBe("confere");
+    expect(r.grupos[0].contatos.some((c) => c.possivelSaida)).toBe(false);
+  });
+
+  test("pasta trocada no Contatos: cargo diverge e a pasta da página vem como esperado", async () => {
+    const trocado = { ...defesa, cargo: "Ministro de Estado da Educação" };
+    const r = await analisar("c.xlsx", [casaCivil, trocado], depsMin(html));
+    const cargo = cargoDe(r, trocado.nome);
+    expect(cargo.situacao).toBe("divergente");
+    expect(cargo.valorEsperado).toBe("Ministro de Estado da Defesa");
+    expect(doContato(r, trocado.nome).semaforo).toBe("amarelo");
+  });
+
+  test("nome fora da página, com composição real: possível saída", async () => {
+    const r = await analisar("c.xlsx", [casaCivil, defesa, contato("Fulano Fora Da Pagina", "Ministro de Estado da Fazenda")], depsMin(html));
+    expect(doContato(r, "Fulano Fora Da Pagina").possivelSaida).toBe(true);
+    expect(doContato(r, casaCivil.nome).possivelSaida).toBeFalsy();
+  });
+
+  test("limitação conhecida de 13/11: CGU e AGU (linha-órgão sem cargo na extração) saem verdes com o cargo fonte_nao_informa", async () => {
+    const cgu = contato("Vinícius Marques de Carvalho", "Ministro de Estado da Controladoria-Geral da União");
+    const agu = contato("Jorge Rodrigo Araújo Messias", "Advogado-Geral da União");
+    const r = await analisar("c.xlsx", [casaCivil, cgu, agu], depsMin(html));
+    for (const c of [cgu, agu]) {
+      expect(doContato(r, c.nome).possivelSaida).toBeFalsy();
+      expect(doContato(r, c.nome).semaforo).toBe("verde");
+      expect(cargoDe(r, c.nome).situacao).toBe("fonte_nao_informa");
+    }
+  });
+
+  test("página vazia: grupo indeterminado, ninguém vira saída (regra de ouro)", async () => {
+    const r = await analisar("c.xlsx", [casaCivil, defesa], depsMin("<html><body></body></html>"));
+    expect(r.grupos[0].contatos.some((c) => c.possivelSaida)).toBe(false);
+    expect(r.grupos[0].contatos.every((c) => c.semaforo === "indeterminado")).toBe(true);
+  });
+
+  test("proposta de inclusão nunca vem do conhecimento da IA", async () => {
+    const ia = async () => [{ nome: "Pessoa Lembrada Pela IA", cargo: "Ministro de Estado da Fazenda", origem: "conhecimento" as const }];
+    const r = await analisar("c.xlsx", [casaCivil, defesa], depsMin(html, { extrairComposicao: ia }));
+    expect(r.grupos[0].novos.some((n) => n.nome === "Pessoa Lembrada Pela IA")).toBe(false);
+  });
+});
+
+describe("Comandantes das Forças Armadas e EMCFA de ponta a ponta: quatro fontes do catálogo (GT de 13/11)", () => {
+  const GRUPO = "Comandantes das Forças Armadas e EMCFA";
+  const URL_MARINHA = "https://www.marinha.mil.br/comandantedamarinha";
+  const URL_DEFESA = "https://www.gov.br/defesa/pt-br/composicao";
+  const URL_EB = "https://www.eb.mil.br/web/comandante-do-exercito";
+  const URL_FAB = "https://www.fab.mil.br/a-forca-aerea/comandante/";
+  const BLOQUEIO = "HTTP 403";
+  const lerFixture = (nome: string) => readFileSync(join(__dirname, "fixtures", nome), "utf8");
+  const PAGINAS: Record<string, string> = {
+    [URL_DEFESA]: lerFixture("defesa-composicao.html"),
+    [URL_EB]: lerFixture("comandante-exercito.html"),
+  };
+  /** As fontes do próprio catálogo; página fora do mapa responde como a Cloudflare em 13/11. */
+  const depsCmd = (paginas: Record<string, string> = PAGINAS, comSemInclusao = true): Dependencias => ({
+    resolverFonte: (g) => {
+      const r = resolverGrupoEFonte(g);
+      return comSemInclusao ? r : { ...r, semInclusao: undefined };
+    },
+    raspar: async (f) => {
+      const html = paginas[f.url];
+      if (html === undefined) throw new ScrapeError(f.url, BLOQUEIO);
+      return extrairConteudo(html, f.url, {
+        ...(f.marcador ? { marcador: f.marcador.textos } : {}),
+        ...(f.marcador?.obrigatorio ? { marcadorObrigatorio: true } : {}),
+        ...(f.pessoaUnica ? { pessoaUnica: f.pessoaUnica } : {}),
+      });
+    },
+    extrairComposicao: async () => [],
+  });
+  const contato = (nome: string, cargo: string): ContatoPlanilha => ({ nome, grupo: GRUPO, cargo, ...CADASTRO_OK });
+  const exercito = contato("Gen Ex Tomás Miguel Miné Ribeiro Paiva", "Comandante do Exército Brasileiro");
+  const emcfa = contato("Alte Esq Renato Rodrigues de Aguiar Freire", "Chefe do Estado-Maior Conjunto das Forças Armadas");
+  const marinha = contato("Alte Esq Fulano de Tal Souza", "Comandante da Marinha");
+  const fab = contato("Ten Brig Ar Beltrano Pereira Lima", "Comandante da Aeronáutica");
+  type Resultado = Awaited<ReturnType<typeof analisar>>;
+  const paginaDaMarinha = `<html><body><main><h1>${marinha.nome}</h1><p>Comandante da Marinha</p></main></body></html>`;
+  const doContato = (r: Resultado, nome: string) => r.grupos[0].contatos.find((c) => c.contato.nome === nome)!;
+
+  test("Marinha e FAB bloqueadas: leitura parcial, os dois indeterminados (nunca saída), Exército e EMCFA verdes", async () => {
+    // Act
+    const r = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd());
+    const g = r.grupos[0];
+
+    // Assert
+    expect(g.grupo).toBe(GRUPO);
+    expect(g.fonteUrl).toBe(URL_EB);
+    expect(g.contatos.some((c) => c.possivelSaida)).toBe(false);
+    expect(doContato(r, marinha.nome).semaforo).toBe("indeterminado");
+    expect(doContato(r, fab.nome).semaforo).toBe("indeterminado");
+    expect(doContato(r, exercito.nome).semaforo).toBe("verde");
+    expect(doContato(r, emcfa.nome).semaforo).toBe("verde");
+    for (const c of [exercito, emcfa]) {
+      expect(doContato(r, c.nome).comparacoes.find((x) => x.campo === "cargo")?.situacao).toBe("confere");
+    }
+    expect(g.erroFonte).toContain(URL_MARINHA);
+    expect(g.erroFonte).toContain(URL_FAB);
+  });
+
+  test("nome em caixa normal no Contatos e em caixa alta na página: confere", async () => {
+    const r = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd());
+    const nome = doContato(r, exercito.nome).comparacoes.find((c) => c.campo === "nome")!;
+    expect(nome.situacao).toBe("confere");
+  });
+
+  test("ninguém da composição da Defesa vira proposta de inclusão, e é o semInclusao que garante", async () => {
+    // Arrange: um segundo nome na página com o mesmo cargo, sem contato no grupo.
+    const outro = "Alte Esq Sicrano Moura Brandão";
+    const defesa = PAGINAS[URL_DEFESA].replace(
+      "</ul>",
+      `<li><div class="item"><p class="nome-autoridade"><a>${outro}</a></p><p class="cargo-autoridade">CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS</p></div></li></ul>`,
+    );
+    const paginas = { ...PAGINAS, [URL_DEFESA]: defesa };
+
+    // Act
+    const com = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd(paginas));
+    const sem = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd(paginas, false));
+
+    // Assert
+    expect(com.grupos[0].novos).toEqual([]);
+    expect(sem.grupos[0].novos.map((n) => n.nome)).toEqual([outro]);
+  });
+
+  test("Marinha lida e o h1 do Exército sem nome (layout mudou): Exército indeterminado, nunca saída", async () => {
+    const paginas = {
+      ...PAGINAS,
+      [URL_MARINHA]: paginaDaMarinha,
+      // O cargo está na página: é a regra do nome que derruba a leitura.
+      [URL_EB]: "<html><body><main><h2>Comandante do Exército Brasileiro</h2><h1>Comandante</h1><p>Página em manutenção.</p></main></body></html>",
+    };
+    const r = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd(paginas));
+    const c = doContato(r, exercito.nome);
+    expect(c.possivelSaida).toBeFalsy();
+    expect(c.semaforo).toBe("indeterminado");
+    expect(r.grupos[0].erroFonte).toContain(URL_EB);
+    expect(doContato(r, marinha.nome).semaforo).toBe("verde");
+  });
+
+  test("FAB montou só o h1 do órgão, sem o cargo: comandante indeterminado, nunca saída nem o órgão como pessoa", async () => {
+    const paginas = {
+      ...PAGINAS,
+      [URL_MARINHA]: paginaDaMarinha,
+      [URL_FAB]: "<html><body><main><h1>Força Aérea Brasileira</h1><p>Asas que protegem o país.</p></main></body></html>",
+    };
+    const r = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd(paginas));
+    const c = doContato(r, fab.nome);
+    expect(c.possivelSaida).toBeFalsy();
+    expect(c.semaforo).toBe("indeterminado");
+    expect(r.grupos[0].erroFonte).toContain(URL_FAB);
+    expect(r.grupos[0].erroFonte).toContain(MOTIVO_PESSOA_UNICA_SEM_CARGO);
+  });
+
+  test("Marinha lida e o cargo do EMCFA mudou na Defesa: chefe do EMCFA indeterminado, nunca saída", async () => {
+    const paginas = {
+      ...PAGINAS,
+      [URL_MARINHA]: paginaDaMarinha,
+      [URL_DEFESA]: PAGINAS[URL_DEFESA].replace("CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS", "CHEFE DO EMCFA"),
+    };
+    const r = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd(paginas));
+    const c = doContato(r, emcfa.nome);
+    expect(c.possivelSaida).toBeFalsy();
+    expect(c.semaforo).toBe("indeterminado");
+    expect(r.grupos[0].erroFonte).toContain(URL_DEFESA);
+  });
+
+  test("as quatro páginas lidas: os quatro verdes", async () => {
+    const pagina = (nome: string, cargo: string) => `<html><body><main><h1>${nome}</h1><p>${cargo}</p></main></body></html>`;
+    const r = await analisar(
+      "c.xlsx",
+      [marinha, emcfa, exercito, fab],
+      depsCmd({ ...PAGINAS, [URL_MARINHA]: pagina(marinha.nome, "Comandante da Marinha"), [URL_FAB]: pagina(fab.nome, "Comandante da Aeronáutica") }),
+    );
+    expect(r.grupos[0].contatos.map((c) => c.semaforo)).toEqual(["verde", "verde", "verde", "verde"]);
+    expect(r.grupos[0].erroFonte).toBeUndefined();
+  });
+
+  test("patente por extenso no Contatos e abreviada na página: amarelo pela patente", async () => {
+    // Arrange
+    const porExtenso = { ...marinha, nome: "Almirante de Esquadra Fulano de Tal Souza" };
+    const paginas = { ...PAGINAS, [URL_MARINHA]: "<html><body><main><h1>Alte Esq Fulano de Tal Souza</h1><p>Comandante da Marinha</p></main></body></html>" };
+
+    // Act
+    const r = await analisar("c.xlsx", [porExtenso, emcfa, exercito, fab], depsCmd(paginas));
+    const c = doContato(r, porExtenso.nome);
+
+    // Assert
+    expect(c.possivelSaida).toBeFalsy();
+    expect(c.semaforo).toBe("amarelo");
+    const nome = c.comparacoes.find((x) => x.campo === "nome")!;
+    expect(nome.situacao).toBe("divergente");
+    expect(nome.valorEsperado).toBe("Alte Esq Fulano de Tal Souza");
   });
 });

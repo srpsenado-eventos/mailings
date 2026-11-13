@@ -2,6 +2,8 @@ import { existsSync } from "node:fs";
 import puppeteer, { type Page } from "puppeteer-core";
 import { extrairConteudo, extrairTabela, ScrapeError, type OpcoesRaspagem } from "@/lib/scrape";
 import { paginaComConteudo } from "@/lib/match";
+import { MOTIVO_MARCADOR_SEM_PESSOA } from "@/lib/scrape-marcador";
+import { MOTIVO_PESSOA_UNICA_SEM_CARGO, MOTIVO_PESSOA_UNICA_SEM_NOME } from "@/lib/scrape-pessoa-unica";
 import type { ConteudoFonte, ExtracaoTabela, CliqueAntes } from "@/lib/types";
 
 /**
@@ -35,6 +37,17 @@ const PAUSA_APOS_CARREGAR_MS = 1_500;
 export const PAUSA_ENTRE_PAGINAS_MS = 3_000;
 export const ESPERA_ANTES_DE_REPETIR_MS = 60_000;
 const MOTIVO_MUITOS_PEDIDOS = "HTTP 429";
+/**
+ * Falhas que a segunda leitura pode resolver: o limite de pedidos e a página que ainda não montou
+ * ou veio no lugar do CAPTCHA, sem o marcador obrigatório ou sem a autoridade única (GT de 13/11),
+ * tratadas como a página sem conteúdo legível.
+ */
+const MOTIVOS_QUE_REPETEM: readonly string[] = [
+  MOTIVO_MUITOS_PEDIDOS,
+  MOTIVO_MARCADOR_SEM_PESSOA,
+  MOTIVO_PESSOA_UNICA_SEM_NOME,
+  MOTIVO_PESSOA_UNICA_SEM_CARGO,
+];
 
 const esperarPadrao = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -57,13 +70,26 @@ export interface ModoLancamento {
 
 export type Lancador = (caminhoChrome: string, modo?: ModoLancamento) => Promise<PaginaNavegador>;
 
-/** O que a leitura pelo Chrome aplica da fonte: a tabela e o nome em destaque (spec 2026-10-30 §3.1). */
-export type OpcoesExtracaoNavegador = Pick<OpcoesRaspagem, "tabela" | "nomeEmDestaque" | "clicarAntes">;
+/**
+ * O que a leitura pelo Chrome aplica da fonte: a tabela, o nome em destaque (spec 2026-10-30 §3.1)
+ * e, desde 13/11, o marcador e a pessoa única (Defesa e comandantes, fontes lidas pela janela).
+ * `gabinetes` não se aplica à janela: o STM é lido por `fetch`. As fontes com marcador ou gabinetes
+ * lidas por `fetch` continuam sem ir à janela no 403 (`janelaLeComoOFetch` em `lib/raspagem.ts`).
+ */
+export type OpcoesExtracaoNavegador = Pick<
+  OpcoesRaspagem,
+  "tabela" | "nomeEmDestaque" | "clicarAntes" | "marcador" | "marcadorObrigatorio" | "pessoaUnica"
+>;
 
 /** O HTML montado pelo Chrome passa pelo MESMO extrator das outras fontes. */
 function extrairDoNavegador(html: string, url: string, opcoes: OpcoesExtracaoNavegador): ConteudoFonte {
   if (opcoes.tabela) return extrairTabela(html, url, opcoes.tabela);
-  return extrairConteudo(html, url, opcoes.nomeEmDestaque ? { nomeEmDestaque: true } : {});
+  return extrairConteudo(html, url, {
+    ...(opcoes.nomeEmDestaque ? { nomeEmDestaque: true } : {}),
+    ...(opcoes.marcador ? { marcador: opcoes.marcador } : {}),
+    ...(opcoes.marcadorObrigatorio ? { marcadorObrigatorio: true } : {}),
+    ...(opcoes.pessoaUnica ? { pessoaUnica: opcoes.pessoaUnica } : {}),
+  });
 }
 
 export interface OpcoesNavegador {
@@ -215,8 +241,9 @@ export interface OpcoesSessao {
  * `ScrapeError`, sem travar as fontes lidas por `fetch`. A rota chama `fechar()` no `finally`.
  *
  * Ritmo: pausa de `PAUSA_ENTRE_PAGINAS_MS` antes de cada página a partir da segunda; página
- * que volta HTTP 429 ou sem conteúdo legível (CAPTCHA, `paginaComConteudo`) é lida mais UMA
- * vez depois de `ESPERA_ANTES_DE_REPETIR_MS`, e o resultado dessa segunda leitura vale.
+ * que volta HTTP 429, sem conteúdo legível (CAPTCHA, `paginaComConteudo`) ou sem o marcador
+ * obrigatório ou a autoridade única (`MOTIVOS_QUE_REPETEM`) é lida mais UMA vez depois de
+ * `ESPERA_ANTES_DE_REPETIR_MS`, e o resultado dessa segunda leitura vale.
  */
 export function abrirSessao(opcoes: OpcoesSessao = {}): SessaoNavegador {
   const timeoutMs = opcoes.timeoutMs ?? TETO_NAVEGADOR_MS;
@@ -257,7 +284,7 @@ export function abrirSessao(opcoes: OpcoesSessao = {}): SessaoNavegador {
       const conteudo = await lerUma(url, extracao);
       if (paginaComConteudo(conteudo)) return conteudo;
     } catch (err) {
-      if (!(err instanceof ScrapeError && err.motivo === MOTIVO_MUITOS_PEDIDOS)) throw err;
+      if (!(err instanceof ScrapeError && MOTIVOS_QUE_REPETEM.includes(err.motivo))) throw err;
     }
     await esperar(ESPERA_ANTES_DE_REPETIR_MS);
     return lerUma(url, extracao);

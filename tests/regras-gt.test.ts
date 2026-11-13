@@ -3,18 +3,26 @@ import { REGRAS_GT } from "@/data/regras-gt";
 import { regrasDoGrupo, textoCurto, textoLongo } from "@/lib/regras-gt";
 
 describe("regras do GT em vigor (spec 2026-11-04 §3.2)", () => {
-  test("as cinco regras de 04/11 com os títulos da spec", () => {
+  test("as três regras de 04/11 que seguem em vigor, com os títulos da spec", () => {
     const de0411 = REGRAS_GT.filter((r) => r.data === "2026-11-04");
     expect(de0411.map((r) => [r.data, r.titulo])).toEqual([
-      ["2026-11-04", "Nome"], ["2026-11-04", "Pessoa em mais de um grupo"], ["2026-11-04", "STM: patentes"], ["2026-11-04", "STM: abreviação"], ["2026-11-04", "Tratamento"],
+      ["2026-11-04", "Nome"], ["2026-11-04", "Pessoa em mais de um grupo"], ["2026-11-04", "Tratamento"],
     ]);
     expect(de0411.map((r) => r.texto)).toEqual([
       "O nome é exatamente como está no site oficial do órgão, inclusive quando o GT conhece o nome político (ex.: Rodrigo Pacheco). A equipe não tem como fazer essa análise para 100% das pessoas.",
       "A pessoa fica em todos os grupos no Contatos. No Sistema Posse ela é bloqueada, por pessoa em cada grupo, no grupo que não convida, no momento em que o grupo for autorizado. O Fiscal mostra em qual grupo bloquear e registra o bloqueio feito.",
-      "As patentes serão pesquisadas pelo Daniel no site do STM. Se não encontrar, o GT consulta a ASPAR do Exército. Até lá, o Fiscal não audita patente.",
-      "Quando for preciso abreviar o nome, abreviar o sobrenome, nunca a patente.",
       "Tabela de tratamentos v02 (REGRA GERAL): Governador, Prefeito, Presidente de Assembleia Legislativa / Câmara Legislativa e Presidente de Câmara Municipal passam a Senhor(a); o endereçamento não muda.",
     ]);
+  });
+  test("as três regras de 13/11: TSE, STM e Chefes de Estado", () => {
+    const de1311 = REGRAS_GT.filter((r) => r.data === "2026-11-13");
+    expect(de1311.map((r) => [r.titulo, r.texto, r.grupos])).toEqual([
+      ["TSE: tribunal de origem", "Membros do TSE que também são ministros do STF ou do STJ são convidados por esses tribunais; o Presidente do TSE é convidado pelo TSE; os juristas ficam no TSE.", ["Ministros do STF", "Ministros do STJ", "Ministros do TSE"]],
+      ["STM: patente como no site", "Patente como no site do STM (Quem é Quem), abreviada como lá; Dr. e Dra. não entram no nome; limite de 50 caracteres.", ["Ministros do STM"]],
+      ["Chefes de Estado", "Chefes de Estado, chefes de governo e presidentes de parlamento: tratamento Excelentíssimo(a) Senhor(a) e endereçamento A Sua Excelência o(a) Senhor(a), em paralelo às autoridades nacionais do mesmo nível.", ["Chefes de Estado, Gov, Presidentes Parlam - 2027"]],
+    ]);
+    expect(REGRAS_GT.some((r) => r.titulo === "STM: patentes" || r.titulo === "STM: abreviação")).toBe(false);
+    expect(regrasDoGrupo("Ministros do TSE").map((r) => r.titulo)).toContain("TSE: tribunal de origem");
   });
   test("as três regras de 05/11 com os textos literais e os grupos", () => {
     const novas = REGRAS_GT.filter((r) => r.data === "2026-11-05").slice(0, 3);
@@ -24,7 +32,7 @@ describe("regras do GT em vigor (spec 2026-11-04 §3.2)", () => {
       ["Desembargadores convocados", "Tratamento e endereçamento seguem o mesmo critério dos ministros do grupo.", ["Ministros do STJ", "Ministros do TST"]],
     ]);
     expect(regrasDoGrupo("Embaixadores (Filipinas até Noruega)").map((r) => r.titulo)).toEqual(["Embaixadores"]);
-    expect(regrasDoGrupo("Ministros do STJ").map((r) => r.titulo)).toEqual(["Presidentes de tribunal", "Desembargadores convocados"]);
+    expect(regrasDoGrupo("Ministros do STJ").map((r) => r.titulo)).toEqual(["Presidentes de tribunal", "Desembargadores convocados", "TSE: tribunal de origem"]);
   });
   test("as duas regras de 05/11 sobre os presidentes do Congresso (spec 2026-11-05 §7.6)", () => {
     const novas = REGRAS_GT.filter((r) => r.titulo === "Presidentes do Congresso e da Câmara" || r.titulo === "Ex-Presidentes do Congresso");
@@ -37,8 +45,8 @@ describe("regras do GT em vigor (spec 2026-11-04 §3.2)", () => {
     expect(regrasDoGrupo("Presidente do Senado").map((r) => r.titulo)).toEqual(["Presidentes do Congresso e da Câmara"]);
     expect(regrasDoGrupo("Ex-Presidentes do Congresso").map((r) => r.titulo)).toEqual(["Ex-Presidentes do Congresso"]);
   });
-  test("regras por grupo: STM tem três, Governadores uma, Senadores a dos presidentes do Congresso; rótulo com variação casa pelo catálogo", () => {
-    expect(regrasDoGrupo("Ministros do STM").map((r) => r.titulo)).toEqual(["STM: patentes", "STM: abreviação", "Presidentes de tribunal"]);
+  test("regras por grupo: STM tem duas, Governadores uma, Senadores a dos presidentes do Congresso; rótulo com variação casa pelo catálogo", () => {
+    expect(regrasDoGrupo("Ministros do STM").map((r) => r.titulo)).toEqual(["Presidentes de tribunal", "STM: patente como no site"]);
     expect(regrasDoGrupo("Governadores").map((r) => r.titulo)).toEqual(["Tratamento"]);
     expect(regrasDoGrupo("Senadores").map((r) => r.titulo)).toEqual(["Presidentes do Congresso e da Câmara"]);
     expect(regrasDoGrupo("rótulo desconhecido")).toEqual([]);

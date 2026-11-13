@@ -1,14 +1,22 @@
+import { GRUPOS_POSSE } from "@/data/grupos-posse";
 import { neutralizarGenero } from "@/lib/cargos";
 import { normalizarTexto } from "@/lib/normalize";
 import { contatoEhFeminino } from "@/lib/tratamento";
 import type { ComparacaoCampo, ContatoPlanilha } from "@/lib/types";
 
 /**
- * Protocolo fixo dos presidentes do Congresso e da Câmara (spec 2026-11-05 §7.3, decisão do
- * Clovis). Vale por cima da tabela de protocolo e dos pares, só nesses cargos.
+ * Protocolo fixo (spec 2026-11-05 §7.3 e 2026-11-13 §3.5, decisões do Clovis). Vale por cima da
+ * tabela de protocolo e dos pares, nos presidentes ativos do Congresso e da Câmara, no grupo de
+ * ex-presidentes do Congresso e em todo o grupo dos Chefes de Estado.
+ *
+ * Não importa `lib/agrupador` nem `lib/catalogo`: `lib/match` importa este módulo e eles importam
+ * `lib/match`, e o ciclo deixaria `OBSERVACAO_SEM_FONTE_OFICIAL` indefinido na avaliação do agrupador.
  */
 
 const GRUPO_EX_PRESIDENTES = "Ex-Presidentes do Congresso";
+
+/** Rótulo do agrupador da Posse (grupo neutro): protocolo fixo para todos, sem exceção por cargo (spec 2026-11-13 §3.5). */
+export const GRUPO_CHEFES_DE_ESTADO = "Chefes de Estado, Gov, Presidentes Parlam - 2027";
 
 /** Cargo ativo, normalizado: nunca "Vice-…" (não começa com "presidente") e nunca com período. */
 const CARGO_ATIVO = /^presidente (do congresso nacional|do senado federal|da camara dos deputados)$/;
@@ -16,6 +24,18 @@ const CARGO_ATIVO = /^presidente (do congresso nacional|do senado federal|da cam
 export interface ProtocoloFixo {
   tratamento: string;
   enderecamento: string;
+}
+
+/** Rótulo oficial e apelidos do grupo dos Chefes de Estado, normalizados. */
+const ROTULOS_CHEFES_DE_ESTADO: ReadonlySet<string> = new Set(
+  GRUPOS_POSSE.filter((g) => g.rotulo === GRUPO_CHEFES_DE_ESTADO).flatMap((g) =>
+    [g.rotulo, ...(g.apelidos ?? [])].map(normalizarTexto),
+  ),
+);
+
+/** Algum segmento ("A; B") do rótulo do Contatos é o grupo dos Chefes de Estado. */
+function nosChefesDeEstado(grupo: string): boolean {
+  return grupo.split(";").some((seg) => ROTULOS_CHEFES_DE_ESTADO.has(normalizarTexto(seg)));
 }
 
 function ativo(cargo: string | undefined): boolean {
@@ -28,7 +48,7 @@ function ativo(cargo: string | undefined): boolean {
  */
 export function protocoloFixo(contato: ContatoPlanilha, grupoCanonico: string | undefined): ProtocoloFixo | undefined {
   const exPresidente = grupoCanonico === GRUPO_EX_PRESIDENTES;
-  if (!exPresidente && !ativo(contato.cargo)) return undefined;
+  if (!exPresidente && !ativo(contato.cargo) && !nosChefesDeEstado(contato.grupo)) return undefined;
   const feminino = contatoEhFeminino(contato);
   return {
     tratamento: exPresidente

@@ -112,7 +112,7 @@ export function etiquetaDoLimiteDoNome(c: ResultadoContato): Etiqueta | undefine
   return { campo: "nome", texto: textoCurtoDoLimite(comp), tom: "atencao", explicacao: textoCoerencia(comp) };
 }
 
-/** A forma curta é o texto completo sem o "…: abreviar o sobrenome…" que a explicação carrega. */
+/** A forma curta é o texto completo sem o "…: patente como no site…" que a explicação carrega. */
 function textoCurtoDoLimite(comp: ComparacaoCampo): string {
   const m = /^Nome com (\d+) caracteres, acima do limite de (\d+) do Posse/.exec(comp.observacao ?? "");
   return m ? textoCurtoLimiteNome(Number(m[1]), Number(m[2])) : textoCoerencia(comp);

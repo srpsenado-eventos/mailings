@@ -56,6 +56,11 @@ export interface RegraNome {
   formaDoPeriodo?: "no_periodo_ou_em_ano";
   /** Máximo de caracteres do campo Nome no Posse (spec 2026-11-04 §3.5), contando só o nome aparado. */
   limiteCaracteres?: number;
+  /**
+   * A patente militar do nome é escrita como o site a escreve (spec 2026-11-13 §3.3): por extenso
+   * e abreviada não são a mesma coisa, e a diferença diverge com o nome da página como esperado.
+   */
+  patenteComoNoSite?: true;
 }
 
 /** Os 6 grupos de tribunal: o Presidente leva "Ministro(a)" no nome. */
@@ -69,7 +74,9 @@ export const REGRAS_NOME: Readonly<Record<string, RegraNome>> = {
     tratamentosProibidos: ["dr", "dra", "doutor", "doutora"],
     prefixoDoPresidente: "ministro",
     limiteCaracteres: 50,
+    patenteComoNoSite: true,
   },
+  "Comandantes das Forças Armadas e EMCFA": { patenteComoNoSite: true },
   // O nome é "Presidente Luís Inácio Lula da Silva": o prefixo é regra, não erro (GT, 2026-10-30).
   "Presidente da República": { prefixoDoPresidente: "presidente" },
   // O cargo é o da presidência com o período, nunca "Ex-Presidente…" (GT, 2026-10-30).

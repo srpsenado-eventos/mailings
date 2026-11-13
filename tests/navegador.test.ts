@@ -14,6 +14,8 @@ import {
   type PaginaNavegador,
 } from "@/lib/navegador";
 import { decodificarCorpo, ScrapeError } from "@/lib/scrape";
+import { MOTIVO_MARCADOR_SEM_PESSOA } from "@/lib/scrape-marcador";
+import { MOTIVO_PESSOA_UNICA_SEM_CARGO, MOTIVO_PESSOA_UNICA_SEM_NOME } from "@/lib/scrape-pessoa-unica";
 import { readFileSync } from "node:fs";
 
 const HTML = `<html><body><main>
@@ -169,6 +171,109 @@ function lancadorDeSessao(htmlPorUrl: Record<string, string | (() => Promise<str
   };
   return { lancar, estado };
 }
+
+describe("marcador e pessoa única pela janela (GT de 13/11)", () => {
+  const URL_DEFESA = "https://www.gov.br/defesa/pt-br/composicao";
+  const URL_EB = "https://www.eb.mil.br/web/comandante-do-exercito";
+  const lerFixture = (nome: string) => readFileSync(path.resolve(__dirname, "fixtures", nome), "utf-8");
+
+  test("a sessão com janela aplica o marcador e a pessoa única", async () => {
+    // Arrange
+    const { lancar } = lancadorDeSessao({ [URL_DEFESA]: lerFixture("defesa-composicao.html"), [URL_EB]: lerFixture("comandante-exercito.html") });
+    const sessao = abrirSessao({ esperar: semEspera, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+
+    // Act
+    const defesa = await sessao.raspar(URL_DEFESA, { marcador: ["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"] });
+    const eb = await sessao.raspar(URL_EB, { pessoaUnica: { cargo: "Comandante do Exército Brasileiro" } });
+    await sessao.fechar();
+
+    // Assert
+    expect(defesa.pessoas.map((p) => p.cargo)).toEqual(["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"]);
+    expect(eb.pessoas).toHaveLength(1);
+    expect(eb.pessoas[0].cargo).toBe("Comandante do Exército Brasileiro");
+  });
+});
+
+describe("marcador obrigatório e pessoa única: a sessão lê mais uma vez (GT de 13/11)", () => {
+  const URL_DEFESA = "https://www.gov.br/defesa/pt-br/composicao";
+  const URL_EB = "https://www.eb.mil.br/web/comandante-do-exercito";
+  const lerFixture = (nome: string) => readFileSync(path.resolve(__dirname, "fixtures", nome), "utf-8");
+  const MARCADOR = ["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"];
+  const PESSOA_UNICA = { cargo: "Comandante do Exército Brasileiro" };
+  const NAO_MONTOU = "<html><body><main><p>Carregando...</p></main></body></html>";
+  const SEM_NOME = `<html><body><main><h2>${PESSOA_UNICA.cargo}</h2><h1>Comandante</h1></main></body></html>`;
+
+  /** Lançador que devolve as respostas na ordem (a última se repete) e anota as esperas. */
+  function sessaoCom(respostas: string[]) {
+    const esperas: number[] = [];
+    let chamadas = 0;
+    const lancar: Lancador = async () => ({
+      conteudo: async () => {
+        chamadas += 1;
+        return respostas[Math.min(chamadas, respostas.length) - 1];
+      },
+      fechar: async () => undefined,
+    });
+    const sessao = abrirSessao({ esperar: async (ms) => { esperas.push(ms); }, env: envCom("D:/chrome.exe"), existe: existeSempre, lancar });
+    return { sessao, esperas, chamadas: () => chamadas };
+  }
+
+  test("Defesa sem o marcador na primeira leitura (não montou) e com ele na segunda: o chefe do EMCFA vem", async () => {
+    // Arrange
+    const { sessao, esperas, chamadas } = sessaoCom([NAO_MONTOU, lerFixture("defesa-composicao.html")]);
+
+    // Act
+    const c = await sessao.raspar(URL_DEFESA, { marcador: MARCADOR, marcadorObrigatorio: true });
+    await sessao.fechar();
+
+    // Assert
+    expect(chamadas()).toBe(2);
+    expect(esperas).toEqual([ESPERA_ANTES_DE_REPETIR_MS]);
+    expect(c.pessoas.map((p) => p.cargo)).toEqual(MARCADOR);
+  });
+
+  test("marcador ausente nas duas leituras: o erro do marcador aparece", async () => {
+    const { sessao, chamadas } = sessaoCom([NAO_MONTOU]);
+    await expect(sessao.raspar(URL_DEFESA, { marcador: MARCADOR, marcadorObrigatorio: true })).rejects.toMatchObject({
+      name: "ScrapeError",
+      motivo: MOTIVO_MARCADOR_SEM_PESSOA,
+    });
+    expect(chamadas()).toBe(2);
+    await sessao.fechar();
+  });
+
+  test("pessoa única sem o cargo na primeira leitura e lida na segunda: a pessoa vem", async () => {
+    const { sessao, esperas } = sessaoCom([NAO_MONTOU, lerFixture("comandante-exercito.html")]);
+    const c = await sessao.raspar(URL_EB, { pessoaUnica: PESSOA_UNICA });
+    await sessao.fechar();
+    expect(esperas).toEqual([ESPERA_ANTES_DE_REPETIR_MS]);
+    expect(c.pessoas.map((p) => p.cargo)).toEqual([PESSOA_UNICA.cargo]);
+  });
+
+  test("pessoa única sem nome na primeira leitura e lida na segunda: a pessoa vem", async () => {
+    const { sessao, chamadas } = sessaoCom([SEM_NOME, lerFixture("comandante-exercito.html")]);
+    const c = await sessao.raspar(URL_EB, { pessoaUnica: PESSOA_UNICA });
+    await sessao.fechar();
+    expect(chamadas()).toBe(2);
+    expect(c.pessoas).toHaveLength(1);
+  });
+
+  test("pessoa única quebrada nas duas leituras: o erro aparece (sem cargo e sem nome)", async () => {
+    const semCargo = sessaoCom([NAO_MONTOU]);
+    await expect(semCargo.sessao.raspar(URL_EB, { pessoaUnica: PESSOA_UNICA })).rejects.toMatchObject({
+      motivo: MOTIVO_PESSOA_UNICA_SEM_CARGO,
+    });
+    expect(semCargo.chamadas()).toBe(2);
+    await semCargo.sessao.fechar();
+
+    const semNome = sessaoCom([SEM_NOME]);
+    await expect(semNome.sessao.raspar(URL_EB, { pessoaUnica: PESSOA_UNICA })).rejects.toMatchObject({
+      motivo: MOTIVO_PESSOA_UNICA_SEM_NOME,
+    });
+    expect(semNome.chamadas()).toBe(2);
+    await semNome.sessao.fechar();
+  });
+});
 
 describe("nome em destaque pelo navegador (spec 2026-10-30 §3.1)", () => {
   const URL_STJ = "https://www.stj.jus.br/web/verMinistrosSTJ?parametro=1";

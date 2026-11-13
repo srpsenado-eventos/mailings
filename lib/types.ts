@@ -394,12 +394,31 @@ export interface FonteCatalogo {
   /** Ausente = HTML. "pdf": o corpo é lido por `extrairConteudoPdf` (spec 2026-10-23 §5.1). */
   tipo?: "html" | "pdf";
   /** Extração por marcador: só as pessoas cujo nome é seguido de um destes textos (spec 2026-10-23 §5.2). */
-  marcador?: { textos: readonly string[] };
+  marcador?: {
+    textos: readonly string[];
+    /**
+     * Nenhuma pessoa com o marcador é leitura quebrada, não lista vazia: a fonte falha e ninguém vira
+     * possível saída (GT de 13/11, Defesa: o chefe do EMCFA sempre está na página). Só na Defesa.
+     */
+    obrigatorio?: true;
+  };
   /**
    * O nome esperado é só a parte em negrito da página (spec 2026-10-30 §3.1, regra do GT
    * "STJ: usar as partes do nome em negrito"). Só no STJ.
    */
   nomeEmDestaque?: true;
+  /**
+   * Extração por gabinete (spec 2026-11-13 §3.3, página "Quem é Quem" do STM): só o elemento cujo
+   * texto começa por um dos `prefixos` vira pessoa (nome = o resto, com `cargo` fixo), mais os
+   * blocos da direção ("nome" / "Ministra-Presidente"), que dão a função como cargo. Só no STM.
+   */
+  gabinetes?: { prefixos: readonly string[]; cargo: string };
+  /**
+   * Página de uma só autoridade (GT de 13/11, comandantes das Forças): a composição é uma pessoa,
+   * cujo nome é o título principal da página (o primeiro `h1` com cara de nome; sem ele, o primeiro
+   * `h2`/`h3`), com tratamento e patente como a página escreve, e cujo cargo é este texto fixo.
+   */
+  pessoaUnica?: { cargo: string };
 }
 
 /** Chave que liga uma fonte individual ao contato: a UF do cargo, ou o nome como está no Contatos. */
@@ -450,7 +469,7 @@ export type TipoFonteProvisoria = "noticia" | "campanha";
 /** Uma fonte que o raspador sabe ler: o que `FonteCatalogo` e `FonteIndividual` têm em comum. */
 export type FonteLegivel = Pick<
   FonteCatalogo,
-  "url" | "tabela" | "navegador" | "urlAlternativa" | "tipo" | "marcador" | "nomeEmDestaque"
+  "url" | "tabela" | "navegador" | "urlAlternativa" | "tipo" | "marcador" | "nomeEmDestaque" | "gabinetes" | "pessoaUnica"
 > &
   Pick<FonteIndividual, "clicarAntes">;
 

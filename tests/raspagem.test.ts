@@ -133,6 +133,42 @@ describe("HTTP 403 ao fetch vai para a janela (spec 2026-10-23 §3.1)", () => {
     await expect(rasparFonte({ url: "https://tst.jus.br/orgaos", marcador: { textos: ["(convocado)"] } }, r)).rejects.toMatchObject({ motivo: "HTTP 403" });
     expect(r.porJanela).not.toHaveBeenCalled();
   });
+  test("fonte por gabinetes e 403: vale o erro do fetch, a janela não é chamada (ela ignora os gabinetes)", async () => {
+    const r = raspadoresFalsos();
+    const url = "https://www.stm.jus.br/quem-e-quem";
+    r.porFetch.mockRejectedValue(new ScrapeError(url, "HTTP 403"));
+    r.porJanela.mockResolvedValue(comConteudo(url));
+    await expect(rasparFonte({ url, gabinetes: { prefixos: ["Gabinete Min"], cargo: "Ministro(a)" } }, r)).rejects.toMatchObject({ motivo: "HTTP 403" });
+    expect(r.porJanela).not.toHaveBeenCalled();
+  });
+  test("fonte por gabinetes: a opção chega ao fetch", async () => {
+    const r = raspadoresFalsos();
+    const gabinetes = { prefixos: ["Gabinete Min"], cargo: "Ministro(a)" };
+    r.porFetch.mockResolvedValue(comConteudo("https://www.stm.jus.br/quem-e-quem"));
+    await rasparFonte({ url: "https://www.stm.jus.br/quem-e-quem", gabinetes }, r);
+    expect(r.porFetch).toHaveBeenCalledWith("https://www.stm.jus.br/quem-e-quem", { gabinetes });
+  });
+  test("fonte de pessoa única pela janela: a opção chega à janela (GT de 13/11, comandantes)", async () => {
+    const r = raspadoresFalsos();
+    const pessoaUnica = { cargo: "Comandante da Marinha" };
+    await rasparFonte({ url: "https://www.marinha.mil.br/comandantedamarinha", navegador: "janela", pessoaUnica }, r);
+    expect(r.porJanela).toHaveBeenCalledWith("https://www.marinha.mil.br/comandantedamarinha", { pessoaUnica });
+  });
+  test("marcador obrigatório pela janela: a exigência chega à janela (Defesa, GT de 13/11)", async () => {
+    const r = raspadoresFalsos();
+    const url = "https://www.gov.br/defesa/pt-br/composicao";
+    await rasparFonte({ url, navegador: "janela", marcador: { textos: ["CHEFE DO EMCFA"], obrigatorio: true } }, r);
+    expect(r.porJanela).toHaveBeenCalledWith(url, { marcador: ["CHEFE DO EMCFA"], marcadorObrigatorio: true });
+  });
+  test("fonte de pessoa única e 403 ao fetch: vai à janela, que aplica a opção", async () => {
+    const r = raspadoresFalsos();
+    const url = "https://www.eb.mil.br/web/comandante-do-exercito";
+    const pessoaUnica = { cargo: "Comandante do Exército Brasileiro" };
+    r.porFetch.mockRejectedValue(new ScrapeError(url, "HTTP 403"));
+    r.porJanela.mockResolvedValue(comConteudo(url));
+    await rasparFonte({ url, pessoaUnica }, r);
+    expect(r.porJanela).toHaveBeenCalledWith(url, { pessoaUnica });
+  });
   test("fonte PDF e 403: vale o erro do fetch, a janela não é chamada (ela não lê PDF)", async () => {
     const r = raspadoresFalsos();
     r.porFetch.mockRejectedValue(new ScrapeError("https://stj.jus.br/lista.pdf", "HTTP 403"));

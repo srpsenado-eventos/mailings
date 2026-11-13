@@ -7,6 +7,7 @@ import {
 import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
 import { HISTORICO_VAZIO, registrar, type HistoricoDecisoes, type RegistroManual } from "@/lib/decisoes";
 import { situacaoDoContato } from "@/lib/painel";
+import { MOTIVO_ORIGEM_TSE } from "@/lib/repetidos-origem";
 import { textoDaSituacao, textoDoBloqueio } from "@/lib/repetidos-decisoes";
 import type {
   CasaLegislativa, ContatoDoEleito, DeputadoAtual, EleitoClassificado, GovernadorClassificado, ResultadoContato, ResultadoEleicao, ResultadoGrupo,
@@ -36,7 +37,7 @@ describe("autoridadesRepetidas", () => {
     expect(resto).toEqual([]);
     expect(a.situacao).toBe("decidido");
     expect(a.convidaPor?.grupoRegra).toBe("Ministros do STF");
-    expect(a.motivo).toBe("Ministros do STF (4.9) antes de Ministros do TSE (5.9)");
+    expect(a.motivo).toBe("Membro do TSE convidado pelo tribunal de origem (regra do GT de 13/11)");
     expect(a.ocorrencias.map((o) => o.grupo)).toEqual(["Ministros do STF", "Ministros do TSE"]);
   });
 
@@ -178,14 +179,48 @@ describe("autoridadesRepetidas", () => {
 });
 
 describe("escolherGrupo", () => {
-  const oc = (grupoRegra: string, nivel?: string): OcorrenciaRepetida => ({
-    grupo: grupoRegra, grupoRegra, chave: "ana", cargo: "x", ex: false, possivelSaida: false, origem: "contatos",
+  const oc = (grupoRegra: string, nivel?: string, cargo = "x"): OcorrenciaRepetida => ({
+    grupo: grupoRegra, grupoRegra, chave: "ana", cargo, ex: false, possivelSaida: false, origem: "contatos",
     ...(nivel ? { nivel: { nivel, nominata: "x" } } : {}),
   });
 
   test("mesmo nível em grupos diferentes vai para conferir", () => {
     const e = escolherGrupo([oc("A", "4.13"), oc("B", "4.13")], false);
     expect(e).toEqual({ situacao: "conferir", motivo: "Mesmo nível na Nominata (4.13): decidir à mão" });
+  });
+
+  test("STJ 6.1.1 vence TSE 5.9 pela regra de origem, com o motivo do GT", () => {
+    const e = escolherGrupo([oc("Ministros do TSE", "5.9", "Ministro do TSE"), oc("Ministros do STJ", "6.1.1", "Ministro do STJ")], false);
+    expect(e.situacao).toBe("decidido");
+    expect(e.convidaPor?.grupoRegra).toBe("Ministros do STJ");
+    expect(e.motivo).toBe(MOTIVO_ORIGEM_TSE);
+  });
+
+  test("Presidente do TSE 4.8 continua vencendo o STF 4.9, pela Nominata", () => {
+    const e = escolherGrupo([oc("Ministros do TSE", "4.8", "Presidente do TSE"), oc("Ministros do STF", "4.9", "Ministro do STF")], false);
+    expect(e.convidaPor?.grupoRegra).toBe("Ministros do TSE");
+    expect(e.motivo).not.toBe(MOTIVO_ORIGEM_TSE);
+  });
+
+  test("TSE, STJ e um grupo mais alto: vence o mais alto, com o motivo da Nominata, não o do GT", () => {
+    const e = escolherGrupo(
+      [
+        oc("Ministros do TSE", "5.9", "Ministro do TSE"),
+        oc("Ministros do STJ", "6.1.1", "Ministro do STJ"),
+        oc("Ministros de Estado", "4.1", "Ministro de Estado"),
+      ],
+      false,
+    );
+    expect(e.situacao).toBe("decidido");
+    expect(e.convidaPor?.grupoRegra).toBe("Ministros de Estado");
+    expect(e.motivo).not.toBe(MOTIVO_ORIGEM_TSE);
+    expect(e.motivo).toContain("antes de");
+  });
+
+  test("TSE 5.9 continua vencendo TST (sem regra de origem)", () => {
+    const e = escolherGrupo([oc("Ministros do TSE", "5.9", "Ministro do TSE"), oc("Ministros do TST", "6.2", "Ministro do TST")], false);
+    expect(e.convidaPor?.grupoRegra).toBe("Ministros do TSE");
+    expect(e.motivo).not.toBe(MOTIVO_ORIGEM_TSE);
   });
 });
 
@@ -196,14 +231,14 @@ describe("etiquetaDeRepeticao", () => {
   test("grupo que não convida leva a etiqueta vermelha", () => {
     expect(etiquetaDeRepeticao(repetidas, ana, "Ministros do TSE")?.etiquetas[0]).toEqual({
       campo: "grupo", tom: "ruim", texto: "Autoridade a ser convidada pelo grupo Ministros do STF",
-      explicacao: "Ministros do STF (4.9) antes de Ministros do TSE (5.9)",
+      explicacao: "Membro do TSE convidado pelo tribunal de origem (regra do GT de 13/11)",
     });
   });
 
   test("grupo que convida leva a etiqueta neutra", () => {
     expect(etiquetaDeRepeticao(repetidas, ana, "Ministros do STF")?.etiquetas[0]).toEqual({
       campo: "grupo", tom: "neutro", texto: "Convidada por este grupo; também em Ministros do TSE",
-      explicacao: "Ministros do STF (4.9) antes de Ministros do TSE (5.9)",
+      explicacao: "Membro do TSE convidado pelo tribunal de origem (regra do GT de 13/11)",
     });
   });
 

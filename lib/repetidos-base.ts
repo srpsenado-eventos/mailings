@@ -4,6 +4,7 @@ import { grupoDoAgrupador } from "@/lib/agrupador";
 import { casaSegmento, segmentarGrupo } from "@/lib/catalogo";
 import { grupoEquivalente, type BloqueioDoGrupo, type CasoDecidido, type Pendencia, type RegistroManual, type SituacaoNoContatos } from "@/lib/decisoes";
 import { normalizarNome, normalizarTexto } from "@/lib/normalize";
+import { GRUPOS_DE_ORIGEM, MOTIVO_ORIGEM_TSE, semTseQuandoHaOrigem } from "@/lib/repetidos-origem";
 import type { ResultadoGrupo } from "@/lib/types";
 
 /**
@@ -144,16 +145,20 @@ function melhorPorGrupoRegra(ocorrencias: readonly OcorrenciaRepetida[]): Ocorre
  * vence o nível mais alto da Nominata. Empate, nenhum nível, nome parcial ou possível
  * saída no vencedor ficam para decidir à mão.
  */
-export function escolherGrupo(ocorrencias: readonly OcorrenciaRepetida[], parcial: boolean): Escolha {
+export function escolherGrupo(todas: readonly OcorrenciaRepetida[], parcial: boolean): Escolha {
   if (parcial) return { situacao: "conferir", motivo: MOTIVO_PARCIAL };
+  const origem = semTseQuandoHaOrigem(todas);
+  const ocorrencias = origem.ocorrencias;
   const atuais = ocorrencias.filter((o) => !o.ex);
   const disputa = melhorPorGrupoRegra(atuais.length > 0 ? atuais : ocorrencias);
   let vencedor: OcorrenciaRepetida;
   let motivo: string;
+  // O motivo do GT só quando o tribunal de origem venceu; um terceiro grupo acima leva o da Nominata.
+  const venceuAOrigem = (o: OcorrenciaRepetida): boolean => origem.aplicada && GRUPOS_DE_ORIGEM.includes(o.grupoRegra);
   if (disputa.length === 1) {
     vencedor = disputa[0];
     const exs = [...new Set(ocorrencias.filter((o) => o.ex).map((o) => o.grupoRegra))].join(", ");
-    motivo = `Cargo atual (${vencedor.grupoRegra}) vence cargo de ex- (${exs})`;
+    motivo = venceuAOrigem(vencedor) ? MOTIVO_ORIGEM_TSE : `Cargo atual (${vencedor.grupoRegra}) vence cargo de ex- (${exs})`;
   } else {
     const [primeira, segunda] = [...disputa].sort(ordemDePrecedencia);
     if (!primeira.nivel) return { situacao: "conferir", motivo: MOTIVO_SEM_NIVEL };
@@ -161,7 +166,7 @@ export function escolherGrupo(ocorrencias: readonly OcorrenciaRepetida[], parcia
       return { situacao: "conferir", motivo: `Mesmo nível na Nominata (${primeira.nivel.nivel}): decidir à mão` };
     }
     vencedor = primeira;
-    motivo = `${rotulo(primeira)} antes de ${rotulo(segunda)}`;
+    motivo = venceuAOrigem(vencedor) ? MOTIVO_ORIGEM_TSE : `${rotulo(primeira)} antes de ${rotulo(segunda)}`;
   }
   if (vencedor.possivelSaida) {
     return { situacao: "conferir", motivo: `Possível saída em ${vencedor.grupoRegra}: confirmar o cargo antes de decidir` };

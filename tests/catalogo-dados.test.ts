@@ -3,6 +3,9 @@ import { CATALOGO } from "@/data/catalogo";
 import { normalizarNome } from "@/lib/normalize";
 import { resolverGrupoEFonte } from "@/lib/catalogo";
 
+/** Domínio oficial de órgão público; `.mil.br` entrou com as páginas das Forças Armadas (GT de 13/11). */
+const DOMINIO_OFICIAL = /^https:\/\/[a-z0-9.-]+\.(gov|jus|leg|mp|def|mil)\.br(\/|$)/i;
+
 // Tabela dos titulares em `/fora-de-exercicio/-/f/por-tipo`: a primeira das duas (fixture de
 // 23/10, tests/scrape-tabela.test.ts).
 const INDICE_TITULARES = 0;
@@ -12,9 +15,9 @@ describe("catálogo real (data/catalogo.ts)", () => {
     expect(CATALOGO).toHaveLength(35);
   });
 
-  test("tem as 26 fontes de grupo (24 − 3 de fora de exercício nos Senadores + grupo novo, TST /orgaos, STJ PDF, PGR e Ex-Presidentes do Congresso)", () => {
+  test("tem as 30 fontes de grupo (as 26 da planilha de 23/10 e as 4 dos Comandantes, GT de 13/11)", () => {
     const total = CATALOGO.reduce((n, g) => n + g.fontes.length, 0);
-    expect(total).toBe(26);
+    expect(total).toBe(30);
   });
 
   describe("planilha de 23/10 (spec 2026-10-23 §5)", () => {
@@ -78,7 +81,7 @@ describe("catálogo real (data/catalogo.ts)", () => {
     test("tipo pdf, marcador e urlAlternativa só onde a spec manda; alternativas em domínio oficial", () => {
       const fontes = CATALOGO.flatMap((g) => g.fontes);
       expect(fontes.filter((f) => f.tipo === "pdf")).toHaveLength(1);
-      expect(fontes.filter((f) => f.marcador)).toHaveLength(2);
+      expect(fontes.filter((f) => f.marcador)).toHaveLength(3); // TST /orgaos, PDF do STJ e Defesa (EMCFA)
       expect(fontes.some((f) => "nomesDoContatos" in f)).toBe(false);
       const alternativas = CATALOGO.flatMap((g) => [...g.fontes, ...(g.fontesIndividuais ?? [])]).flatMap((f) => (f.urlAlternativa ? [f.urlAlternativa] : []));
       expect(alternativas).toEqual(["https://agencia.ac.gov.br/governadora/"]); // só AC: as dos ministérios saíram em 13/11
@@ -104,16 +107,32 @@ describe("catálogo real (data/catalogo.ts)", () => {
     ]);
     const estaduais = janela.filter((u) => !u.startsWith("https://www.gov.br/"));
     expect(estaduais).toEqual([
+      "https://www.marinha.mil.br/comandantedamarinha",
+      "https://www.fab.mil.br/a-forca-aerea/comandante/",
       "https://www.transparencia.am.gov.br/estrutura-organizacional/",
       "https://transparencia.rr.gov.br/principaiscargos",
       "https://www.rj.gov.br/pagina/sobre-o-governo9806",
     ]);
-    // a geral do Planalto (Ministros de Estado) + as 3 entradas de Embaixadores (mesma lista do MRE).
-    expect(janela.length - estaduais.length).toBe(4);
+    // a geral do Planalto (Ministros de Estado), a composição da Defesa (EMCFA) e as 3 entradas de
+    // Embaixadores (mesma lista do MRE).
+    expect(janela.length - estaduais.length).toBe(5);
+  });
+
+  test("Comandantes das Forças Armadas e EMCFA: quatro fontes oficiais, sem proposta de inclusão (GT de 13/11)", () => {
+    const g = CATALOGO.find((x) => x.nome === "Comandantes das Forças Armadas e EMCFA")!;
+    expect(g.fontes).toEqual([
+      { url: "https://www.marinha.mil.br/comandantedamarinha", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Marinha" } },
+      { url: "https://www.gov.br/defesa/pt-br/composicao", ativo: true, navegador: "janela", marcador: { textos: ["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"] } },
+      { url: "https://www.eb.mil.br/web/comandante-do-exercito", ativo: true, pessoaUnica: { cargo: "Comandante do Exército Brasileiro" } },
+      { url: "https://www.fab.mil.br/a-forca-aerea/comandante/", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Aeronáutica" } },
+    ]);
+    expect(g.fontes.every((f) => DOMINIO_OFICIAL.test(f.url))).toBe(true);
+    expect(g.semInclusao).toBe(true);
+    const comPessoaUnica = CATALOGO.flatMap((x) => x.fontes).filter((f) => f.pessoaUnica).map((f) => f.url);
+    expect(comPessoaUnica).toHaveLength(3);
   });
 
   describe("fontes individuais (spec 2026-10-15)", () => {
-    const DOMINIO_OFICIAL = /^https:\/\/[a-z0-9.-]+\.(gov|jus|leg|mp|def)\.br(\/|$)/i;
     const comIndividuais = CATALOGO.filter((g) => (g.fontesIndividuais ?? []).length > 0);
 
     test("só Governadores e Governadores Eleitos têm fontes individuais (Ministros de Estado saiu em 13/11)", () => {
@@ -266,10 +285,10 @@ describe("fontes que clicam antes de ler (GT de 05/11)", () => {
     expect(comClique.every((f) => f.navegador === "janela")).toBe(true);
   });
 
-  test("só os grupos de Embaixadores não recebem proposta de inclusão (regra do GT de 05/11)", () => {
+  test("só os grupos de Embaixadores e os Comandantes não recebem proposta de inclusão (GT de 05/11 e de 13/11)", () => {
     const marcados = CATALOGO.filter((g) => g.semInclusao).map((g) => g.nome);
-    expect(marcados).toHaveLength(3);
-    expect(marcados.every((n) => n.startsWith("Embaixadores"))).toBe(true);
+    expect(marcados).toHaveLength(4);
+    expect(marcados.filter((n) => !n.startsWith("Embaixadores"))).toEqual(["Comandantes das Forças Armadas e EMCFA"]);
     expect(CATALOGO.filter((g) => g.nome.startsWith("Embaixadores")).every((g) => g.semInclusao === true)).toBe(true);
     expect(resolverGrupoEFonte("Embaixadores (Filipinas até Noruega)").semInclusao).toBe(true);
     expect(resolverGrupoEFonte("Ministros do STF").semInclusao).toBeUndefined();

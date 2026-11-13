@@ -26,14 +26,20 @@ const LISTAS = [
 ];
 
 describe("agrupador da Posse 2027: dados", () => {
-  it("tem os 28 grupos da spec, sem rótulo repetido", () => {
-    expect(GRUPOS_POSSE).toHaveLength(28);
-    expect(new Set(GRUPOS_POSSE.map((g) => g.rotulo)).size).toBe(28);
+  it("tem os 29 grupos (os 28 da spec e os Comandantes, GT de 13/11), sem rótulo repetido", () => {
+    expect(GRUPOS_POSSE).toHaveLength(29);
+    expect(new Set(GRUPOS_POSSE.map((g) => g.rotulo)).size).toBe(29);
+  });
+
+  it("Comandantes das Forças Armadas e EMCFA é grupo de fonte, logo depois de Ministros de Estado (GT de 13/11)", () => {
+    const rotulos = GRUPOS_POSSE.map((g) => g.rotulo);
+    expect(grupoDoAgrupador("Comandantes das Forças Armadas e EMCFA")?.fiscalizacao).toBe("fonte");
+    expect(rotulos.indexOf("Comandantes das Forças Armadas e EMCFA")).toBe(rotulos.indexOf("Ministros de Estado") + 1);
   });
 
   it("começa por Defensor Público Geral e termina nas delegações estrangeiras", () => {
     expect(GRUPOS_POSSE[0].rotulo).toBe("Defensor Público Geral");
-    expect(GRUPOS_POSSE[27].rotulo).toBe("Delegações estrangeiras e organismos intern - 2027");
+    expect(GRUPOS_POSSE[28].rotulo).toBe("Delegações estrangeiras e organismos intern - 2027");
   });
 
   it("marca como neutro exatamente os 7 grupos de convidados", () => {
@@ -46,8 +52,8 @@ describe("agrupador da Posse 2027: dados", () => {
     expect([...listas].sort()).toEqual([...LISTAS].sort());
   });
 
-  it("deixa os demais 17 grupos em fonte", () => {
-    expect(GRUPOS_POSSE.filter((g) => g.fiscalizacao === "fonte")).toHaveLength(17);
+  it("deixa os demais 18 grupos em fonte", () => {
+    expect(GRUPOS_POSSE.filter((g) => g.fiscalizacao === "fonte")).toHaveLength(18);
   });
 
   it("usa para Deputados Federais o mesmo rótulo do painel de deputados", () => {
@@ -98,9 +104,9 @@ describe("linhasDoAgrupador", () => {
   ];
   const linhas = linhasDoAgrupador(grupos, { [GRUPO_SENADORES_ELEITOS]: 22 });
 
-  it("devolve os 28 na ordem do agrupador mais o que ficou de fora", () => {
-    expect(linhas).toHaveLength(29);
-    expect(linhas.slice(0, 28).map((l) => l.rotulo)).toEqual(GRUPOS_POSSE.map((g) => g.rotulo));
+  it("devolve os 29 na ordem do agrupador mais o que ficou de fora", () => {
+    expect(linhas).toHaveLength(30);
+    expect(linhas.slice(0, 29).map((l) => l.rotulo)).toEqual(GRUPOS_POSSE.map((g) => g.rotulo));
   });
 
   it("conta os contatos do grupo mesmo com rótulo diferente por espaço", () => {
@@ -147,8 +153,8 @@ describe("linhasDoAgrupador", () => {
 });
 
 describe("textos do bloco do agrupador", () => {
-  it("título conta os 28 grupos e o modo neutro usa o texto fixado pela spec", () => {
-    expect(TITULO_AGRUPADOR).toBe("Grupos da Posse 2027 (28)");
+  it("título conta os 29 grupos e o modo neutro usa o texto fixado pela spec", () => {
+    expect(TITULO_AGRUPADOR).toBe("Grupos da Posse 2027 (29)");
     expect(ROTULO_FISCALIZACAO.neutro).toBe("Sem fonte oficial (grupo de convidados)");
   });
 });
@@ -156,14 +162,14 @@ describe("textos do bloco do agrupador", () => {
 describe("rótulo do Contatos para Deputados Federais (spec 2026-11-05 §9.2)", () => {
   const SINGULAR = "Deputado Federal - Posse Presidencial 2027";
 
-  it("é apelido de Deputados Federais, em modo lista, sem criar um 29º grupo", () => {
+  it("é apelido de Deputados Federais, em modo lista, sem criar um 30º grupo", () => {
     // Act
     const grupo = grupoDoAgrupador(SINGULAR);
 
     // Assert
     expect(grupo?.rotulo).toBe("Deputados Federais");
     expect(modoDoGrupo(SINGULAR)).toBe("lista");
-    expect(GRUPOS_POSSE).toHaveLength(28);
+    expect(GRUPOS_POSSE).toHaveLength(29);
   });
 
   it("não confunde o rótulo dos eleitos com o apelido", () => {

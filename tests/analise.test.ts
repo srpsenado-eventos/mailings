@@ -6,6 +6,7 @@ import { extrairConteudo, extrairTabela, ScrapeError } from "@/lib/scrape";
 import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { MOTIVO_NAVEGADOR_AUSENTE } from "@/lib/navegador";
 import { CATALOGO } from "@/data/catalogo";
+import { resolverGrupoEFonte } from "@/lib/catalogo";
 import { chaveDaLeitura, MOTIVO_SEM_NINGUEM } from "@/lib/memoria-leitura";
 import { MOTIVO_SEM_LISTA } from "@/lib/match";
 import { GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
@@ -1497,5 +1498,97 @@ describe("Ministros de Estado de ponta a ponta: página do Planalto como fonte �
     const ia = async () => [{ nome: "Pessoa Lembrada Pela IA", cargo: "Ministro de Estado da Fazenda", origem: "conhecimento" as const }];
     const r = await analisar("c.xlsx", [casaCivil, defesa], depsMin(html, { extrairComposicao: ia }));
     expect(r.grupos[0].novos.some((n) => n.nome === "Pessoa Lembrada Pela IA")).toBe(false);
+  });
+});
+
+describe("Comandantes das Forças Armadas e EMCFA de ponta a ponta: quatro fontes do catálogo (GT de 13/11)", () => {
+  const GRUPO = "Comandantes das Forças Armadas e EMCFA";
+  const URL_MARINHA = "https://www.marinha.mil.br/comandantedamarinha";
+  const URL_DEFESA = "https://www.gov.br/defesa/pt-br/composicao";
+  const URL_EB = "https://www.eb.mil.br/web/comandante-do-exercito";
+  const URL_FAB = "https://www.fab.mil.br/a-forca-aerea/comandante/";
+  const BLOQUEIO = "HTTP 403";
+  const lerFixture = (nome: string) => readFileSync(join(__dirname, "fixtures", nome), "utf8");
+  const PAGINAS: Record<string, string> = {
+    [URL_DEFESA]: lerFixture("defesa-composicao.html"),
+    [URL_EB]: lerFixture("comandante-exercito.html"),
+  };
+  /** As fontes do próprio catálogo; página fora do mapa responde como a Cloudflare em 13/11. */
+  const depsCmd = (paginas: Record<string, string> = PAGINAS): Dependencias => ({
+    resolverFonte: (g) => resolverGrupoEFonte(g),
+    raspar: async (f) => {
+      const html = paginas[f.url];
+      if (html === undefined) throw new ScrapeError(f.url, BLOQUEIO);
+      return extrairConteudo(html, f.url, {
+        ...(f.marcador ? { marcador: f.marcador.textos } : {}),
+        ...(f.pessoaUnica ? { pessoaUnica: f.pessoaUnica } : {}),
+      });
+    },
+    extrairComposicao: async () => [],
+  });
+  const contato = (nome: string, cargo: string): ContatoPlanilha => ({ nome, grupo: GRUPO, cargo, ...CADASTRO_OK });
+  const exercito = contato("Gen Ex Tomás Miguel Miné Ribeiro Paiva", "Comandante do Exército Brasileiro");
+  const emcfa = contato("Alte Esq Renato Rodrigues de Aguiar Freire", "Chefe do Estado-Maior Conjunto das Forças Armadas");
+  const marinha = contato("Alte Esq Fulano de Tal Souza", "Comandante da Marinha");
+  const fab = contato("Ten Brig Ar Beltrano Pereira Lima", "Comandante da Aeronáutica");
+  type Resultado = Awaited<ReturnType<typeof analisar>>;
+  const doContato = (r: Resultado, nome: string) => r.grupos[0].contatos.find((c) => c.contato.nome === nome)!;
+
+  test("Marinha e FAB bloqueadas: leitura parcial, os dois indeterminados (nunca saída), Exército e EMCFA verdes", async () => {
+    // Act
+    const r = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd());
+    const g = r.grupos[0];
+
+    // Assert
+    expect(g.grupo).toBe(GRUPO);
+    expect(g.contatos.some((c) => c.possivelSaida)).toBe(false);
+    expect(doContato(r, marinha.nome).semaforo).toBe("indeterminado");
+    expect(doContato(r, fab.nome).semaforo).toBe("indeterminado");
+    expect(doContato(r, exercito.nome).semaforo).toBe("verde");
+    expect(doContato(r, emcfa.nome).semaforo).toBe("verde");
+    for (const c of [exercito, emcfa]) {
+      expect(doContato(r, c.nome).comparacoes.find((x) => x.campo === "cargo")?.situacao).toBe("confere");
+    }
+    expect(g.erroFonte).toContain(URL_MARINHA);
+    expect(g.erroFonte).toContain(URL_FAB);
+  });
+
+  test("nome em caixa normal no Contatos e em caixa alta na página: confere", async () => {
+    const r = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd());
+    const nome = doContato(r, exercito.nome).comparacoes.find((c) => c.campo === "nome")!;
+    expect(nome.situacao).toBe("confere");
+  });
+
+  test("ninguém da composição da Defesa vira proposta de inclusão (semInclusao)", async () => {
+    const r = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd());
+    expect(r.grupos[0].novos).toEqual([]);
+  });
+
+  test("as quatro páginas lidas: os quatro verdes", async () => {
+    const pagina = (nome: string) => `<html><body><main><h1>${nome}</h1></main></body></html>`;
+    const r = await analisar(
+      "c.xlsx",
+      [marinha, emcfa, exercito, fab],
+      depsCmd({ ...PAGINAS, [URL_MARINHA]: pagina(marinha.nome), [URL_FAB]: pagina(fab.nome) }),
+    );
+    expect(r.grupos[0].contatos.map((c) => c.semaforo)).toEqual(["verde", "verde", "verde", "verde"]);
+    expect(r.grupos[0].erroFonte).toBeUndefined();
+  });
+
+  test("patente por extenso no Contatos e abreviada na página: amarelo pela patente", async () => {
+    // Arrange
+    const porExtenso = { ...marinha, nome: "Almirante de Esquadra Fulano de Tal Souza" };
+    const paginas = { ...PAGINAS, [URL_MARINHA]: "<html><body><main><h1>Alte Esq Fulano de Tal Souza</h1></main></body></html>" };
+
+    // Act
+    const r = await analisar("c.xlsx", [porExtenso, emcfa, exercito, fab], depsCmd(paginas));
+    const c = doContato(r, porExtenso.nome);
+
+    // Assert
+    expect(c.possivelSaida).toBeFalsy();
+    expect(c.semaforo).toBe("amarelo");
+    const nome = c.comparacoes.find((x) => x.campo === "nome")!;
+    expect(nome.situacao).toBe("divergente");
+    expect(nome.valorEsperado).toBe("Alte Esq Fulano de Tal Souza");
   });
 });

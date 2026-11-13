@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import * as cheerio from "cheerio";
 import { describe, expect, test } from "vitest";
 import { extrairConteudo } from "@/lib/scrape";
 import { normalizarNome } from "@/lib/normalize";
@@ -63,13 +64,50 @@ describe("extrairConteudo com gabinetes (STM, página Quem é Quem)", () => {
     const padrao = extrairConteudo(html, URL_STM);
     expect(padrao.pessoas.map((p) => p.cargo)).not.toContain("Ministro(a)");
     expect(padrao.pessoas.map((p) => p.nome)).not.toContain("Gen Ex Guido Amin Naves");
-    expect(padrao.pessoas.length).not.toBe(MINISTROS_NA_FIXTURE);
   });
 });
 
-describe("extrairConteudo com gabinetes (prefixos)", () => {
-  const pagina = (itens: string[]) =>
-    `<html><body><div class="lista">${itens.map((t) => `<div class="item"><button>${t}</button></div>`).join("")}</div></body></html>`;
+describe("extrairConteudo com gabinetes (lista ancorada na aba Ministros e Gabinetes)", () => {
+  const variante = (mudar: ($: cheerio.CheerioAPI) => void): string => {
+    const $ = cheerio.load(html);
+    mudar($);
+    return $.html();
+  };
+  const nomes = (h: string) => extrairConteudo(h, URL_STM, { gabinetes: GABINETES }).pessoas.map((p) => p.nome);
+  const original = nomes(html);
+
+  test("organograma antes da aba: continua a lista atual, sem o ministro que saiu", () => {
+    const invertida = variante(($) => {
+      $("#pills-contact").insertBefore("#pills-profile");
+    });
+    expect(invertida.indexOf("GABIM")).toBeLessThan(invertida.indexOf("accordionGabinetes"));
+    const r = nomes(invertida);
+    expect(r).toEqual(original);
+    expect(r).toHaveLength(MINISTROS_NA_FIXTURE);
+    expect(r.some((n) => n.includes("Marco Antônio de Farias"))).toBe(false);
+  });
+
+  test("gabinete avulso antes da lista não entra nem arrasta a cópia defasada", () => {
+    const comAvulso = variante(($) => {
+      $("#pills-home").prepend('<div class="avulso"><button>Gabinete Min Gen Ex Avulso Antigo da Silva</button></div>');
+    });
+    const r = nomes(comAvulso);
+    expect(r).toEqual(original);
+    expect(r.some((n) => n.includes("Avulso") || n.includes("Marco Antônio de Farias"))).toBe(false);
+  });
+
+  test("sem a aba (ou sem o painel que ela controla), nenhum gabinete vira pessoa", () => {
+    const semAba = variante(($) => {
+      $("#pills-profile-tab").remove();
+    });
+    expect(nomes(semAba)).toEqual([]);
+  });
+});
+
+describe("extrairConteudo com gabinetes (prefixos e direção)", () => {
+  const pagina = (itens: string[], depois = "") =>
+    `<html><body><ul class="abas"><li><button id="aba-gab" aria-controls="painel-gab">Ministros e Gabinetes</button></li></ul>` +
+    `<div id="painel-gab"><div class="lista">${itens.map((t) => `<div class="item"><button>${t}</button></div>`).join("")}</div></div>${depois}</body></html>`;
 
   test("casa sem caixa, com espaços colapsados e o prefixo mais longo primeiro", () => {
     const c = extrairConteudo(
@@ -80,20 +118,26 @@ describe("extrairConteudo com gabinetes (prefixos)", () => {
     expect(c.pessoas.map((p) => p.nome)).toEqual(["Dr. Joaquim Bezerra Vilaça", "Gen Ex Fulano de Tal", "Dra Beltrana Souza"]);
   });
 
-  test("bloco da direção sem gabinete correspondente entra como pessoa própria; juíza e diretor nunca", () => {
+  test("bloco da direção com nome que não casa nenhum gabinete não produz pessoa; juíza e diretor nunca", () => {
     const c = extrairConteudo(
-      `<html><body><div class="lista"><div><button>Gabinete Min Gen Ex Fulano de Tal</button></div><div><button>Gabinete Min Dr Sicrano Souza</button></div></div>
-       <div><p>Dra. Beltrana Lima</p><p>Ministra-Presidente</p></div>
-       <div><p>Dra. Juiza Ficticia</p><p>Juíza-Corregedora Auxiliar</p></div>
-       <div><p>Dr. Servidor Ficticio</p><p>Diretor-Geral</p></div></body></html>`,
+      pagina(
+        ["Gabinete Min Gen Ex Fulano de Tal", "Gabinete Min Dr Sicrano Souza"],
+        `<div><p>Dra. Beltrana Lima</p><p>Ministra-Presidente</p></div>
+         <div><p>Dra. Juiza Ficticia</p><p>Juíza-Corregedora Auxiliar</p></div>
+         <div><p>Dr. Servidor Ficticio</p><p>Diretor-Geral</p></div>`,
+      ),
       "https://stm.jus.br",
       { gabinetes: GABINETES },
     );
     expect(c.pessoas).toEqual([
       { nome: "Gen Ex Fulano de Tal", cargo: "Ministro(a)", origem: "pagina" },
       { nome: "Dr Sicrano Souza", cargo: "Ministro(a)", origem: "pagina" },
-      { nome: "Dra. Beltrana Lima", cargo: "Ministra-Presidente", origem: "pagina" },
     ]);
+  });
+
+  test("o painel também se acha pelo aria-labelledby", () => {
+    const h = `<html><body><button id="aba-gab">Ministros e Gabinetes</button><div aria-labelledby="aba-gab"><div><button>Gabinete Min Gen Ex Fulano de Tal</button></div></div></body></html>`;
+    expect(extrairConteudo(h, "https://stm.jus.br", { gabinetes: GABINETES }).pessoas.map((p) => p.nome)).toEqual(["Gen Ex Fulano de Tal"]);
   });
 
   test("o prefixo tem que terminar numa palavra: 'Gabinete Ministerial' não vira pessoa", () => {

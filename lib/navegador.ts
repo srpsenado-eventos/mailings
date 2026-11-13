@@ -57,7 +57,11 @@ export interface ModoLancamento {
 
 export type Lancador = (caminhoChrome: string, modo?: ModoLancamento) => Promise<PaginaNavegador>;
 
-/** O que a leitura pelo Chrome aplica da fonte: a tabela e o nome em destaque (spec 2026-10-30 §3.1). */
+/**
+ * O que a leitura pelo Chrome aplica da fonte: a tabela e o nome em destaque (spec 2026-10-30 §3.1).
+ * `marcador` e `gabinetes` não se aplicam à janela: essas fontes (TST `/orgaos`, STM) são lidas por
+ * `fetch` e não vão à janela no 403 (`janelaLeComoOFetch` em `lib/raspagem.ts`).
+ */
 export type OpcoesExtracaoNavegador = Pick<OpcoesRaspagem, "tabela" | "nomeEmDestaque" | "clicarAntes">;
 
 /** O HTML montado pelo Chrome passa pelo MESMO extrator das outras fontes. */

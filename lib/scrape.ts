@@ -650,6 +650,9 @@ export interface OpcoesExtracao {
 export function extrairConteudo(html: string, url: string, opcoes: OpcoesExtracao = {}): ConteudoFonte {
   const $ = cheerio.load(html);
   $("script, style, noscript").remove();
+  // Gabinetes antes da moldura: a aba "Ministros e Gabinetes", que ancora a lista, fica num
+  // `ul.nav` que a moldura apaga (spec 2026-11-13 §3.3).
+  const doGabinete = opcoes.gabinetes ? extrairPorGabinetes($, url, opcoes.gabinetes) : undefined;
   removerMoldura($);
 
   // destaques ANTES de mutar o DOM (extrairLinhas insere "\n").
@@ -663,8 +666,6 @@ export function extrairConteudo(html: string, url: string, opcoes: OpcoesExtraca
 
   // Também antes de mutar o DOM: o negrito de cada linha, para o nome em destaque.
   const destaquesPorLinha = opcoes.nomeEmDestaque ? colherDestaquesPorLinha($, TAGS_SEPARAR) : undefined;
-  // Idem: os gabinetes são lidos no DOM original (spec 2026-11-13 §3.3).
-  const doGabinete = opcoes.gabinetes ? extrairPorGabinetes($, url, opcoes.gabinetes) : undefined;
 
   const { linhas, titulos } = extrairLinhas($);
   const pessoas =

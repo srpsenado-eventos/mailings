@@ -5,8 +5,8 @@ import type { PessoaSite } from "@/lib/types";
 /**
  * Extração por gabinete (spec 2026-11-13 §3.3, página "Quem é Quem" do STM). A página lista cada
  * ministro como "Gabinete Min <patente> <nome>" e traz, no organograma, os blocos da direção
- * ("<nome>" numa linha, "Ministra-Presidente" na seguinte). Só esses dois desenhos viram pessoa:
- * biografias, chefes de gabinete, juízes e servidores ficam de fora. Funções puras; este módulo
+ * ("<nome>" numa linha, "Ministra-Presidente" na seguinte). Só os gabinetes da aba "Ministros e
+ * Gabinetes" viram pessoa, e a direção só lhes dá o cargo: biografias, chefes de gabinete, juízes e servidores ficam de fora. Funções puras; este módulo
  * não importa `lib/scrape.ts`, que o chama de `extrairConteudo`.
  */
 
@@ -81,19 +81,29 @@ function elementosDeGabinete(
   return candidatos.filter((c) => !contem.has(c.posicao));
 }
 
+/** Título da aba que traz a lista atual dos gabinetes ("Ministros e Gabinetes"), normalizado. */
+const TITULO_DA_LISTA_ATUAL = "ministros e gabinetes";
+
 /**
- * Só a primeira lista de gabinetes da página. A lista é o ancestral mais próximo que contém outro
- * gabinete. O STM repete os gabinetes no organograma, e essa cópia estava defasada em 13/11 (um
- * ministro que já saiu, três que entraram faltando): tomá-la poria quem saiu na composição.
+ * Posição (em `body *`) da seção da lista atual: o painel que a aba "Ministros e Gabinetes"
+ * controla (`aria-controls` ou `data-bs-target`) ou que se diz rotulado por ela
+ * (`aria-labelledby`). O STM repete os gabinetes no organograma ("Gabinete dos Ministros
+ * (GABIM)"), e essa cópia estava defasada em 13/11 (um ministro que já saiu, três que entraram
+ * faltando): só a seção ancorada na aba vale, seja qual for a ordem na página. Sem a aba ou sem
+ * o painel, `undefined`: nenhum gabinete entra, e o grupo cai em leitura suspeita, nunca em saída.
  */
-function primeiraLista(gabinetes: readonly Gabinete[], ancestrais: (posicao: number) => number[]): Gabinete[] {
-  if (gabinetes.length === 0) return [];
-  const ancestraisDe = gabinetes.map((g) => ancestrais(g.posicao));
-  const contagem = new Map<number, number>();
-  for (const lista of ancestraisDe) for (const a of lista) contagem.set(a, (contagem.get(a) ?? 0) + 1);
-  const listaDe = (i: number): number | undefined => ancestraisDe[i].find((a) => (contagem.get(a) ?? 0) >= 2);
-  const primeira = listaDe(0);
-  return gabinetes.filter((_, i) => listaDe(i) === primeira);
+function secaoDaListaAtual($: CheerioAPI): number | undefined {
+  const elementos = $("body *").toArray();
+  const aba = elementos.find((el) => $(el).children().length === 0 && normalizarTexto($(el).text()) === TITULO_DA_LISTA_ATUAL);
+  if (!aba) return undefined;
+  const alvo = $(aba).attr("aria-controls") ?? $(aba).attr("data-bs-target")?.replace(/^#/, "");
+  const idDaAba = $(aba).attr("id");
+  const posicao = elementos.findIndex(
+    (el) =>
+      (alvo !== undefined && $(el).attr("id") === alvo) ||
+      (idDaAba !== undefined && $(el).attr("aria-labelledby") === idDaAba),
+  );
+  return posicao >= 0 ? posicao : undefined;
 }
 
 interface Direcao {
@@ -129,37 +139,32 @@ function mesmaPessoa(curto: string, longo: string): boolean {
 }
 
 /**
- * Pessoas da página por gabinete. Cada gabinete da primeira lista vira uma pessoa com o nome como
- * a página o escreve depois do prefixo (patente e "Dr./Dra." incluídos) e o `cargo` fixo. Bloco
- * da direção que reconhece exatamente um gabinete (`mesmaPessoa`) só lhe dá a função como cargo,
- * a primeira na ordem da página ("Vice-Presidente" antes de "Corregedor", quando é a mesma
- * pessoa); o nome fica o do gabinete. Bloco que não reconhece nenhum entra como pessoa própria;
- * o que reconhece mais de um é ambíguo e não muda nada. Nome repetido entra uma vez. A `url`
- * fica na assinatura por simetria com os outros extratores.
+ * Pessoas da página por gabinete. Cada gabinete da seção da lista atual (`secaoDaListaAtual`) vira
+ * uma pessoa com o nome como a página o escreve depois do prefixo (patente e "Dr./Dra." incluídos)
+ * e o `cargo` fixo. A direção só dá o cargo: bloco que reconhece exatamente um gabinete
+ * (`mesmaPessoa`) lhe dá a função, a primeira na ordem da página ("Vice-Presidente" antes de
+ * "Corregedor", quando é a mesma pessoa), e o nome fica o do gabinete. Bloco que não reconhece
+ * nenhum gabinete, ou mais de um, é ignorado e nunca vira pessoa: os blocos vêm do organograma,
+ * que pode estar defasado, e um nome antigo entraria na composição como se estivesse no tribunal
+ * (o pior caso fica sendo uma divergência de cargo, visível). Nome repetido entra uma vez. A
+ * `url` fica na assinatura por simetria com os outros extratores.
  */
 export function extrairPorGabinetes($: CheerioAPI, _url: string, opcoes: OpcoesGabinetes): PessoaSite[] {
-  const vistos = new Set<string>();
+  const secao = secaoDaListaAtual($);
+  if (secao === undefined) return [];
   const ancestrais = ancestraisPorPosicao($);
-  const doGabinete = primeiraLista(elementosDeGabinete($, opcoes.prefixos, ancestrais), ancestrais).filter((g) => {
+  const vistos = new Set<string>();
+  const doGabinete = elementosDeGabinete($, opcoes.prefixos, ancestrais).filter((g) => {
+    if (!ancestrais(g.posicao).includes(secao)) return false;
     const chave = normalizarNome(g.nome);
     if (vistos.has(chave)) return false;
     vistos.add(chave);
     return true;
   });
   const cargos = new Map<number, string>();
-  const avulsas: PessoaSite[] = [];
   for (const bloco of blocosDaDirecao($)) {
     const reconhecidos = doGabinete.flatMap((g, i) => (mesmaPessoa(bloco.nome, g.nome) ? [i] : []));
-    if (reconhecidos.length === 1) {
-      if (!cargos.has(reconhecidos[0])) cargos.set(reconhecidos[0], bloco.cargo);
-      continue;
-    }
-    if (reconhecidos.length > 1) continue;
-    const jaAvulsa = avulsas.some((p) => mesmaPessoa(bloco.nome, p.nome) || mesmaPessoa(p.nome, bloco.nome));
-    if (!jaAvulsa) avulsas.push({ nome: bloco.nome, cargo: bloco.cargo, origem: "pagina" });
+    if (reconhecidos.length === 1 && !cargos.has(reconhecidos[0])) cargos.set(reconhecidos[0], bloco.cargo);
   }
-  return [
-    ...doGabinete.map((g, i): PessoaSite => ({ nome: g.nome, cargo: cargos.get(i) ?? opcoes.cargo, origem: "pagina" })),
-    ...avulsas,
-  ];
+  return doGabinete.map((g, i): PessoaSite => ({ nome: g.nome, cargo: cargos.get(i) ?? opcoes.cargo, origem: "pagina" }));
 }

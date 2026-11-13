@@ -1476,6 +1476,17 @@ describe("Ministros de Estado de ponta a ponta: página do Planalto como fonte �
     expect(doContato(r, casaCivil.nome).possivelSaida).toBeFalsy();
   });
 
+  test("limitação conhecida de 13/11: CGU e AGU (linha-órgão sem cargo na extração) saem verdes com o cargo fonte_nao_informa", async () => {
+    const cgu = contato("Vinícius Marques de Carvalho", "Ministro de Estado da Controladoria-Geral da União");
+    const agu = contato("Jorge Rodrigo Araújo Messias", "Advogado-Geral da União");
+    const r = await analisar("c.xlsx", [casaCivil, cgu, agu], depsMin(html));
+    for (const c of [cgu, agu]) {
+      expect(doContato(r, c.nome).possivelSaida).toBeFalsy();
+      expect(doContato(r, c.nome).semaforo).toBe("verde");
+      expect(cargoDe(r, c.nome).situacao).toBe("fonte_nao_informa");
+    }
+  });
+
   test("página vazia: grupo indeterminado, ninguém vira saída (regra de ouro)", async () => {
     const r = await analisar("c.xlsx", [casaCivil, defesa], depsMin("<html><body></body></html>"));
     expect(r.grupos[0].contatos.some((c) => c.possivelSaida)).toBe(false);

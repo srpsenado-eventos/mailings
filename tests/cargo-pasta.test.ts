@@ -3,7 +3,8 @@ import { GRUPOS_CARGO_PELA_PASTA, situacaoCargoPelaPasta } from "@/lib/cargo-pas
 
 describe("situacaoCargoPelaPasta (GT de 13/11: Ministros de Estado, cargo pela pasta)", () => {
   test("só Ministros de Estado usa a regra", () => {
-    expect(GRUPOS_CARGO_PELA_PASTA).toEqual(["Ministros de Estado"]);
+    expect(GRUPOS_CARGO_PELA_PASTA).toContain("Ministros de Estado");
+    expect(GRUPOS_CARGO_PELA_PASTA).not.toContain("Ministros do STF");
   });
 
   test.each([

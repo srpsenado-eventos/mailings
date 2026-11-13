@@ -29,6 +29,10 @@ function temPapel(valor: string): boolean {
  * indiferentes) e o papel também confere, ou a página só traz o órgão (caso CGU e AGU). Pasta
  * diferente, ou com palavras a mais ou a menos, diverge. Sem token distintivo em algum lado,
  * usa a régua comum (`situacaoCampo`).
+ *
+ * Limitação conhecida (13/11): a régua "só órgão" está pronta, mas a extração da página do Planalto
+ * hoje não entrega o órgão como cargo para CGU e AGU; até a extração mudar, esses dois saem
+ * `fonte_nao_informa` (neutro, nunca divergente nem saída).
  */
 export function situacaoCargoPelaPasta(valorPlanilha: string, valorEsperado: string): SituacaoCampo {
   const planilha = pastaDe(valorPlanilha);

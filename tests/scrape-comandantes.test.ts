@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
 import { extrairConteudo, extrairPorMarcador } from "@/lib/scrape";
-import { MOTIVO_PESSOA_UNICA_SEM_NOME } from "@/lib/scrape-pessoa-unica";
+import { MOTIVO_PESSOA_UNICA_SEM_CARGO, MOTIVO_PESSOA_UNICA_SEM_NOME } from "@/lib/scrape-pessoa-unica";
 import { MOTIVO_MARCADOR_SEM_PESSOA } from "@/lib/scrape-marcador";
 
 const fixture = (nome: string) => readFileSync(path.resolve(__dirname, "fixtures", nome), "utf-8");
@@ -18,7 +18,7 @@ describe("pessoaUnica: página de uma só autoridade (GT de 13/11)", () => {
 
   test("a pessoa é o h1, com a patente como a página escreve, e o cargo é o fixo do catálogo", () => {
     // Arrange
-    const html = pagina(`<main><h2>Biografia</h2><h1>Alte Esq Fulano de Tal Souza</h1><p>Nasceu em 1960.</p></main>`);
+    const html = pagina(`<main><h2>Biografia</h2><h1>Alte Esq Fulano de Tal Souza</h1><p>Comandante da Marinha desde 2025. Nasceu em 1960.</p></main>`);
 
     // Act
     const c = extrairConteudo(html, "https://exemplo.mil.br/comandante", opcoes);
@@ -28,7 +28,7 @@ describe("pessoaUnica: página de uma só autoridade (GT de 13/11)", () => {
   });
 
   test("o h1 do cabeçalho (moldura) não conta", () => {
-    const html = pagina(`<header><h1>Marinha do Brasil</h1></header><main><h1>Alte Esq Fulano de Tal Souza</h1></main>`);
+    const html = pagina(`<header><h1>Marinha do Brasil</h1></header><main><h1>Alte Esq Fulano de Tal Souza</h1><p>Comandante da Marinha</p></main>`);
     const c = extrairConteudo(html, "https://exemplo.mil.br/comandante", opcoes);
     expect(c.pessoas.map((p) => p.nome)).toEqual(["Alte Esq Fulano de Tal Souza"]);
   });
@@ -46,10 +46,26 @@ describe("pessoaUnica: página de uma só autoridade (GT de 13/11)", () => {
   });
 
   test("nenhum título com cara de nome: a leitura falha (layout mudou), nunca uma pessoa inventada nem lista vazia", () => {
-    const html = pagina(`<main><h1>Comandante</h1><p>Texto qualquer da página.</p></main>`);
+    const html = pagina(`<main><h2>Comandante da Marinha</h2><h1>Comandante</h1><p>Texto qualquer da página.</p></main>`);
     expect(() => extrairConteudo(html, "https://exemplo.mil.br/comandante", opcoes)).toThrow(
       expect.objectContaining({ motivo: MOTIVO_PESSOA_UNICA_SEM_NOME }),
     );
+  });
+
+  test("h1 institucional sem o cargo do catálogo na página: a leitura falha, nunca o órgão vira a pessoa", () => {
+    // Arrange: a página montou só o cabeçalho do órgão, sem o texto do comandante.
+    const html = pagina(`<main><h1>Força Aérea Brasileira</h1><p>Asas que protegem o país.</p></main>`);
+
+    // Act + Assert
+    expect(() => extrairConteudo(html, "https://exemplo.mil.br/comandante", { pessoaUnica: { cargo: "Comandante da Aeronáutica" } })).toThrow(
+      expect.objectContaining({ motivo: MOTIVO_PESSOA_UNICA_SEM_CARGO }),
+    );
+  });
+
+  test("o cargo do catálogo é comparado sem caixa nem acento", () => {
+    const html = pagina(`<main><h1>Alte Esq Fulano de Tal Souza</h1><p>COMANDANTE DA MARINHA</p></main>`);
+    const c = extrairConteudo(html, "https://exemplo.mil.br/comandante", opcoes);
+    expect(c.pessoas.map((p) => p.nome)).toEqual(["Alte Esq Fulano de Tal Souza"]);
   });
 
   test("Exército (recorte real): o h1 com 'Gen Ex' e o cargo como a página escreve", () => {

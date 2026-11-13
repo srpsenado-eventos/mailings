@@ -85,14 +85,17 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     emailBackup: "beatriz.silveira@senado.leg.br",
     // GT de 13/11: os comandantes das três Forças e o chefe do EMCFA, cada um na página do seu órgão.
     // A Defesa lista ministro, secretários e outros que não são deste grupo: ninguém vira proposta de inclusão.
+    // A primária é a do Exército, lida por `fetch`: o link "abrir" e o texto da IA saem de uma página que responde.
     fontes: [
-      // Verificação anti-robô da Cloudflare medida em 13/11 (403 ao fetch e à janela): falha esperada em toda
-      // coleta até o Clovis indicar outra página; o grupo sai em leitura parcial e o comandante fica indeterminado, nunca saída.
-      { url: "https://www.marinha.mil.br/comandantedamarinha", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Marinha" } },
+      { url: "https://www.eb.mil.br/web/comandante-do-exercito", ativo: true, pessoaUnica: { cargo: "Comandante do Exército Brasileiro" } },
       // Página montada por JavaScript (gov.br): lida pela janela; só o chefe do EMCFA, pelo cargo como a página escreve.
       { url: "https://www.gov.br/defesa/pt-br/composicao", ativo: true, navegador: "janela", marcador: { textos: ["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"], obrigatorio: true } },
-      { url: "https://www.eb.mil.br/web/comandante-do-exercito", ativo: true, pessoaUnica: { cargo: "Comandante do Exército Brasileiro" } },
-      // Mesma verificação da Cloudflare da Marinha (13/11): falha esperada até o Clovis indicar outra página.
+      // Verificação anti-robô da Cloudflare medida em 13/11: falha ao fetch e à janela, em toda coleta, até o Clovis
+      // indicar outra página. O grupo sai em leitura parcial e o comandante fica indeterminado, ou "≈ via IA" quando há
+      // ANTHROPIC_API_KEY e a IA o resgata; nunca saída.
+      { url: "https://www.marinha.mil.br/comandantedamarinha", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Marinha" } },
+      // Mesma verificação da Cloudflare da Marinha (13/11): falha ao fetch e à janela; indeterminado, ou "≈ via IA" com a
+      // IA ligada, até o Clovis indicar outra página.
       { url: "https://www.fab.mil.br/a-forca-aerea/comandante/", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Aeronáutica" } },
     ],
     semInclusao: true,

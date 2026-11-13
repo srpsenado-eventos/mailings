@@ -90,7 +90,9 @@ const TITULO_DA_LISTA_ATUAL = "ministros e gabinetes";
  * (`aria-labelledby`). O STM repete os gabinetes no organograma ("Gabinete dos Ministros
  * (GABIM)"), e essa cópia estava defasada em 13/11 (um ministro que já saiu, três que entraram
  * faltando): só a seção ancorada na aba vale, seja qual for a ordem na página. Sem a aba ou sem
- * o painel, `undefined`: nenhum gabinete entra, e o grupo cai em leitura suspeita, nunca em saída.
+ * o painel, `undefined`: nenhum gabinete entra e a primária vem sem ninguém, que é falha da
+ * primária: leitura suspeita, memória de leitura ou composição pela IA ("≈ via IA"), nunca saída
+ * pela página.
  */
 function secaoDaListaAtual($: CheerioAPI): number | undefined {
   const elementos = $("body *").toArray();

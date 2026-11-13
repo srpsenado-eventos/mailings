@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, test, vi } from "vitest";
 import { analisar, MOTIVO_LEITURA_SUSPEITA, type Dependencias } from "@/lib/analise";
 import { extrairConteudo, extrairTabela, ScrapeError } from "@/lib/scrape";
+import { MOTIVO_PESSOA_UNICA_SEM_CARGO } from "@/lib/scrape-pessoa-unica";
 import { URL_PESQUISA_AMPLA } from "@/lib/gemini";
 import { MOTIVO_NAVEGADOR_AUSENTE } from "@/lib/navegador";
 import { CATALOGO } from "@/data/catalogo";
@@ -1536,6 +1537,7 @@ describe("Comandantes das Forças Armadas e EMCFA de ponta a ponta: quatro fonte
   const marinha = contato("Alte Esq Fulano de Tal Souza", "Comandante da Marinha");
   const fab = contato("Ten Brig Ar Beltrano Pereira Lima", "Comandante da Aeronáutica");
   type Resultado = Awaited<ReturnType<typeof analisar>>;
+  const paginaDaMarinha = `<html><body><main><h1>${marinha.nome}</h1><p>Comandante da Marinha</p></main></body></html>`;
   const doContato = (r: Resultado, nome: string) => r.grupos[0].contatos.find((c) => c.contato.nome === nome)!;
 
   test("Marinha e FAB bloqueadas: leitura parcial, os dois indeterminados (nunca saída), Exército e EMCFA verdes", async () => {
@@ -1545,6 +1547,7 @@ describe("Comandantes das Forças Armadas e EMCFA de ponta a ponta: quatro fonte
 
     // Assert
     expect(g.grupo).toBe(GRUPO);
+    expect(g.fonteUrl).toBe(URL_EB);
     expect(g.contatos.some((c) => c.possivelSaida)).toBe(false);
     expect(doContato(r, marinha.nome).semaforo).toBe("indeterminado");
     expect(doContato(r, fab.nome).semaforo).toBe("indeterminado");
@@ -1584,8 +1587,9 @@ describe("Comandantes das Forças Armadas e EMCFA de ponta a ponta: quatro fonte
   test("Marinha lida e o h1 do Exército sem nome (layout mudou): Exército indeterminado, nunca saída", async () => {
     const paginas = {
       ...PAGINAS,
-      [URL_MARINHA]: `<html><body><main><h1>${marinha.nome}</h1></main></body></html>`,
-      [URL_EB]: "<html><body><main><h1>Comandante</h1><p>Página em manutenção.</p></main></body></html>",
+      [URL_MARINHA]: paginaDaMarinha,
+      // O cargo está na página: é a regra do nome que derruba a leitura.
+      [URL_EB]: "<html><body><main><h2>Comandante do Exército Brasileiro</h2><h1>Comandante</h1><p>Página em manutenção.</p></main></body></html>",
     };
     const r = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd(paginas));
     const c = doContato(r, exercito.nome);
@@ -1595,10 +1599,24 @@ describe("Comandantes das Forças Armadas e EMCFA de ponta a ponta: quatro fonte
     expect(doContato(r, marinha.nome).semaforo).toBe("verde");
   });
 
+  test("FAB montou só o h1 do órgão, sem o cargo: comandante indeterminado, nunca saída nem o órgão como pessoa", async () => {
+    const paginas = {
+      ...PAGINAS,
+      [URL_MARINHA]: paginaDaMarinha,
+      [URL_FAB]: "<html><body><main><h1>Força Aérea Brasileira</h1><p>Asas que protegem o país.</p></main></body></html>",
+    };
+    const r = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd(paginas));
+    const c = doContato(r, fab.nome);
+    expect(c.possivelSaida).toBeFalsy();
+    expect(c.semaforo).toBe("indeterminado");
+    expect(r.grupos[0].erroFonte).toContain(URL_FAB);
+    expect(r.grupos[0].erroFonte).toContain(MOTIVO_PESSOA_UNICA_SEM_CARGO);
+  });
+
   test("Marinha lida e o cargo do EMCFA mudou na Defesa: chefe do EMCFA indeterminado, nunca saída", async () => {
     const paginas = {
       ...PAGINAS,
-      [URL_MARINHA]: `<html><body><main><h1>${marinha.nome}</h1></main></body></html>`,
+      [URL_MARINHA]: paginaDaMarinha,
       [URL_DEFESA]: PAGINAS[URL_DEFESA].replace("CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS", "CHEFE DO EMCFA"),
     };
     const r = await analisar("c.xlsx", [marinha, emcfa, exercito, fab], depsCmd(paginas));
@@ -1609,11 +1627,11 @@ describe("Comandantes das Forças Armadas e EMCFA de ponta a ponta: quatro fonte
   });
 
   test("as quatro páginas lidas: os quatro verdes", async () => {
-    const pagina = (nome: string) => `<html><body><main><h1>${nome}</h1></main></body></html>`;
+    const pagina = (nome: string, cargo: string) => `<html><body><main><h1>${nome}</h1><p>${cargo}</p></main></body></html>`;
     const r = await analisar(
       "c.xlsx",
       [marinha, emcfa, exercito, fab],
-      depsCmd({ ...PAGINAS, [URL_MARINHA]: pagina(marinha.nome), [URL_FAB]: pagina(fab.nome) }),
+      depsCmd({ ...PAGINAS, [URL_MARINHA]: pagina(marinha.nome, "Comandante da Marinha"), [URL_FAB]: pagina(fab.nome, "Comandante da Aeronáutica") }),
     );
     expect(r.grupos[0].contatos.map((c) => c.semaforo)).toEqual(["verde", "verde", "verde", "verde"]);
     expect(r.grupos[0].erroFonte).toBeUndefined();
@@ -1622,7 +1640,7 @@ describe("Comandantes das Forças Armadas e EMCFA de ponta a ponta: quatro fonte
   test("patente por extenso no Contatos e abreviada na página: amarelo pela patente", async () => {
     // Arrange
     const porExtenso = { ...marinha, nome: "Almirante de Esquadra Fulano de Tal Souza" };
-    const paginas = { ...PAGINAS, [URL_MARINHA]: "<html><body><main><h1>Alte Esq Fulano de Tal Souza</h1></main></body></html>" };
+    const paginas = { ...PAGINAS, [URL_MARINHA]: "<html><body><main><h1>Alte Esq Fulano de Tal Souza</h1><p>Comandante da Marinha</p></main></body></html>" };
 
     // Act
     const r = await analisar("c.xlsx", [porExtenso, emcfa, exercito, fab], depsCmd(paginas));

@@ -47,10 +47,10 @@ function montarOpcoes(fonte: FonteLegivel): OpcoesRaspagem {
 
 /**
  * A janela não lê PDF nem aplica os gabinetes; o marcador ela aplica desde 13/11 (Defesa), mas a
- * fonte com marcador lida por `fetch` segue sem ir à janela no 403, como antes. Sem isso a extração ficaria de fora, e
- * a página inteira entraria no lugar da lista filtrada (TST `/orgaos`: ~145 pessoas viraria dezenas
- * de inclusões falsas; STM: juízes e servidores). Fonte assim não vai à janela no 403/401; vale o
- * erro do fetch.
+ * fonte com marcador lida por `fetch` segue sem ir à janela no 403, como antes. Sem isso a
+ * extração ficaria de fora, e a página inteira entraria no lugar da lista filtrada (TST `/orgaos`:
+ * ~145 pessoas viraria dezenas de inclusões falsas; STM: juízes e servidores). Fonte assim não vai
+ * à janela no 403/401; vale o erro do fetch.
  */
 function janelaLeComoOFetch(fonte: FonteLegivel): boolean {
   return !fonte.marcador && fonte.tipo !== "pdf" && !fonte.gabinetes;

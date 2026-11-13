@@ -35,7 +35,7 @@ export function modoDoGrupo(rotulo: string): ModoFiscalizacao {
 }
 
 /**
- * Linhas do bloco "Grupos da Posse 2027": os 28 do agrupador na ordem da lista (0 contatos quando
+ * Linhas do bloco "Grupos da Posse 2027": os 29 do agrupador na ordem da lista (0 contatos quando
  * vazio), depois os grupos do retrato que não casam, marcados `foraDoAgrupador`.
  * `esperados` é indexado pelo rótulo oficial do agrupador.
  */

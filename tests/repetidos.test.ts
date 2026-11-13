@@ -202,6 +202,21 @@ describe("escolherGrupo", () => {
     expect(e.motivo).not.toBe(MOTIVO_ORIGEM_TSE);
   });
 
+  test("TSE, STJ e um grupo mais alto: vence o mais alto, com o motivo da Nominata, não o do GT", () => {
+    const e = escolherGrupo(
+      [
+        oc("Ministros do TSE", "5.9", "Ministro do TSE"),
+        oc("Ministros do STJ", "6.1.1", "Ministro do STJ"),
+        oc("Ministros de Estado", "4.1", "Ministro de Estado"),
+      ],
+      false,
+    );
+    expect(e.situacao).toBe("decidido");
+    expect(e.convidaPor?.grupoRegra).toBe("Ministros de Estado");
+    expect(e.motivo).not.toBe(MOTIVO_ORIGEM_TSE);
+    expect(e.motivo).toContain("antes de");
+  });
+
   test("TSE 5.9 continua vencendo TST (sem regra de origem)", () => {
     const e = escolherGrupo([oc("Ministros do TSE", "5.9", "Ministro do TSE"), oc("Ministros do TST", "6.2", "Ministro do TST")], false);
     expect(e.convidaPor?.grupoRegra).toBe("Ministros do TSE");

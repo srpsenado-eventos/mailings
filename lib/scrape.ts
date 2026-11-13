@@ -6,7 +6,7 @@ import { CARGOS } from "@/lib/cargos";
 import type { ConteudoFonte, PessoaSite, ExtracaoTabela, CliqueAntes } from "@/lib/types";
 import { colherDestaquesPorLinha, comDestaque, type DestaquesPorLinha } from "@/lib/scrape-destaque";
 import { extrairPorGabinetes, type OpcoesGabinetes } from "@/lib/scrape-gabinetes";
-import { extrairPessoaUnica, MOTIVO_PESSOA_UNICA_SEM_NOME, type OpcoesPessoaUnica } from "@/lib/scrape-pessoa-unica";
+import { extrairPessoaUnica, type OpcoesPessoaUnica } from "@/lib/scrape-pessoa-unica";
 import { MOTIVO_MARCADOR_SEM_PESSOA, pessoaDoMarcadorEmLinhaPropria, semNomeRepetido } from "@/lib/scrape-marcador";
 
 export class ScrapeError extends Error {
@@ -659,7 +659,11 @@ export function extrairConteudo(html: string, url: string, opcoes: OpcoesExtraca
   const doGabinete = opcoes.gabinetes ? extrairPorGabinetes($, url, opcoes.gabinetes) : undefined;
   removerMoldura($);
   // Depois da moldura: o título do cabeçalho ("Marinha do Brasil") não é a autoridade da página.
-  const daPessoaUnica = opcoes.pessoaUnica ? extrairPessoaUnica($, opcoes.pessoaUnica, pareceNome) : undefined;
+  // Sem o cargo do catálogo ou sem nome: leitura quebrada. Sem o erro, a fonte secundária vazia seria
+  // "ninguém a listar" e a autoridade viraria possível saída.
+  const pessoaUnica = opcoes.pessoaUnica ? extrairPessoaUnica($, opcoes.pessoaUnica, pareceNome) : undefined;
+  if (pessoaUnica && "motivo" in pessoaUnica) throw new ScrapeError(url, pessoaUnica.motivo);
+  const daPessoaUnica = pessoaUnica?.pessoas;
 
   // destaques ANTES de mutar o DOM (extrairLinhas insere "\n").
   const destaquesBrutos: string[] = [];
@@ -680,9 +684,7 @@ export function extrairConteudo(html: string, url: string, opcoes: OpcoesExtraca
     (opcoes.marcador?.length
       ? extrairPorMarcador(linhas.join("\n"), opcoes.marcador)
       : segmentarPessoas(linhas, titulos, destaquesPorLinha));
-  // Página de uma só autoridade, ou de marcador obrigatório, sem ninguém: leitura quebrada. Sem o erro,
-  // a fonte secundária vazia seria "ninguém a listar" e a autoridade viraria possível saída.
-  if (daPessoaUnica?.length === 0) throw new ScrapeError(url, MOTIVO_PESSOA_UNICA_SEM_NOME);
+  // Marcador obrigatório sem ninguém: leitura quebrada, pelo mesmo motivo da pessoa única acima.
   if (opcoes.marcadorObrigatorio && opcoes.marcador?.length && pessoas.length === 0) {
     throw new ScrapeError(url, MOTIVO_MARCADOR_SEM_PESSOA);
   }

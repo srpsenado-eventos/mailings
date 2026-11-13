@@ -118,12 +118,12 @@ describe("catálogo real (data/catalogo.ts)", () => {
     expect(janela.length - estaduais.length).toBe(5);
   });
 
-  test("Comandantes das Forças Armadas e EMCFA: quatro fontes oficiais, sem proposta de inclusão (GT de 13/11)", () => {
+  test("Comandantes das Forças Armadas e EMCFA: quatro fontes oficiais, a primária é a do Exército, sem proposta de inclusão (GT de 13/11)", () => {
     const g = CATALOGO.find((x) => x.nome === "Comandantes das Forças Armadas e EMCFA")!;
     expect(g.fontes).toEqual([
-      { url: "https://www.marinha.mil.br/comandantedamarinha", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Marinha" } },
-      { url: "https://www.gov.br/defesa/pt-br/composicao", ativo: true, navegador: "janela", marcador: { textos: ["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"], obrigatorio: true } },
       { url: "https://www.eb.mil.br/web/comandante-do-exercito", ativo: true, pessoaUnica: { cargo: "Comandante do Exército Brasileiro" } },
+      { url: "https://www.gov.br/defesa/pt-br/composicao", ativo: true, navegador: "janela", marcador: { textos: ["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"], obrigatorio: true } },
+      { url: "https://www.marinha.mil.br/comandantedamarinha", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Marinha" } },
       { url: "https://www.fab.mil.br/a-forca-aerea/comandante/", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Aeronáutica" } },
     ]);
     expect(g.fontes.every((f) => DOMINIO_OFICIAL.test(f.url))).toBe(true);

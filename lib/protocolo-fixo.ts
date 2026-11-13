@@ -1,3 +1,5 @@
+import { grupoDoAgrupador } from "@/lib/agrupador";
+import { segmentarGrupo } from "@/lib/catalogo";
 import { neutralizarGenero } from "@/lib/cargos";
 import { normalizarTexto } from "@/lib/normalize";
 import { contatoEhFeminino } from "@/lib/tratamento";
@@ -10,12 +12,20 @@ import type { ComparacaoCampo, ContatoPlanilha } from "@/lib/types";
 
 const GRUPO_EX_PRESIDENTES = "Ex-Presidentes do Congresso";
 
+/** Rótulo do agrupador da Posse (grupo neutro): protocolo fixo para todos, sem exceção por cargo (spec 2026-11-13 §3.5). */
+export const GRUPO_CHEFES_DE_ESTADO = "Chefes de Estado, Gov, Presidentes Parlam - 2027";
+
 /** Cargo ativo, normalizado: nunca "Vice-…" (não começa com "presidente") e nunca com período. */
 const CARGO_ATIVO = /^presidente (do congresso nacional|do senado federal|da camara dos deputados)$/;
 
 export interface ProtocoloFixo {
   tratamento: string;
   enderecamento: string;
+}
+
+/** Algum segmento do rótulo do Contatos resolve, pelo agrupador, para o grupo dos Chefes de Estado. */
+function nosChefesDeEstado(grupo: string): boolean {
+  return segmentarGrupo(grupo).some((seg) => grupoDoAgrupador(seg)?.rotulo === GRUPO_CHEFES_DE_ESTADO);
 }
 
 function ativo(cargo: string | undefined): boolean {
@@ -28,7 +38,7 @@ function ativo(cargo: string | undefined): boolean {
  */
 export function protocoloFixo(contato: ContatoPlanilha, grupoCanonico: string | undefined): ProtocoloFixo | undefined {
   const exPresidente = grupoCanonico === GRUPO_EX_PRESIDENTES;
-  if (!exPresidente && !ativo(contato.cargo)) return undefined;
+  if (!exPresidente && !ativo(contato.cargo) && !nosChefesDeEstado(contato.grupo)) return undefined;
   const feminino = contatoEhFeminino(contato);
   return {
     tratamento: exPresidente

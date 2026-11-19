@@ -1,3 +1,10 @@
+import {
+  GRUPO_DEPUTADOS_ELEITOS,
+  GRUPO_GOVERNADORES_ELEITOS,
+  GRUPO_MINISTROS_INDICADOS,
+  GRUPO_SENADORES_ELEITOS,
+} from "@/data/grupos-posse";
+
 /**
  * Regras do GT em vigor (spec 2026-11-04 §3.2). Cada entrada nova é decisão do Clovis, como no
  * catálogo: nenhuma regra entra por inferência.
@@ -36,12 +43,6 @@ export const REGRAS_GT: readonly RegraGt[] = [
   },
   {
     data: "2026-11-05",
-    titulo: "Presidentes de tribunal",
-    texto: "No tratamento, \"Excelentíssimo(a) Senhor(a)\" e \"Senhor(a)\" conferem. O nome leva \"Ministro(a)\" e o cargo traz a presidência.",
-    grupos: ["Ministros do STF", "Ministros do STJ", "Ministros do TSE", "Ministros do TST", "Ministros do STM", "Ministros do TCU"],
-  },
-  {
-    data: "2026-11-05",
     titulo: "Desembargadores convocados",
     texto: "Tratamento e endereçamento seguem o mesmo critério dos ministros do grupo.",
     grupos: ["Ministros do STJ", "Ministros do TST"],
@@ -75,5 +76,29 @@ export const REGRAS_GT: readonly RegraGt[] = [
     titulo: "Chefes de Estado",
     texto: "Chefes de Estado, chefes de governo e presidentes de parlamento: tratamento Excelentíssimo(a) Senhor(a) e endereçamento A Sua Excelência o(a) Senhor(a), em paralelo às autoridades nacionais do mesmo nível.",
     grupos: ["Chefes de Estado, Gov, Presidentes Parlam - 2027"],
+  },
+  {
+    data: "2026-11-19",
+    titulo: "Eleitos",
+    texto: "Senadores, deputados federais e governadores eleitos: tratamento Senhor(a) e endereçamento Ao Senhor / À Senhora; o cargo fica como no Contatos (Senador(a) eleito(a), Deputado(a) Federal eleito(a), Governador(a) eleito(a) do estado de X).",
+    grupos: [GRUPO_SENADORES_ELEITOS, GRUPO_DEPUTADOS_ELEITOS, GRUPO_GOVERNADORES_ELEITOS],
+  },
+  {
+    data: "2026-11-19",
+    titulo: "Presidentes de tribunal",
+    texto: "Tratamento Excelentíssimo(a) Senhor(a) só no Presidente do STF; nos presidentes do STJ, STM, TCU, TSE e TST, Senhor(a). Endereçamento A Sua Excelência o(a) Senhor(a) nos seis. O nome leva \"Ministro(a)\" e o cargo traz a presidência.",
+    grupos: ["Ministros do STF", "Ministros do STJ", "Ministros do TSE", "Ministros do TST", "Ministros do STM", "Ministros do TCU"],
+  },
+  {
+    data: "2026-11-19",
+    titulo: "Presidente da Câmara: nome",
+    texto: "O nome leva \"Deputado(a) Federal\" antes, como no Contatos; o cargo é Presidente da Câmara dos Deputados.",
+    grupos: ["Presidente da Câmara dos Deputados"],
+  },
+  {
+    data: "2026-11-19",
+    titulo: "Ministros de Estado indicados",
+    texto: "Tratamento Senhor(a); cargo \"Ministro(a) indicado(a) de Estado da <Pasta>\" ou \"Ministro(a) indicado(a) da <Pasta>\", como nos ministros atuais; endereçamento ainda a definir pelo GT.",
+    grupos: [GRUPO_MINISTROS_INDICADOS],
   },
 ];

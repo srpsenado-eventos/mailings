@@ -1,6 +1,7 @@
 import { REGRAS_NOME, type RegraNome } from "@/data/regras-nome";
 import { chaveToken, mesmaGrafiaDeNome, PATENTES_EM_TOKENS, TRATAMENTOS_EM_TOKENS } from "@/lib/normalize";
-import { nomeEsperadoComPrefixo, semTratamentosProibidos } from "@/lib/tratamento";
+import { nomeEsperadoComPrefixo } from "@/lib/prefixo-nome";
+import { semTratamentosProibidos } from "@/lib/tratamento";
 import type { ContatoPlanilha } from "@/lib/types";
 
 /** O prefixo (em tokens) que começa em `tokens[i]`, se houver. */

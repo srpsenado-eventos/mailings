@@ -40,7 +40,7 @@ export interface RegraNome {
    * contato. `"presidente"`: todo contato do grupo leva "Presidente " antes do nome. O app
    * nunca propõe tirar o prefixo; a comparação com a página já o ignora (`normalizarNome`).
    */
-  prefixoDoPresidente?: "ministro" | "presidente";
+  prefixoDoPresidente?: "ministro" | "presidente" | "deputado_federal";
   /**
    * Cargo que o ex-presidente leva no cadastro, seguido do período da presidência ("Presidente
    * do Senado Federal de 2019 a 2021"), sem "Ex-" (spec 2026-10-30 §3.5, decisão 5 do Clovis).
@@ -79,6 +79,8 @@ export const REGRAS_NOME: Readonly<Record<string, RegraNome>> = {
   "Comandantes das Forças Armadas e EMCFA": { patenteComoNoSite: true },
   // O nome é "Presidente Luís Inácio Lula da Silva": o prefixo é regra, não erro (GT, 2026-10-30).
   "Presidente da República": { prefixoDoPresidente: "presidente" },
+  // Decisão do GT de 19/11: o Presidente da Câmara leva "Deputado(a) Federal" antes do nome.
+  "Presidente da Câmara dos Deputados": { prefixoDoPresidente: "deputado_federal" },
   // O cargo é o da presidência com o período, nunca "Ex-Presidente…" (GT, 2026-10-30).
   // Desde 05/11 o cargo é o do Contatos: "Presidente do Congresso Nacional no período de AAAA a AAAA".
   "Ex-Presidentes do Congresso": {

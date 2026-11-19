@@ -35,9 +35,8 @@ import { comparacoesProtocoloFixo } from "@/lib/protocolo-fixo";
 import { ehItemInstitucional } from "@/lib/proposta-inclusao";
 import { comparacaoLimiteNome } from "@/lib/limite-nome";
 import { nomeConfereComPatente, nomeEsperadoDaPagina, regraDoGrupo } from "@/lib/nome-patente";
+import { comparacaoPrefixoNome, comparacaoRegraNome } from "@/lib/prefixo-nome";
 import {
-  comparacaoPrefixoNome,
-  comparacaoRegraNome,
   comparacoesCoerencia,
   comparacoesProtocolo,
 } from "@/lib/tratamento";

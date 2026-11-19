@@ -106,6 +106,21 @@ describe("fonte individual complementar (spec 2026-11-19 v2 §2.3)", () => {
   test("fora da composição do grupo continua possível saída, mesmo com a página confirmando o nome", async () => {
     const r = await analisar("c.xlsx", [garibaldi, outro], deps(resolvidaEx([complementarEx]), { [URL_EX]: grupoExSemGaribaldi, [URL_COMP_EX]: compEx }));
     expect(contato(r, "Garibaldi Alves Filho")).toMatchObject({ possivelSaida: true, semaforo: "vermelho" });
+    // A página confirma o nome, mas a presença é só do grupo: nada é trocado no contato vermelho.
+    const c = contato(r, "Garibaldi Alves Filho");
+    expect(c.camposDivergentes).toContainEqual({ campo: "nome", valorPlanilha: "Garibaldi Alves Filho" });
+    expect(c.comparacoes.find((x) => x.campo === "nome" && x.situacao === "confere")).toBeUndefined();
+  });
+
+  test("contato indeterminado pelo grupo (leitura parcial): nada é trocado, a página ainda é lida e tentada", async () => {
+    const URL_EX2 = "https://exemplo.leg.br/ex-presidentes-2";
+    const resolvida: FonteResolvida = { ...resolvidaEx([complementarEx]), fontes: [fonteGrupoEx, { url: URL_EX2, ativo: true }] };
+    const mapa = { [URL_EX]: grupoExSemGaribaldi, [URL_EX2]: "HTTP 503", [URL_COMP_EX]: compEx };
+    const com = await analisar("c.xlsx", [garibaldi, outro], deps(resolvida, mapa));
+    const sem = await analisar("c.xlsx", [garibaldi, outro], deps({ ...resolvida, fontesIndividuais: [] }, mapa));
+    expect(contato(sem, "Garibaldi Alves Filho").semaforo).toBe("indeterminado");
+    expect(contato(com, "Garibaldi Alves Filho")).toEqual(contato(sem, "Garibaldi Alves Filho"));
+    expect(com.leituras?.[URL_COMP_EX]).toBeDefined();
   });
 
   test("página lida sem o nome: nada trocado e a observação acrescentada", async () => {

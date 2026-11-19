@@ -800,6 +800,29 @@ describe("fontes individuais no painel (spec 2026-10-15 §6.1)", () => {
     ]);
   });
 
+  test("procedência com página complementar (caminho de grupo): o contato não ligado mantém a linha única do grupo; o ligado mostra a página própria no nome e o grupo no cargo", () => {
+    const URL_GRUPO = "https://orgao.gov.br/grupo";
+    const URL_PROPRIA = "https://orgao.gov.br/perfil/1";
+    const base = { score: 1, origem: "oficial" as const, camposDivergentes: [] };
+    const naoLigado: ResultadoContato = {
+      ...base,
+      contato: { nome: "Outro Fictício", grupo: "G" } as ResultadoContato["contato"],
+      semaforo: "verde",
+      comparacoes: [{ campo: "nome", valorPlanilha: "Outro Fictício", situacao: "confere" }, { campo: "cargo", valorPlanilha: "Cargo", situacao: "confere" }],
+    };
+    const ligado: ResultadoContato = {
+      ...naoLigado,
+      contato: { nome: "Ligado Fictício", grupo: "G" } as ResultadoContato["contato"],
+      comparacoes: [{ campo: "nome", valorPlanilha: "Ligado Fictício", situacao: "confere", fonteUrl: URL_PROPRIA }, { campo: "cargo", valorPlanilha: "Cargo", situacao: "confere" }],
+    };
+    const g: ResultadoGrupo = { grupo: "G", fonteUrl: URL_GRUPO, semFonte: false, contatos: [naoLigado, ligado], novos: [], individuais: { lidas: 1, caidas: 0 } };
+    expect(procedenciaDoContato(naoLigado, g)).toEqual([{ rotulo: "Nome e cargo", texto: URL_GRUPO, url: URL_GRUPO, lida: true }]);
+    expect(procedenciaDoContato(ligado, g)).toEqual([
+      { rotulo: "Nome", texto: URL_PROPRIA, url: URL_PROPRIA, lida: true },
+      { rotulo: "Cargo", texto: URL_GRUPO, url: URL_GRUPO, lida: true },
+    ]);
+  });
+
   test("procedência: campo não verificado sai 'lida: false', campo conferido sai 'lida: true'", () => {
     const invertido: ResultadoContato = {
       ...contato,

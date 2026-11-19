@@ -617,7 +617,10 @@ function ressalvasDaLinha(
  */
 export function procedenciaDoContato(c: ResultadoContato, g: ResultadoGrupo, falhas?: FalhasPorUrl): LinhaProcedencia[] {
   const deGrupo = g.reaproveitada ? { leituraDe: g.reaproveitada.lidaEm } : {};
-  if (!g.individuais) {
+  // Grupo de caminho de grupo com página complementar (spec 2026-11-19 v2 §2.3): só o contato ligado
+  // a ela tem comparação com URL própria; os demais seguem na linha única do grupo.
+  const comPaginaPropria = [comparacaoDeValor(c, "nome"), comparacaoDeValor(c, "cargo")].some((x) => x?.fonteUrl !== undefined && x.fonteUrl !== g.fonteUrl);
+  if (!g.individuais || (g.fonteUrl !== undefined && !comPaginaPropria)) {
     const p = procedenciaNomeCargo(g);
     return p ? [{ rotulo: "Nome e cargo", ...p, lida: true, ...deGrupo, ...ressalvasDaLinha(g.fonteUrl, falhas, Boolean(g.alternativa), undefined) }] : [];
   }
@@ -629,14 +632,15 @@ export function procedenciaDoContato(c: ResultadoContato, g: ResultadoGrupo, fal
   };
   const linhas: LinhaProcedencia[] = [];
   const compNome = comparacaoDeValor(c, "nome");
-  const nome = compNome?.fonteUrl ?? c.fonteUrl;
+  const nome = compNome?.fonteUrl ?? c.fonteUrl ?? (compNome ? g.fonteUrl : undefined);
   // A alternativa marca a linha cuja URL é a lida pela alternativa; a provisória, a linha do nome.
   const pelaAlternativa = (url: string) => c.alternativa?.url === url;
   // O aviso de URL caída é da principal (é ela que entra em `falhas`), não da alternativa lida.
   const urlDoAviso = (url: string) => (pelaAlternativa(url) ? c.alternativa?.urlPrincipal : undefined) ?? (g.alternativa?.url === url ? g.alternativa.urlPrincipal : undefined) ?? url;
   if (nome) linhas.push({ rotulo: "Nome", texto: nome, url: nome, lida: compNome?.situacao !== "nao_verificado", ...leituraDe(nome, true), ...ressalvasDaLinha(urlDoAviso(nome), falhas, pelaAlternativa(nome), tipoProvisoria(c.provisoria)) });
   const compCargo = comparacaoDeValor(c, "cargo");
-  const cargo = compCargo?.fonteUrl;
+  // Cargo que o caminho de grupo decidiu não traz URL: vale a do grupo.
+  const cargo = compCargo?.fonteUrl ?? (compCargo ? g.fonteUrl : undefined);
   if (cargo) linhas.push({ rotulo: "Cargo", texto: cargo, url: cargo, lida: compCargo?.situacao !== "nao_verificado", ...leituraDe(cargo, cargo === c.fonteUrl), ...ressalvasDaLinha(urlDoAviso(cargo), falhas, pelaAlternativa(cargo), undefined) });
   return linhas;
 }

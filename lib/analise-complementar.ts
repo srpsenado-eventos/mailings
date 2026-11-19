@@ -79,7 +79,7 @@ export function soComplementares(vigentes: readonly FonteIndividual[]): boolean 
 /**
  * Troca no resultado do grupo as comparações dos campos da página complementar pelas do veredito
  * individual. Campo que o veredito não traz (cargo vazio no cadastro) fica como o grupo decidiu.
- * O semáforo só é refeito quando era verde ou amarelo: vermelho e indeterminado são do grupo.
+ * Só é chamada para contato verde ou amarelo no grupo; o semáforo é refeito a partir das divergências.
  */
 function trocarCampos(r: ResultadoContato, doVeredito: readonly ComparacaoCampo[], fonte: FonteIndividual, leituraDe: string | undefined): ResultadoContato {
   const cobre = (campo: string) => (fonte.campos as readonly string[]).includes(campo);
@@ -88,12 +88,11 @@ function trocarCampos(r: ResultadoContato, doVeredito: readonly ComparacaoCampo[
   const jaTinha = new Set(r.comparacoes.map((c) => c.campo));
   const comparacoes = [...trocadas, ...[...novas.values()].filter((c) => !jaTinha.has(c.campo))];
   const camposDivergentes = divergenciasDe(comparacoes);
-  const refaz = r.semaforo === "verde" || r.semaforo === "amarelo";
   return {
     ...r,
     comparacoes,
     camposDivergentes,
-    ...(refaz ? { semaforo: camposDivergentes.length > 0 ? ("amarelo" as const) : ("verde" as const) } : {}),
+    semaforo: camposDivergentes.length > 0 ? ("amarelo" as const) : ("verde" as const),
     ...(leituraDe ? { leituraDe } : {}),
   };
 }
@@ -130,6 +129,8 @@ export async function aplicarComplementares(
     const fonte = ligacoes[i];
     if (!fonte) return resultado;
     const lida = porUrl.get(fonte.url)!;
+    // Vermelho (possível saída) e indeterminado são do grupo: a página não troca nada neles.
+    if (resultado.semaforo !== "verde" && resultado.semaforo !== "amarelo") return resultado;
     const v = compararContatoIndividual({ contato: resultado.contato, fonte, lida, grupoCanonico: grupo.grupo });
     if (v.lidaComConteudo && !v.nomeConfirmado) {
       return comObservacao(resultado, observacaoSemNomeNaComplementar(lida.urlDaMemoria ?? lida.alternativa?.url ?? fonte.url));

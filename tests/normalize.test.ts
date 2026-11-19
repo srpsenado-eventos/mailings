@@ -108,3 +108,13 @@ describe("tratamento de embaixada (spec 2026-11-05 §7.1)", () => {
     expect(normalizarNome("SE Sr. Noguchi Yasushi")).toBe(normalizarNome("Noguchi Yasushi"));
   });
 });
+
+describe("Deputado Federal como prefixo removível (GT, 2026-11-19)", () => {
+  test("normalizarNome tira o prefixo nos dois gêneros", () => {
+    expect(normalizarNome("Deputado Federal Hugo Fictício")).toBe(normalizarNome("Hugo Fictício"));
+    expect(normalizarNome("Deputada Federal Ana Fictícia")).toBe(normalizarNome("Ana Fictícia"));
+  });
+  test("removerTratamentos tira Exmo. e Deputado Federal", () => {
+    expect(removerTratamentos("Exmo. Deputado Federal Hugo Fictício")).toBe("Hugo Fictício");
+  });
+});

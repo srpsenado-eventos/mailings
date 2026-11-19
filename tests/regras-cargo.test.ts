@@ -284,8 +284,8 @@ describe("caixa de \"estado\" no cargo dos governadores (spec 2026-11-19 v2 §2.
     expect(comparacaoCargoGovernadorCaixa({ nome: "x", grupo: "Senadores", cargo: "Governador do Estado de Goiás" }, "Senadores (Acre a Goiás)")).toEqual([]);
   });
   test("rótulo e texto do achado", () => {
-    expect(rotuloAchado("cargo_governador_caixa")).toBe('Cargo de governador com "estado" fora da caixa do GT');
+    expect(rotuloAchado("cargo_governador_caixa")).toBe('Cargo do governador com "estado" em caixa alta (o GT escreve em minúscula)');
     const [c] = comparacaoCargoGovernadorCaixa(gov("Governador do Estado de Goiás"), "Governadores");
-    expect(textoCoerencia(c)).toBe('Cargo de governador com "estado" fora da caixa do GT (Governador do estado de Goiás)');
+    expect(textoCoerencia(c)).toBe('Cargo do governador com "estado" em caixa alta (o GT escreve em minúscula) (Governador do estado de Goiás)');
   });
 });

@@ -484,7 +484,7 @@ export function rotuloAchado(achado: AchadoCoerencia): string {
     case "cargo_ex_presidente":
       return "Cargo de ex-presidente fora do formato do GT";
     case "cargo_governador_caixa":
-      return 'Cargo de governador com "estado" fora da caixa do GT';
+      return 'Cargo do governador com "estado" em caixa alta (o GT escreve em minúscula)';
     case "nome_acima_do_limite":
       return "Nome acima do limite do Posse";
   }

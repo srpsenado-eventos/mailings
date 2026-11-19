@@ -138,7 +138,7 @@ export function comparacaoCargoIndicado(contato: ContatoPlanilha): ComparacaoCam
 }
 
 const PALAVRA_ESTADO = /\bestado\b/i;
-const CARGO_GOVERNADOR = /^governador(?:a)?\b.* d[aeo]s? estado d[aeo]s? .+$/;
+const CARGO_GOVERNADOR = /^governador(a)?( em exercicio| substitut[oa]| eleit[oa])? do estado d[aeo]s? .+$/;
 
 function nosGovernadores(contato: ContatoPlanilha, grupoCanonico: string | undefined): boolean {
   if (grupoCanonico && normalizarTexto(grupoCanonico) === normalizarTexto(GRUPO_GOVERNADORES)) return true;

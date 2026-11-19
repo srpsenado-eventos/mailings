@@ -645,3 +645,14 @@ describe("comparacoesProtocolo — convocados seguem o critério dos ministros",
     expect(t.situacao).toBe("divergente");
   });
 });
+
+describe("caixa de \"estado\" no cargo dos governadores ligada ao veredito (spec 2026-11-19 v2 §2.1)", () => {
+  const gov = (cargo: string): ContatoPlanilha => ({ nome: "Pessoa Fictícia", grupo: "Governadores", cargo });
+  test("Estado capitalizado vira divergência de cargo com o esperado em minúscula", () => {
+    const achado = comparacoesTratamento(gov("Governador do Estado de Goiás"), "Governadores").find((x) => x.achado === "cargo_governador_caixa");
+    expect(achado).toMatchObject({ campo: "cargo", situacao: "divergente", valorEsperado: "Governador do estado de Goiás" });
+  });
+  test("com \"estado\" em minúscula não traz o achado", () => {
+    expect(comparacoesTratamento(gov("Governador do estado de Goiás"), "Governadores").some((x) => x.achado === "cargo_governador_caixa")).toBe(false);
+  });
+});

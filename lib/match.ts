@@ -295,6 +295,7 @@ export function comparacoesTratamento(
     ...comparacaoLimiteNome(contato, grupoCanonico),
     ...comparacaoCargoExPresidente(contato, grupoCanonico),
     ...comparacaoCargoIndicado(contato),
+    ...comparacaoCargoGovernadorCaixa(contato, grupoCanonico),
   ];
 }
 

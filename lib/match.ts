@@ -28,7 +28,6 @@ import {
   semGenero,
   situacaoCargoTribunal,
   temGeneroNeutro,
-  tratamentoAceitoDoPresidente,
   type ContextoCargo,
 } from "@/lib/cargo-tribunal";
 import { GRUPOS_CARGO_PELA_PASTA, situacaoCargoPelaPasta } from "@/lib/cargo-pasta";
@@ -289,14 +288,9 @@ export function comparacoesTratamento(
   contato: ContatoPlanilha,
   grupoCanonico: string | undefined,
 ): ComparacaoCampo[] {
-  const aceitaPresidente = tratamentoAceitoDoPresidente(contato, grupoCanonico);
   return [
     ...comparacoesCoerencia(contato),
-    ...(comparacoesProtocoloFixo(contato, grupoCanonico) ?? comparacoesProtocolo(contato).map((c) =>
-      aceitaPresidente && c.campo === "tratamento" && c.situacao === "divergente"
-        ? { ...c, situacao: "confere" as const }
-        : c,
-    )),
+    ...(comparacoesProtocoloFixo(contato, grupoCanonico) ?? comparacoesProtocolo(contato)),
     ...comparacaoRegraNome(contato, grupoCanonico),
     ...comparacaoPrefixoNome(contato, grupoCanonico),
     ...comparacaoLimiteNome(contato, grupoCanonico),

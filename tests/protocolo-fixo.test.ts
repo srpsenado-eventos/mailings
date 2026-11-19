@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { comparacoesProtocoloFixo, GRUPO_CHEFES_DE_ESTADO, protocoloFixo } from "@/lib/protocolo-fixo";
 import { comparacoesTratamento } from "@/lib/match";
+import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
 import type { ContatoPlanilha } from "@/lib/types";
 
 const EX = "Ex-Presidentes do Congresso";
@@ -73,9 +74,9 @@ describe("protocoloFixo (spec 2026-11-05 §7.3)", () => {
     expect(protocoloFixo(contato({ cargo: "Vice-Presidente" }), EX)?.tratamento).toBe("Senhor");
   });
 
-  test("Presidente de tribunal não é alcançado e grupo sem nome vale pelo cargo", () => {
+  test("Presidente de tribunal só é alcançado no grupo do tribunal e grupo sem nome vale pelo cargo", () => {
     // Act + Assert
-    expect(protocoloFixo(contato({ cargo: "Presidente do Supremo Tribunal Federal" }), "Ministros do STF")).toBeUndefined();
+    expect(protocoloFixo(contato({ cargo: "Presidente do Supremo Tribunal Federal" }), undefined)).toBeUndefined();
     expect(protocoloFixo(contato({ cargo: "Presidente do Senado Federal" }), undefined)?.tratamento).toBe("Excelentíssimo Senhor");
   });
 });
@@ -213,5 +214,49 @@ describe("Chefes de Estado (spec 2026-11-13 §3.5)", () => {
   test("fora do grupo nada muda", () => {
     // Act + Assert
     expect(protocoloFixo(contato({ grupo: "Senadores", cargo: "Senador" }), undefined)).toBeUndefined();
+  });
+});
+
+describe("protocolo fixo dos eleitos e dos presidentes de tribunal (spec 2026-11-19 §2.1 e §2.2)", () => {
+  test.each([
+    [GRUPO_SENADORES_ELEITOS, "Senador eleito"],
+    [GRUPO_DEPUTADOS_ELEITOS, "Deputado Federal eleito"],
+    [GRUPO_GOVERNADORES_ELEITOS, "Governador eleito do estado de Goiás"],
+  ])("eleito no grupo %s leva Senhor e Ao Senhor", (grupo, cargo) => {
+    expect(protocoloFixo(contato({ grupo, cargo }), undefined)).toEqual({ tratamento: "Senhor", enderecamento: "Ao Senhor" });
+  });
+  test("eleita (tratamento Senhora no cadastro) leva Senhora e À Senhora", () => {
+    const c = contato({ grupo: GRUPO_SENADORES_ELEITOS, cargo: "Senadora eleita", tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" });
+    expect(comparacoesProtocoloFixo(c, undefined)).toEqual([
+      { campo: "tratamento", valorPlanilha: "Senhora", valorEsperado: "Senhora", situacao: "confere", origemValor: "regra_gt" },
+      { campo: "enderecamento", valorPlanilha: "A Sua Excelência a Senhora", valorEsperado: "À Senhora", situacao: "divergente", origemValor: "regra_gt" },
+    ]);
+  });
+  test("rótulo com dois segmentos casa o eleito pelo segmento", () => {
+    expect(protocoloFixo(contato({ grupo: `Senadores; ${GRUPO_SENADORES_ELEITOS}`, cargo: "Senador eleito" }), "Senadores")?.enderecamento).toBe("Ao Senhor");
+  });
+  test("presidente do STF leva Excelentíssimo Senhor; presidenta, Excelentíssima Senhora", () => {
+    expect(protocoloFixo(contato({ grupo: "Ministros do STF", cargo: "Presidente do Supremo Tribunal Federal" }), "Ministros do STF"))
+      .toEqual({ tratamento: "Excelentíssimo Senhor", enderecamento: "A Sua Excelência o Senhor" });
+    expect(protocoloFixo(contato({ grupo: "Ministros do STF", cargo: "Presidenta do Supremo Tribunal Federal", tratamento: "Senhora" }), "Ministros do STF"))
+      .toEqual({ tratamento: "Excelentíssima Senhora", enderecamento: "A Sua Excelência a Senhora" });
+  });
+  test.each(["Ministros do STJ", "Ministros do STM", "Ministros do TCU", "Ministros do TSE", "Ministros do TST"])(
+    "presidente em %s leva Senhor e A Sua Excelência o Senhor", (grupo) => {
+      expect(protocoloFixo(contato({ grupo, cargo: "Presidente do Tribunal" }), grupo)).toEqual({ tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" });
+    });
+  test("Excelentíssimo Senhor no presidente do STJ diverge, esperado Senhor", () => {
+    const c = contato({ grupo: "Ministros do STJ", cargo: "Presidente do Superior Tribunal de Justiça", tratamento: "Excelentíssimo Senhor", enderecamento: "A Sua Excelência o Senhor" });
+    expect(comparacoesTratamento(c, "Ministros do STJ").filter((x) => x.campo === "tratamento")).toEqual([
+      { campo: "tratamento", valorPlanilha: "Excelentíssimo Senhor", valorEsperado: "Senhor", situacao: "divergente", origemValor: "regra_gt" },
+    ]);
+  });
+  test("Vice-Presidente de tribunal e ministro comum ficam fora do fixo", () => {
+    expect(protocoloFixo(contato({ grupo: "Ministros do STF", cargo: "Vice-Presidente do Supremo Tribunal Federal" }), "Ministros do STF")).toBeUndefined();
+    expect(protocoloFixo(contato({ grupo: "Ministros do STF", cargo: "Ministro do Supremo Tribunal Federal" }), "Ministros do STF")).toBeUndefined();
+  });
+  test("Senador em exercício e governador atual não recebem o fixo dos eleitos", () => {
+    expect(protocoloFixo(contato({ grupo: "Senadores", cargo: "Senador" }), "Senadores (Acre a Goiás)")).toBeUndefined();
+    expect(protocoloFixo(contato({ grupo: "Governadores", cargo: "Governador do Estado de Goiás" }), "Governadores")).toBeUndefined();
   });
 });

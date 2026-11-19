@@ -108,4 +108,10 @@ export const REGRAS_GT: readonly RegraGt[] = [
     texto: "Cargo \"Governador(a) do estado de(a/o) X\" com \"estado\" em minúscula (Manual de Comunicação do Senado); DF é \"Governador(a) do Distrito Federal\".",
     grupos: [GRUPO_GOVERNADORES, GRUPO_GOVERNADORES_ELEITOS],
   },
+  {
+    data: "2026-11-19",
+    titulo: "Ministros de Estado: CGU",
+    texto: "O cargo do ministro da CGU é \"Ministro da Controladoria-Geral da União\", conferido na página \"Quem é quem\" da CGU; os demais seguem a página do Planalto.",
+    grupos: ["Ministros de Estado"],
+  },
 ];

@@ -190,6 +190,12 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       // A página traz "Garibaldi Alves" e vale a grafia do site (spec 2026-11-04 §3.3).
       { url: "https://www25.senado.leg.br/web/senadores/nova-republica", ativo: true },
     ],
+    // Exceção do gabarito, versão 2 (spec 2026-11-19 §2.3): a página "Nova República" continua
+    // compondo o grupo (lá ele é "Garibaldi Alves"); o nome confere pela página individual do Senado
+    // ("Senador Garibaldi Alves Filho" no título).
+    fontesIndividuais: [
+      { url: "https://www25.senado.leg.br/web/senadores/senador/-/perfil/87", ativo: true, chave: { nome: "Garibaldi Alves Filho" }, campos: ["nome"], complementar: true },
+    ],
   },
   {
     nome: "Ex-Senadores",
@@ -316,6 +322,19 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       // headless, e vem inteira no Chrome com janela (medido em 2026-10-15): `navegador: "janela"`.
       // Layout cargo numa linha e nome na seguinte, coberto por tests/fixtures/ministros-estado.html.
       { url: "https://www.gov.br/planalto/pt-br/conheca-a-presidencia/ministros-e-ministras", ativo: true, navegador: "janela" },
+    ],
+    // Exceção do gabarito, versão 2 (spec 2026-11-19 §2.3): a página "Quem é quem" da CGU traz o cargo
+    // "Ministro da Controladoria-Geral da União", que a página do Planalto não entrega. Só nome e cargo
+    // deste ministro; os demais seguem a página do Planalto. gov.br: lido pelo Chrome com janela.
+    fontesIndividuais: [
+      {
+        url: "https://www.gov.br/cgu/pt-br/acesso-a-informacao/institucional/quem-e-quem/gabinete-ministerial",
+        ativo: true,
+        chave: { nome: "Vinicius Marques de Carvalho" },
+        campos: ["nome", "cargo"],
+        navegador: "janela",
+        complementar: true,
+      },
     ],
   },
   {

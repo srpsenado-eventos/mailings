@@ -54,6 +54,14 @@ import { fonteIndividualDe, type FonteResolvida } from "@/lib/catalogo";
 import { ufDoContato } from "@/lib/uf";
 import { auditarEndereco, indexarEnderecos, type IndiceEnderecos } from "@/lib/endereco";
 import { aplicarPares } from "@/lib/tratamento-pares";
+import {
+  aplicarComplementares,
+  individualComConteudo,
+  individualVigente,
+  soComplementares,
+  textoIndividuaisCaidas,
+  type IndividualLida,
+} from "@/lib/analise-complementar";
 
 function motivoDaFalha(err: unknown): string {
   if (err instanceof ScrapeError) return err.motivo;
@@ -127,7 +135,6 @@ interface Leitura<F extends FonteLegivel> {
   tentadas: TentativaDeUrl[];
 }
 type FonteLida = Leitura<FonteCatalogo>;
-type IndividualLida = Leitura<FonteIndividual>;
 /** Uma leitura de uma URL só, antes de saber se ela serviu. */
 type Raspagem = Pick<Leitura<FonteLegivel>, "conteudo" | "erro">;
 
@@ -418,11 +425,30 @@ async function analisarGrupoResolvendo(
   }
 
   // Grupo com fontes individuais (spec 2026-10-15): caminho por contato. Os demais seguem abaixo.
-  if (resolvida.fontesIndividuais.length > 0) {
+  // Exceção (spec 2026-11-19 v2 §2.3): se todas as individuais vigentes são complementares, o grupo
+  // segue o caminho de grupo e as páginas complementares só trocam os campos que declaram.
+  const vigentes = resolvida.fontesIndividuais.filter((f) => individualVigente(f, agora));
+  if (resolvida.fontesIndividuais.length > 0 && !soComplementares(vigentes)) {
     const a = await analisarGrupoIndividual(grupo, contatos, resolvida, deps, agora);
     return { ...a, grupo: comResponsavel(a.grupo, resolvida.responsavel) };
   }
+  const doGrupo = await analisarGrupoDeFontes(grupo, contatos, { ...resolvida, grupoCanonico: resolvida.grupoCanonico }, deps, agora);
+  if (vigentes.length === 0) return doGrupo;
+  const leitor = {
+    ler: (f: FonteIndividual) => lerFonte(f, deps, agora, individualComConteudo, MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO),
+    guardar: (l: IndividualLida) => guardar(l, agora),
+  };
+  return aplicarComplementares(doGrupo, contatos, vigentes, leitor);
+}
 
+/** Caminho de grupo (spec 2026-09-24): todas as fontes ativas compõem a composição. */
+async function analisarGrupoDeFontes(
+  grupo: string,
+  contatos: ContatoPlanilha[],
+  resolvida: FonteResolvida & { grupoCanonico: string },
+  deps: Dependencias,
+  agora: Date,
+): Promise<AnaliseDoGrupo> {
   // 1. Camada 1 (base): todas as fontes ativas, em paralelo. Uma falhar não derruba a outra.
   //    Fonte que FALHOU hoje (ver `falhou`) sai pela leitura guardada válida, se houver, com o
   //    motivo de hoje anotado (spec 2026-10-20 §5.1, passo 2).
@@ -552,26 +578,6 @@ async function analisarGrupoResolvendo(
     leituras: leiturasBoas(lidas, primariaParcial, agora),
     tentadas,
   };
-}
-
-/** Dia `AAAA-MM-DD` no fuso de Brasília ("en-CA" já formata assim). */
-const FORMATO_DIA_BRASILIA = new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: "America/Sao_Paulo" });
-
-/**
- * Fonte individual ainda dentro da validade (spec 2026-10-26 §3.3): sem `validaAte`, ou com o dia
- * da varredura em Brasília até ele, inclusive. Fonte vencida é tratada como inativa.
- */
-function individualVigente(fonte: FonteIndividual, agora: Date): boolean {
-  return fonte.validaAte === undefined || FORMATO_DIA_BRASILIA.format(agora) <= fonte.validaAte;
-}
-
-function individualComConteudo(l: { conteudo?: ConteudoFonte; erro?: string }): boolean {
-  return l.erro === undefined && l.conteudo !== undefined && paginaComConteudo(l.conteudo);
-}
-
-/** Pluraliza "N página(s) individual(is) inacessível(is)" para o motivo do grupo. */
-function textoIndividuaisCaidas(n: number): string {
-  return n === 1 ? "1 página individual inacessível" : `${n} páginas individuais inacessíveis`;
 }
 
 /**

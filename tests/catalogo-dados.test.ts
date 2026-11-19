@@ -123,9 +123,9 @@ describe("catálogo real (data/catalogo.ts)", () => {
       "https://transparencia.rr.gov.br/principaiscargos",
       "https://www.rj.gov.br/pagina/sobre-o-governo9806",
     ]);
-    // a geral do Planalto (Ministros de Estado), a composição da Defesa (EMCFA) e as 3 entradas de
+    // a geral do Planalto e a CGU complementar (Ministros de Estado), a composição da Defesa (EMCFA) e as 3 entradas de
     // Embaixadores (mesma lista do MRE).
-    expect(janela.length - estaduais.length).toBe(5);
+    expect(janela.length - estaduais.length).toBe(6);
   });
 
   test("Comandantes das Forças Armadas e EMCFA: quatro fontes oficiais, a primária é a do Exército, sem proposta de inclusão (GT de 13/11)", () => {
@@ -163,8 +163,19 @@ describe("catálogo real (data/catalogo.ts)", () => {
   describe("fontes individuais (spec 2026-10-15)", () => {
     const comIndividuais = CATALOGO.filter((g) => (g.fontesIndividuais ?? []).length > 0);
 
-    test("só Governadores e Governadores Eleitos têm fontes individuais (Ministros de Estado saiu em 13/11)", () => {
-      expect(comIndividuais.map((g) => g.nome).sort()).toEqual(["Governadores", "Governadores Eleitos"]);
+    test("têm fontes individuais Governadores, Governadores Eleitos e, só como complementares, Ex-Presidentes do Congresso e Ministros de Estado (spec 2026-11-19 v2 §2.3)", () => {
+      expect(comIndividuais.map((g) => g.nome).sort()).toEqual(["Ex-Presidentes do Congresso", "Governadores", "Governadores Eleitos", "Ministros de Estado"]);
+    });
+
+    test("Garibaldi (Ex-Presidentes) e a CGU (Ministros de Estado) são individuais complementares, e só elas", () => {
+      expect(CATALOGO.find((g) => g.nome === "Ex-Presidentes do Congresso")?.fontesIndividuais).toEqual([
+        { url: "https://www25.senado.leg.br/web/senadores/senador/-/perfil/87", ativo: true, chave: { nome: "Garibaldi Alves Filho" }, campos: ["nome"], complementar: true },
+      ]);
+      expect(CATALOGO.find((g) => g.nome === "Ministros de Estado")?.fontesIndividuais).toEqual([
+        { url: "https://www.gov.br/cgu/pt-br/acesso-a-informacao/institucional/quem-e-quem/gabinete-ministerial", ativo: true, chave: { nome: "Vinicius Marques de Carvalho" }, campos: ["nome", "cargo"], navegador: "janela", complementar: true },
+      ]);
+      const complementares = CATALOGO.flatMap((g) => (g.fontesIndividuais ?? []).filter((f) => f.complementar).map(() => g.nome));
+      expect(complementares).toEqual(["Ex-Presidentes do Congresso", "Ministros de Estado"]);
     });
 
     test("Governadores Eleitos: 3 sites de campanha (ES, RN, TO), provisórios, só nome, válidos até 5/1/2027 (spec 2026-10-26)", () => {
@@ -253,10 +264,10 @@ describe("catálogo real (data/catalogo.ts)", () => {
       for (const g of CATALOGO) expect((g.fontesIndividuais ?? []).filter((f) => /cepe\.com\.br|ioerj\.com\.br/.test(f.url))).toEqual([]);
     });
 
-    test("Ministros de Estado: a página do Planalto é a fonte única, lida pela janela, sem individuais (GT de 13/11)", () => {
+    test("Ministros de Estado: a página do Planalto é a fonte do grupo, lida pela janela; a única individual é a complementar da CGU", () => {
       const g = CATALOGO.find((x) => x.nome === "Ministros de Estado")!;
       expect(g.fontes).toEqual([{ url: "https://www.gov.br/planalto/pt-br/conheca-a-presidencia/ministros-e-ministras", ativo: true, navegador: "janela" }]);
-      expect(g.fontesIndividuais ?? []).toEqual([]);
+      expect((g.fontesIndividuais ?? []).every((f) => f.complementar)).toBe(true);
     });
 
     test("toda individual é de domínio oficial (salvo o site de campanha), tem campos com 'nome' e chave única no grupo", () => {
@@ -275,6 +286,13 @@ describe("catálogo real (data/catalogo.ts)", () => {
           expect(f.campos).toEqual(["cargo"]);
           expect((g.fontesIndividuais ?? []).some((i) => i.ativo)).toBe(true);
         }
+      }
+    });
+
+    test("grupo com individual complementar não mistura com individual comum", () => {
+      for (const g of comIndividuais) {
+        const ind = g.fontesIndividuais ?? [];
+        if (ind.some((f) => f.complementar)) expect(ind.every((f) => f.complementar)).toBe(true);
       }
     });
   });

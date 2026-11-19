@@ -453,6 +453,13 @@ export interface FonteIndividual {
    * o nome do governador só aparece depois do clique). Só vale com `navegador: "janela"`.
    */
   clicarAntes?: CliqueAntes;
+  /**
+   * Página que só complementa o grupo (spec 2026-11-19 v2 §2.3): o grupo segue o caminho de grupo
+   * (composição, possível saída, cargo pela pasta) e, depois, o contato ligado a esta página tem os
+   * `campos` dela comparados com ela. Nunca cria saída nem proposta de inclusão. O grupo só vai por
+   * aqui quando TODAS as suas individuais vigentes são complementares.
+   */
+  complementar?: true;
 }
 
 /**

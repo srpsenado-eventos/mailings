@@ -1,5 +1,5 @@
 import { GRUPOS_DE_TRIBUNAL } from "@/data/cargos-tribunal";
-import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES_ELEITOS, GRUPOS_POSSE } from "@/data/grupos-posse";
+import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_GOVERNADORES_ELEITOS, GRUPO_MINISTROS_INDICADOS, GRUPO_SENADORES_ELEITOS, GRUPOS_POSSE } from "@/data/grupos-posse";
 import { neutralizarGenero } from "@/lib/cargos";
 import { normalizarTexto } from "@/lib/normalize";
 import { contatoEhFeminino } from "@/lib/tratamento";
@@ -26,7 +26,20 @@ const CARGO_ATIVO = /^presidente (do congresso nacional|do senado federal|da cam
 
 export interface ProtocoloFixo {
   tratamento: string;
-  enderecamento: string;
+  /** Ausente quando o GT ainda não decidiu o endereçamento (ministros indicados). */
+  enderecamento?: string;
+  /** Orientação que acompanha o endereçamento sem regra. */
+  observacaoEnderecamento?: string;
+}
+
+/** Endereçamento dos ministros indicados ainda sem decisão do GT (19/11). */
+export const OBSERVACAO_ENDERECAMENTO_INDICADOS = "Endereçamento dos ministros indicados: a definir pelo GT";
+
+const ROTULO_INDICADOS = normalizarTexto(GRUPO_MINISTROS_INDICADOS);
+
+/** Algum segmento ("A; B") do rótulo do Contatos é o grupo dos ministros indicados. */
+function nosMinistrosIndicados(grupo: string): boolean {
+  return grupo.split(";").some((seg) => normalizarTexto(seg) === ROTULO_INDICADOS);
 }
 
 /** Rótulo oficial e apelidos do grupo dos Chefes de Estado, normalizados. */
@@ -80,6 +93,9 @@ export function protocoloFixo(contato: ContatoPlanilha, grupoCanonico: string | 
   if (ativo(contato.cargo) || nosChefesDeEstado(contato.grupo)) {
     return { tratamento: feminino ? "Excelentíssima Senhora" : "Excelentíssimo Senhor", enderecamento: excelencia };
   }
+  if (nosMinistrosIndicados(contato.grupo)) {
+    return { tratamento: feminino ? "Senhora" : "Senhor", observacaoEnderecamento: OBSERVACAO_ENDERECAMENTO_INDICADOS };
+  }
   if (nosEleitos(contato.grupo)) {
     return { tratamento: feminino ? "Senhora" : "Senhor", enderecamento: feminino ? "À Senhora" : "Ao Senhor" };
   }
@@ -109,8 +125,15 @@ export function comparacoesProtocoloFixo(
 ): ComparacaoCampo[] | undefined {
   const fixo = protocoloFixo(contato, grupoCanonico);
   if (!fixo) return undefined;
-  return [
-    comparar("tratamento", contato.tratamento ?? "", fixo.tratamento),
-    comparar("enderecamento", contato.enderecamento ?? "", fixo.enderecamento),
-  ];
+  const enderecamento: ComparacaoCampo =
+    fixo.enderecamento === undefined
+      ? {
+          campo: "enderecamento",
+          valorPlanilha: contato.enderecamento ?? "",
+          situacao: "sem_regra",
+          origemValor: "regra_gt",
+          ...(fixo.observacaoEnderecamento ? { observacao: fixo.observacaoEnderecamento } : {}),
+        }
+      : comparar("enderecamento", contato.enderecamento ?? "", fixo.enderecamento);
+  return [comparar("tratamento", contato.tratamento ?? "", fixo.tratamento), enderecamento];
 }

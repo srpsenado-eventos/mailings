@@ -18,6 +18,8 @@ export interface GrupoPosse {
 export const GRUPO_SENADORES_ELEITOS = "Senadores eleitos - Posse Presidencial 2027";
 export const GRUPO_DEPUTADOS_ELEITOS = "Deputado Federal eleitos - Posse Presidencial 2027";
 export const GRUPO_GOVERNADORES_ELEITOS = "Governadores eleitos - Posse Presidencial 2027";
+/** Rótulo do grupo neutro dos ministros indicados (spec 2026-11-19 §2.4). */
+export const GRUPO_MINISTROS_INDICADOS = "Ministros de Estado Indicados - Posse 2027";
 
 /** Igual a `NOME_GRUPO_DEPUTADOS` de `lib/painel-deputados.ts` (um teste confere). */
 export const GRUPO_DEPUTADOS_FEDERAIS = "Deputados Federais";
@@ -54,7 +56,7 @@ export const GRUPOS_POSSE: readonly GrupoPosse[] = [
   // O Contatos grava este grupo no singular; é o mesmo grupo (Clovis, 2026-11-06).
   lista(GRUPO_DEPUTADOS_FEDERAIS, ["Deputado Federal - Posse Presidencial 2027"]),
   lista(GRUPO_DEPUTADOS_ELEITOS),
-  neutro("Ministros de Estado Indicados - Posse 2027"),
+  neutro(GRUPO_MINISTROS_INDICADOS),
   neutro("Convidados do presidente eleito - Posse 2027"),
   neutro("Convidados do vice presidente eleito - Posse 2027"),
   neutro("Convidado do presidente do Congresso e Câmara 2027"),

@@ -1,5 +1,7 @@
 import { REGRAS_NOME, type RegraNome } from "@/data/regras-nome";
+import { GRUPO_MINISTROS_INDICADOS } from "@/data/grupos-posse";
 import { normalizarTexto } from "@/lib/normalize";
+import { contatoEhFeminino } from "@/lib/tratamento";
 import type { ComparacaoCampo, ContatoPlanilha } from "@/lib/types";
 
 /**
@@ -92,6 +94,43 @@ export function comparacaoCargoExPresidente(
       origemValor: "coerencia",
       achado: "cargo_ex_presidente",
       observacao: tracos.length > 0 ? observacaoDoTraco(tracos) : OBSERVACAO_PERIODO,
+    },
+  ];
+}
+
+/** Cargo aceito dos ministros indicados, normalizado (spec 2026-11-19 §2.4): as duas formas do GT. */
+const CARGO_INDICADO = /^ministr[oa] indicad[oa] (de estado )?d[aeo]s? .+$/;
+
+/** Cargo do cadastro "Ministro(a) [de Estado] [indicado(a)] d(a/o/e) Pasta", com o artigo e a pasta capturados. */
+const CARGO_COM_PASTA = /^\s*ministr[oa]\s+(?:indicad[oa]\s+)?(?:de\s+estado\s+)?(?:indicad[oa]\s+)?(d[aeo]s?)\s+(\S.*?)\s*$/i;
+
+function nosIndicados(grupo: string): boolean {
+  const alvo = normalizarTexto(GRUPO_MINISTROS_INDICADOS);
+  return grupo.split(";").some((seg) => normalizarTexto(seg) === alvo);
+}
+
+/**
+ * Cargo do ministro indicado fora do formato do GT (spec 2026-11-19 §2.4): "Ministro(a) indicado(a)
+ * de Estado d(a/o/e) Pasta" ou "Ministro(a) indicado(a) d(a/o/e) Pasta". O esperado copia a pasta
+ * e o artigo do cadastro; sem pasta reconhecível leva "[Pasta]". Cargo vazio e grupos de fora
+ * ficam de fora.
+ */
+export function comparacaoCargoIndicado(contato: ContatoPlanilha): ComparacaoCampo[] {
+  if (!nosIndicados(contato.grupo)) return [];
+  const cargo = contato.cargo ?? "";
+  const normalizado = normalizarTexto(cargo);
+  if (normalizado.length === 0 || CARGO_INDICADO.test(normalizado)) return [];
+  const forma = contatoEhFeminino(contato) ? "Ministra indicada" : "Ministro indicado";
+  const achado = CARGO_COM_PASTA.exec(cargo);
+  const pasta = achado ? `${achado[1].toLowerCase()} ${achado[2]}` : "da [Pasta]";
+  return [
+    {
+      campo: "cargo",
+      valorPlanilha: cargo,
+      valorEsperado: `${forma} de Estado ${pasta}`,
+      situacao: "divergente",
+      origemValor: "coerencia",
+      achado: "cargo_indicado",
     },
   ];
 }

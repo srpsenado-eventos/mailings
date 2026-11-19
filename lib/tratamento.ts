@@ -480,6 +480,8 @@ export function rotuloAchado(achado: AchadoCoerencia): string {
       return "nome traz tratamento acadêmico; grafar sem ele no cadastro";
     case "nome_sem_prefixo":
       return "Nome sem o prefixo do cargo";
+    case "cargo_indicado":
+      return "Cargo de ministro indicado fora do formato do GT";
     case "cargo_ex_presidente":
       return "Cargo de ex-presidente fora do formato do GT";
     case "nome_acima_do_limite":
@@ -523,7 +525,7 @@ export function textoCoerencia(c: ComparacaoCampo): string {
   if (c.achado === "nome_sem_prefixo") {
     return `${rotulo} (${c.valorEsperado ?? ""}). ${EXPLICACAO_PREFIXO_NOME}`;
   }
-  if (c.achado === "cargo_ex_presidente") {
+  if (c.achado === "cargo_ex_presidente" || c.achado === "cargo_indicado") {
     return c.observacao ? `${rotulo} (${c.valorEsperado ?? ""}). ${c.observacao}` : `${rotulo} (${c.valorEsperado ?? ""})`;
   }
   if (c.achado === "nome_acima_do_limite") return c.observacao ?? rotulo;

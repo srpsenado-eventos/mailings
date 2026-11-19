@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { comparacoesProtocoloFixo, GRUPO_CHEFES_DE_ESTADO, protocoloFixo } from "@/lib/protocolo-fixo";
-import { comparacoesTratamento } from "@/lib/match";
-import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
+import { comparacoesTratamento, compararContatoSemFonteOficial } from "@/lib/match";
+import { GRUPO_MINISTROS_INDICADOS, GRUPO_DEPUTADOS_ELEITOS, GRUPO_GOVERNADORES_ELEITOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
 import type { ContatoPlanilha } from "@/lib/types";
 
 const EX = "Ex-Presidentes do Congresso";
@@ -258,5 +258,32 @@ describe("protocolo fixo dos eleitos e dos presidentes de tribunal (spec 2026-11
   test("Senador em exercício e governador atual não recebem o fixo dos eleitos", () => {
     expect(protocoloFixo(contato({ grupo: "Senadores", cargo: "Senador" }), "Senadores (Acre a Goiás)")).toBeUndefined();
     expect(protocoloFixo(contato({ grupo: "Governadores", cargo: "Governador do Estado de Goiás" }), "Governadores")).toBeUndefined();
+  });
+});
+
+describe("ministros indicados (spec 2026-11-19 §2.4)", () => {
+  test("indicado: tratamento Senhor fixo e endereçamento sem regra com a observação", () => {
+    const c = { nome: "Pessoa Fictícia", grupo: GRUPO_MINISTROS_INDICADOS, cargo: "Ministro indicado da Fazenda", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" };
+    expect(comparacoesProtocoloFixo(c, undefined)).toEqual([
+      { campo: "tratamento", valorPlanilha: "Senhor", valorEsperado: "Senhor", situacao: "confere", origemValor: "regra_gt" },
+      { campo: "enderecamento", valorPlanilha: "A Sua Excelência o Senhor", situacao: "sem_regra", origemValor: "regra_gt", observacao: "Endereçamento dos ministros indicados: a definir pelo GT" },
+    ]);
+  });
+  test("indicado com Excelentíssimo Senhor diverge, esperado Senhor; o cargo fora do formato também aparece", () => {
+    const c = { nome: "Pessoa Fictícia", grupo: GRUPO_MINISTROS_INDICADOS, cargo: "Ministro de Estado da Fazenda", tratamento: "Excelentíssimo Senhor", enderecamento: "A Sua Excelência o Senhor" };
+    const cmp = comparacoesTratamento(c, undefined);
+    expect(cmp.find((x) => x.campo === "tratamento")?.valorEsperado).toBe("Senhor");
+    expect(cmp.find((x) => x.achado === "cargo_indicado")?.valorEsperado).toBe("Ministro indicado de Estado da Fazenda");
+    expect(cmp.find((x) => x.campo === "enderecamento")?.situacao).toBe("sem_regra");
+  });
+  test("no caminho neutro, o endereçamento sem regra não pinta amarelo; tratamento e cargo pintam", () => {
+    const ok = { nome: "Pessoa Fictícia", grupo: GRUPO_MINISTROS_INDICADOS, cargo: "Ministro indicado da Fazenda", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" };
+    expect(compararContatoSemFonteOficial(ok, "neutro").semaforo).toBe("verde");
+    const ruim = { ...ok, cargo: "Ministro de Estado da Fazenda" };
+    expect(compararContatoSemFonteOficial(ruim, "neutro").semaforo).toBe("amarelo");
+  });
+  test("indicada leva Senhora", () => {
+    const c = { nome: "Pessoa Fictícia", grupo: GRUPO_MINISTROS_INDICADOS, cargo: "Ministra indicada da Saúde", tratamento: "Senhora" };
+    expect(protocoloFixo(c, undefined)?.tratamento).toBe("Senhora");
   });
 });

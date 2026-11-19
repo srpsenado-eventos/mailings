@@ -49,6 +49,7 @@ export type AchadoCoerencia =
   | "nome_tratamento_academico"
   | "nome_sem_prefixo"
   | "cargo_ex_presidente"
+  | "cargo_indicado"
   | "nome_acima_do_limite";
 
 /** Uma pessoa extraída (estruturada) da fonte oficial. */

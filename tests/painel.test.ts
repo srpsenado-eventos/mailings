@@ -32,6 +32,8 @@ import {
   textoMudanca,
   textoUrlCaida,
 } from "@/lib/painel";
+import { GRUPO_MINISTROS_INDICADOS } from "@/data/grupos-posse";
+import { compararContatoSemFonteOficial } from "@/lib/match";
 import { ColunaFaltanteError } from "@/lib/planilha";
 import type {
   BaseEnderecos,
@@ -1012,5 +1014,25 @@ describe("nome acima do limite do Posse (STM, spec 2026-11-04 §3.5)", () => {
   test("possível saída também mostra a etiqueta do limite", () => {
     const saida = contato({ semaforo: "vermelho", possivelSaida: true, comparacoes: [limite] });
     expect(textos(saida, grupoComFonte)).toContain("Nome com 51 caracteres, acima do limite de 50 do Posse");
+  });
+});
+
+describe("observação do endereçamento sem regra (ministros indicados, spec 2026-11-19 §2.4)", () => {
+  const indicado = {
+    nome: "Pessoa Fictícia", grupo: GRUPO_MINISTROS_INDICADOS, cargo: "Ministro indicado da Fazenda",
+    tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor",
+  };
+
+  test("o cartão de endereçamento leva a observação e mantém o texto de sem regra", () => {
+    const c = compararContatoSemFonteOficial(indicado, "neutro");
+    const cartao = detalhesDoContato(c, grupoComFonte).find((d) => d.campo === "enderecamento");
+    expect(cartao?.observacao).toBe("Endereçamento dos ministros indicados: a definir pelo GT");
+    expect(cartao?.valorReferencia).toBe("sem regra de protocolo para este cargo");
+  });
+
+  test("sem_regra sem observação continua sem observação no cartão", () => {
+    const c = compararContatoSemFonteOficial({ ...indicado, grupo: "Grupo Comum", cargo: "Cargo Fora da Tabela" }, "neutro");
+    const cartao = detalhesDoContato(c, grupoComFonte).find((d) => d.campo === "enderecamento");
+    expect(cartao?.observacao).toBeUndefined();
   });
 });

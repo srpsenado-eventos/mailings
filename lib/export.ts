@@ -77,7 +77,7 @@ function valorEsperadoDe(c: ResultadoContato, campo: string): string {
   const comp = comparacaoDe(c, campo);
   if (!comp) return "";
   if (comp.situacao === "fonte_nao_informa") return "fonte não informa";
-  if (comp.situacao === "sem_regra") return "sem regra de protocolo";
+  if (comp.situacao === "sem_regra") return comp.observacao ? `sem regra de protocolo (${comp.observacao})` : "sem regra de protocolo";
   if (comp.situacao === "nao_verificado") return "não verificado";
   const v = comp.valorEsperado ?? "";
   if (v && comp.origemValor === "pares") {

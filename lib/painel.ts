@@ -328,7 +328,7 @@ export function detalhesDoContato(c: ResultadoContato, _g: ResultadoGrupo): Deta
       valorReferencia: valorReferenciaDe(comp),
       ...(copiavel ? { copiavel } : {}),
       ...(comp?.fonteUrl ? { url: comp.fonteUrl } : {}),
-      ...((comp?.origemValor === "pares" || campo === "nome") && comp?.observacao ? { observacao: comp.observacao } : {}),
+      ...((comp?.origemValor === "pares" || campo === "nome" || comp?.situacao === "sem_regra") && comp?.observacao ? { observacao: comp.observacao } : {}),
       coerencias: coerencias.map(textoCoerencia),
     });
   }

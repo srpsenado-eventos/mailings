@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import * as XLSX from "xlsx";
+import { GRUPO_MINISTROS_INDICADOS } from "@/data/grupos-posse";
+import { compararContatoSemFonteOficial } from "@/lib/match";
 import { resultadoParaLinhas, gerarXlsx } from "@/lib/export";
 import type { ComparacaoCampo, ContatoPlanilha, ResultadoAnalise, ResultadoContato } from "@/lib/types";
 
@@ -679,5 +681,18 @@ describe("tratamento pela maioria dos pares no export (spec 2026-10-30 §3.4)", 
       { nome: "Ana", grupo: "ORG" },
     );
     expect(resultadoParaLinhas(analise)[0]["Tratamento (protocolo)"]).toBe("Senhor (maioria dos pares: 6 de 7)");
+  });
+});
+
+describe("endereçamento sem regra com observação (ministros indicados)", () => {
+  test("a coluna do endereçamento traz a observação junto de sem regra de protocolo", () => {
+    const contato = compararContatoSemFonteOficial(
+      { nome: "Pessoa Fictícia", grupo: GRUPO_MINISTROS_INDICADOS, cargo: "Ministro indicado da Fazenda", tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" },
+      "neutro",
+    );
+    const base = analise.grupos[0];
+    const linha = resultadoParaLinhas({ ...analise, grupos: [{ ...base, contatos: [contato] }] })[0];
+    const chave = Object.keys(linha).find((k) => k.startsWith("Endereçamento (") && !k.includes("(planilha)"));
+    expect(linha[chave ?? ""]).toBe("sem regra de protocolo (Endereçamento dos ministros indicados: a definir pelo GT)");
   });
 });

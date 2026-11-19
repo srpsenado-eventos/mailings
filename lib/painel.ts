@@ -4,6 +4,8 @@ import { colunasDaBase, textoCelula } from "@/lib/ajuste-numero";
 import { descreverMotivoDeHoje, diaMes, MIN_COLETAS_URL_CAIDA } from "@/lib/memoria-leitura";
 import { textoCurtoLimiteNome } from "@/lib/limite-nome";
 import { normalizarTexto } from "@/lib/normalize";
+import { resolverGrupoEFonte } from "@/lib/catalogo";
+import { CATALOGO } from "@/data/catalogo";
 import { ColunaFaltanteError } from "@/lib/planilha";
 import { ehFiltroEleicao, passaFiltroEleicao, type FiltroEleicao } from "@/lib/painel-eleicao";
 import type {
@@ -15,6 +17,7 @@ import type {
   FalhaDeUrl,
   FalhasPorUrl,
   LeituraAlternativa,
+  LinkInformativo,
   MudancaDeComposicao,
   PessoaSite,
   Reaproveitamento,
@@ -744,4 +747,11 @@ export function montarRetrato(
       ? { baseEnderecos: planilhas.baseEnderecos, ...contagemOuNada(planilhas.baseEnderecos, resultado.grupos) }
       : {}),
   };
+}
+
+/** Links de referência do grupo (spec 2026-11-19 §2.5), pelo grupo canônico; `[]` sem grupo ou sem links. */
+export function linksInformativosDoGrupo(rotuloDoContatos: string): readonly LinkInformativo[] {
+  const canonico = resolverGrupoEFonte(rotuloDoContatos).grupoCanonico;
+  if (!canonico) return [];
+  return CATALOGO.find((g) => g.nome === canonico)?.linksInformativos ?? [];
 }

@@ -498,6 +498,17 @@ export interface GrupoCatalogo {
   ufs?: readonly string[];
   /** Regra do GT de 05/11: o grupo nunca recebe proposta de inclusão (`novos` sai vazio). */
   semInclusao?: true;
+  /**
+   * Links só de referência para o cabeçalho do grupo no painel (spec 2026-11-19 §2.5).
+   * Nunca são lidos pela varredura: não entram em falhas, memória de leitura nem export.
+   */
+  linksInformativos?: readonly LinkInformativo[];
+}
+
+/** Link de referência mostrado no cabeçalho do grupo; nunca é fonte de leitura (spec 2026-11-19 §2.5). */
+export interface LinkInformativo {
+  titulo: string;
+  url: string;
 }
 
 /**

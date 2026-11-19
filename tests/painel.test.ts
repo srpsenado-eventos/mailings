@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   avisoUrlCaida,
+  linksInformativosDoGrupo,
   camposDoEndereco,
   cartoesDoResumo,
   contarContatos,
@@ -1034,5 +1035,19 @@ describe("observação do endereçamento sem regra (ministros indicados, spec 20
     const c = compararContatoSemFonteOficial({ ...indicado, grupo: "Grupo Comum", cargo: "Cargo Fora da Tabela" }, "neutro");
     const cartao = detalhesDoContato(c, grupoComFonte).find((d) => d.campo === "enderecamento");
     expect(cartao?.observacao).toBeUndefined();
+  });
+});
+
+describe("linksInformativosDoGrupo (spec 2026-11-19 §2.5)", () => {
+  test("Ministros do STM devolve os dois links de referência", () => {
+    expect(linksInformativosDoGrupo("Ministros do STM").map((l) => l.titulo)).toEqual([
+      "Composição da Corte (referência de gênero)",
+      "Manual de Comunicação do Senado: forma de tratamento",
+    ]);
+  });
+
+  test("grupo sem links e rótulo desconhecido devolvem lista vazia", () => {
+    expect(linksInformativosDoGrupo("Senadores")).toEqual([]);
+    expect(linksInformativosDoGrupo("Grupo que não existe")).toEqual([]);
   });
 });

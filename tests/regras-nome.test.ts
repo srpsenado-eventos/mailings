@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { comparacaoPrefixoNome, comparacaoRegraNome, contatoEhFeminino, nomeEsperadoComPrefixo, rotuloAchado, textoCoerencia } from "@/lib/tratamento";
+import { comparacaoPrefixoNome, comparacaoRegraNome, nomeEsperadoComPrefixo } from "@/lib/prefixo-nome";
+import { contatoEhFeminino, rotuloAchado, textoCoerencia } from "@/lib/tratamento";
 import { comparacaoLimiteNome, tamanhoDoNome } from "@/lib/limite-nome";
 import type { RegraNome } from "@/data/regras-nome";
 import type { ContatoPlanilha } from "@/lib/types";
@@ -304,13 +305,12 @@ describe("comparacaoPrefixoNome — Presidente de tribunal leva \"Ministro(a)\" 
     expect(comparacaoRegraNome(c, GRUPO_STM).map((r) => r.valorEsperado)).toEqual(["Joaquim Bezerra Vilaça"]);
   });
 
-  test("Presidente do Senado e da Câmara ficam fora da regra", () => {
+  test("Presidente do Senado fica fora da regra", () => {
     // Arrange
     const c = contato({ nome: "Davi Alcolumbre", cargo: "Presidente do Senado Federal" });
 
     // Act / Assert
     expect(comparacaoPrefixoNome(c, "Presidente do Senado")).toEqual([]);
-    expect(comparacaoPrefixoNome(c, "Presidente da Câmara dos Deputados")).toEqual([]);
   });
 
   test("Senadores: nome com \"Senador\" não é acusado nem corrigido", () => {
@@ -434,7 +434,7 @@ describe("rotuloAchado e textoCoerencia — nome_sem_prefixo", () => {
 
     // Assert
     expect(texto).toContain("(Ministro Edson Fachin)");
-    expect(texto).toContain('O Presidente de tribunal leva "Ministro(a)" antes do nome; o Presidente da República leva "Presidente" (regra do GT, 2026-10-30)');
+    expect(texto).toContain('O Presidente de tribunal leva "Ministro(a)" antes do nome; o Presidente da República leva "Presidente"; o Presidente da Câmara leva "Deputado(a) Federal" (regras do GT de 2026-10-30 e 2026-11-19)');
   });
 });
 

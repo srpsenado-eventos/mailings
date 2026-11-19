@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { detalhesDoContato } from "@/lib/painel";
-import { comparacaoCargoExPresidente, OBSERVACAO_PERIODO, PERIODO_PRESIDENCIA } from "@/lib/regras-cargo";
+import { GRUPO_MINISTROS_INDICADOS } from "@/data/grupos-posse";
+import { comparacaoCargoExPresidente, comparacaoCargoIndicado, OBSERVACAO_PERIODO, PERIODO_PRESIDENCIA } from "@/lib/regras-cargo";
 import { REGRAS_NOME } from "@/data/regras-nome";
 import { rotuloAchado, textoCoerencia } from "@/lib/tratamento";
 import type { ContatoPlanilha, ResultadoContato, ResultadoGrupo } from "@/lib/types";
@@ -228,5 +229,37 @@ describe("texto do achado cargo_ex_presidente", () => {
     expect(texto).toBe(
       "Cargo de ex-presidente fora do formato do GT (Presidente do Congresso Nacional no período de AAAA a AAAA). Informar o período da presidência",
     );
+  });
+});
+
+describe("cargo dos ministros indicados (spec 2026-11-19 §2.4)", () => {
+  const ind = (cargo: string, tratamento = "Senhor"): ContatoPlanilha => ({ nome: "Pessoa Fictícia", grupo: GRUPO_MINISTROS_INDICADOS, cargo, tratamento });
+
+  test.each(["Ministro indicado de Estado da Fazenda", "Ministra indicada da Saúde", "Ministro indicado de Minas e Energia", "ministro indicado de estado do Esporte"])("%s confere", (cargo) => {
+    expect(comparacaoCargoIndicado(ind(cargo))).toEqual([]);
+  });
+  test("sem o indicado: diverge com a pasta copiada", () => {
+    expect(comparacaoCargoIndicado(ind("Ministro de Estado da Fazenda"))).toEqual([
+      { campo: "cargo", valorPlanilha: "Ministro de Estado da Fazenda", valorEsperado: "Ministro indicado de Estado da Fazenda", situacao: "divergente", origemValor: "coerencia", achado: "cargo_indicado" },
+    ]);
+    expect(comparacaoCargoIndicado(ind("Ministra de Estado da Saúde", "Senhora"))[0].valorEsperado).toBe("Ministra indicada de Estado da Saúde");
+  });
+  test("indicada depois de de Estado não é a forma aceita", () => {
+    expect(comparacaoCargoIndicado(ind("Ministra de Estado Indicada da Saúde", "Senhora"))[0].valorEsperado).toBe("Ministra indicada de Estado da Saúde");
+  });
+  test("cargo sem pasta reconhecível leva [Pasta]; cargo vazio e grupo de fora ficam de fora", () => {
+    expect(comparacaoCargoIndicado(ind("Indicado"))[0].valorEsperado).toBe("Ministro indicado de Estado da [Pasta]");
+    expect(comparacaoCargoIndicado(ind(""))).toEqual([]);
+    expect(comparacaoCargoIndicado({ nome: "x", grupo: "Ministros de Estado", cargo: "Ministro de Estado da Fazenda" })).toEqual([]);
+  });
+  test("Ministro de Estado sem pasta leva [Pasta], nunca de Estado de Estado", () => {
+    expect(comparacaoCargoIndicado(ind("Ministro de Estado"))[0].valorEsperado).toBe("Ministro indicado de Estado da [Pasta]");
+  });
+  test("Ministro indicado de Estado sem pasta diverge, com [Pasta] no esperado", () => {
+    expect(comparacaoCargoIndicado(ind("Ministro indicado de Estado"))[0].valorEsperado).toBe("Ministro indicado de Estado da [Pasta]");
+    expect(comparacaoCargoIndicado(ind("Ministra indicada de Estado", "Senhora"))[0].valorEsperado).toBe("Ministra indicada de Estado da [Pasta]");
+  });
+  test("rótulo do achado", () => {
+    expect(rotuloAchado("cargo_indicado")).toBe("Cargo de ministro indicado fora do formato do GT");
   });
 });

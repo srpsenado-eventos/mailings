@@ -588,7 +588,7 @@ describe("comparacoesProtocolo — Governador pela tabela real v02 (04/11)", () 
   });
 });
 
-describe("presidente de tribunal aceita Excelentíssimo(a) Senhor(a) (spec 2026-11-05 §2.4)", () => {
+describe("presidente de tribunal: Excelentíssimo(a) só no STF (spec 2026-11-19 §2.2, substitui 2026-11-05 §2.4)", () => {
   function contatoDe(cargo: string, tratamento: string, grupo: string): ContatoPlanilha {
     return { nome: "Fulano de Tal", cargo, tratamento, grupo };
   }
@@ -601,9 +601,9 @@ describe("presidente de tribunal aceita Excelentíssimo(a) Senhor(a) (spec 2026-
     expect(tratamentoDe(c, "Ministros do STF")?.situacao).toBe("confere");
   });
 
-  test("presidente do STM mulher com 'Excelentíssima Senhora' confere", () => {
+  test("presidente do STM mulher com Excelentíssima Senhora diverge, esperado Senhora", () => {
     const c = contatoDe("Presidente do Superior Tribunal Militar", "Excelentíssima Senhora", "Ministros do STM");
-    expect(tratamentoDe(c, "Ministros do STM")?.situacao).toBe("confere");
+    expect(tratamentoDe(c, "Ministros do STM")?.situacao).toBe("divergente");
   });
 
   test("presidente do STM mulher com 'Excelentíssimo Senhor' continua divergente", () => {
@@ -622,9 +622,9 @@ describe("presidente de tribunal aceita Excelentíssimo(a) Senhor(a) (spec 2026-
     expect(tratamentoDe(c, "Ministros do STF")?.situacao).toBe("divergente");
   });
 
-  test("presidente do STJ com 'Excelentíssimo Senhor' continua sem_regra", () => {
+  test("presidente do STJ com Excelentíssimo Senhor diverge, esperado Senhor", () => {
     const c = contatoDe("Presidente do Superior Tribunal de Justiça", "Excelentíssimo Senhor", "Ministros do STJ");
-    expect(tratamentoDe(c, "Ministros do STJ")?.situacao).toBe("sem_regra");
+    expect(tratamentoDe(c, "Ministros do STJ")?.situacao).toBe("divergente");
   });
 });
 

@@ -74,12 +74,15 @@ const eleicao = (over: Partial<ResultadoEleicao> = {}): ResultadoEleicao => ({
 /** Tratamento e endereçamento coerentes, para que só nome e cargo decidam o semáforo. */
 const SENHOR = { tratamento: "Senhor", enderecamento: "A Sua Excelência o Senhor" };
 const SENHORA = { tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" };
+/** Protocolo fixo dos eleitos (spec 2026-11-19 §2.1). */
+const ELEITO = { tratamento: "Senhor", enderecamento: "Ao Senhor" };
+const ELEITA = { tratamento: "Senhora", enderecamento: "À Senhora" };
 
 const deltan: ContatoPlanilha = {
-  ...SENHOR, id: "1", nome: "Deltan Dallagnol", grupo: GRUPO_SENADORES_ELEITOS, cargo: "Senador", departamento: "PARANÁ",
+  ...ELEITO, id: "1", nome: "Deltan Dallagnol", grupo: GRUPO_SENADORES_ELEITOS, cargo: "Senador", departamento: "PARANÁ",
 };
 const fulano: ContatoPlanilha = {
-  ...SENHOR, id: "2", nome: "Fulano de Tal", grupo: GRUPO_SENADORES_ELEITOS, cargo: "Senador", departamento: "PARANÁ",
+  ...ELEITO, id: "2", nome: "Fulano de Tal", grupo: GRUPO_SENADORES_ELEITOS, cargo: "Senador", departamento: "PARANÁ",
 };
 
 describe("composicaoDaLista (spec 2026-10-30 §4.6)", () => {
@@ -198,7 +201,7 @@ describe("aplicarListas (spec 2026-10-30 §4.6)", () => {
   });
 
   test("sem gênero na lista, a forma feminina do cargo também confirma", () => {
-    const r = aplicarListas(analise([grupoLista(GRUPO_SENADORES_ELEITOS, [{ ...deltan, ...SENHORA, cargo: "Senadora" }])], eleicao()), "30/10");
+    const r = aplicarListas(analise([grupoLista(GRUPO_SENADORES_ELEITOS, [{ ...deltan, ...ELEITA, cargo: "Senadora" }])], eleicao()), "30/10");
     const [c] = r.grupos[0].contatos;
     expect(c.semaforo).toBe("verde");
     expect(c.comparacoes.find((x) => x.campo === "cargo")).toMatchObject({ situacao: "confere", valorEsperado: "Senadora" });
@@ -206,7 +209,7 @@ describe("aplicarListas (spec 2026-10-30 §4.6)", () => {
 
   test("com gênero masculino na lista, o cargo feminino diverge", () => {
     const e = eleicao({ eleitos: [classificado(eleito({ genero: "Masculino" }), GRUPO_SENADORES_ELEITOS)] });
-    const r = aplicarListas(analise([grupoLista(GRUPO_SENADORES_ELEITOS, [{ ...deltan, ...SENHORA, cargo: "Senadora" }])], e), "30/10");
+    const r = aplicarListas(analise([grupoLista(GRUPO_SENADORES_ELEITOS, [{ ...deltan, ...ELEITA, cargo: "Senadora" }])], e), "30/10");
     expect(r.grupos[0].contatos[0].comparacoes.find((x) => x.campo === "cargo")).toMatchObject({ situacao: "divergente", valorEsperado: "Senador" });
   });
 
@@ -224,7 +227,7 @@ describe("aplicarListas (spec 2026-10-30 §4.6)", () => {
   });
 
   test("governador eleito a conferir também sai com o motivo próprio", () => {
-    const joana: ContatoPlanilha = { ...SENHORA, nome: "Joana Fictícia", grupo: GRUPO_GOVERNADORES_ELEITOS, cargo: "Governadora do Estado do Espírito Santo - ES" };
+    const joana: ContatoPlanilha = { ...ELEITA, nome: "Joana Fictícia", grupo: GRUPO_GOVERNADORES_ELEITOS, cargo: "Governadora do Estado do Espírito Santo - ES" };
     const g = grupoLista(GRUPO_GOVERNADORES_ELEITOS, [joana]);
     const eleicaoGoverno = { destino: "conferir" as const, uf: "ES", situacaoTse: "Eleito", statusMandato: "Mandato novo", nomeUrna: "Joana Fictícia" };
     const gov = { eleitos: [govClassificado(governador(), GRUPO_GOVERNADORES_ELEITOS)], segundoTurno: [] };
@@ -316,7 +319,7 @@ describe("aplicarListas (spec 2026-10-30 §4.6)", () => {
   });
 
   test("governador eleito casa pela UF do cargo quando o departamento vem vazio", () => {
-    const joana: ContatoPlanilha = { ...SENHORA, nome: "Joana Fictícia", grupo: GRUPO_GOVERNADORES_ELEITOS, cargo: "Governadora do Estado do Espírito Santo - ES" };
+    const joana: ContatoPlanilha = { ...ELEITA, nome: "Joana Fictícia", grupo: GRUPO_GOVERNADORES_ELEITOS, cargo: "Governadora do Estado do Espírito Santo - ES" };
     const gov = { eleitos: [govClassificado(governador({ genero: "Feminino" }), GRUPO_GOVERNADORES_ELEITOS)], segundoTurno: [] };
     const r = aplicarListas(analise([grupoLista(GRUPO_GOVERNADORES_ELEITOS, [joana])], eleicao({ governadores: gov })), "30/10");
     expect(r.grupos[0].contatos[0].semaforo).toBe("verde");
@@ -359,10 +362,26 @@ describe("aplicarListas (spec 2026-10-30 §4.6)", () => {
     expect(entrada).toEqual(copia);
   });
 
-  test("tratamento sem regra na tabela segue julgado pelos pares depois da comparação com a lista (spec 2026-10-30 §3.4)", () => {
-    // Arrange: cargo fora da tabela de protocolo; ninguém está na lista do TSE.
+  test("fixo vem antes dos pares, e os pares ainda decidem num grupo lista sem protocolo fixo (spec 2026-10-30 §3.4)", () => {
+    // Arrange: Deputados Federais não tem protocolo fixo; cargo fora da tabela; ninguém na lista.
     const pessoa = (id: string, nome: string, tratamento: string): ContatoPlanilha => ({
-      ...SENHOR, id, nome, tratamento, grupo: GRUPO_SENADORES_ELEITOS, cargo: "Parlamentar Eleito", departamento: "PARANÁ",
+      ...SENHOR, id, nome, tratamento, grupo: GRUPO_DEPUTADOS_FEDERAIS, cargo: "Parlamentar Eleito", departamento: "PARANÁ",
+    });
+    const lote = [pessoa("1", "Ana Um", "Senhor"), pessoa("2", "Bia Dois", "Senhor"), pessoa("3", "Caio Tres", "Senhor"), pessoa("4", "Davi Quatro", "Doutor")];
+
+    // Act
+    const r = aplicarListas(analise([grupoLista(GRUPO_DEPUTADOS_FEDERAIS, lote)], eleicao({ deputadosAtuais: [deputado()] })), "30/10");
+
+    // Assert
+    const davi = r.grupos[0].contatos[3];
+    expect(davi.comparacoes.find((x) => x.campo === "tratamento" && x.origemValor === "pares")).toMatchObject({ situacao: "divergente", valorEsperado: "Senhor" });
+    expect(davi.possivelSaida).toBeUndefined();
+  });
+
+  test("eleito segue o protocolo fixo e os pares não julgam o tratamento (spec 2026-11-19 §2.1)", () => {
+    // Arrange: ninguém está na lista do TSE; um deles com tratamento fora do fixo.
+    const pessoa = (id: string, nome: string, tratamento: string): ContatoPlanilha => ({
+      ...ELEITO, id, nome, tratamento, grupo: GRUPO_SENADORES_ELEITOS, cargo: "Parlamentar Eleito", departamento: "PARANÁ",
     });
     const lote = [pessoa("1", "Ana Um", "Senhor"), pessoa("2", "Bia Dois", "Senhor"), pessoa("3", "Caio Tres", "Senhor"), pessoa("4", "Davi Quatro", "Doutor")];
 
@@ -371,8 +390,8 @@ describe("aplicarListas (spec 2026-10-30 §4.6)", () => {
 
     // Assert
     const davi = r.grupos[0].contatos[3];
-    expect(davi.comparacoes.find((x) => x.campo === "tratamento" && x.origemValor === "pares")).toMatchObject({ situacao: "divergente", valorEsperado: "Senhor" });
-    expect(davi.semaforo).toBe("indeterminado");
+    const tratamento = davi.comparacoes.filter((x) => x.campo === "tratamento");
+    expect(tratamento).toEqual([{ campo: "tratamento", valorPlanilha: "Doutor", valorEsperado: "Senhor", situacao: "divergente", origemValor: "regra_gt" }]);
     expect(davi.possivelSaida).toBeUndefined();
   });
 });

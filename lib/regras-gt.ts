@@ -5,12 +5,16 @@ import { normalizarTexto } from "@/lib/normalize";
 
 export const TITULO_REGRAS_GT = "Regras do GT em vigor";
 
-/** Regras que também aparecem no cabeçalho do grupo; o grupo é o canônico do rótulo do Contatos. */
+/**
+ * Regras que também aparecem no cabeçalho do grupo: as do grupo canônico do rótulo do Contatos e,
+ * para os grupos do agrupador sem canônico (eleitos, indicados), as que citam algum segmento do rótulo.
+ * Cada regra aparece uma vez, na ordem do quadro.
+ */
 export function regrasDoGrupo(rotuloDoContatos: string, regras: readonly RegraGt[] = REGRAS_GT): RegraGt[] {
   const canonico = resolverGrupoEFonte(rotuloDoContatos).grupoCanonico;
-  if (!canonico) return [];
-  const alvo = normalizarTexto(canonico);
-  return regras.filter((r) => r.grupos?.some((g) => normalizarTexto(g) === alvo));
+  const alvos = new Set(rotuloDoContatos.split(";").map((s) => normalizarTexto(s.trim())).filter(Boolean));
+  if (canonico) alvos.add(normalizarTexto(canonico));
+  return regras.filter((r) => r.grupos?.some((g) => alvos.has(normalizarTexto(g))));
 }
 
 /** "Regra do GT de DD/MM: título", para o cabeçalho do grupo. */

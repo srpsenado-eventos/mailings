@@ -592,3 +592,34 @@ describe("STM pela página Quem é Quem, de ponta a ponta (spec 2026-11-13 §3.3
     expect(g.contatos.every((r) => !r.possivelSaida)).toBe(true);
   });
 });
+
+describe("Presidente da Câmara: prefixo Deputado Federal contra a página (GT, 2026-11-19)", () => {
+  const GRUPO_CAMARA = "Presidente da Câmara dos Deputados";
+  const pagina: ConteudoFonte = {
+    url: "https://camara.leg.br",
+    textoLimpo: "Hugo Fictício, Presidente.",
+    destaques: [],
+    pessoas: [{ nome: "Hugo Fictício", cargo: "Presidente", origem: "pagina" }],
+  };
+  const presidente = (nome: string): ContatoPlanilha => ({
+    nome,
+    grupo: GRUPO_CAMARA,
+    cargo: "Presidente da Câmara dos Deputados",
+    tratamento: "Excelentíssimo Senhor",
+    enderecamento: "A Sua Excelência o Senhor",
+  });
+
+  test("cadastro com o prefixo casa a página sem ele e o nome confere", () => {
+    const g = compararGrupo(GRUPO_CAMARA, [presidente("Deputado Federal Hugo Fictício")], pagina, GRUPO_CAMARA);
+    const nome = g.contatos[0].comparacoes.find((c) => c.campo === "nome");
+    expect(g.contatos[0].possivelSaida).toBeFalsy();
+    expect(nome?.situacao).toBe("confere");
+    expect(achadosDe(g.contatos[0].comparacoes)).not.toContain("nome_sem_prefixo");
+  });
+
+  test("cadastro sem o prefixo acusa nome_sem_prefixo com o esperado completo", () => {
+    const g = compararGrupo(GRUPO_CAMARA, [presidente("Hugo Fictício")], pagina, GRUPO_CAMARA);
+    const achado = g.contatos[0].comparacoes.find((c) => c.achado === "nome_sem_prefixo");
+    expect(achado?.valorEsperado).toBe("Deputado Federal Hugo Fictício");
+  });
+});

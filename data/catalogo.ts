@@ -351,6 +351,11 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
         gabinetes: { prefixos: ["Gabinete Min.", "Gabinete Min", "Gabinete Ministro", "Gabinete Ministra"], cargo: "Ministro(a)" },
       },
     ],
+    // Gabarito das conferentes, 19/11: só referência, nunca leitura (spec 2026-11-19 §2.5).
+    linksInformativos: [
+      { titulo: "Composição da Corte (referência de gênero)", url: "https://www.stm.jus.br/institucional/conheca-o-superior-tribunal-militar/composicao-da-corte?view=default" },
+      { titulo: "Manual de Comunicação do Senado: forma de tratamento", url: "https://www12.senado.leg.br/manualdecomunicacao/estilos/forma-de-tratamento" },
+    ],
   },
   {
     nome: "Ministros do TCU",

@@ -15,6 +15,8 @@ const TRATAMENTOS = [
   // Embaixadores: "SE Sr." e "S.E. Sra." (chaveToken tira os pontos). "SE" sozinho nunca é prefixo.
   "se sr.", "se sra.",
   "senador", "senadora", "deputado", "deputada",
+  // Prefixo do Presidente da Câmara (GT, 19/11): o par vence o "deputado" solto, pois emTokens ordena do mais longo.
+  "deputado federal", "deputada federal",
   "ministro", "ministra", "presidente", "governador", "governadora",
   "vereador", "vereadora", "prefeito", "prefeita", "desembargador", "desembargadora",
 ];

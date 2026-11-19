@@ -132,6 +132,24 @@ describe("catálogo real (data/catalogo.ts)", () => {
     expect(comPessoaUnica).toHaveLength(3);
   });
 
+  describe("links informativos (spec 2026-11-19 §2.5)", () => {
+    test("todo link informativo é de domínio oficial", () => {
+      const links = CATALOGO.flatMap((g) => g.linksInformativos ?? []);
+      expect(links.length).toBeGreaterThan(0);
+      expect(links.filter((l) => !DOMINIO_OFICIAL.test(l.url)).map((l) => l.url)).toEqual([]);
+    });
+
+    test("o STM tem exatamente os dois links de referência, e só ele", () => {
+      const stm = CATALOGO.find((x) => x.nome === "Ministros do STM")!;
+      expect(stm.linksInformativos).toEqual([
+        { titulo: "Composição da Corte (referência de gênero)", url: "https://www.stm.jus.br/institucional/conheca-o-superior-tribunal-militar/composicao-da-corte?view=default" },
+        { titulo: "Manual de Comunicação do Senado: forma de tratamento", url: "https://www12.senado.leg.br/manualdecomunicacao/estilos/forma-de-tratamento" },
+      ]);
+      expect(CATALOGO.filter((g) => g.linksInformativos).map((g) => g.nome)).toEqual(["Ministros do STM"]);
+      expect(stm.fontes).toHaveLength(1);
+    });
+  });
+
   describe("fontes individuais (spec 2026-10-15)", () => {
     const comIndividuais = CATALOGO.filter((g) => (g.fontesIndividuais ?? []).length > 0);
 

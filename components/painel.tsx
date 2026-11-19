@@ -17,12 +17,28 @@ import { PublicarButton } from "@/components/publicar-button";
 import { CLASSES_COLUNAS, LinhaContato, LinhaNovo } from "@/components/linha-contato";
 import { contarBloqueiosDoGrupo, ehLinhaABloquear, ROTULO_CARTAO_BLOQUEIO, textosDeBloqueioDoGrupo, totalABloquear } from "@/lib/painel-bloqueio";
 import { fontePropria } from "@/lib/painel-fonte-propria";
-import { avisoUrlCaida, cartoesDoResumo, estadoDaFonteDoGrupo, contarContatos, filtrarGrupos, FILTROS, resumoDoGrupo, rotuloDaOpcaoDeGrupo, textoAlternativa, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoMudanca, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, textosProvisorias, type Filtro } from "@/lib/painel";
+import { avisoUrlCaida, cartoesDoResumo, estadoDaFonteDoGrupo, contarContatos, filtrarGrupos, FILTROS, linksInformativosDoGrupo, resumoDoGrupo, rotuloDaOpcaoDeGrupo, textoAlternativa, textoCabecalhoWeb, textoDataHora, textoIndividuais, textoMudanca, textoNumeroNaBase, textoReaproveitada, textoSituacaoDosGrupos, textosProvisorias, type Filtro } from "@/lib/painel";
 import type { HistoricoDecisoes } from "@/lib/decisoes";
 import { gruposNaoCadastrados, linhasDosGruposNaoCadastrados, retratoSemGruposDeTeste, rotulosDeTesteForaDoAgrupador, secoesDosDemaisGrupos } from "@/lib/painel-grupos-vazios";
 import { motivosDosGruposVazios, retratoComPropostasDecididas } from "@/lib/propostas-decisoes";
 import { autoridadesRepetidas, etiquetaDeRepeticao, textoDoLinkDoPainel } from "@/lib/repetidos";
 import type { FalhasPorUrl, ResultadoGrupo, Retrato } from "@/lib/types";
+
+function Referencias({ grupo }: { grupo: string }) {
+  const links = linksInformativosDoGrupo(grupo);
+  if (links.length === 0) return null;
+  return (
+    <>
+      {" · Referências: "}
+      {links.map((l, i) => (
+        <span key={l.url}>
+          {i > 0 && " · "}
+          <a href={l.url} target="_blank" rel="noreferrer" className="underline">{l.titulo}</a>
+        </span>
+      ))}
+    </>
+  );
+}
 
 function EstadoDaFonte({ g, falhas }: { g: ResultadoGrupo; falhas?: FalhasPorUrl }) {
   const caida = avisoUrlCaida(falhas, g.fonteUrl);
@@ -44,6 +60,7 @@ function EstadoDaFonte({ g, falhas }: { g: ResultadoGrupo; falhas?: FalhasPorUrl
         {caida && <> · {caida}</>}
         {g.individuais && <> · {textoIndividuais(g.individuais)}</>}
         {g.fonteUrl && <> · <a href={g.fonteUrl} target="_blank" rel="noreferrer" className="underline">abrir</a></>}
+        {g.fonteUrl && <Referencias grupo={g.grupo} />}
       </span>
     );
   }
@@ -60,6 +77,7 @@ function EstadoDaFonte({ g, falhas }: { g: ResultadoGrupo; falhas?: FalhasPorUrl
       {g.fonteUrl && g.fonteUrl.startsWith("http") && (
         <a href={g.fonteUrl} target="_blank" rel="noreferrer" className="text-acao underline">abrir fonte</a>
       )}
+      {g.fonteUrl && g.fonteUrl.startsWith("http") && <Referencias grupo={g.grupo} />}
     </span>
   );
 }

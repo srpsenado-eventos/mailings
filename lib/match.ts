@@ -28,7 +28,6 @@ import {
   semGenero,
   situacaoCargoTribunal,
   temGeneroNeutro,
-  tratamentoAceitoDoPresidente,
   type ContextoCargo,
 } from "@/lib/cargo-tribunal";
 import { GRUPOS_CARGO_PELA_PASTA, situacaoCargoPelaPasta } from "@/lib/cargo-pasta";
@@ -36,13 +35,12 @@ import { comparacoesProtocoloFixo } from "@/lib/protocolo-fixo";
 import { ehItemInstitucional } from "@/lib/proposta-inclusao";
 import { comparacaoLimiteNome } from "@/lib/limite-nome";
 import { nomeConfereComPatente, nomeEsperadoDaPagina, regraDoGrupo } from "@/lib/nome-patente";
+import { comparacaoPrefixoNome, comparacaoRegraNome } from "@/lib/prefixo-nome";
 import {
-  comparacaoPrefixoNome,
-  comparacaoRegraNome,
   comparacoesCoerencia,
   comparacoesProtocolo,
 } from "@/lib/tratamento";
-import { comparacaoCargoExPresidente } from "@/lib/regras-cargo";
+import { comparacaoCargoExPresidente, comparacaoCargoIndicado } from "@/lib/regras-cargo";
 
 const LIMIAR_PESSOA = 0.6;
 const LIMIAR_TOKEN = 0.85;
@@ -289,18 +287,14 @@ export function comparacoesTratamento(
   contato: ContatoPlanilha,
   grupoCanonico: string | undefined,
 ): ComparacaoCampo[] {
-  const aceitaPresidente = tratamentoAceitoDoPresidente(contato, grupoCanonico);
   return [
     ...comparacoesCoerencia(contato),
-    ...(comparacoesProtocoloFixo(contato, grupoCanonico) ?? comparacoesProtocolo(contato).map((c) =>
-      aceitaPresidente && c.campo === "tratamento" && c.situacao === "divergente"
-        ? { ...c, situacao: "confere" as const }
-        : c,
-    )),
+    ...(comparacoesProtocoloFixo(contato, grupoCanonico) ?? comparacoesProtocolo(contato)),
     ...comparacaoRegraNome(contato, grupoCanonico),
     ...comparacaoPrefixoNome(contato, grupoCanonico),
     ...comparacaoLimiteNome(contato, grupoCanonico),
     ...comparacaoCargoExPresidente(contato, grupoCanonico),
+    ...comparacaoCargoIndicado(contato),
   ];
 }
 

@@ -1,9 +1,11 @@
 import { describe, expect, test } from "vitest";
 import { aplicarPares, contagemDosPares, maioriaDosPares, nucleoDoCargo } from "@/lib/tratamento-pares";
+import { GRUPO_MINISTROS_INDICADOS } from "@/data/grupos-posse";
 import type { ComparacaoCampo, ContatoPlanilha, ResultadoContato, ResultadoGrupo } from "@/lib/types";
 
 const GRUPO = "Ministros do STF";
 const CARGO = "Ministro do Supremo Tribunal Federal";
+const OBSERVACAO = "Endereçamento dos ministros indicados: a definir pelo GT";
 
 /** Contato com as duas comparações de protocolo "sem regra", como a Camada B as deixa. */
 function semRegra(over: Partial<ContatoPlanilha>, semaforo: ResultadoContato["semaforo"] = "verde"): ResultadoContato {
@@ -195,6 +197,27 @@ describe("aplicarPares", () => {
     for (const r of [aplicarPares(dois), aplicarPares(tres)]) {
       expect(r.contatos.every((c) => comparacao(c, "tratamento")?.situacao === "sem_regra")).toBe(true);
       expect(r.contatos.every((c) => c.semaforo === "verde")).toBe(true);
+    }
+  });
+
+  test("endereçamento sem regra dos indicados sobrevive aos pares, com origem regra_gt e a observação", () => {
+    // Arrange: três indicados com o mesmo endereçamento e um diferente.
+    const indicado = (nome: string, enderecamento: string): ResultadoContato => {
+      const base = semRegra({ nome, grupo: GRUPO_MINISTROS_INDICADOS, cargo: "Ministro indicado da Fazenda", enderecamento });
+      return { ...base, comparacoes: [
+        base.comparacoes[0],
+        { campo: "tratamento", valorPlanilha: "Senhor", valorEsperado: "Senhor", situacao: "confere", origemValor: "regra_gt" },
+        { campo: "enderecamento", valorPlanilha: enderecamento, situacao: "sem_regra", origemValor: "regra_gt", observacao: OBSERVACAO },
+      ] };
+    };
+    const contatos = [indicado("A", "Ao Senhor"), indicado("B", "Ao Senhor"), indicado("C", "Ao Senhor"), indicado("D", "A Sua Excelência o Senhor")];
+
+    // Act
+    const r = aplicarPares({ ...grupoCom(contatos), grupo: GRUPO_MINISTROS_INDICADOS });
+
+    // Assert
+    for (const c of r.contatos) {
+      expect(c.comparacoes.find((x) => x.campo === "enderecamento")).toMatchObject({ situacao: "sem_regra", origemValor: "regra_gt", observacao: OBSERVACAO });
     }
   });
 

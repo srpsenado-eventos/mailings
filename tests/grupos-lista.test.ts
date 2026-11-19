@@ -362,6 +362,22 @@ describe("aplicarListas (spec 2026-10-30 §4.6)", () => {
     expect(entrada).toEqual(copia);
   });
 
+  test("fixo vem antes dos pares, e os pares ainda decidem num grupo lista sem protocolo fixo (spec 2026-10-30 §3.4)", () => {
+    // Arrange: Deputados Federais não tem protocolo fixo; cargo fora da tabela; ninguém na lista.
+    const pessoa = (id: string, nome: string, tratamento: string): ContatoPlanilha => ({
+      ...SENHOR, id, nome, tratamento, grupo: GRUPO_DEPUTADOS_FEDERAIS, cargo: "Parlamentar Eleito", departamento: "PARANÁ",
+    });
+    const lote = [pessoa("1", "Ana Um", "Senhor"), pessoa("2", "Bia Dois", "Senhor"), pessoa("3", "Caio Tres", "Senhor"), pessoa("4", "Davi Quatro", "Doutor")];
+
+    // Act
+    const r = aplicarListas(analise([grupoLista(GRUPO_DEPUTADOS_FEDERAIS, lote)], eleicao({ deputadosAtuais: [deputado()] })), "30/10");
+
+    // Assert
+    const davi = r.grupos[0].contatos[3];
+    expect(davi.comparacoes.find((x) => x.campo === "tratamento" && x.origemValor === "pares")).toMatchObject({ situacao: "divergente", valorEsperado: "Senhor" });
+    expect(davi.possivelSaida).toBeUndefined();
+  });
+
   test("eleito segue o protocolo fixo e os pares não julgam o tratamento (spec 2026-11-19 §2.1)", () => {
     // Arrange: ninguém está na lista do TSE; um deles com tratamento fora do fixo.
     const pessoa = (id: string, nome: string, tratamento: string): ContatoPlanilha => ({

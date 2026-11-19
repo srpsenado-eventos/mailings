@@ -1,9 +1,8 @@
 import stringSimilarity from "string-similarity";
-import { chaveToken, normalizarTexto } from "@/lib/normalize";
+import { normalizarTexto } from "@/lib/normalize";
 import { cargoDeMinistroDoConvocado } from "@/lib/cargo-convocado";
 import { REGRAS_TRATAMENTO } from "@/data/tratamentos";
 import { EXCECOES_CARGO } from "@/data/cargos-tratamento";
-import { REGRAS_NOME, type RegraNome } from "@/data/regras-nome";
 import { generoDoCargo, generoPorLexico, MARCADOR_GENERICO, neutralizarGenero, type Genero } from "@/lib/cargos";
 import type {
   AchadoCoerencia,

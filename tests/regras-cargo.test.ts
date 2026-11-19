@@ -252,6 +252,13 @@ describe("cargo dos ministros indicados (spec 2026-11-19 §2.4)", () => {
     expect(comparacaoCargoIndicado(ind(""))).toEqual([]);
     expect(comparacaoCargoIndicado({ nome: "x", grupo: "Ministros de Estado", cargo: "Ministro de Estado da Fazenda" })).toEqual([]);
   });
+  test("Ministro de Estado sem pasta leva [Pasta], nunca de Estado de Estado", () => {
+    expect(comparacaoCargoIndicado(ind("Ministro de Estado"))[0].valorEsperado).toBe("Ministro indicado de Estado da [Pasta]");
+  });
+  test("Ministro indicado de Estado sem pasta diverge, com [Pasta] no esperado", () => {
+    expect(comparacaoCargoIndicado(ind("Ministro indicado de Estado"))[0].valorEsperado).toBe("Ministro indicado de Estado da [Pasta]");
+    expect(comparacaoCargoIndicado(ind("Ministra indicada de Estado", "Senhora"))[0].valorEsperado).toBe("Ministra indicada de Estado da [Pasta]");
+  });
   test("rótulo do achado", () => {
     expect(rotuloAchado("cargo_indicado")).toBe("Cargo de ministro indicado fora do formato do GT");
   });

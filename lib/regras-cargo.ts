@@ -99,7 +99,8 @@ export function comparacaoCargoExPresidente(
 }
 
 /** Cargo aceito dos ministros indicados, normalizado (spec 2026-11-19 §2.4): as duas formas do GT. */
-const CARGO_INDICADO = /^ministr[oa] indicad[oa] (de estado )?d[aeo]s? .+$/;
+// "de estado" sozinho, sem pasta, não confere.
+const CARGO_INDICADO = /^ministr[oa] indicad[oa] (?!de estado$)(de estado )?d[aeo]s? .+$/;
 
 /** Cargo do cadastro "Ministro(a) [de Estado] [indicado(a)] d(a/o/e) Pasta", com o artigo e a pasta capturados. */
 const CARGO_COM_PASTA = /^\s*ministr[oa]\s+(?:indicad[oa]\s+)?(?:de\s+estado\s+)?(?:indicad[oa]\s+)?(d[aeo]s?)\s+(\S.*?)\s*$/i;
@@ -122,7 +123,8 @@ export function comparacaoCargoIndicado(contato: ContatoPlanilha): ComparacaoCam
   if (normalizado.length === 0 || CARGO_INDICADO.test(normalizado)) return [];
   const forma = contatoEhFeminino(contato) ? "Ministra indicada" : "Ministro indicado";
   const achado = CARGO_COM_PASTA.exec(cargo);
-  const pasta = achado ? `${achado[1].toLowerCase()} ${achado[2]}` : "da [Pasta]";
+  const pastaReal = achado && normalizarTexto(achado[2]) !== "estado";
+  const pasta = achado && pastaReal ? `${achado[1].toLowerCase()} ${achado[2]}` : "da [Pasta]";
   return [
     {
       campo: "cargo",

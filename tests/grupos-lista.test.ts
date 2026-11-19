@@ -128,7 +128,7 @@ describe("composicaoDaLista (spec 2026-10-30 §4.6)", () => {
       segundoTurno: [],
     };
     const lista = composicaoDaLista(GRUPO_GOVERNADORES_ELEITOS, eleicao({ governadores: gov }));
-    expect(lista?.map((p) => p.cargoEsperado)).toEqual(["Governador do Estado de Espírito Santo", "Governador do Distrito Federal"]);
+    expect(lista?.map((p) => p.cargoEsperado)).toEqual(["Governador do estado de Espírito Santo", "Governador do Distrito Federal"]);
   });
 
   test("Deputados Federais: a lista de exercício da Câmara, nome parlamentar e nome civil", () => {

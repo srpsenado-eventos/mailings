@@ -50,6 +50,7 @@ export type AchadoCoerencia =
   | "nome_sem_prefixo"
   | "cargo_ex_presidente"
   | "cargo_indicado"
+  | "cargo_governador_caixa"
   | "nome_acima_do_limite";
 
 /** Uma pessoa extraída (estruturada) da fonte oficial. */

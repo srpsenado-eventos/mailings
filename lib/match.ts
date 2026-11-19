@@ -40,7 +40,7 @@ import {
   comparacoesCoerencia,
   comparacoesProtocolo,
 } from "@/lib/tratamento";
-import { comparacaoCargoExPresidente, comparacaoCargoIndicado } from "@/lib/regras-cargo";
+import { comparacaoCargoExPresidente, comparacaoCargoGovernadorCaixa, comparacaoCargoIndicado } from "@/lib/regras-cargo";
 
 const LIMIAR_PESSOA = 0.6;
 const LIMIAR_TOKEN = 0.85;

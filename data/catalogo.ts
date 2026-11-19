@@ -225,6 +225,13 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     // (fornecida em 26/10) fica como alternativa.
     // DF: o portal df.gov.br (fornecido em 26/10) não traz o nome da governadora no texto e
     // geraria possível saída falsa; fica a notícia da CLDF.
+    // Gabarito das conferentes, versão 2, 19/11; fetch de 19/11: 200 (leitura real com `rasparFonte`,
+    // só contagens). PB e RO: a página nova rende governador e passa a principal; a atual vira
+    // alternativa. AC, DF, SP e TO: a página nova não rende pessoa com cargo de governador (AC 5
+    // pessoas, DF 2, SP 7, TO 4, nenhuma com "governador" no cargo), então a atual segue principal e
+    // a nova fica como `urlAlternativa` (DF, SP e TO). DF: a notícia da CLDF continua provisória e
+    // principal. AC: só cabe uma alternativa e a da agência (que lê) fica; a nova
+    // `estado.ac.gov.br/orgao-entidades/` não rende governador e não entra.
     // RR: o nome do governador só aparece depois de clicar no título "Governador do Estado de Roraima"
     // ("Ocupado por: …"; medido em 05/11), o que supera a decisão de 30/10 de deixá-lo "não consta".
     fontesIndividuais: [
@@ -232,14 +239,14 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       { url: "https://amapa.gov.br/gestores", ativo: true, chave: { uf: "AP" }, campos: ["nome", "cargo"] },
       { url: "https://www.transparencia.am.gov.br/estrutura-organizacional/", ativo: true, chave: { uf: "AM" }, campos: ["nome", "cargo"], navegador: "janela" },
       { url: "https://www.pa.gov.br/orgao?id_orgao=2", ativo: true, chave: { uf: "PA" }, campos: ["nome", "cargo"] },
-      { url: "https://rondonia.ro.gov.br/?page_id=1207", ativo: true, chave: { uf: "RO" }, campos: ["nome", "cargo"] },
+      { url: "https://rondonia.ro.gov.br/portal/o-governador/", ativo: true, urlAlternativa: "https://rondonia.ro.gov.br/?page_id=1207", chave: { uf: "RO" }, campos: ["nome", "cargo"] },
       { url: "https://transparencia.rr.gov.br/principaiscargos", ativo: true, chave: { uf: "RR" }, campos: ["nome", "cargo"], navegador: "janela", clicarAntes: { texto: "Governador do Estado de Roraima", prova: "Ocupado por" } },
-      { url: "https://www.to.gov.br/governo", ativo: true, chave: { uf: "TO" }, campos: ["nome", "cargo"] },
+      { url: "https://www.to.gov.br/governo", ativo: true, urlAlternativa: "https://www.to.gov.br/secom/governador/21pfeahm3org", chave: { uf: "TO" }, campos: ["nome", "cargo"] },
       { url: "https://alagoas.al.gov.br/governo/governador-de-alagoas", ativo: true, chave: { uf: "AL" }, campos: ["nome", "cargo"] },
       { url: "https://www.ba.gov.br/comunicacao/equipe-de-governo", ativo: true, chave: { uf: "BA" }, campos: ["nome", "cargo"] },
       { url: "https://www.ce.gov.br/o-governo/", ativo: true, chave: { uf: "CE" }, campos: ["nome", "cargo"] },
       { url: "https://egma.ma.gov.br/integrantes-do-governo", ativo: true, chave: { uf: "MA" }, campos: ["nome", "cargo"] },
-      { url: "https://paraiba.pb.gov.br/governadoria/governador-1", ativo: true, chave: { uf: "PB" }, campos: ["nome", "cargo"] },
+      { url: "https://iphaep.pb.gov.br/governadoria/governador-1", ativo: true, urlAlternativa: "https://paraiba.pb.gov.br/governadoria/governador-1", chave: { uf: "PB" }, campos: ["nome", "cargo"] },
       // Provisória (notícia do TSE), planilha de 23/10.
       { url: "https://www.tse.jus.br/comunicacao/noticias/2026/Outubro/raquel-lyra-psd-e-reeleita-governadora-de-pernambuco", ativo: true, chave: { uf: "PE" }, campos: ["nome", "cargo"], provisoria: "noticia" },
       { url: "https://www.pi.gov.br/governador/", ativo: true, chave: { uf: "PI" }, campos: ["nome", "cargo"] },
@@ -247,17 +254,30 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
       { url: "https://www.se.gov.br/agencia/governo", ativo: true, chave: { uf: "SE" }, campos: ["nome", "cargo"] },
       { url: "https://goias.gov.br/administracao-direta/", ativo: true, chave: { uf: "GO" }, campos: ["nome", "cargo"] },
       // Provisória (notícia da Câmara Legislativa do DF), planilha de 23/10.
-      { url: "https://www.cl.df.gov.br/-/celina-leao-toma-posse-como-governadora-do-distrito-federal", ativo: true, chave: { uf: "DF" }, campos: ["nome", "cargo"], provisoria: "noticia" },
+      { url: "https://www.cl.df.gov.br/-/celina-leao-toma-posse-como-governadora-do-distrito-federal", ativo: true, urlAlternativa: "https://www.df.gov.br/perfil-do-governador", chave: { uf: "DF" }, campos: ["nome", "cargo"], provisoria: "noticia" },
       { url: "https://www.transparencia.ms.gov.br/#/QuemEQuem", ativo: true, chave: { uf: "MS" }, campos: ["nome", "cargo"], navegador: true },
       { url: "https://www.es.gov.br/governo/governador", ativo: true, chave: { uf: "ES" }, campos: ["nome", "cargo"] },
       { url: "https://www.rj.gov.br/pagina/sobre-o-governo9806", ativo: true, chave: { uf: "RJ" }, campos: ["nome", "cargo"], navegador: "janela" },
-      { url: "https://www.sp.gov.br/sp/institucional/estrutura/!ut/p/z1/04_Sj9CPykssy0xPLMnMz0vMAfIjo8ziDSzMTIyM3Q2MPYyDnQ3MXB3DzJ2NQg0M_Y31wyEKcABHA_0oovTjVhCF3_hw_ShUKwKCg4Am-BpaOvtauhk7-pvhV-DpbAxTgNuSgtzQCINMT0UAo-8oDA!!/", ativo: true, chave: { uf: "SP" }, campos: ["nome", "cargo"] },
+      { url: "https://www.sp.gov.br/sp/institucional/estrutura/!ut/p/z1/04_Sj9CPykssy0xPLMnMz0vMAfIjo8ziDSzMTIyM3Q2MPYyDnQ3MXB3DzJ2NQg0M_Y31wyEKcABHA_0oovTjVhCF3_hw_ShUKwKCg4Am-BpaOvtauhk7-pvhV-DpbAxTgNuSgtzQCINMT0UAo-8oDA!!/", ativo: true, urlAlternativa: "https://www.sp.gov.br/sp/institucional/estrutura/governador", chave: { uf: "SP" }, campos: ["nome", "cargo"] },
       { url: "https://www.parana.pr.gov.br/Pagina/Quemequem", ativo: true, chave: { uf: "PR" }, campos: ["nome", "cargo"] },
       { url: "https://www.estado.rs.gov.br/governador", ativo: true, chave: { uf: "RS" }, campos: ["nome", "cargo"] },
       // GT de 05/11. MT é montada por JavaScript (o fetch traz 70 caracteres): lida pelo Chrome.
       { url: "https://portal.mt.gov.br/conheca-mato-grosso/governo", ativo: true, chave: { uf: "MT" }, campos: ["nome", "cargo"], navegador: true },
       { url: "https://www.mg.gov.br/governador/mateus-simoes-de-almeida", ativo: true, chave: { uf: "MG" }, campos: ["nome", "cargo"] },
       { url: "https://agenda.scc.sc.gov.br/site/colegiado-de-governo", ativo: true, chave: { uf: "SC" }, campos: ["nome", "cargo"] },
+    ],
+    // Gabarito das conferentes, versão 2, 19/11; fetch de 19/11: 200. Só referência, nunca leitura:
+    // os diários oficiais não listam o governador numa página legível (a Cepe, de PE, é domínio
+    // privado e por isso nunca seria fonte) e os dois verbetes do Manual de Comunicação do Senado
+    // dizem como escrever o estado no cargo (spec 2026-11-19 §2.2).
+    linksInformativos: [
+      { titulo: "Diário Oficial do ES (referência do gabarito)", url: "https://ioes.dio.es.gov.br/portal/visualizacoes/diario_oficial" },
+      { titulo: "Diário Oficial do MS (referência do gabarito)", url: "https://www.diariooficial.ms.gov.br" },
+      { titulo: "Diário Oficial de PE (referência do gabarito)", url: "https://diariooficial.cepe.com.br/diariooficialweb/#/home?diario=MQ%3D%3D" },
+      { titulo: "Diário Oficial do RJ (referência do gabarito)", url: "https://portal.ioerj.com.br" },
+      { titulo: "Diário Oficial de RR (referência do gabarito)", url: "https://www.imprensaoficial.rr.gov.br/_inicial/" },
+      { titulo: "Manual de Comunicação do Senado: artigo definido dos estados", url: "https://www12.senado.leg.br/manualdecomunicacao/estilos/artigo-definido" },
+      { titulo: "Manual de Comunicação do Senado: \"estado\" em minúscula", url: "https://www12.senado.leg.br/manualdecomunicacao/estilos/estado" },
     ],
   },
   {

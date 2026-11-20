@@ -152,7 +152,9 @@ export function fonteIndividualDe(
 
 function mapearGrupo(grupo: GrupoCatalogo): GrupoCadastro {
   const fonteAtiva = grupo.fontes.find((f) => f.ativo);
-  const individuais = (grupo.fontesIndividuais ?? []).filter((f) => f.ativo).length;
+  const ativas = (grupo.fontesIndividuais ?? []).filter((f) => f.ativo);
+  const complementares = ativas.filter((f) => f.complementar === true).length;
+  const individuais = ativas.length - complementares;
   return {
     nome: grupo.nome,
     responsavel1: grupo.responsavel1,
@@ -162,8 +164,9 @@ function mapearGrupo(grupo: GrupoCatalogo): GrupoCadastro {
     emailResp2: grupo.emailResp2,
     emailBackup: grupo.emailBackup,
     fonteUrl: fonteAtiva?.url,
-    temFonte: fonteAtiva !== undefined || individuais > 0,
+    temFonte: fonteAtiva !== undefined || ativas.length > 0,
     fontesIndividuais: individuais,
+    paginasComplementares: complementares,
     ...(fonteAtiva?.campos ? { camposFontePrimaria: fonteAtiva.campos } : {}),
   };
 }

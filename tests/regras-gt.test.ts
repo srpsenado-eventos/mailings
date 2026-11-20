@@ -67,8 +67,9 @@ describe("regras do GT em vigor (spec 2026-11-04 §3.2)", () => {
   test("grupos do agrupador sem canônico casam pelo segmento do rótulo, sem repetir regra", () => {
     expect(regrasDoGrupo(GRUPO_SENADORES_ELEITOS).map((r) => r.titulo)).toContain("Eleitos");
     expect(regrasDoGrupo("Senadores; " + GRUPO_SENADORES_ELEITOS).map((r) => r.titulo)).toContain("Eleitos");
-    // O rótulo dos indicados também resolve o canônico "Ministros de Estado", que leva a regra da CGU.
-    expect(regrasDoGrupo(GRUPO_MINISTROS_INDICADOS).map((r) => r.titulo)).toEqual(["Ministros de Estado indicados", "Ministros de Estado: CGU"]);
+    // Grupo neutro não soma o canônico "Ministros de Estado" que o rótulo resolve: sem a regra da CGU.
+    expect(regrasDoGrupo(GRUPO_MINISTROS_INDICADOS).map((r) => r.titulo)).toEqual(["Ministros de Estado indicados"]);
+    expect(regrasDoGrupo("Ministros de Estado").map((r) => r.titulo)).toEqual(["Ministros de Estado: CGU"]);
     expect(regrasDoGrupo("Ministros do STJ").filter((r) => r.titulo === "Presidentes de tribunal")).toHaveLength(1);
   });
   test("textos curto e longo", () => {

@@ -14,6 +14,9 @@ function FonteStatus({ grupo }: { grupo: GrupoCadastro }) {
           {grupo.camposFontePrimaria && <span className="ml-2 text-xs text-gray-500">(referência de: {grupo.camposFontePrimaria.join(", ")})</span>}
         </div>
       )}
+      {grupo.paginasComplementares > 0 && (
+        <div className="text-xs text-gray-600">{grupo.paginasComplementares} {grupo.paginasComplementares === 1 ? "página complementar" : "páginas complementares"}</div>
+      )}
       {grupo.fontesIndividuais > 0 && (
         <div className="text-xs text-gray-600">{grupo.fontesIndividuais} {grupo.fontesIndividuais === 1 ? "fonte individual" : "fontes individuais"} (uma página por contato)</div>
       )}

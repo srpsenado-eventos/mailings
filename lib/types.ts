@@ -333,8 +333,10 @@ export interface GrupoCadastro {
   /** URL oficial primária ativa, se houver. */
   fonteUrl?: string;
   temFonte: boolean;
-  /** Quantidade de fontes individuais ativas (spec 2026-10-15). */
+  /** Quantidade de fontes individuais comuns ativas, uma página por contato (spec 2026-10-15). */
   fontesIndividuais: number;
+  /** Quantidade de páginas complementares ativas: uma página de um contato num grupo lido por página de grupo (spec 2026-11-19 v2 §2.3). */
+  paginasComplementares: number;
   /** Campos que a fonte primária cobre, quando ela declara (`["cargo"]` na lista do Planalto). */
   camposFontePrimaria?: readonly CampoFonte[];
 }

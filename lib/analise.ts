@@ -438,7 +438,7 @@ async function analisarGrupoResolvendo(
     ler: (f: FonteIndividual) => lerFonte(f, deps, agora, individualComConteudo, MOTIVO_PAGINA_INDIVIDUAL_SEM_CONTEUDO),
     guardar: (l: IndividualLida) => guardar(l, agora),
   };
-  return aplicarComplementares(doGrupo, contatos, vigentes, leitor);
+  return aplicarComplementares(doGrupo, vigentes, leitor);
 }
 
 /** Caminho de grupo (spec 2026-09-24): todas as fontes ativas compõem a composição. */

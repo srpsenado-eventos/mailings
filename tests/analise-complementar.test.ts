@@ -132,6 +132,19 @@ describe("fonte individual complementar (spec 2026-11-19 v2 §2.3)", () => {
     expect(c.possivelSaida).toBeUndefined();
   });
 
+  test("achado de coerência do grupo no mesmo campo não é trocado nem duplicado pela página complementar", async () => {
+    const complementar: FonteIndividual = { ...complementarEx, campos: ["nome", "cargo"] };
+    const compCargo = pagina(URL_COMP_EX, "Senador Garibaldi Alves Filho Perfil parlamentar", [{ nome: "Garibaldi Alves Filho", cargo: "Presidente do Congresso Nacional" }]);
+    const comEx: ContatoPlanilha = { ...garibaldi, cargo: "Ex-Presidente do Senado" };
+    const r = await analisar("c.xlsx", [comEx, outro], deps(resolvidaEx([complementar]), { [URL_EX]: grupoEx, [URL_COMP_EX]: compCargo }));
+    const cargos = contato(r, "Garibaldi Alves Filho").comparacoes.filter((x) => x.campo === "cargo");
+    expect(cargos.filter((x) => x.achado === "cargo_ex_presidente")).toHaveLength(1);
+    const daPagina = cargos.filter((x) => !x.achado);
+    expect(daPagina).toHaveLength(1);
+    expect(daPagina[0].fonteUrl).toBe(URL_COMP_EX);
+    expect(cargos).toHaveLength(2);
+  });
+
   test("Ministros de Estado: o cargo da CGU confere pela página individual; os demais seguem a pasta", async () => {
     const r = await analisar("c.xlsx", [beltrano, fulano], deps(resolvidaMin, { [URL_MIN]: grupoMin, [URL_COMP_MIN]: compMin }));
     expect(campo(r, "Fulano Controlador Fictício", "cargo")).toMatchObject({ situacao: "confere", fonteUrl: URL_COMP_MIN });

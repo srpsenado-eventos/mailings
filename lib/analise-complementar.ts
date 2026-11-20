@@ -1,7 +1,6 @@
 import type {
   ComparacaoCampo,
   ConteudoFonte,
-  ContatoPlanilha,
   FonteIndividual,
   LeituraAlternativa,
   Reaproveitamento,
@@ -78,14 +77,15 @@ export function soComplementares(vigentes: readonly FonteIndividual[]): boolean 
 
 /**
  * Troca no resultado do grupo as comparações dos campos da página complementar pelas do veredito
- * individual. Campo que o veredito não traz (cargo vazio no cadastro) fica como o grupo decidiu.
+ * individual (achados de coerência do grupo ficam). Campo que o veredito não traz (cargo vazio no cadastro) fica como o grupo decidiu.
  * Só é chamada para contato verde ou amarelo no grupo; o semáforo é refeito a partir das divergências.
  */
 function trocarCampos(r: ResultadoContato, doVeredito: readonly ComparacaoCampo[], fonte: FonteIndividual, leituraDe: string | undefined): ResultadoContato {
   const cobre = (campo: string) => (fonte.campos as readonly string[]).includes(campo);
-  const novas = new Map(doVeredito.filter((c) => cobre(c.campo)).map((c) => [c.campo, c]));
-  const trocadas = r.comparacoes.map((c) => novas.get(c.campo) ?? c);
-  const jaTinha = new Set(r.comparacoes.map((c) => c.campo));
+  // Só as comparações da página (sem `achado`) são trocadas; as de coerência do grupo (Camada C) ficam.
+  const novas = new Map(doVeredito.filter((c) => cobre(c.campo) && !c.achado).map((c) => [c.campo, c]));
+  const trocadas = r.comparacoes.map((c) => (!c.achado && novas.has(c.campo) ? novas.get(c.campo)! : c));
+  const jaTinha = new Set(r.comparacoes.filter((c) => !c.achado).map((c) => c.campo));
   const comparacoes = [...trocadas, ...[...novas.values()].filter((c) => !jaTinha.has(c.campo))];
   const camposDivergentes = divergenciasDe(comparacoes);
   return {
@@ -112,13 +112,12 @@ function comObservacao(r: ResultadoContato, aviso: string): ResultadoContato {
  */
 export async function aplicarComplementares(
   analise: AnaliseComplementavel,
-  contatos: readonly ContatoPlanilha[],
   complementares: readonly FonteIndividual[],
   leitor: LeitorDePaginas,
 ): Promise<AnaliseComplementavel> {
   const { grupo } = analise;
-  if (grupo.semFonte || grupo.fonteInacessivel || grupo.contatos.length !== contatos.length) return analise;
-  const ligacoes = contatos.map((c) => fonteIndividualDe(c, complementares));
+  if (grupo.semFonte || grupo.fonteInacessivel) return analise;
+  const ligacoes = grupo.contatos.map((r) => fonteIndividualDe(r.contato, complementares));
   const aLer = [...new Map(ligacoes.flatMap((f) => (f ? [[f.url, f] as const] : []))).values()];
   if (aLer.length === 0) return analise;
 

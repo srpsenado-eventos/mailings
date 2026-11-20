@@ -230,8 +230,10 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     // e o Chrome com janela traz a página inteira (medido em 2026-10-16): `navegador: "janela"`.
     // AC (GT de 05/11): volta à página `orgao-entidades/governadoria/`; a da agência oficial
     // (fornecida em 26/10) fica como alternativa.
-    // DF: o portal df.gov.br (fornecido em 26/10) não traz o nome da governadora no texto e
-    // geraria possível saída falsa; fica a notícia da CLDF.
+    // DF: em 26/10 o portal df.gov.br não rendeu o nome da governadora e geraria possível saída
+    // falsa; fica a notícia da CLDF. Na medição de 19/11 (fetch) o texto da página nova traz o nome
+    // inteiro da governadora e "governadora do distrito federal", mas a extração do raspador não
+    // rende pessoa com cargo; por isso a notícia segue principal e a página nova fica só como alternativa.
     // Gabarito das conferentes, versão 2, 19/11; fetch de 19/11: 200 (leitura real com `rasparFonte`,
     // só contagens). PB e RO: a página nova rende governador e passa a principal; a atual vira
     // alternativa. AC, DF, SP e TO: a página nova não rende pessoa com cargo de governador (AC 5

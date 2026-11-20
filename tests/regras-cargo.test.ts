@@ -280,6 +280,9 @@ describe("caixa de \"estado\" no cargo dos governadores (spec 2026-11-19 v2 §2.
   test("vale nos governadores eleitos pelo rótulo do agrupador, sem grupo canônico", () => {
     expect(comparacaoCargoGovernadorCaixa(gov("Governador eleito do Estado do Pará", GRUPO_GOVERNADORES_ELEITOS), undefined)[0]?.valorEsperado).toBe("Governador eleito do estado do Pará");
   });
+  test("caso literal da spec: ELEITO DO ESTADO DO PARÁ nos governadores eleitos", () => {
+    expect(comparacaoCargoGovernadorCaixa(gov("Governador ELEITO DO ESTADO DO PARÁ", GRUPO_GOVERNADORES_ELEITOS), undefined)[0]?.valorEsperado).toBe("Governador ELEITO DO estado DO PARÁ");
+  });
   test("fora dos grupos de governador nada muda", () => {
     expect(comparacaoCargoGovernadorCaixa({ nome: "x", grupo: "Senadores", cargo: "Governador do Estado de Goiás" }, "Senadores (Acre a Goiás)")).toEqual([]);
   });

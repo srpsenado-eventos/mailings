@@ -89,11 +89,12 @@ export const CATALOGO: readonly GrupoCatalogo[] = [
     fontes: [
       { url: "https://www.eb.mil.br/web/comandante-do-exercito", ativo: true, pessoaUnica: { cargo: "Comandante do Exército Brasileiro" } },
       // Página montada por JavaScript (gov.br): lida pela janela; só o chefe do EMCFA, pelo cargo como a página escreve.
-      { url: "https://www.gov.br/defesa/pt-br/composicao", ativo: true, navegador: "janela", marcador: { textos: ["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"], obrigatorio: true } },
+      // Gabarito das conferentes, versão 2, 19/11; fetch de 19/11: quem-e-quem 200 com o marcador em linha própria; a composição fica como alternativa.
+      { url: "https://www.gov.br/defesa/pt-br/composicao/quem-e-quem", urlAlternativa: "https://www.gov.br/defesa/pt-br/composicao", ativo: true, navegador: "janela", marcador: { textos: ["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"], obrigatorio: true } },
       // Verificação anti-robô da Cloudflare medida em 13/11: falha ao fetch e à janela, em toda coleta, até o Clovis
-      // indicar outra página. O grupo sai em leitura parcial e o comandante fica indeterminado, ou "≈ via IA" quando há
+      // indicar outra página (gabarito v2, 19/11: relacao-de-autoridades 403 (Cloudflare), como a principal; entra como alternativa). O grupo sai em leitura parcial e o comandante fica indeterminado, ou "≈ via IA" quando há
       // ANTHROPIC_API_KEY e a IA o resgata; nunca saída.
-      { url: "https://www.marinha.mil.br/comandantedamarinha", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Marinha" } },
+      { url: "https://www.marinha.mil.br/comandantedamarinha", urlAlternativa: "https://www.marinha.mil.br/relacao-de-autoridades", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Marinha" } },
       // Mesma verificação da Cloudflare da Marinha (13/11): falha ao fetch e à janela; indeterminado, ou "≈ via IA" com a
       // IA ligada, até o Clovis indicar outra página.
       { url: "https://www.fab.mil.br/a-forca-aerea/comandante/", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Aeronáutica" } },

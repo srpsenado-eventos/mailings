@@ -92,10 +92,12 @@ describe("catálogo real (data/catalogo.ts)", () => {
         "https://paraiba.pb.gov.br/governadoria/governador-1",
         "https://rondonia.ro.gov.br/?page_id=1207",
         "https://www.df.gov.br/perfil-do-governador",
+        "https://www.gov.br/defesa/pt-br/composicao",
+        "https://www.marinha.mil.br/relacao-de-autoridades",
         "https://www.sp.gov.br/sp/institucional/estrutura/governador",
         "https://www.to.gov.br/secom/governador/21pfeahm3org",
       ]);
-      expect(alternativas.every((u) => /^https:\/\/[a-z0-9.-]+\.gov\.br\//.test(u))).toBe(true);
+      expect(alternativas.every((u) => /^https:\/\/[a-z0-9.-]+\.(gov|mil)\.br\//.test(u))).toBe(true);
     });
 
     test("AC lê a página da governadoria, com a agência como alternativa (GT de 05/11)", () => {
@@ -132,8 +134,8 @@ describe("catálogo real (data/catalogo.ts)", () => {
     const g = CATALOGO.find((x) => x.nome === "Comandantes das Forças Armadas e EMCFA")!;
     expect(g.fontes).toEqual([
       { url: "https://www.eb.mil.br/web/comandante-do-exercito", ativo: true, pessoaUnica: { cargo: "Comandante do Exército Brasileiro" } },
-      { url: "https://www.gov.br/defesa/pt-br/composicao", ativo: true, navegador: "janela", marcador: { textos: ["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"], obrigatorio: true } },
-      { url: "https://www.marinha.mil.br/comandantedamarinha", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Marinha" } },
+      { url: "https://www.gov.br/defesa/pt-br/composicao/quem-e-quem", urlAlternativa: "https://www.gov.br/defesa/pt-br/composicao", ativo: true, navegador: "janela", marcador: { textos: ["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"], obrigatorio: true } },
+      { url: "https://www.marinha.mil.br/comandantedamarinha", urlAlternativa: "https://www.marinha.mil.br/relacao-de-autoridades", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Marinha" } },
       { url: "https://www.fab.mil.br/a-forca-aerea/comandante/", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Aeronáutica" } },
     ]);
     expect(g.fontes.every((f) => DOMINIO_OFICIAL.test(f.url))).toBe(true);

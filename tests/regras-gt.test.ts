@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { REGRAS_GT } from "@/data/regras-gt";
-import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_GOVERNADORES_ELEITOS, GRUPO_MINISTROS_INDICADOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
+import { GRUPO_DEPUTADOS_ELEITOS, GRUPO_GOVERNADORES, GRUPO_GOVERNADORES_ELEITOS, GRUPO_MINISTROS_INDICADOS, GRUPO_SENADORES_ELEITOS } from "@/data/grupos-posse";
 import { regrasDoGrupo, textoCurto, textoLongo } from "@/lib/regras-gt";
 
 describe("regras do GT em vigor (spec 2026-11-04 §3.2)", () => {
@@ -49,23 +49,27 @@ describe("regras do GT em vigor (spec 2026-11-04 §3.2)", () => {
   });
   test("regras por grupo: STM tem duas, Governadores uma, Senadores a dos presidentes do Congresso; rótulo com variação casa pelo catálogo", () => {
     expect(regrasDoGrupo("Ministros do STM").map((r) => r.titulo)).toEqual(["STM: patente como no site", "Presidentes de tribunal"]);
-    expect(regrasDoGrupo("Governadores").map((r) => r.titulo)).toEqual(["Tratamento"]);
+    expect(regrasDoGrupo("Governadores").map((r) => r.titulo)).toEqual(["Tratamento", "Governadores: cargo"]);
     expect(regrasDoGrupo("Senadores").map((r) => r.titulo)).toEqual(["Presidentes do Congresso e da Câmara"]);
     expect(regrasDoGrupo("rótulo desconhecido")).toEqual([]);
   });
-  test("as quatro regras de 19/11 com os textos literais e os grupos (spec 2026-11-19 §2.6)", () => {
+  test("as seis regras de 19/11 com os textos literais e os grupos (spec 2026-11-19 §2.6)", () => {
     const de1911 = REGRAS_GT.filter((r) => r.data === "2026-11-19");
     expect(de1911.map((r) => [r.titulo, r.texto, r.grupos])).toEqual([
       ["Eleitos", "Senadores, deputados federais e governadores eleitos: tratamento Senhor(a) e endereçamento Ao Senhor / À Senhora; o cargo fica como no Contatos (Senador(a) eleito(a), Deputado(a) Federal eleito(a), Governador(a) eleito(a) do estado de X).", [GRUPO_SENADORES_ELEITOS, GRUPO_DEPUTADOS_ELEITOS, GRUPO_GOVERNADORES_ELEITOS]],
       ["Presidentes de tribunal", "Tratamento Excelentíssimo(a) Senhor(a) só no Presidente do STF; nos presidentes do STJ, STM, TCU, TSE e TST, Senhor(a). Endereçamento A Sua Excelência o(a) Senhor(a) nos seis. O nome leva \"Ministro(a)\" e o cargo traz a presidência.", ["Ministros do STF", "Ministros do STJ", "Ministros do TSE", "Ministros do TST", "Ministros do STM", "Ministros do TCU"]],
       ["Presidente da Câmara: nome", "O nome leva \"Deputado(a) Federal\" antes, como no Contatos; o cargo é Presidente da Câmara dos Deputados.", ["Presidente da Câmara dos Deputados"]],
       ["Ministros de Estado indicados", "Tratamento Senhor(a); cargo \"Ministro(a) indicado(a) de Estado da <Pasta>\" ou \"Ministro(a) indicado(a) da <Pasta>\", como nos ministros atuais; endereçamento ainda a definir pelo GT.", [GRUPO_MINISTROS_INDICADOS]],
+      ["Governadores: cargo", "Cargo \"Governador(a) do estado de(a/o) X\" com \"estado\" em minúscula (Manual de Comunicação do Senado); DF é \"Governador(a) do Distrito Federal\".", [GRUPO_GOVERNADORES, GRUPO_GOVERNADORES_ELEITOS]],
+      ["Ministros de Estado: CGU", "O cargo do ministro da CGU é \"Ministro da Controladoria-Geral da União\", conferido na página \"Quem é quem\" da CGU; os demais seguem a página do Planalto.", ["Ministros de Estado"]],
     ]);
   });
   test("grupos do agrupador sem canônico casam pelo segmento do rótulo, sem repetir regra", () => {
     expect(regrasDoGrupo(GRUPO_SENADORES_ELEITOS).map((r) => r.titulo)).toContain("Eleitos");
     expect(regrasDoGrupo("Senadores; " + GRUPO_SENADORES_ELEITOS).map((r) => r.titulo)).toContain("Eleitos");
+    // Grupo neutro não soma o canônico "Ministros de Estado" que o rótulo resolve: sem a regra da CGU.
     expect(regrasDoGrupo(GRUPO_MINISTROS_INDICADOS).map((r) => r.titulo)).toEqual(["Ministros de Estado indicados"]);
+    expect(regrasDoGrupo("Ministros de Estado").map((r) => r.titulo)).toEqual(["Ministros de Estado: CGU"]);
     expect(regrasDoGrupo("Ministros do STJ").filter((r) => r.titulo === "Presidentes de tribunal")).toHaveLength(1);
   });
   test("textos curto e longo", () => {

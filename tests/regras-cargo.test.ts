@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { detalhesDoContato } from "@/lib/painel";
-import { GRUPO_MINISTROS_INDICADOS } from "@/data/grupos-posse";
-import { comparacaoCargoExPresidente, comparacaoCargoIndicado, OBSERVACAO_PERIODO, PERIODO_PRESIDENCIA } from "@/lib/regras-cargo";
+import { GRUPO_GOVERNADORES, GRUPO_GOVERNADORES_ELEITOS, GRUPO_MINISTROS_INDICADOS } from "@/data/grupos-posse";
+import { comparacaoCargoExPresidente, comparacaoCargoGovernadorCaixa, comparacaoCargoIndicado, OBSERVACAO_PERIODO, PERIODO_PRESIDENCIA } from "@/lib/regras-cargo";
 import { REGRAS_NOME } from "@/data/regras-nome";
 import { rotuloAchado, textoCoerencia } from "@/lib/tratamento";
 import type { ContatoPlanilha, ResultadoContato, ResultadoGrupo } from "@/lib/types";
@@ -261,5 +261,34 @@ describe("cargo dos ministros indicados (spec 2026-11-19 §2.4)", () => {
   });
   test("rótulo do achado", () => {
     expect(rotuloAchado("cargo_indicado")).toBe("Cargo de ministro indicado fora do formato do GT");
+  });
+});
+
+describe("caixa de \"estado\" no cargo dos governadores (spec 2026-11-19 v2 §2.1)", () => {
+  const gov = (cargo: string, grupo = GRUPO_GOVERNADORES) => ({ nome: "Pessoa Fictícia", grupo, cargo });
+  test.each(["Governador do estado de Goiás", "Governadora do estado da Bahia", "Governador em Exercício do estado de Goiás", "Governador eleito do estado de Alagoas", "Governadora do Distrito Federal", ""])("%s não gera achado", (cargo) => {
+    expect(comparacaoCargoGovernadorCaixa(gov(cargo), "Governadores")).toEqual([]);
+  });
+  test("Estado com inicial maiúscula diverge com o esperado em minúscula", () => {
+    expect(comparacaoCargoGovernadorCaixa(gov("Governador do Estado de Goiás"), "Governadores")).toEqual([
+      { campo: "cargo", valorPlanilha: "Governador do Estado de Goiás", valorEsperado: "Governador do estado de Goiás", situacao: "divergente", origemValor: "coerencia", achado: "cargo_governador_caixa" },
+    ]);
+  });
+  test("tudo em caixa alta troca só a palavra", () => {
+    expect(comparacaoCargoGovernadorCaixa(gov("GOVERNADOR DO ESTADO DO PARÁ"), "Governadores")[0].valorEsperado).toBe("GOVERNADOR DO estado DO PARÁ");
+  });
+  test("vale nos governadores eleitos pelo rótulo do agrupador, sem grupo canônico", () => {
+    expect(comparacaoCargoGovernadorCaixa(gov("Governador eleito do Estado do Pará", GRUPO_GOVERNADORES_ELEITOS), undefined)[0]?.valorEsperado).toBe("Governador eleito do estado do Pará");
+  });
+  test("caso literal da spec: ELEITO DO ESTADO DO PARÁ nos governadores eleitos", () => {
+    expect(comparacaoCargoGovernadorCaixa(gov("Governador ELEITO DO ESTADO DO PARÁ", GRUPO_GOVERNADORES_ELEITOS), undefined)[0]?.valorEsperado).toBe("Governador ELEITO DO estado DO PARÁ");
+  });
+  test("fora dos grupos de governador nada muda", () => {
+    expect(comparacaoCargoGovernadorCaixa({ nome: "x", grupo: "Senadores", cargo: "Governador do Estado de Goiás" }, "Senadores (Acre a Goiás)")).toEqual([]);
+  });
+  test("rótulo e texto do achado", () => {
+    expect(rotuloAchado("cargo_governador_caixa")).toBe('Cargo do governador com "estado" em caixa alta (o GT escreve em minúscula)');
+    const [c] = comparacaoCargoGovernadorCaixa(gov("Governador do Estado de Goiás"), "Governadores");
+    expect(textoCoerencia(c)).toBe('Cargo do governador com "estado" em caixa alta (o GT escreve em minúscula) (Governador do estado de Goiás)');
   });
 });

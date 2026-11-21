@@ -324,6 +324,26 @@ describe("resolverGrupoEFonte com fontes individuais", () => {
     expect(lista.find((g) => g.nome === "Ministros")).toMatchObject({ temFonte: true, fontesIndividuais: 1, camposFontePrimaria: ["cargo"] });
   });
 
+  test("listarGruposComFonte conta as páginas complementares à parte das individuais comuns", () => {
+    const so: GrupoCatalogo = {
+      nome: "Ex-Presidentes",
+      fontes: [{ url: "https://exemplo.leg.br/lista", ativo: true }],
+      fontesIndividuais: [{ url: "https://exemplo.leg.br/p1", ativo: true, chave: { nome: "A" }, campos: ["nome"], complementar: true }],
+    };
+    const duas: GrupoCatalogo = {
+      nome: "Dois",
+      fontes: [{ url: "https://exemplo.leg.br/lista2", ativo: true }],
+      fontesIndividuais: [
+        { url: "https://exemplo.leg.br/p2", ativo: true, chave: { nome: "B" }, campos: ["nome"], complementar: true },
+        { url: "https://exemplo.leg.br/p3", ativo: true, chave: { nome: "C" }, campos: ["nome"], complementar: true },
+      ],
+    };
+    const lista = listarGruposComFonte([so, duas, governadores]);
+    expect(lista.find((g) => g.nome === "Ex-Presidentes")).toMatchObject({ temFonte: true, fontesIndividuais: 0, paginasComplementares: 1 });
+    expect(lista.find((g) => g.nome === "Dois")).toMatchObject({ fontesIndividuais: 0, paginasComplementares: 2 });
+    expect(lista.find((g) => g.nome === "Governadores")).toMatchObject({ fontesIndividuais: 1, paginasComplementares: 0 });
+  });
+
   test("rótulo 'Governadores Eleitos' casa o grupo exato e não herda as individuais de Governadores", () => {
     const r = resolverGrupoEFonte("Governadores Eleitos", CATALOGO);
     expect(r.grupoCanonico).toBe("Governadores Eleitos");

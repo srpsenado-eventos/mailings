@@ -1505,7 +1505,7 @@ describe("Ministros de Estado de ponta a ponta: página do Planalto como fonte �
 describe("Comandantes das Forças Armadas e EMCFA de ponta a ponta: quatro fontes do catálogo (GT de 13/11)", () => {
   const GRUPO = "Comandantes das Forças Armadas e EMCFA";
   const URL_MARINHA = "https://www.marinha.mil.br/comandantedamarinha";
-  const URL_DEFESA = "https://www.gov.br/defesa/pt-br/composicao";
+  const URL_DEFESA = "https://www.gov.br/defesa/pt-br/composicao/quem-e-quem";
   const URL_EB = "https://www.eb.mil.br/web/comandante-do-exercito";
   const URL_FAB = "https://www.fab.mil.br/a-forca-aerea/comandante/";
   const BLOQUEIO = "HTTP 403";

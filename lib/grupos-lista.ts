@@ -100,7 +100,7 @@ function cargoGovernador(uf: string, feminino: boolean): string {
   const sigla = uf.toUpperCase();
   if (sigla === "DF") return `${papel} do Distrito Federal`;
   const extenso = UF_POR_EXTENSO[sigla];
-  return extenso ? `${papel} do Estado de ${nomeProprio(extenso)}` : papel;
+  return extenso ? `${papel} do estado de ${nomeProprio(extenso)}` : papel;
 }
 
 function eleitosDaCasa(rotulo: string, casa: CasaLegislativa, eleicao: ResultadoEleicao): PessoaDaLista[] | undefined {

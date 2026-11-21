@@ -1,5 +1,6 @@
 import {
   GRUPO_DEPUTADOS_ELEITOS,
+  GRUPO_GOVERNADORES,
   GRUPO_GOVERNADORES_ELEITOS,
   GRUPO_MINISTROS_INDICADOS,
   GRUPO_SENADORES_ELEITOS,
@@ -100,5 +101,17 @@ export const REGRAS_GT: readonly RegraGt[] = [
     titulo: "Ministros de Estado indicados",
     texto: "Tratamento Senhor(a); cargo \"Ministro(a) indicado(a) de Estado da <Pasta>\" ou \"Ministro(a) indicado(a) da <Pasta>\", como nos ministros atuais; endereçamento ainda a definir pelo GT.",
     grupos: [GRUPO_MINISTROS_INDICADOS],
+  },
+  {
+    data: "2026-11-19",
+    titulo: "Governadores: cargo",
+    texto: "Cargo \"Governador(a) do estado de(a/o) X\" com \"estado\" em minúscula (Manual de Comunicação do Senado); DF é \"Governador(a) do Distrito Federal\".",
+    grupos: [GRUPO_GOVERNADORES, GRUPO_GOVERNADORES_ELEITOS],
+  },
+  {
+    data: "2026-11-19",
+    titulo: "Ministros de Estado: CGU",
+    texto: "O cargo do ministro da CGU é \"Ministro da Controladoria-Geral da União\", conferido na página \"Quem é quem\" da CGU; os demais seguem a página do Planalto.",
+    grupos: ["Ministros de Estado"],
   },
 ];

@@ -128,7 +128,7 @@ describe("composicaoDaLista (spec 2026-10-30 §4.6)", () => {
       segundoTurno: [],
     };
     const lista = composicaoDaLista(GRUPO_GOVERNADORES_ELEITOS, eleicao({ governadores: gov }));
-    expect(lista?.map((p) => p.cargoEsperado)).toEqual(["Governador do Estado de Espírito Santo", "Governador do Distrito Federal"]);
+    expect(lista?.map((p) => p.cargoEsperado)).toEqual(["Governador do estado de Espírito Santo", "Governador do Distrito Federal"]);
   });
 
   test("Deputados Federais: a lista de exercício da Câmara, nome parlamentar e nome civil", () => {
@@ -319,7 +319,7 @@ describe("aplicarListas (spec 2026-10-30 §4.6)", () => {
   });
 
   test("governador eleito casa pela UF do cargo quando o departamento vem vazio", () => {
-    const joana: ContatoPlanilha = { ...ELEITA, nome: "Joana Fictícia", grupo: GRUPO_GOVERNADORES_ELEITOS, cargo: "Governadora do Estado do Espírito Santo - ES" };
+    const joana: ContatoPlanilha = { ...ELEITA, nome: "Joana Fictícia", grupo: GRUPO_GOVERNADORES_ELEITOS, cargo: "Governadora do estado do Espírito Santo - ES" };
     const gov = { eleitos: [govClassificado(governador({ genero: "Feminino" }), GRUPO_GOVERNADORES_ELEITOS)], segundoTurno: [] };
     const r = aplicarListas(analise([grupoLista(GRUPO_GOVERNADORES_ELEITOS, [joana])], eleicao({ governadores: gov })), "30/10");
     expect(r.grupos[0].contatos[0].semaforo).toBe("verde");

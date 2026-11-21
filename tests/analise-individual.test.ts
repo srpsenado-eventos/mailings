@@ -30,9 +30,9 @@ const individuaisGov: FonteIndividual[] = [
 
 const ministra: ContatoPlanilha = { nome: "Ana Maria Política Completa", cargo: "Ministra de Estado do Exemplo", grupo: "Ministros de Estado", ...PROTOCOLO_F };
 const ministroSemIndividual: ContatoPlanilha = { nome: "Beltrano Sem Página", cargo: "Ministro de Estado da Fazenda", grupo: "Ministros de Estado", ...PROTOCOLO_M };
-const govGo: ContatoPlanilha = { nome: "João Carlos Destaque Silva", cargo: "Governador do Estado de Goiás", grupo: "Governadores", ...PROTOCOLO_M };
-const govRs: ContatoPlanilha = { nome: "Pedro Paulo Sul Alegre", cargo: "Governador do Estado do Rio Grande do Sul", grupo: "Governadores", ...PROTOCOLO_M };
-const govMt: ContatoPlanilha = { nome: "Fulano Sem Fonte", cargo: "Governador do Estado de Mato Grosso", grupo: "Governadores", ...PROTOCOLO_M };
+const govGo: ContatoPlanilha = { nome: "João Carlos Destaque Silva", cargo: "Governador do estado de Goiás", grupo: "Governadores", ...PROTOCOLO_M };
+const govRs: ContatoPlanilha = { nome: "Pedro Paulo Sul Alegre", cargo: "Governador do estado do Rio Grande do Sul", grupo: "Governadores", ...PROTOCOLO_M };
+const govMt: ContatoPlanilha = { nome: "Fulano Sem Fonte", cargo: "Governador do estado de Mato Grosso", grupo: "Governadores", ...PROTOCOLO_M };
 
 const paginaMin = extrairConteudo(fixture("ministerio-individual.html"), URL_MIN);
 const paginaGeral: ConteudoFonte = {
@@ -250,7 +250,7 @@ describe("memória de leitura nas páginas individuais e na lista geral (spec 20
 
   test("duas lidas hoje sem confirmar ninguém continuam leitura suspeita, mesmo com reaproveitadas confirmando", async () => {
     const semNomes = (url: string): ConteudoFonte => ({ ...paginaGo, url, pessoas: [], textoLimpo: paginaGo.textoLimpo.replace("João Carlos Destaque Silva", "Outro Governador Qualquer") });
-    const govMg: ContatoPlanilha = { nome: "Terceiro Governador Exemplo", cargo: "Governador do Estado de Minas Gerais", grupo: "Governadores", ...PROTOCOLO_M };
+    const govMg: ContatoPlanilha = { nome: "Terceiro Governador Exemplo", cargo: "Governador do estado de Minas Gerais", grupo: "Governadores", ...PROTOCOLO_M };
     const URL_MG = "https://mg.gov.br/governador";
     const paginaMg: ConteudoFonte = { url: URL_MG, textoLimpo: `${paginaGo.textoLimpo} Terceiro Governador Exemplo`, destaques: [], pessoas: [{ nome: "Terceiro Governador Exemplo", cargo: "Governador" }] };
     const resolvida: FonteResolvida = { ...RESOLVIDA_GOV, fontesIndividuais: [...individuaisGov, { url: URL_MG, ativo: true, chave: { uf: "MG" }, campos: ["nome", "cargo"] }] };
@@ -381,7 +381,7 @@ describe("clique que não revelou o trecho (GT de 05/11, Roraima)", () => {
   const URL_RR = "https://transparencia.rr.gov.br/principaiscargos";
   const clique = { texto: "Governador do Estado de Roraima", prova: "Ocupado por" };
   const fonteRR: FonteIndividual = { url: URL_RR, ativo: true, chave: { uf: "RR" }, campos: ["nome", "cargo"], navegador: "janela", clicarAntes: clique };
-  const govRR: ContatoPlanilha = { nome: "Francisco dos Santos Sampaio", cargo: "Governador do Estado de Roraima", grupo: "Governadores", ...PROTOCOLO_M };
+  const govRR: ContatoPlanilha = { nome: "Francisco dos Santos Sampaio", cargo: "Governador do estado de Roraima", grupo: "Governadores", ...PROTOCOLO_M };
   const resolvida: FonteResolvida = { ...RESOLVIDA_GOV, fontesIndividuais: [fonteRR] };
   const AGORA = new Date("2026-11-06T12:00:00.000Z");
   const guardada: ConteudoFonte = {

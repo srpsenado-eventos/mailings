@@ -5,6 +5,8 @@ import { resolverGrupoEFonte } from "@/lib/catalogo";
 
 /** Domínio oficial de órgão público; `.mil.br` entrou com as páginas das Forças Armadas (GT de 13/11). */
 const DOMINIO_OFICIAL = /^https:\/\/[a-z0-9.-]+\.(gov|jus|leg|mp|def|mil)\.br(\/|$)/i;
+// Só para linksInformativos (nunca para fontes): os diários oficiais de PE (Cepe) e do RJ (IOERJ) são de domínio privado (gabarito v2, 19/11).
+const DOMINIO_DE_LINK_INFORMATIVO = /^https:\/\/[a-z0-9.-]+\.(gov|jus|leg|mp|def|mil)\.br(\/|$)|^https:\/\/diariooficial\.cepe\.com\.br(\/|$)|^https:\/\/portal\.ioerj\.com\.br(\/|$)/i;
 
 // Tabela dos titulares em `/fora-de-exercicio/-/f/por-tipo`: a primeira das duas (fixture de
 // 23/10, tests/scrape-tabela.test.ts).
@@ -84,8 +86,18 @@ describe("catálogo real (data/catalogo.ts)", () => {
       expect(fontes.filter((f) => f.marcador)).toHaveLength(3); // TST /orgaos, PDF do STJ e Defesa (EMCFA)
       expect(fontes.some((f) => "nomesDoContatos" in f)).toBe(false);
       const alternativas = CATALOGO.flatMap((g) => [...g.fontes, ...(g.fontesIndividuais ?? [])]).flatMap((f) => (f.urlAlternativa ? [f.urlAlternativa] : []));
-      expect(alternativas).toEqual(["https://agencia.ac.gov.br/governadora/"]); // só AC: as dos ministérios saíram em 13/11
-      expect(alternativas.every((u) => /^https:\/\/[a-z0-9.-]+\.gov\.br\//.test(u))).toBe(true);
+      // As dos ministérios saíram em 13/11; os Governadores ganharam as da versão 2 do gabarito em 19/11.
+      expect([...alternativas].sort()).toEqual([
+        "https://agencia.ac.gov.br/governadora/",
+        "https://paraiba.pb.gov.br/governadoria/governador-1",
+        "https://rondonia.ro.gov.br/?page_id=1207",
+        "https://www.df.gov.br/perfil-do-governador",
+        "https://www.gov.br/defesa/pt-br/composicao",
+        "https://www.marinha.mil.br/relacao-de-autoridades",
+        "https://www.sp.gov.br/sp/institucional/estrutura/governador",
+        "https://www.to.gov.br/secom/governador/21pfeahm3org",
+      ]);
+      expect(alternativas.every((u) => /^https:\/\/[a-z0-9.-]+\.(gov|mil)\.br\//.test(u))).toBe(true);
     });
 
     test("AC lê a página da governadoria, com a agência como alternativa (GT de 05/11)", () => {
@@ -113,17 +125,17 @@ describe("catálogo real (data/catalogo.ts)", () => {
       "https://transparencia.rr.gov.br/principaiscargos",
       "https://www.rj.gov.br/pagina/sobre-o-governo9806",
     ]);
-    // a geral do Planalto (Ministros de Estado), a composição da Defesa (EMCFA) e as 3 entradas de
+    // a geral do Planalto e a CGU complementar (Ministros de Estado), a composição da Defesa (EMCFA) e as 3 entradas de
     // Embaixadores (mesma lista do MRE).
-    expect(janela.length - estaduais.length).toBe(5);
+    expect(janela.length - estaduais.length).toBe(6);
   });
 
   test("Comandantes das Forças Armadas e EMCFA: quatro fontes oficiais, a primária é a do Exército, sem proposta de inclusão (GT de 13/11)", () => {
     const g = CATALOGO.find((x) => x.nome === "Comandantes das Forças Armadas e EMCFA")!;
     expect(g.fontes).toEqual([
       { url: "https://www.eb.mil.br/web/comandante-do-exercito", ativo: true, pessoaUnica: { cargo: "Comandante do Exército Brasileiro" } },
-      { url: "https://www.gov.br/defesa/pt-br/composicao", ativo: true, navegador: "janela", marcador: { textos: ["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"], obrigatorio: true } },
-      { url: "https://www.marinha.mil.br/comandantedamarinha", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Marinha" } },
+      { url: "https://www.gov.br/defesa/pt-br/composicao/quem-e-quem", urlAlternativa: "https://www.gov.br/defesa/pt-br/composicao", ativo: true, navegador: "janela", marcador: { textos: ["CHEFE DO ESTADO-MAIOR CONJUNTO DAS FORÇAS ARMADAS"], obrigatorio: true } },
+      { url: "https://www.marinha.mil.br/comandantedamarinha", urlAlternativa: "https://www.marinha.mil.br/relacao-de-autoridades", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Marinha" } },
       { url: "https://www.fab.mil.br/a-forca-aerea/comandante/", ativo: true, navegador: "janela", pessoaUnica: { cargo: "Comandante da Aeronáutica" } },
     ]);
     expect(g.fontes.every((f) => DOMINIO_OFICIAL.test(f.url))).toBe(true);
@@ -136,7 +148,7 @@ describe("catálogo real (data/catalogo.ts)", () => {
     test("todo link informativo é de domínio oficial", () => {
       const links = CATALOGO.flatMap((g) => g.linksInformativos ?? []);
       expect(links.length).toBeGreaterThan(0);
-      expect(links.filter((l) => !DOMINIO_OFICIAL.test(l.url)).map((l) => l.url)).toEqual([]);
+      expect(links.filter((l) => !DOMINIO_DE_LINK_INFORMATIVO.test(l.url)).map((l) => l.url)).toEqual([]);
     });
 
     test("o STM tem exatamente os dois links de referência, e só ele", () => {
@@ -145,7 +157,7 @@ describe("catálogo real (data/catalogo.ts)", () => {
         { titulo: "Composição da Corte (referência de gênero)", url: "https://www.stm.jus.br/institucional/conheca-o-superior-tribunal-militar/composicao-da-corte?view=default" },
         { titulo: "Manual de Comunicação do Senado: forma de tratamento", url: "https://www12.senado.leg.br/manualdecomunicacao/estilos/forma-de-tratamento" },
       ]);
-      expect(CATALOGO.filter((g) => g.linksInformativos).map((g) => g.nome)).toEqual(["Ministros do STM"]);
+      expect(CATALOGO.filter((g) => g.linksInformativos).map((g) => g.nome)).toEqual(["Governadores", "Ministros do STM"]);
       expect(stm.fontes).toHaveLength(1);
     });
   });
@@ -153,8 +165,19 @@ describe("catálogo real (data/catalogo.ts)", () => {
   describe("fontes individuais (spec 2026-10-15)", () => {
     const comIndividuais = CATALOGO.filter((g) => (g.fontesIndividuais ?? []).length > 0);
 
-    test("só Governadores e Governadores Eleitos têm fontes individuais (Ministros de Estado saiu em 13/11)", () => {
-      expect(comIndividuais.map((g) => g.nome).sort()).toEqual(["Governadores", "Governadores Eleitos"]);
+    test("têm fontes individuais Governadores, Governadores Eleitos e, só como complementares, Ex-Presidentes do Congresso e Ministros de Estado (spec 2026-11-19 v2 §2.3)", () => {
+      expect(comIndividuais.map((g) => g.nome).sort()).toEqual(["Ex-Presidentes do Congresso", "Governadores", "Governadores Eleitos", "Ministros de Estado"]);
+    });
+
+    test("Garibaldi (Ex-Presidentes) e a CGU (Ministros de Estado) são individuais complementares, e só elas", () => {
+      expect(CATALOGO.find((g) => g.nome === "Ex-Presidentes do Congresso")?.fontesIndividuais).toEqual([
+        { url: "https://www25.senado.leg.br/web/senadores/senador/-/perfil/87", ativo: true, chave: { nome: "Garibaldi Alves Filho" }, campos: ["nome"], complementar: true },
+      ]);
+      expect(CATALOGO.find((g) => g.nome === "Ministros de Estado")?.fontesIndividuais).toEqual([
+        { url: "https://www.gov.br/cgu/pt-br/acesso-a-informacao/institucional/quem-e-quem/gabinete-ministerial", ativo: true, chave: { nome: "Vinicius Marques de Carvalho" }, campos: ["nome", "cargo"], navegador: "janela", complementar: true },
+      ]);
+      const complementares = CATALOGO.flatMap((g) => (g.fontesIndividuais ?? []).filter((f) => f.complementar).map(() => g.nome));
+      expect(complementares).toEqual(["Ex-Presidentes do Congresso", "Ministros de Estado"]);
     });
 
     test("Governadores Eleitos: 3 sites de campanha (ES, RN, TO), provisórios, só nome, válidos até 5/1/2027 (spec 2026-10-26)", () => {
@@ -210,10 +233,43 @@ describe("catálogo real (data/catalogo.ts)", () => {
       expect(provisorias.every((f) => f.campos.join(",") === "nome,cargo")).toBe(true);
     });
 
-    test("Ministros de Estado: a página do Planalto é a fonte única, lida pela janela, sem individuais (GT de 13/11)", () => {
+    test("Governadores: links da versão 2 do gabarito (19/11): PB e RO leem a página nova, DF, SP e TO a têm como alternativa (AC mantém a agência)", () => {
+      const ind = CATALOGO.find((x) => x.nome === "Governadores")!.fontesIndividuais ?? [];
+      const da = (uf: string) => ind.find((f) => "uf" in f.chave && f.chave.uf === uf);
+      expect(da("PB")).toMatchObject({ url: "https://iphaep.pb.gov.br/governadoria/governador-1", urlAlternativa: "https://paraiba.pb.gov.br/governadoria/governador-1" });
+      expect(da("RO")).toMatchObject({ url: "https://rondonia.ro.gov.br/portal/o-governador/", urlAlternativa: "https://rondonia.ro.gov.br/?page_id=1207" });
+      expect(da("AC")).toMatchObject({ url: "https://estado.ac.gov.br/orgao-entidades/governadoria/", urlAlternativa: "https://agencia.ac.gov.br/governadora/" });
+      expect(da("TO")).toMatchObject({ url: "https://www.to.gov.br/governo", urlAlternativa: "https://www.to.gov.br/secom/governador/21pfeahm3org" });
+      expect(da("SP")?.url).toMatch(/!ut\/p\/z1\//);
+      expect(da("SP")?.urlAlternativa).toBe("https://www.sp.gov.br/sp/institucional/estrutura/governador");
+      expect(da("DF")).toMatchObject({ url: "https://www.cl.df.gov.br/-/celina-leao-toma-posse-como-governadora-do-distrito-federal", urlAlternativa: "https://www.df.gov.br/perfil-do-governador", provisoria: "noticia" });
+      expect(da("CE")?.url).toBe("https://www.ce.gov.br/o-governo/");
+      expect(ind).toHaveLength(27);
+    });
+
+    test("Governadores: sete links informativos (cinco diários oficiais e dois manuais do Senado)", () => {
+      const g = CATALOGO.find((x) => x.nome === "Governadores")!;
+      expect(g.linksInformativos).toEqual([
+        { titulo: "Diário Oficial do ES (referência do gabarito)", url: "https://ioes.dio.es.gov.br/portal/visualizacoes/diario_oficial" },
+        { titulo: "Diário Oficial do MS (referência do gabarito)", url: "https://www.diariooficial.ms.gov.br" },
+        { titulo: "Diário Oficial de PE (referência do gabarito)", url: "https://diariooficial.cepe.com.br/diariooficialweb/#/home?diario=MQ%3D%3D" },
+        { titulo: "Diário Oficial do RJ (referência do gabarito)", url: "https://portal.ioerj.com.br" },
+        { titulo: "Diário Oficial de RR (referência do gabarito)", url: "https://www.imprensaoficial.rr.gov.br/_inicial/" },
+        { titulo: "Manual de Comunicação do Senado: artigo definido dos estados", url: "https://www12.senado.leg.br/manualdecomunicacao/estilos/artigo-definido" },
+        { titulo: "Manual de Comunicação do Senado: \"estado\" em minúscula", url: "https://www12.senado.leg.br/manualdecomunicacao/estilos/estado" },
+      ]);
+    });
+
+    test("a exceção da Cepe e do IOERJ é só de link informativo, nunca de fonte", () => {
+      expect(DOMINIO_OFICIAL.test("https://diariooficial.cepe.com.br/x")).toBe(false);
+      expect(DOMINIO_OFICIAL.test("https://portal.ioerj.com.br")).toBe(false);
+      for (const g of CATALOGO) expect((g.fontesIndividuais ?? []).filter((f) => /cepe\.com\.br|ioerj\.com\.br/.test(f.url))).toEqual([]);
+    });
+
+    test("Ministros de Estado: a página do Planalto é a fonte do grupo, lida pela janela; a única individual é a complementar da CGU", () => {
       const g = CATALOGO.find((x) => x.nome === "Ministros de Estado")!;
       expect(g.fontes).toEqual([{ url: "https://www.gov.br/planalto/pt-br/conheca-a-presidencia/ministros-e-ministras", ativo: true, navegador: "janela" }]);
-      expect(g.fontesIndividuais ?? []).toEqual([]);
+      expect((g.fontesIndividuais ?? []).every((f) => f.complementar)).toBe(true);
     });
 
     test("toda individual é de domínio oficial (salvo o site de campanha), tem campos com 'nome' e chave única no grupo", () => {
@@ -232,6 +288,13 @@ describe("catálogo real (data/catalogo.ts)", () => {
           expect(f.campos).toEqual(["cargo"]);
           expect((g.fontesIndividuais ?? []).some((i) => i.ativo)).toBe(true);
         }
+      }
+    });
+
+    test("grupo com individual complementar não mistura com individual comum", () => {
+      for (const g of comIndividuais) {
+        const ind = g.fontesIndividuais ?? [];
+        if (ind.some((f) => f.complementar)) expect(ind.every((f) => f.complementar)).toBe(true);
       }
     });
   });

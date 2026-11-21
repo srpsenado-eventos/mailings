@@ -1,5 +1,5 @@
 import { REGRAS_NOME, type RegraNome } from "@/data/regras-nome";
-import { GRUPO_MINISTROS_INDICADOS } from "@/data/grupos-posse";
+import { GRUPO_GOVERNADORES, GRUPO_GOVERNADORES_ELEITOS, GRUPO_MINISTROS_INDICADOS } from "@/data/grupos-posse";
 import { normalizarTexto } from "@/lib/normalize";
 import { contatoEhFeminino } from "@/lib/tratamento";
 import type { ComparacaoCampo, ContatoPlanilha } from "@/lib/types";
@@ -133,6 +133,39 @@ export function comparacaoCargoIndicado(contato: ContatoPlanilha): ComparacaoCam
       situacao: "divergente",
       origemValor: "coerencia",
       achado: "cargo_indicado",
+    },
+  ];
+}
+
+const PALAVRA_ESTADO = /\bestado\b/i;
+const CARGO_GOVERNADOR = /^governador(a)?( em exercicio| substitut[oa]| eleit[oa])? do estado d[aeo]s? .+$/;
+
+function nosGovernadores(contato: ContatoPlanilha, grupoCanonico: string | undefined): boolean {
+  if (grupoCanonico && normalizarTexto(grupoCanonico) === normalizarTexto(GRUPO_GOVERNADORES)) return true;
+  const alvos = [GRUPO_GOVERNADORES, GRUPO_GOVERNADORES_ELEITOS].map(normalizarTexto);
+  return contato.grupo.split(";").some((seg) => alvos.includes(normalizarTexto(seg)));
+}
+
+/**
+ * Caixa de "estado" no cargo dos governadores (spec 2026-11-19 v2 §2.1): o GT escreve
+ * "Governador(a) do estado de(a/o) X", com "estado" em minúscula (Manual de Comunicação do
+ * Senado). O esperado é o cargo do cadastro com só essa palavra trocada. Vale nos grupos
+ * Governadores e Governadores eleitos; cargo vazio ou fora do padrão (DF, outras formas) não gera achado.
+ */
+export function comparacaoCargoGovernadorCaixa(contato: ContatoPlanilha, grupoCanonico: string | undefined): ComparacaoCampo[] {
+  if (!nosGovernadores(contato, grupoCanonico)) return [];
+  const cargo = contato.cargo ?? "";
+  if (!CARGO_GOVERNADOR.test(normalizarTexto(cargo))) return [];
+  const achada = PALAVRA_ESTADO.exec(cargo);
+  if (!achada || achada[0] === "estado") return [];
+  return [
+    {
+      campo: "cargo",
+      valorPlanilha: cargo,
+      valorEsperado: cargo.replace(PALAVRA_ESTADO, "estado"),
+      situacao: "divergente",
+      origemValor: "coerencia",
+      achado: "cargo_governador_caixa",
     },
   ];
 }

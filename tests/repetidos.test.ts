@@ -80,7 +80,7 @@ describe("autoridadesRepetidas", () => {
   test("o período no cargo do ex-presidente não vira o nível do Presidente do Senado atual", () => {
     const [a] = autoridadesRepetidas([
       grupo("Ex-Presidentes do Congresso", [linha("Rui Fictício", "Presidente do Senado Federal de 2019 a 2021")]),
-      grupo("Ex-Presidentes da República", [linha("Rui Fictício", "Presidente da República Federativa do Brasil de 1990 a 1992")]),
+      grupo("Ex-Presidentes da República", [linha("Rui Fictício", "Presidente da República Federativa do Brasil no período de 1990 a 1992")]),
     ]);
     expect(a.ocorrencias.every((o) => o.ex)).toBe(true);
     expect(a.convidaPor?.grupoRegra).toBe("Ex-Presidentes da República");

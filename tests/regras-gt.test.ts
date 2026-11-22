@@ -47,6 +47,13 @@ describe("regras do GT em vigor (spec 2026-11-04 §3.2)", () => {
     expect(regrasDoGrupo("Presidente do Senado").map((r) => r.titulo)).toEqual(["Presidentes do Congresso e da Câmara"]);
     expect(regrasDoGrupo("Ex-Presidentes do Congresso").map((r) => r.titulo)).toEqual(["Ex-Presidentes do Congresso"]);
   });
+  test("a regra de 22/11 dos Ex-Presidentes da República (spec 2026-11-22 §2)", () => {
+    const de2211 = REGRAS_GT.filter((r) => r.data === "2026-11-22");
+    expect(de2211.map((r) => [r.titulo, r.texto, r.grupos])).toEqual([
+      ["Ex-Presidentes da República", "Cargo: Presidente da República Federativa do Brasil no período de AAAA a AAAA, ou em AAAA para um único ano (mesma forma do Congresso, regra de 05/11).", ["Ex-Presidentes da República"]],
+    ]);
+    expect(regrasDoGrupo("Ex-Presidentes da República").map((r) => r.titulo)).toEqual(["Ex-Presidentes da República"]);
+  });
   test("regras por grupo: STM tem duas, Governadores uma, Senadores a dos presidentes do Congresso; rótulo com variação casa pelo catálogo", () => {
     expect(regrasDoGrupo("Ministros do STM").map((r) => r.titulo)).toEqual(["STM: patente como no site", "Presidentes de tribunal"]);
     expect(regrasDoGrupo("Governadores").map((r) => r.titulo)).toEqual(["Tratamento", "Governadores: cargo"]);

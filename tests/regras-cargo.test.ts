@@ -16,7 +16,7 @@ describe("REGRAS_NOME: cargo com período dos ex-presidentes", () => {
     // Assert
     expect(REGRAS_NOME[SENADO]?.cargoComPeriodo).toBe("Presidente do Congresso Nacional");
     expect(REGRAS_NOME[SENADO]?.formaDoPeriodo).toBe("no_periodo_ou_em_ano");
-    expect(REGRAS_NOME[REPUBLICA]?.formaDoPeriodo).toBeUndefined();
+    expect(REGRAS_NOME[REPUBLICA]?.formaDoPeriodo).toBe("no_periodo_ou_em_ano");
     expect(REGRAS_NOME[REPUBLICA]?.cargoComPeriodo).toBe("Presidente da República Federativa do Brasil");
   });
 });
@@ -71,7 +71,25 @@ describe("comparacaoCargoExPresidente", () => {
     const [c] = comparacaoCargoExPresidente(exPresidente("Ex-Presidente da República", REPUBLICA), REPUBLICA);
 
     // Assert
-    expect(c.valorEsperado).toBe("Presidente da República Federativa do Brasil de AAAA a AAAA");
+    expect(c.valorEsperado).toBe("Presidente da República Federativa do Brasil no período de AAAA a AAAA");
+  });
+
+  test.each([
+    "Presidente da República Federativa do Brasil no período de 2011 a 2016",
+    "Presidente da República Federativa do Brasil em 1985",
+    "Presidente da República Federativa do Brasil no período de 2003 a 2006 e de 2007 a 2010",
+  ])('na República, o cargo na forma do Congresso não gera achado (decisão de 22/11): "%s"', (cargo) => {
+    // Assert
+    expect(comparacaoCargoExPresidente(exPresidente(cargo, REPUBLICA), REPUBLICA)).toEqual([]);
+  });
+
+  test('na República, a forma antiga "de AAAA a AAAA" diverge desde 22/11', () => {
+    // Act
+    const r = comparacaoCargoExPresidente(exPresidente("Presidente da República Federativa do Brasil de 2011 a 2016", REPUBLICA), REPUBLICA);
+
+    // Assert
+    expect(r.map((x) => x.achado)).toEqual(["cargo_ex_presidente"]);
+    expect(r[0].valorEsperado).toBe("Presidente da República Federativa do Brasil no período de AAAA a AAAA");
   });
 
   test.each([
@@ -123,7 +141,7 @@ describe("comparacaoCargoExPresidente", () => {
     const [c] = comparacaoCargoExPresidente(exPresidente("Presidente da República", REPUBLICA), REPUBLICA);
 
     // Assert
-    expect(c.valorEsperado).toBe("Presidente da República Federativa do Brasil de AAAA a AAAA");
+    expect(c.valorEsperado).toBe("Presidente da República Federativa do Brasil no período de AAAA a AAAA");
   });
 
   test("cargo vazio, ou só espaços, não é desta regra (o painel já acusa \"Cargo vazio\")", () => {

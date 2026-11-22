@@ -424,7 +424,7 @@ describe("Cargo do ex-presidente com o período (Camada C) nos caminhos de Resul
     // Assert
     expect(g.contatos[0].semaforo).toBe("vermelho");
     expect(cargoDivergente(g.contatos[0].comparacoes)?.valorEsperado).toBe(
-      "Presidente da República Federativa do Brasil de AAAA a AAAA",
+      "Presidente da República Federativa do Brasil no período de AAAA a AAAA",
     );
     expect(g.contatos[0].camposDivergentes.map((d) => d.campo)).toContain("fonte");
   });

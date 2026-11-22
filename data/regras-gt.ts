@@ -114,4 +114,10 @@ export const REGRAS_GT: readonly RegraGt[] = [
     texto: "O cargo do ministro da CGU é \"Ministro da Controladoria-Geral da União\", conferido na página \"Quem é quem\" da CGU; os demais seguem a página do Planalto.",
     grupos: ["Ministros de Estado"],
   },
+  {
+    data: "2026-11-22",
+    titulo: "Ex-Presidentes da República",
+    texto: "Cargo: Presidente da República Federativa do Brasil no período de AAAA a AAAA, ou em AAAA para um único ano (mesma forma do Congresso, regra de 05/11).",
+    grupos: ["Ex-Presidentes da República"],
+  },
 ];

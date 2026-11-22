@@ -43,15 +43,16 @@ export interface RegraNome {
   prefixoDoPresidente?: "ministro" | "presidente" | "deputado_federal";
   /**
    * Cargo que o ex-presidente leva no cadastro, seguido do período da presidência ("Presidente
-   * do Senado Federal de 2019 a 2021"), sem "Ex-" (spec 2026-10-30 §3.5, decisão 5 do Clovis).
+   * do Congresso Nacional no período de 2019 a 2021"), sem "Ex-" (spec 2026-10-30 §3.5, decisão 5
+   * do Clovis; forma do período em `formaDoPeriodo`).
    * Regra do campo `Cargo`, aplicada por `comparacaoCargoExPresidente` (`lib/regras-cargo.ts`).
    */
   cargoComPeriodo?: string;
   /**
-   * Forma do período depois de `cargoComPeriodo`. Ausente: "de AAAA a AAAA" (Ex-Presidentes da
-   * República). `"no_periodo_ou_em_ano"` (Ex-Presidentes do Congresso, decisão do Clovis de
-   * 05/11, spec 2026-11-05 §7.2): "no período de AAAA a AAAA", com um ou mais períodos, ou "em
-   * AAAA" para um único ano.
+   * Forma do período depois de `cargoComPeriodo`. Ausente: "de AAAA a AAAA" (forma de 30/10, hoje
+   * sem grupo). `"no_periodo_ou_em_ano"` (Ex-Presidentes do Congresso, decisão do Clovis de 05/11,
+   * spec 2026-11-05 §7.2; Ex-Presidentes da República desde 22/11, spec 2026-11-22): "no período
+   * de AAAA a AAAA", com um ou mais períodos, ou "em AAAA" para um único ano.
    */
   formaDoPeriodo?: "no_periodo_ou_em_ano";
   /** Máximo de caracteres do campo Nome no Posse (spec 2026-11-04 §3.5), contando só o nome aparado. */
@@ -87,5 +88,9 @@ export const REGRAS_NOME: Readonly<Record<string, RegraNome>> = {
     cargoComPeriodo: "Presidente do Congresso Nacional",
     formaDoPeriodo: "no_periodo_ou_em_ano",
   },
-  "Ex-Presidentes da República": { cargoComPeriodo: "Presidente da República Federativa do Brasil" },
+  // Desde 22/11 a República segue a mesma forma do Congresso (decisão do Clovis, spec 2026-11-22).
+  "Ex-Presidentes da República": {
+    cargoComPeriodo: "Presidente da República Federativa do Brasil",
+    formaDoPeriodo: "no_periodo_ou_em_ano",
+  },
 };

@@ -54,8 +54,9 @@ function observacaoDoTraco(trechos: readonly string[]): string {
  * Cargo do ex-presidente fora do formato do GT (spec 2026-10-30 §3.5; decisão do Clovis de
  * 30/10: todo cargo fora do formato é acusado). Nos grupos com `cargoComPeriodo` em
  * `data/regras-nome.ts`, o cargo aceito é o da regra seguido de "de AAAA a AAAA" com anos de
- * quatro dígitos (o segundo não antes do primeiro, um ou mais mandatos) ou, na forma do Congresso
- * (adendo de 05/11), "no período de AAAA a AAAA" (um ou mais períodos) e "em AAAA" (um só ano).
+ * quatro dígitos (o segundo não antes do primeiro, um ou mais mandatos) ou, com `formaDoPeriodo`
+ * (Congresso desde 05/11, República desde 22/11), "no período de AAAA a AAAA" (um ou mais
+ * períodos) e "em AAAA" (um só ano).
  * Qualquer outra forma diverge: "Ex-Presidente...", o cargo sem período, sem "Federal", "Senador", o marcador
  * "AAAA" copiado sem preencher. O esperado é o cargo da regra com "AAAA" no lugar dos anos, e a
  * observação pede o período. Período com traço no lugar do "a" (adendo de 06/11) diz isso na

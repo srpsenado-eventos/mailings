@@ -638,6 +638,28 @@ describe("compararContatoSemFonteOficial (spec 2026-10-30 §4.5)", () => {
   });
 });
 
+describe('"Ex-Presidente" da composição nos grupos de ex-presidentes (spec 2026-11-22 §2.1)', () => {
+  const EX = { exPresidente: true };
+
+  test("Ex-Presidente da República confirma o cargo no formato do GT", () => {
+    expect(situacaoCampo("Presidente da República Federativa do Brasil no período de 2011 a 2016", "Ex-Presidente da República", EX)).toBe("confere");
+    expect(situacaoCampo("Presidente do Congresso Nacional no período de 2007 a 2009", "Ex-Presidente do Senado Federal", EX)).toBe("confere");
+    expect(situacaoCampo("Presidente do Congresso Nacional em 2007", "Presidente do Senado Federal", EX)).toBe("confere");
+  });
+
+  test("vice continua divergindo, e o gênero explícito também", () => {
+    expect(situacaoCampo("Presidente do Congresso Nacional em 2007", "Vice-Presidente do Senado Federal", EX)).toBe("divergente");
+    expect(situacaoCampo("Presidente da República Federativa do Brasil no período de 2011 a 2016", "Ex-Vice-Presidente da República", EX)).toBe("divergente");
+    expect(situacaoCampo("Ministro do STF", "Ex-Presidente da República", EX)).toBe("divergente");
+  });
+
+  test("sem o contexto, Ex-Presidente e Ex-Senador seguem não confirmando (outros grupos)", () => {
+    expect(situacaoCampo("Presidente da República Federativa do Brasil no período de 2011 a 2016", "Ex-Presidente da República")).toBe("divergente");
+    expect(situacaoCampo("Senador", "Ex-Senador", EX)).toBe("divergente");
+    expect(situacaoCampo("Senador", "Ex-Senador")).toBe("divergente");
+  });
+});
+
 describe("cargo nos tribunais (spec 2026-10-30 §3.2)", () => {
   const TRIBUNAL = { tribunal: true };
 

@@ -117,7 +117,7 @@ export const REGRAS_GT: readonly RegraGt[] = [
   {
     data: "2026-11-22",
     titulo: "Ex-Presidentes da República",
-    texto: "Cargo: Presidente da República Federativa do Brasil no período de AAAA a AAAA, ou em AAAA para um único ano (mesma forma do Congresso, regra de 05/11).",
+    texto: "Cargo: Presidente da República Federativa do Brasil no período de AAAA a AAAA, ou em AAAA para um único ano (mesma forma do Congresso, regra de 05/11). \"Ex-Presidente\" na composição (página ou IA) confirma o cargo nos dois grupos de ex-presidentes.",
     grupos: ["Ex-Presidentes da República"],
   },
 ];

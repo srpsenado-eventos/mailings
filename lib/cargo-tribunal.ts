@@ -1,6 +1,7 @@
 import { normalizarTexto } from "@/lib/normalize";
 import { generoDoCargo, neutralizarGenero, PREFIXOS_NEGANTES, tokensSignificativos } from "@/lib/cargos";
 import { ehGrupoDeTribunal, FUNCOES_DE_TRIBUNAL } from "@/data/cargos-tribunal";
+import { REGRAS_NOME } from "@/data/regras-nome";
 import type { ContatoPlanilha, SituacaoCampo } from "@/lib/types";
 
 /**
@@ -12,11 +13,27 @@ import type { ContatoPlanilha, SituacaoCampo } from "@/lib/types";
 export interface ContextoCargo {
   /** Grupo de tribunal (`data/cargos-tribunal.ts`): as funções de tribunal valem como "Ministro". */
   tribunal?: boolean;
+  /**
+   * Grupo de ex-presidentes (`cargoComPeriodo` em `data/regras-nome.ts`): o "Ex-" do cargo da
+   * composição não diverge (spec 2026-11-22 §2.1); a escrita do cargo é da regra do GT.
+   */
+  exPresidente?: boolean;
 }
 
 /** O contexto de cargo do grupo canônico (nome do catálogo). */
 export function contextoCargoDoGrupo(grupoCanonico: string | undefined): ContextoCargo {
-  return { tribunal: ehGrupoDeTribunal(grupoCanonico) };
+  return {
+    tribunal: ehGrupoDeTribunal(grupoCanonico),
+    exPresidente: Boolean(grupoCanonico && REGRAS_NOME[grupoCanonico]?.cargoComPeriodo),
+  };
+}
+
+/** "Ex-Presidente", "ex presidente", "EX-PRESIDENTA": o prefixo sai, o resto fica como está. */
+const PREFIXO_EX_PRESIDENTE = /\bex[\s-]*(?=president[ea]\b)/i;
+
+/** Cargo sem o "Ex-" de "Ex-Presidente(a)" (spec 2026-11-22 §2.1); outros "ex" ficam. */
+export function semExPresidente(valor: string): string {
+  return valor.replace(PREFIXO_EX_PRESIDENTE, "");
 }
 
 /** "Ministro(a)", "Corregedor(a)-Geral", "Ministro/Ministra": a página não diz o gênero (texto normalizado). */

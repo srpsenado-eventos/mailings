@@ -25,6 +25,7 @@ import { CARGOS, PREFIXOS_NEGANTES, tokensSignificativos } from "@/lib/cargos";
 import {
   cargoEsperadoNoTribunal,
   contextoCargoDoGrupo,
+  semExPresidente,
   semGenero,
   situacaoCargoTribunal,
   temGeneroNeutro,
@@ -218,10 +219,15 @@ function rolesDe(valor: string): string[] {
  * Página sem gênero ("Ministro(a)", "Ministro/Ministra") confirma os dois gêneros do
  * Contatos; com um gênero explícito, "Ministra" continua não confirmando "Ministro". Nos
  * grupos de tribunal (`contexto.tribunal`), as funções de tribunal valem como "Ministro"
- * (`situacaoCargoTribunal`, `lib/cargo-tribunal.ts`). Spec 2026-10-30 §3.2.
+ * (`situacaoCargoTribunal`, `lib/cargo-tribunal.ts`). Spec 2026-10-30 §3.2. Nos grupos de
+ * ex-presidentes (`contexto.exPresidente`), o "Ex-" de "Ex-Presidente" sai dos dois lados antes
+ * da régua: a escrita do cargo é da regra do GT (`cargo_ex_presidente`), e a composição que diz
+ * "Ex-Presidente da República" confirma o cargo (spec 2026-11-22 §2.1).
  */
-export function situacaoCampo(valorPlanilha: string, valorEsperado?: string, contexto: ContextoCargo = {}): SituacaoCampo {
-  if (valorEsperado === undefined) return "fonte_nao_informa";
+export function situacaoCampo(planilha: string, esperado?: string, contexto: ContextoCargo = {}): SituacaoCampo {
+  if (esperado === undefined) return "fonte_nao_informa";
+  const valorPlanilha = contexto.exPresidente ? semExPresidente(planilha) : planilha;
+  const valorEsperado = contexto.exPresidente ? semExPresidente(esperado) : esperado;
   const doTribunal = contexto.tribunal ? situacaoCargoTribunal(valorPlanilha, valorEsperado) : undefined;
   if (doTribunal) return doTribunal;
   return temGeneroNeutro(valorEsperado)

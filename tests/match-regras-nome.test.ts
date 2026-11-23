@@ -361,6 +361,43 @@ describe("Cargo do ex-presidente com o período (Camada C) nos caminhos de Resul
     expect(r.camposDivergentes.map((d) => d.campo)).toContain("cargo");
   });
 
+  test('composição via IA com "Ex-Presidente da República" confere o cargo no formato do GT e o contato fica verde (spec 2026-11-22 §2.1)', () => {
+    // Arrange
+    const REP = "Ex-Presidentes da República";
+    const c: ContatoPlanilha = { ...ex("Presidente da República Federativa do Brasil no período de 2011 a 2016"), grupo: REP };
+    const viaIa: ConteudoFonte = {
+      url: "pesquisa-ampla://anthropic-haiku",
+      textoLimpo: "",
+      destaques: [],
+      pessoas: [{ nome: "Rui Fictício Barbosa", cargo: "Ex-Presidente da República", origem: "conhecimento" }],
+    };
+
+    // Act
+    const g = compararGrupo(REP, [c], viaIa, REP);
+
+    // Assert
+    const r = g.contatos[0];
+    const cargo = r.comparacoes.find((k) => k.campo === "cargo" && !k.achado);
+    expect(cargo?.situacao).toBe("confere");
+    expect(cargo?.valorEsperado).toBe("Ex-Presidente da República");
+    expect(cargoDivergente(r.comparacoes)).toBeUndefined();
+    expect(r.semaforo).toBe("verde");
+  });
+
+  test('página com "Ex-Presidente do Senado Federal" confere no Congresso; "Vice-Presidente" segue divergente', () => {
+    // Arrange
+    const pagina = (cargo: string): ConteudoFonte => ({ ...paginaSemCargo, pessoas: [{ nome: "Rui Fictício Barbosa", cargo, origem: "pagina" }] });
+    const ok = ex("Presidente do Congresso Nacional no período de 2007 a 2009");
+
+    // Act
+    const confere = compararGrupo(GRUPO_EX, [ok], pagina("Ex-Presidente do Senado Federal"), GRUPO_EX);
+    const vice = compararGrupo(GRUPO_EX, [ok], pagina("Vice-Presidente do Senado Federal"), GRUPO_EX);
+
+    // Assert
+    expect(confere.contatos[0].semaforo).toBe("verde");
+    expect(vice.contatos[0].comparacoes.find((k) => k.campo === "cargo" && !k.achado)?.situacao).toBe("divergente");
+  });
+
   test('pessoa casada com "Presidente do Congresso Nacional" sem período pinta amarelo no cargo', () => {
     // Act
     const g = compararGrupo(GRUPO_EX, [ex("Presidente do Congresso Nacional")], paginaSemCargo, GRUPO_EX);

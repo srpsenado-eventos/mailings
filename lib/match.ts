@@ -392,12 +392,16 @@ function montarResultado(
     });
   }
   if (contato.endereco) {
+    // Endereço lembrado pela IA não é fonte (spec 2026-11-22 §2.2, adendo de 24/11): a composição via
+    // conhecimento só confere presença, nome e cargo; o endereço fica "fonte não informa",
+    // como quando a página oficial não o publica, e nunca pinta amarelo.
+    const enderecoDaIa = pessoa.origem === "conhecimento";
     comparacoes.push({
       campo: "endereco",
       valorPlanilha: contato.endereco,
-      valorEsperado: pessoa.endereco,
+      valorEsperado: enderecoDaIa ? undefined : pessoa.endereco,
       origemValor: ov,
-      situacao: situacaoCampo(contato.endereco, pessoa.endereco),
+      situacao: enderecoDaIa ? "fonte_nao_informa" : situacaoCampo(contato.endereco, pessoa.endereco),
     });
   }
   for (const campo of ["telefone", "email"] as const) {

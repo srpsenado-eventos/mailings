@@ -228,16 +228,37 @@ describe("auditoria por campo (IA-first)", () => {
     expect(r.semaforo).toBe("amarelo");
   });
 
-  test("endereço carrega a origem do dado (conhecimento → confira)", () => {
+  test("endereço informado pela IA é fonte_nao_informa e não pinta amarelo (adendo 22/11 §2.2)", () => {
     const f: ConteudoFonte = {
       url: "https://x", textoLimpo: "", destaques: [],
-      pessoas: [{ nome: "Ana Lima", cargo: "Conselheira", endereco: "SAFS Q4", origem: "conhecimento" }],
+      pessoas: [{ nome: "Ana Lima", cargo: "Conselheira", endereco: "Brasília, DF", origem: "conhecimento" }],
     };
-    const r = compararContato(contato({ nome: "Ana Lima", endereco: "Rua Antiga" }), f);
+    const r = compararContato(
+      contato({ nome: "Ana Lima", cargo: "Conselheira", endereco: "Rua Antiga, 10", tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" }),
+      f,
+    );
+    const end = r.comparacoes.find((c) => c.campo === "endereco");
+    expect(end?.situacao).toBe("fonte_nao_informa");
+    expect(end?.valorEsperado).toBeUndefined();
+    expect(end?.origemValor).toBe("conhecimento");
+    expect(r.camposDivergentes.some((c) => c.campo === "endereco")).toBe(false);
+    expect(r.semaforo).toBe("verde");
+    expect(r.origem).toBe("pesquisa_ampla"); // pessoa veio do conhecimento da IA
+  });
+
+  test("endereço lido da página oficial continua divergindo (adendo 22/11 §2.2 só vale para a IA)", () => {
+    const f: ConteudoFonte = {
+      url: "https://x", textoLimpo: "", destaques: [],
+      pessoas: [{ nome: "Ana Lima", cargo: "Conselheira", endereco: "SAFS Q4", origem: "pagina" }],
+    };
+    const r = compararContato(
+      contato({ nome: "Ana Lima", cargo: "Conselheira", endereco: "Rua Antiga, 10", tratamento: "Senhora", enderecamento: "A Sua Excelência a Senhora" }),
+      f,
+    );
     const end = r.comparacoes.find((c) => c.campo === "endereco");
     expect(end?.situacao).toBe("divergente");
-    expect(end?.origemValor).toBe("conhecimento");
-    expect(r.origem).toBe("pesquisa_ampla"); // pessoa veio do conhecimento da IA
+    expect(end?.valorEsperado).toBe("SAFS Q4");
+    expect(r.semaforo).toBe("amarelo");
   });
 
   test("não casado → possivelSaida (não é 'fonte não informa')", () => {

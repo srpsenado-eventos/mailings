@@ -23,7 +23,7 @@ export const REGRAS_TEXTO: readonly RegraEmTexto[] = [
   {
     titulo: "Número vazio",
     texto:
-      "Em endereço do DF (UF = DF, ou UF vazia com cidade Brasília), Número vazio vira S/N. Se o Logradouro traz Lote, Casa ou Chácara seguidos de número ou de letra isolada (Lote 12, Casa B), cada trecho vai ao Complemento abreviado; seguidos de nome (Casa Civil, Chácara Santa Luzia), ficam no Logradouro. Fora do DF, S/N só quando o logradouro já traz 'S/N' ou 'sem número'; senão a linha fica em REVISAR (número não informado).",
+      "Em endereço do DF (UF = DF, ou UF vazia com cidade Brasília), Número vazio vira S/N. Se o Logradouro traz Lote, Casa ou Chácara seguidos de número ou de letra isolada (Lote 12, Casa B), cada trecho vai ao Complemento abreviado; seguidos de nome (Casa Civil, Chácara Santa Luzia), ficam no Logradouro. Fora do DF, S/N só quando o logradouro já traz 'S/N' ou 'sem número'; senão a linha fica em REVISAR (número não informado). Número recebido como 's/n' em qualquer caixa é gravado 'S/N', como campo alterado.",
   },
   {
     titulo: "Número acima de 6 (regra A)",
@@ -41,6 +41,11 @@ export const REGRAS_TEXTO: readonly RegraEmTexto[] = [
       "CEP com letras, de tamanho diferente de 8 ou fora da faixa da UF fica em REVISAR, com o valor como veio; a ferramenta não troca a UF nem o CEP. UF fora das 27 do país, Cidade ou Bairro vazios também ficam em REVISAR.",
   },
   {
+    titulo: "Bairro da Câmara pelo CEP",
+    texto:
+      "Bairro vazio com CEP 70160-900 (Praça dos Três Poderes), UF DF e cidade Brasília recebe 'Zona Cívico-Administrativa', como campo alterado: é o CEP que define o bairro, não o texto do logradouro (decisão do Clovis de 25/11). Fora dessa condição exata, Bairro vazio fica em REVISAR.",
+  },
+  {
     titulo: "Nome acima de 50",
     texto:
       "A ferramenta nunca corta nome sozinha. Nome com mais de 50 caracteres fica como veio, em REVISAR, com uma sugestão mais curta (patente abreviada, depois sem os nomes do meio) e a contagem de caracteres. Caixa alta integral vira iniciais maiúsculas, marcada como alterada.",
@@ -53,7 +58,7 @@ export const REGRAS_TEXTO: readonly RegraEmTexto[] = [
   {
     titulo: "Tratamento e Endereçamento",
     texto:
-      "São obrigatórios em toda linha e nunca são alterados pela ferramenta. Quando o cargo tem regra na tabela de tratamentos v02, os dois valores são conferidos; divergência fica em REVISAR, com a forma da tabela no gênero da pessoa como sugestão. Gênero incoerente entre tratamento, endereçamento e cargo também é apontado. Linha nova com um dos dois vazios fica fora do arquivo até ser preenchida.",
+      "São obrigatórios em toda linha. Sem a opção de preencher o protocolo (o padrão), nunca são alterados pela ferramenta: quando o cargo tem regra na tabela de tratamentos v02, os dois valores são conferidos; divergência fica em REVISAR, com a forma da tabela no gênero da pessoa como sugestão; linha nova com um dos dois vazios fica fora do arquivo até ser preenchida. Com a opção (ligada só depois do aval do GT), campo vazio é preenchido pela regra, como campo alterado: nos grupos de eleitos, 'Senhor(a)' e 'Ao Senhor' / 'À Senhora' (protocolo fixo de 19/11); nos demais, a tabela v02 para o cargo, no gênero do cargo. Campo já preenchido nunca muda, só é conferido. Cargo vazio ou sem regra na tabela deixa os dois vazios e a linha fora do arquivo, com o motivo. Gênero incoerente entre tratamento, endereçamento e cargo é apontado nos dois modos.",
   },
   {
     titulo: "Duplicidade",

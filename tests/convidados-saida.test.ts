@@ -79,10 +79,11 @@ describe("arquivo de conferência", () => {
     expect(wb.SheetNames).toEqual(["Resumo", "Simulacao", "Modelo PRODASEN", "Revisoes", "Regras"]);
     const sim = XLSX.utils.sheet_to_json<string[]>(wb.Sheets["Simulacao"], { header: 1, defval: "" });
     expect(sim[0].slice(0, 4)).toEqual(["Linha na lista", "Situação", "NOME RECEBIDO", "NOME GRAVADO"]);
-    expect(sim[0].slice(-6)).toEqual(["Campos alterados", "Regras aplicadas", "Revisão / validação", "Trecho que não coube", "Já no Contatos (Id · grupo)", "Referência (Câmara / TSE)"]);
+    expect(sim[0].slice(-7)).toEqual(["Campos alterados", "Regras aplicadas", "Revisão / validação", "Trecho que não coube", "Já no Contatos (Id · grupo)", "Registro do GT (duplicidade / grupo do convite)", "Referência (Câmara / TSE)"]);
+    expect(sim[0]).toHaveLength(31);
     expect(sim).toHaveLength(12);
     const rev = XLSX.utils.sheet_to_json<string[]>(wb.Sheets["Revisoes"], { header: 1, defval: "" });
-    expect(rev[0]).toEqual(["Linha na lista", "Nome", "Tipo", "Campo", "Valor recebido", "Sugestão da ferramenta", "Motivo", "Decisão (preencher)"]);
+    expect(rev[0]).toEqual(["Linha na lista", "Nome", "Tipo", "Campo", "Valor recebido", "Sugestão da ferramenta", "Motivo", "Registro do GT (duplicidade / grupo do convite)", "Decisão (preencher)"]);
     expect(rev.slice(1).map((l) => l[2])).toContain("Já no Contatos: grupo escolhido");
     const modelo = XLSX.utils.sheet_to_json<string[]>(wb.Sheets["Modelo PRODASEN"], { header: 1, defval: "" });
     expect(modelo[0]).toEqual([...CABECALHO_PRODASEN]);
@@ -99,7 +100,9 @@ describe("arquivo de conferência", () => {
     expect(cor(4, 12)).toBe(CORES.azul);
     expect(cor(6, 27)).toBe(CORES.laranja);
     expect(cor(8, 27)).toBe(CORES.verde);
+    expect(cor(8, 29)).toBe(CORES.verde);
     expect(cor(11, 1)).toBe(CORES.cinza);
+    expect(cor(11, 31)).toBe(CORES.cinza);
     expect(cor(2, 1)).toBeUndefined();
     expect(cor(1, 1)).toBe(CORES.cabecalho);
     expect(sim.views[0]).toMatchObject({ state: "frozen", xSplit: 2, ySplit: 1 });
@@ -116,6 +119,25 @@ describe("arquivo de conferência", () => {
     expect(plano).toMatch(/Como ler/);
     expect(plano).toMatch(/Aba 'Regras': as regras aplicadas nesta rodada, na ordem\./);
     expect(plano).toMatch(/Grupo não vai no arquivo: é escolhido no Contatos/);
+    expect(plano).not.toMatch(/Planilha de divergências/);
+  });
+  test("Resumo diz a planilha de divergências (arquivo ou motivo) quando a meta a traz", async () => {
+    const divergencias = "Divergencias Camara - Deputados Federais - 25NOV2026.xlsx";
+    const wb = abas(await gerarConferencia(rodadaDoExemplo(), { ...meta, divergencias }));
+    const resumo = XLSX.utils.sheet_to_json<string[]>(wb.Sheets["Resumo"], { header: 1, defval: "" });
+    expect(resumo.find((l) => l[0] === "Planilha de divergências")?.[1]).toBe(divergencias);
+  });
+  test("coluna 'Registro do GT' na Simulacao e na Revisoes: sem histórico lido, aviso só em quem tem ocorrência na base", async () => {
+    const wb = abas(await gerarConferencia(rodadaDoExemplo(), meta));
+    const sim = XLSX.utils.sheet_to_json<string[]>(wb.Sheets["Simulacao"], { header: 1, defval: "" });
+    const registro = (linha: number) => sim.find((l) => Number(l[0]) === linha)?.[29];
+    expect(registro(14)).toBe("registro de decisões não lido");
+    expect(registro(15)).toBe("registro de decisões não lido");
+    expect(registro(9)).toBe("");
+    expect(registro(18)).toBe("");
+    const rev = XLSX.utils.sheet_to_json<string[]>(wb.Sheets["Revisoes"], { header: 1, defval: "" });
+    expect(rev.find((l) => Number(l[0]) === 14)?.[7]).toBe("registro de decisões não lido");
+    expect(rev.find((l) => Number(l[0]) === 11)?.[7]).toBe("");
   });
 });
 

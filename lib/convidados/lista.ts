@@ -56,11 +56,23 @@ function abasParaLer(nomes: readonly string[]): string[] {
   return [...daLista, ...demais];
 }
 
-export function lerListaPadrao(buffer: ArrayBuffer): LinhaLista[] {
-  return lerListaPadraoComAba(buffer).linhas;
+/** Com `protocoloOpcional`, TRATAMENTO e ENDERECAMENTO podem faltar: a coluna ausente vale "" em toda linha (spec 2026-11-08 §16.3). */
+export interface OpcoesLeitura {
+  protocoloOpcional?: boolean;
 }
 
-export function lerListaPadraoComAba(buffer: ArrayBuffer): ListaLida {
+const COLUNAS_DE_PROTOCOLO: readonly CampoModelo[] = ["TRATAMENTO", "ENDERECAMENTO"];
+
+function colunasObrigatorias(opcoes: OpcoesLeitura): readonly CampoModelo[] {
+  if (!opcoes.protocoloOpcional) return CAMPOS_MODELO;
+  return CAMPOS_MODELO.filter((c) => !COLUNAS_DE_PROTOCOLO.includes(c));
+}
+
+export function lerListaPadrao(buffer: ArrayBuffer, opcoes: OpcoesLeitura = {}): LinhaLista[] {
+  return lerListaPadraoComAba(buffer, opcoes).linhas;
+}
+
+export function lerListaPadraoComAba(buffer: ArrayBuffer, opcoes: OpcoesLeitura = {}): ListaLida {
   const wb = XLSX.read(buffer, { type: "array" });
   for (const nomeAba of abasParaLer(wb.SheetNames)) {
     const matriz = XLSX.utils.sheet_to_json<unknown[]>(wb.Sheets[nomeAba], { header: 1, defval: "", raw: false, range: 0 });
@@ -68,7 +80,7 @@ export function lerListaPadraoComAba(buffer: ArrayBuffer): ListaLida {
     if (posicao < 0) continue;
 
     const cabecalho = matriz[posicao].map((c) => normalizarTexto(texto(c)));
-    const faltantes = CAMPOS_MODELO.filter((c) => indiceDoCampo(cabecalho, c) < 0).map((c) =>
+    const faltantes = colunasObrigatorias(opcoes).filter((c) => indiceDoCampo(cabecalho, c) < 0).map((c) =>
       c === "NOME" ? ROTULO_NOME : c,
     );
     if (faltantes.length > 0) throw new ColunaFaltanteError(faltantes);
@@ -77,7 +89,10 @@ export function lerListaPadraoComAba(buffer: ArrayBuffer): ListaLida {
     const linhas: LinhaLista[] = [];
     matriz.slice(posicao + 1).forEach((celulas, i) => {
       const valores = Object.fromEntries(
-        CAMPOS_MODELO.map((c) => [c, texto(celulas[indiceDoCampo(cabecalho, c)])]),
+        CAMPOS_MODELO.map((c) => {
+          const indice = indiceDoCampo(cabecalho, c);
+          return [c, indice < 0 ? "" : texto(celulas[indice])];
+        }),
       ) as Valores;
       if (!valores.NOME) return;
       linhas.push({
@@ -99,10 +114,10 @@ export interface ListaDeEntrada {
   linhas: LinhaLista[];
 }
 
-/** Reconhece pelas colunas se a lista é a planilha do site da Câmara; senão lê como modelo Padrão. */
-export function lerLista(buffer: ArrayBuffer): ListaDeEntrada {
+/** Reconhece pelas colunas se a lista é a planilha do site da Câmara; senão lê como modelo Padrão (`opcoes` só valem no Padrão). */
+export function lerLista(buffer: ArrayBuffer, opcoes: OpcoesLeitura = {}): ListaDeEntrada {
   const abaCamara = abaDaListaDaCamara(buffer);
   if (abaCamara !== undefined) return { origem: "camara", aba: abaCamara, linhas: lerListaDaCamara(buffer) };
-  const { linhas, aba } = lerListaPadraoComAba(buffer);
+  const { linhas, aba } = lerListaPadraoComAba(buffer, opcoes);
   return { origem: "padrao", aba, linhas };
 }

@@ -53,3 +53,8 @@ export function maisRecente(nomes: readonly string[], prefixo: string): string |
   }
   return melhor?.nome;
 }
+
+/** Planilha de divergências com o site da Câmara (spec 2026-11-08 §16.5); só existe para "Deputados Federais". */
+export function nomeDivergencias(sufixo: string): string {
+  return `Divergencias Camara - Deputados Federais - ${sufixo}.xlsx`;
+}

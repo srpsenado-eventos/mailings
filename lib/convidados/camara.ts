@@ -76,7 +76,8 @@ export function complementoDaCamara(anexo: string, gabinete: string): string {
   return partes.filter((p) => p !== "").join(", ");
 }
 
-function protocoloDoGenero(genero: "f" | "m" | undefined): Pick<Valores, "TRATAMENTO" | "ENDERECAMENTO" | "CARGO"> {
+/** Tratamento, endereçamento e cargo pelo gênero (§15.2); sem gênero decidido, tratamento e endereçamento ficam vazios. */
+export function protocoloDoGenero(genero: "f" | "m" | undefined): Pick<Valores, "TRATAMENTO" | "ENDERECAMENTO" | "CARGO"> {
   if (genero === "f") return { TRATAMENTO: "Senhora", ENDERECAMENTO: "A Sua Excelência a Senhora", CARGO: "Deputada Federal" };
   if (genero === "m") return { TRATAMENTO: "Senhor", ENDERECAMENTO: "A Sua Excelência o Senhor", CARGO: "Deputado Federal" };
   // Gênero que a Câmara não decide: nunca "Senhor" por padrão; a linha cai em "Tratamento ou Endereçamento vazio".

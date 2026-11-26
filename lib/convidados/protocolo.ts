@@ -20,7 +20,7 @@ export const EXCECOES_CONVIDADOS: Readonly<Record<string, string>> = {
 };
 
 /** As exceções do app inteiro valem também aqui; as da lista de convidados se somam a elas. */
-const EXCECOES: Readonly<Record<string, string>> = { ...EXCECOES_CARGO, ...EXCECOES_CONVIDADOS };
+export const EXCECOES: Readonly<Record<string, string>> = { ...EXCECOES_CARGO, ...EXCECOES_CONVIDADOS };
 
 const ACHADOS_DE_COERENCIA: readonly AchadoCoerencia[] = [
   "genero_tratamento_enderecamento",

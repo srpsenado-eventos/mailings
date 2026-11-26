@@ -18,7 +18,8 @@ describe("tratarLista sobre os 11 casos do exemplo aprovado", () => {
     expect(r.linhas.filter((x) => x.entraNoArquivo).map((x) => x.linha)).toEqual([9, 10, 11, 12, 13, 16, 17, 19]);
   });
   test("contagens do Resumo", () => {
-    expect(r.contagens).toEqual({ linhas: 11, novos: 8, novosAlterados: 4, novosValidar: 1, novosRevisar: 3, jaGrupoEscolhido: 1, jaOutroGrupo: 1, repetidas: 1, semProtocolo: 0, enderecoNovo: 1 });
+    expect(r.contagens).toEqual({ linhas: 11, novos: 8, novosAlterados: 4, novosValidar: 1, novosRevisar: 3, jaGrupoEscolhido: 1, jaOutroGrupo: 1, repetidas: 1, semProtocolo: 0, enderecoNovo: 1, protocoloPreenchido: 0 });
+    expect(r.preencherProtocolo).toBe(false);
   });
   test("linha 10: logradouro abreviado só até caber, número S/N, complemento que já cabia fica", () => {
     expect(l(10).gravado).toMatchObject({ LOGRADOURO: "SAS Quadra 3 Bloco C Edifício Sede da Associação", NUMERO: "S/N", COMPLEMENTO: "5º andar, Sala 512" });
@@ -97,12 +98,18 @@ describe("casos fora do exemplo", () => {
   test("lista vazia devolve nenhuma linha e contagens zeradas", () => {
     const r = tratarLista({ linhas: [], grupo: GRUPO, base: [], enderecos: [] });
     expect(r.linhas).toEqual([]);
-    expect(r.contagens).toEqual({ linhas: 0, novos: 0, novosAlterados: 0, novosValidar: 0, novosRevisar: 0, jaGrupoEscolhido: 0, jaOutroGrupo: 0, repetidas: 0, semProtocolo: 0, enderecoNovo: 0 });
+    expect(r.contagens).toEqual({ linhas: 0, novos: 0, novosAlterados: 0, novosValidar: 0, novosRevisar: 0, jaGrupoEscolhido: 0, jaOutroGrupo: 0, repetidas: 0, semProtocolo: 0, enderecoNovo: 0, protocoloPreenchido: 0 });
   });
   test("a aba Regras tem uma regra para cada família de tratamento", () => {
     expect(REGRAS_TEXTO.map((r) => r.titulo)).toContain("Duplicidade");
     expect(REGRAS_TEXTO.find((r) => r.titulo === "Duplicidade")?.texto).toMatch(/BASE GRUPOS POSSE/);
-    expect(REGRAS_TEXTO).toHaveLength(14);
+    expect(REGRAS_TEXTO).toHaveLength(15);
+  });
+  test("a aba Regras descreve os dois modos do protocolo, o bairro da Câmara pelo CEP e o S/N em caixa alta", () => {
+    const titulos = REGRAS_TEXTO.map((r) => r.titulo);
+    expect(titulos.indexOf("Bairro da Câmara pelo CEP")).toBe(titulos.indexOf("CEP com letras, UF inexistente, campo obrigatório vazio") + 1);
+    expect(REGRAS_TEXTO.find((r) => r.titulo === "Tratamento e Endereçamento")?.texto).toMatch(/Sem a opção de preencher o protocolo.*Com a opção/);
+    expect(REGRAS_TEXTO.find((r) => r.titulo === "Número vazio")?.texto).toMatch(/'s\/n' em qualquer caixa é gravado 'S\/N'/);
   });
 });
 

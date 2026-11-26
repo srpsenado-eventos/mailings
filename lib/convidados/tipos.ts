@@ -88,12 +88,16 @@ export interface LinhaTratada {
   ocorrencias: Ocorrencia[];
   conferirDuplicidade: Ocorrencia[];
   referencia: string;
+  /** Coluna "Registro do GT" (spec 2026-11-08 §16.6): decisão e pendências já registradas sobre a pessoa; "" sem nada a dizer. */
+  registroGt: string;
   repeteLinha?: number;
   entraNoArquivo: boolean;
 }
 
+/** `preencherProtocolo` diz se a rodada preencheu Tratamento e Endereçamento vazios pela regra (spec 2026-11-08 §16.3). */
 export interface Rodada {
   grupo: string;
+  preencherProtocolo: boolean;
   linhas: LinhaTratada[];
   contagens: {
     linhas: number;
@@ -106,10 +110,15 @@ export interface Rodada {
     repetidas: number;
     semProtocolo: number;
     enderecoNovo: number;
+    /** Linhas com Tratamento ou Endereçamento preenchidos pela regra nesta rodada. */
+    protocoloPreenchido: number;
   };
 }
 
-/** `geradoEm` já formatado "DD/MM/AAAA HH:MM"; `comando` é o texto do comando ou "tela"; `origem` e `aba` dizem de onde a lista foi lida. */
+/**
+ * `geradoEm` já formatado "DD/MM/AAAA HH:MM"; `comando` é o texto do comando ou "tela"; `origem` e `aba` dizem de onde
+ * a lista foi lida; `divergencias` é o nome da planilha de divergências gerada ou o motivo de não ter sido (spec §16.5).
+ */
 export interface MetaRodada {
   listaNome: string;
   primeiraLinha: number;
@@ -121,4 +130,5 @@ export interface MetaRodada {
   comando: string;
   origem: OrigemLista;
   aba: string;
+  divergencias?: string;
 }

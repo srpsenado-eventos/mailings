@@ -37,6 +37,18 @@ describe("lerListaPadrao", () => {
     expect(() => lerListaPadrao(buf)).toThrow(ColunaFaltanteError);
     expect(() => lerListaPadrao(buf)).toThrow(/ENDERECAMENTO/);
   });
+  test("com protocoloOpcional, TRATAMENTO e ENDERECAMENTO ausentes valem vazio em toda linha; as demais colunas seguem obrigatórias", () => {
+    const buf = montarListaPadrao([linha, { ...linha, NOME: "Carlos Eduardo Fictício Ramos" }], { semColunas: ["TRATAMENTO", "ENDERECAMENTO"] });
+    const linhas = lerListaPadrao(buf, { protocoloOpcional: true });
+    expect(linhas).toHaveLength(2);
+    expect(linhas.map((l) => [l.valores.TRATAMENTO, l.valores.ENDERECAMENTO])).toEqual([["", ""], ["", ""]]);
+    expect(linhas[0].valores.NOME).toBe("Ana Beatriz Exemplo Souza");
+    expect(() => lerListaPadrao(montarListaPadrao([linha], { semColunas: ["CEP"] }), { protocoloOpcional: true })).toThrow(ColunaFaltanteError);
+  });
+  test("com protocoloOpcional e as colunas presentes, os valores são lidos como sempre", () => {
+    const linhas = lerListaPadrao(montarListaPadrao([linha]), { protocoloOpcional: true });
+    expect(linhas[0].valores).toMatchObject({ TRATAMENTO: "Senhora", ENDERECAMENTO: "À Senhora" });
+  });
   test("ÓRGÃO ausente não é erro", () => {
     const linhas = lerListaPadrao(montarListaPadrao([linha], { semColunas: ["ÓRGÃO"] }));
     expect(linhas[0].orgao).toBe("");
@@ -74,5 +86,10 @@ describe("despachante de origem", () => {
     const r = lerLista(montarListaPadrao([{ NOME: "Ana Exemplo" }]));
     expect(r.origem).toBe("padrao");
     expect(r.aba).toBe("Lista de Convidados");
+  });
+  test("lerLista repassa protocoloOpcional ao leitor do modelo Padrão", () => {
+    const buf = montarListaPadrao([{ NOME: "Ana Exemplo" }], { semColunas: ["TRATAMENTO"] });
+    expect(() => lerLista(buf)).toThrow(/TRATAMENTO/);
+    expect(lerLista(buf, { protocoloOpcional: true }).linhas[0].valores.TRATAMENTO).toBe("");
   });
 });

@@ -127,10 +127,21 @@ function tratarNumeroVazio(entrada: EntradaNumero): SaidaNumero {
   return { numero: "", logradouro, complemento, regras: [], revisao: { marca: "revisar", texto: "Número não informado" } };
 }
 
+const SEM_NUMERO = "S/N";
+const REGRA_SN_CAIXA_ALTA = "Número S/N em caixa alta";
+
+/** Só a forma exata "s/n" em qualquer caixa (spec 2026-11-08 §16.8); "s/nº", "s.n." e "sn" ficam como vieram. */
+function ehSemNumero(numero: string): boolean {
+  return normalizarTexto(numero) === "s/n";
+}
+
 export function tratarNumero(entrada: EntradaNumero): SaidaNumero {
   const numero = entrada.numero.trim();
   const { logradouro, complemento } = entrada;
   if (!numero) return tratarNumeroVazio(entrada);
+  if (ehSemNumero(numero)) {
+    return { numero: SEM_NUMERO, logradouro, complemento, regras: numero === SEM_NUMERO ? [] : [REGRA_SN_CAIXA_ALTA] };
+  }
   if (numero.length <= (LIMITES.NUMERO ?? Infinity)) return { numero, logradouro, complemento, regras: [] };
   if (temMarcaDeLote(numero)) {
     const juntado = juntarAoComplemento(numero, complemento);

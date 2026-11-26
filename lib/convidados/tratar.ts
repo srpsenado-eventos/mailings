@@ -1,6 +1,7 @@
+import type { HistoricoDecisoes } from "@/lib/decisoes";
 import type { ContatoPlanilha, EnderecoEstruturado } from "@/lib/types";
 import { encaixarLogradouroComplemento } from "./abreviacoes";
-import { tratarBairro, tratarCidade, tratarUf } from "./bairro-cidade-uf";
+import { tratarBairro, tratarCidade, tratarUf, type ContextoBairro } from "./bairro-cidade-uf";
 import { tratarCep } from "./cep";
 import {
   compararEnderecoCadastrado,
@@ -15,7 +16,9 @@ import {
 import { tratarNome } from "./nome";
 import { REVISAO_COMPLEMENTO_REGRA_A, tratarNumero } from "./numero";
 import { LIMITES } from "./limites";
+import { preencherProtocolo } from "./preencher-protocolo";
 import { conferirProtocolo } from "./protocolo";
+import { textoDoRegistroGt } from "./registro-gt";
 import {
   CAMPOS_MODELO,
   TEXTO_SITUACAO,
@@ -32,12 +35,18 @@ import {
   type Valores,
 } from "./tipos";
 
+/**
+ * `preencherProtocolo`: Tratamento e Endereçamento vazios são preenchidos pela regra (spec 2026-11-08 §16.3); padrão desligado.
+ * `decisoes`: histórico de `.fiscal/decisoes.json` para a coluna "Registro do GT" (§16.6); `null` ou ausente = não lido.
+ */
 export interface EntradaTratamento {
   linhas: readonly LinhaLista[];
   grupo: string;
   base: readonly ContatoPlanilha[];
   enderecos: readonly EnderecoEstruturado[];
   referencias?: ReferenciasEleicao;
+  preencherProtocolo?: boolean;
+  decisoes?: HistoricoDecisoes | null;
 }
 
 const SEPARADOR = " · ";
@@ -55,6 +64,22 @@ interface Curadoria {
   regras: string[];
   revisoes: RevisaoDeCampo[];
   trechoQueNaoCoube: string;
+  /** Por que Tratamento ou Endereçamento vazios não foram preenchidos pela regra; só com a opção ligada. */
+  motivoSemProtocolo?: string;
+}
+
+interface ProtocoloGravado {
+  tratamento: string;
+  enderecamento: string;
+  regras: string[];
+  motivo?: string;
+}
+
+/** Sem a opção, os dois campos só são aparados; com ela, os vazios vêm de `preencherProtocolo`. */
+function protocoloGravado(recebido: Valores, grupo: string, preencher: boolean): ProtocoloGravado {
+  if (!preencher) return { tratamento: recebido.TRATAMENTO.trim(), enderecamento: recebido.ENDERECAMENTO.trim(), regras: [] };
+  const p = preencherProtocolo({ cargo: recebido.CARGO, grupo, tratamento: recebido.TRATAMENTO, enderecamento: recebido.ENDERECAMENTO });
+  return { tratamento: p.tratamento, enderecamento: p.enderecamento, regras: p.regras, motivo: p.motivoSemPreenchimento };
 }
 
 function campoDaRevisaoDeNumero(texto: string): CampoModelo {
@@ -76,7 +101,7 @@ function revisoesDoEncaixe(revisao: Revisao | undefined): RevisaoDeCampo[] {
   }));
 }
 
-function curarCampos(recebido: Valores, grupo: string): Curadoria {
+function curarCampos(recebido: Valores, grupo: string, preencher: boolean): Curadoria {
   const revisoes: RevisaoDeCampo[] = [];
   const regras: string[] = [];
   const aplicar = (campo: CampoModelo, resultado: ResultadoCampo): string => {
@@ -89,7 +114,10 @@ function curarCampos(recebido: Valores, grupo: string): Curadoria {
   const uf = aplicar("UF", tratarUf(recebido.UF));
   const cidade = aplicar("CIDADE", tratarCidade(recebido.CIDADE));
   const cep = aplicar("CEP", tratarCep(recebido.CEP, uf));
-  const bairro = aplicar("BAIRRO", tratarBairro(recebido.BAIRRO));
+  const contextoBairro: ContextoBairro = { cep, uf, cidade };
+  const bairro = aplicar("BAIRRO", tratarBairro(recebido.BAIRRO, contextoBairro));
+  const protocolo = protocoloGravado(recebido, grupo, preencher);
+  regras.push(...protocolo.regras);
 
   const numero = tratarNumero({ numero: recebido.NUMERO, logradouro: recebido.LOGRADOURO, complemento: recebido.COMPLEMENTO, uf, cidade });
   regras.push(...numero.regras);
@@ -102,8 +130,8 @@ function curarCampos(recebido: Valores, grupo: string): Curadoria {
 
   const gravado: Valores = {
     NOME: nome,
-    TRATAMENTO: recebido.TRATAMENTO.trim(),
-    ENDERECAMENTO: recebido.ENDERECAMENTO.trim(),
+    TRATAMENTO: protocolo.tratamento,
+    ENDERECAMENTO: protocolo.enderecamento,
     CARGO: recebido.CARGO.trim(),
     CEP: cep,
     LOGRADOURO: encaixe.logradouro,
@@ -113,7 +141,7 @@ function curarCampos(recebido: Valores, grupo: string): Curadoria {
     CIDADE: cidade,
     UF: uf,
   };
-  return { gravado, regras, revisoes, trechoQueNaoCoube: encaixe.trechoQueNaoCoube };
+  return { gravado, regras, revisoes, trechoQueNaoCoube: encaixe.trechoQueNaoCoube, motivoSemProtocolo: protocolo.motivo };
 }
 
 function achadoDeRevisao(linha: number, nome: string, recebido: Valores, item: RevisaoDeCampo): Achado | undefined {
@@ -163,6 +191,8 @@ interface ContextoDuplicidade {
   indice: IndiceBase;
   enderecos: readonly EnderecoEstruturado[];
   referencias: ReferenciasEleicao;
+  preencherProtocolo: boolean;
+  decisoes: HistoricoDecisoes | null;
 }
 
 interface ParteDaBase {
@@ -205,10 +235,12 @@ function tratarContraABase(linha: number, gravado: Valores, recebido: Valores, c
   return { situacao: naBase.situacao, achados, ocorrencias: naBase.ocorrencias, conferirDuplicidade: naBase.conferir };
 }
 
-function achadosSemProtocolo(linha: number, gravado: Valores): Achado[] {
+/** Com a opção de preencher ligada, o motivo é o do não preenchimento (cargo vazio ou sem regra); senão o de sempre. */
+function achadosSemProtocolo(linha: number, gravado: Valores, motivoSemPreenchimento?: string): Achado[] {
   const vazios: CampoModelo[] = (["TRATAMENTO", "ENDERECAMENTO"] as const).filter((c) => gravado[c] === "");
+  const motivo = motivoSemPreenchimento ?? MOTIVO_SEM_PROTOCOLO;
   return vazios.map((campo) => ({
-    linha, nome: gravado.NOME, tipo: "revisar" as const, campo, valorRecebido: "", sugestao: "", motivo: MOTIVO_SEM_PROTOCOLO,
+    linha, nome: gravado.NOME, tipo: "revisar" as const, campo, valorRecebido: "", sugestao: "", motivo,
   }));
 }
 
@@ -218,7 +250,7 @@ function tratarUma(
   ctx: ContextoDuplicidade,
 ): LinhaTratada {
   const recebido = item.valores;
-  const { gravado, regras, revisoes, trechoQueNaoCoube } = curarCampos(recebido, ctx.grupo);
+  const { gravado, regras, revisoes, trechoQueNaoCoube, motivoSemProtocolo } = curarCampos(recebido, ctx.grupo, ctx.preencherProtocolo);
   const nome = gravado.NOME;
   const camposAlterados = CAMPOS_MODELO.filter((c) => gravado[c] !== recebido[c]);
 
@@ -233,23 +265,30 @@ function tratarUma(
 
   if (repeteDe !== undefined) {
     const todos = [...achados, achadoDeRepetida(item.linha, nome, repeteDe, gravado)];
+    // A linha repetida não consulta a base: a primeira ocorrência já traz o registro do GT.
     return {
-      ...parcial, referencia: "", situacao: "repetida", achados: todos, marcas: marcasDe(todos, revisoes),
+      ...parcial, referencia: "", registroGt: "", situacao: "repetida", achados: todos, marcas: marcasDe(todos, revisoes),
       ocorrencias: [], conferirDuplicidade: [], repeteLinha: repeteDe.linha, entraNoArquivo: false,
     };
   }
 
   const naBase = tratarContraABase(item.linha, gravado, recebido, ctx);
-  const faltaProtocolo = naBase.situacao === "novo" ? achadosSemProtocolo(item.linha, gravado) : [];
+  const registroGt = textoDoRegistroGt({ nome, ocorrencias: naBase.ocorrencias, grupoEscolhido: ctx.grupo, historico: ctx.decisoes });
+  const faltaProtocolo = naBase.situacao === "novo" ? achadosSemProtocolo(item.linha, gravado, motivoSemProtocolo) : [];
   // Campo vazio já tem o achado de sem_protocolo; o da tabela no mesmo campo seria repetido.
   const camposVazios = new Set(faltaProtocolo.map((a) => a.campo));
   const semRepetirCampo = achados.filter((a) => !(camposVazios.has(a.campo) && a.valorRecebido === ""));
   const todos = [...semRepetirCampo, ...naBase.achados, ...faltaProtocolo];
   const situacao: Situacao = faltaProtocolo.length > 0 ? "sem_protocolo" : naBase.situacao;
   return {
-    ...parcial, situacao, achados: todos, marcas: marcasDe(todos, revisoes),
+    ...parcial, registroGt, situacao, achados: todos, marcas: marcasDe(todos, revisoes),
     ocorrencias: naBase.ocorrencias, conferirDuplicidade: naBase.conferirDuplicidade, entraNoArquivo: situacao === "novo",
   };
+}
+
+/** O campo veio vazio e saiu preenchido: só a regra faz isso (a ferramenta nunca escreve num campo preenchido). */
+function protocoloPreenchidoNaLinha(l: LinhaTratada): boolean {
+  return (["TRATAMENTO", "ENDERECAMENTO"] as const).some((c) => l.recebido[c].trim() === "" && l.gravado[c] !== "");
 }
 
 function contar(linhas: readonly LinhaTratada[]): Rodada["contagens"] {
@@ -266,6 +305,7 @@ function contar(linhas: readonly LinhaTratada[]): Rodada["contagens"] {
     repetidas: quantas("repetida"),
     semProtocolo: quantas("sem_protocolo"),
     enderecoNovo: linhas.flatMap((l) => l.achados).filter((a) => a.tipo === "endereco_novo").length,
+    protocoloPreenchido: linhas.filter(protocoloPreenchidoNaLinha).length,
   };
 }
 
@@ -275,6 +315,8 @@ export function tratarLista(entrada: EntradaTratamento): Rodada {
     indice: indexarBase(entrada.base),
     enderecos: entrada.enderecos,
     referencias: entrada.referencias ?? SEM_REFERENCIAS,
+    preencherProtocolo: entrada.preencherProtocolo ?? false,
+    decisoes: entrada.decisoes ?? null,
   };
   const primeiras = repetidasNaLista(entrada.linhas.map((l) => l.valores.NOME));
   const linhas: LinhaTratada[] = [];
@@ -283,7 +325,7 @@ export function tratarLista(entrada: EntradaTratamento): Rodada {
     const repeteDe = indicePrimeira === undefined ? undefined : linhas[indicePrimeira];
     linhas.push(tratarUma(item, repeteDe, ctx));
   });
-  return { grupo: entrada.grupo, linhas, contagens: contar(linhas) };
+  return { grupo: entrada.grupo, preencherProtocolo: ctx.preencherProtocolo, linhas, contagens: contar(linhas) };
 }
 
 export function textoDaSituacao(l: LinhaTratada): string {

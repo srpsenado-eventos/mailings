@@ -440,7 +440,8 @@ const TRATAMENTOS_FEMININOS = [
   "eminentissima", "reverendissima", "doutora", "dona",
 ];
 
-const generoDaForma = (valor?: string): Genero =>
+/** Gênero de um tratamento ou endereçamento pelo léxico das formas ("Senhora", "Excelentíssimo"); `indeterminado` sem marca. */
+export const generoDaForma = (valor?: string): Genero =>
   generoPorLexico(valor, TRATAMENTOS_MASCULINOS, TRATAMENTOS_FEMININOS);
 
 /** Dois gêneros se contradizem só quando ambos são conhecidos e diferentes. */

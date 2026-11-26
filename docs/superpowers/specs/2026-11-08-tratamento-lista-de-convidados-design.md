@@ -311,3 +311,82 @@ Defeito achado em 09/11: o modelo Padrão real traz a aba "Orientações de pree
 4. Rodar o comando sobre o `deputado.xls` real de 09/11 com `--grupo "Deputados Federais"` produz 513 linhas, todas "Novo: importar", sem REVISAR nem VALIDAR, e o arquivo de importação igual, coluna a coluna, à planilha manual do Clovis, exceto NUMERO/COMPLEMENTO (regra A) e CEP (70160900 em todas).
 5. Modelo Padrão com a aba "Orientações de preenchimento" antes da "Lista de Convidados", as duas com o cabeçalho: o leitor lê a lista, não o exemplo; sem a aba "Lista de Convidados", lê a primeira aba com o cabeçalho que não seja de orientações.
 6. Suíte verde, `npm run typecheck` e `npm run build` limpos; nenhum nome real em teste, log ou stdout.
+
+## 16. Adendo de 25/11 (primeira lista oficial: a da Câmara, dois grupos e sem protocolo)
+
+Decisões do Clovis em 25/11, ao receber a primeira lista oficial de um órgão (`Lista de Deputados convidados final.xlsx`, da Câmara dos Deputados): 720 linhas no modelo Padrão, com dois grupos no mesmo arquivo (516 deputados em exercício e 204 eleitos, separados só pela coluna CARGO), **sem** as colunas TRATAMENTO e ENDERECAMENTO, e com o endereço da Câmara escrito de um jeito diferente do fixado em §15.2 para a planilha do site. As respostas vieram a perguntas feitas uma a uma, com opções, antes de qualquer código. Quando este adendo e as seções anteriores discordam, vale o adendo.
+
+### 16.1 Pastas oficiais e saída por grupo
+
+As listas recebidas ficam em `../GT Posse/Contatos/Oficial/Listas oficiais enviadas/` e nunca são editadas; o trabalho é sobre cópia. A saída de cada rodada vai para `../GT Posse/Contatos/Oficial/Listas Tratadas - Contatos/<grupo>/<DDMMMAAAA[-n]>/`, uma pasta por grupo do Contatos, com o nome do grupo escrito como `grupoNoNomeDeArquivo` já escreve nos arquivos (sem acento nem caracteres proibidos). O comando não muda o padrão de `--saida`; a pasta do grupo é passada em `--saida`, e `--modelo` aponta o modelo real em `../GT Posse/Contatos/Tratamento - Lista de Convidados/`. As bases são as de data mais recente em `Oficial/` (`POSSE 2027 - CONTATOS - ATUALIZADO <data>.xlsx` e `BASE ENDERECO - CONTATOS - ATUALIZADO PRODASEN - <data>.xlsx`), passadas em `--base` e `--enderecos`. As rodadas antigas em `Tratamento - Lista de Convidados/<data>/` ficam onde estão.
+
+### 16.2 Lista com mais de um grupo
+
+A ferramenta continua recebendo **um grupo por rodada**. Quando a lista traz mais de um grupo e a divisão casa grupos que o Fiscal já conhece como distintos (aqui: CARGO com "eleito"/"eleita" é "Deputado Federal eleitos - Posse Presidencial 2027"; os demais são "Deputados Federais"), a lista é dividida **fora do comando**, em um arquivo por grupo, mantendo o cabeçalho e as abas do modelo Padrão, e cada arquivo roda numa rodada própria. A divisão é feita por script da skill `listas-oficiais-convidados` (`scripts/dividir-lista.cjs`), reproduzível e sem listar nomes, e registrada no relatório. Quando a divisão não casa grupos conhecidos, ou um pedaço da lista não tem grupo claro, a pergunta vai ao Clovis antes de dividir; a ferramenta nunca inventa o grupo.
+
+### 16.3 Tratamento e endereçamento preenchidos pela ferramenta, com aval antes de gravar
+
+Hoje o módulo só confere (§5.8). Passa a **preencher** os dois campos quando vêm vazios, mas só com a opção explícita `--preencher-protocolo`; sem ela nada muda (coluna ausente continua `ColunaFaltanteError`, campo vazio continua "Fora do arquivo"). A opção é a forma de "sempre questionar antes de gravar" (decisão do Clovis): a rodada só roda com ela depois que o Clovis viu a regra que vai ser aplicada e disse sim, e isso é passo da rotina da skill, não da ferramenta.
+
+Com a opção:
+
+- O leitor do modelo Padrão aceita a falta de TRATAMENTO e ENDERECAMENTO (as duas ou uma); a coluna ausente vale como vazia em toda linha. As demais colunas continuam obrigatórias.
+- Em cada linha, campo **vazio** é preenchido pela regra; campo **preenchido** nunca é alterado, só conferido como hoje.
+- **Grupo de eleitos** (o grupo escolhido ao rodar é um dos `GRUPOS_DE_ELEITOS` de `lib/protocolo-fixo.ts`, por `mesmoGrupo`): TRATAMENTO "Senhor" / "Senhora" e ENDERECAMENTO "Ao Senhor" / "À Senhora" (protocolo fixo dos eleitos, 19/11). O CARGO fica como veio ("Deputado Federal eleito" / "Deputada Federal eleita", como o Contatos já faz nos senadores eleitos: "Senador eleito" / "Senadora eleita").
+- **Demais grupos**: regra da tabela de tratamentos v02 para o cargo (`resolverRegra` com as exceções do app e as da lista de convidados, §5.8): TRATAMENTO é a forma nominal da primeira linha do endereçamento e ENDERECAMENTO é a primeira linha, as duas no gênero da pessoa (`formaNoGenero`). Para "Deputado Federal" / "Deputada Federal": "Senhor" / "Senhora" e "A Sua Excelência o Senhor" / "a Senhora", o mesmo que §15.2 já grava para a planilha do site.
+- **Gênero** pelo CARGO (`contatoEhFeminino` sobre o cargo, já que tratamento e endereçamento estão vazios): "Deputada Federal eleita" é feminino, "Deputado Federal eleito" masculino. Cargo que não decide o gênero deixa os dois campos vazios; nunca "Senhor" por padrão.
+- Cargo **sem regra** na tabela e fora dos grupos de eleitos deixa os dois campos vazios. Nos dois casos (sem regra, sem gênero) a linha segue como hoje, "Fora do arquivo: Tratamento ou Endereçamento vazio", e o achado REVISAR diz o motivo ("Cargo sem regra na tabela de tratamentos" ou "Cargo não decide o gênero").
+- O preenchimento é campo **alterado** (RECEBIDO vazio, GRAVADO preenchido, amarelo na Simulacao), com a regra "Tratamento preenchido pela regra: eleitos (19/11)" ou "Tratamento preenchido pela regra: tabela v02 para 'Deputada Federal'", e a mesma para o endereçamento. Não é VALIDAR: o Clovis escolheu a opção sem a marca.
+- O Resumo ganha a linha "Tratamento ou Endereçamento preenchidos pela ferramenta" (quantas linhas); o cabeçalho do Resumo diz se a opção estava ligada. A regra "Tratamento e Endereçamento" da aba Regras passa a descrever os dois modos.
+
+### 16.4 Endereço como veio; o bairro da Câmara pelo CEP
+
+O endereço entra **como o órgão mandou**: "Câmara dos Deputados, Praça dos Três Poderes", Complemento "Anexo IV - Nº andar - Gab. N" com algarismo romano, Bairro vazio. A ferramenta não reescreve para o modelo de §15.2; normaliza só o que ultrapassa os limites dos Correios (§5), como já faz.
+
+Uma completação, decidida pelo Clovis em 25/11 "considerando ser esse, de fato, o bairro correto conforme o CEP": linha com BAIRRO vazio, CEP `70160900` (o da Câmara, Praça dos Três Poderes), UF DF e Cidade Brasília recebe BAIRRO "Zona Cívico-Administrativa", como campo alterado (amarelo), com a regra "Bairro preenchido pelo CEP 70160-900 (Praça dos Três Poderes)". Fora dessa condição exata, Bairro vazio continua REVISAR. A condição é pelo CEP, não pelo texto do logradouro: é o CEP que define o bairro.
+
+Decisão minha (16.8): Número "s/n" em qualquer caixa é gravado "S/N", a forma que o Contatos e as rodadas dos Correios já usam, como campo alterado com a regra "Número S/N em caixa alta". A comparação de endereço com a base já tratava as duas formas como iguais.
+
+### 16.5 Planilha de divergências com o site da Câmara (só "Deputados Federais")
+
+Pedido do Clovis para o dia da confecção dos convites, por enquanto só para o grupo "Deputados Federais": uma planilha com a lista original e a indicação de quem permanece, quem saiu e quem entrou em relação ao `deputado.xls` do site da Câmara naquele dia. A lista da Câmara continua sendo a fonte do endereço e dos demais dados de quem casa.
+
+**Quando é gerada.** Na rodada em que o grupo escolhido é "Deputados Federais" (por `mesmoGrupo`), a lista é do modelo Padrão (origem `padrao`; a planilha do site como lista não gera, porque seria comparar a planilha com ela mesma) e há uma planilha do site da Câmara disponível: a indicada em `--camara <deputado.xls>` (opção nova, para apontar o arquivo do dia sem mexer na pasta de referências) ou, sem a opção, a reconhecida em `--eleitos` (tipo `atuais` de `lib/planilha-eleitos.ts`, como hoje). Sem nenhuma das duas, a rodada segue sem a planilha e o Resumo diz isso. A rodada pode ser repetida no dia dos convites só para refazer esta planilha, com o `deputado.xls` recém-baixado.
+
+**Arquivo.** `Divergencias Camara - Deputados Federais - <DDMMMAAAA>.xlsx`, na mesma pasta da rodada, com três abas:
+
+- **Lista original**: as linhas da lista, na ordem, com "Linha na lista" e os campos do modelo (NOME a UF) nos valores **gravados**, isto é, já normalizados pela curadoria desta rodada (inclusive protocolo preenchido e bairro da Câmara). É a lista "conforme veio, mas já normalizada" que o Clovis pediu.
+- **Divergencias**: as mesmas linhas e colunas, mais a coluna "Situação no site da Câmara (<arquivo>, <data>)" com "Permanece" ou "Saiu", e as colunas do site para quem casou (Nome parlamentar, Nome civil, UF, Partido, Titular/Suplente/Efetivado). Depois das linhas da lista, uma linha para cada deputado do site que não casou ninguém, "Entrou", com NOME = nome parlamentar como no site, CARGO "Deputado Federal" / "Deputada Federal" pelo sexo da planilha da Câmara, TRATAMENTO e ENDERECAMENTO no gênero (como §15.2) e o endereço montado pelo mapeamento de §15.2 (Praça dos Três Poderes, S/N, "Anexo N, Gabinete NNN", 70160900, Zona Cívico-Administrativa, Brasília, DF), que é o único endereço que o site informa. "Permanece" verde, "Saiu" laranja, "Entrou" azul, "Conferir" amarelo.
+- **Resumo** (decisão minha, 16.8): lista, arquivo da Câmara e sua data (data de modificação do arquivo, porque o `deputado.xls` não traz data dentro), contagens por situação e a explicação do casamento.
+
+**Casamento** (reaproveita a regra de `deputadosEmExercicio`, spec 2026-10-30 §4.3.2, adaptada porque a lista traz um só nome e nenhuma UF da pessoa): a linha casa o deputado quando o nome da lista, por `normalizarNome`, é igual ao nome parlamentar ou ao nome civil do site (qualquer UF); senão, quando casa o nome civil por `nomesComAbreviacao`. Linha que casa mais de um deputado, ou deputado casado por mais de uma linha, é "Conferir" (homônimo), nas duas pontas. "Permanece" é a linha que casou um deputado; "Saiu" é a linha que não casou nenhum; "Entrou" é o deputado que nenhuma linha casou. Nada disso muda a situação da linha na rodada nem o arquivo de importação: é planilha de conferência.
+
+### 16.6 Registro do GT por linha (regra do Clovis de 19/11)
+
+Toda planilha de contatos entregue traz, por linha, o que já está registrado sobre duplicidade e grupo do convite. A Simulacao ganha a coluna "Registro do GT (duplicidade / grupo do convite)", logo depois de "Já no Contatos (Id · grupo)", e a Revisoes ganha a mesma coluna; a planilha de divergências de 16.5 também a traz. O texto é montado por função pura a partir de `.fiscal/decisoes.json` (lido pelo comando com `--decisoes <json>`, padrão `.fiscal/decisoes.json`; arquivo ausente ou ilegível faz a coluna dizer "registro de decisões não lido" e a rodada segue):
+
+- Pessoa com ocorrências na base: os grupos e Ids já vêm na coluna ao lado; aqui entram os casos da pessoa (`casosDaPessoa` pelo nome normalizado e pelos grupos das ocorrências mais o grupo escolhido), a decisão vigente de cada um (`vigente`: tipo em texto, grupo do convite, data, "validado" ou "a validar", observação) e as pendências de bloqueio (`quadroDeBloqueio` com os grupos atuais da pessoa na base). Em mais de um grupo sem decisão: "Em mais de um grupo · sem decisão registrada".
+- Pessoa nova, sem ocorrência: "sem decisão registrada" só quando há caso com o nome dela (decisão antiga de pessoa que saiu da base); senão vazio.
+
+O arquivo de importação (modelo do PRODASEN) não muda: a coluna é só das planilhas de conferência.
+
+### 16.7 Critérios de aceite do adendo
+
+1. Modelo Padrão **sem** TRATAMENTO e ENDERECAMENTO: sem `--preencher-protocolo`, `ColunaFaltanteError` com os dois nomes (como hoje); com a opção, as linhas são lidas com os dois campos vazios.
+2. Com a opção, grupo "Deputado Federal eleitos - Posse Presidencial 2027": "Deputado Federal eleito" sai "Senhor" / "Ao Senhor", "Deputada Federal eleita" sai "Senhora" / "À Senhora", os dois campos em `camposAlterados`, regra "…eleitos (19/11)", CARGO inalterado. Grupo "Deputados Federais": "Deputada Federal" sai "Senhora" / "A Sua Excelência a Senhora", regra "…tabela v02 para 'Deputada Federal'". Cargo "Assessor Especial" (sem regra) fica vazio, fora do arquivo, com o motivo "Cargo sem regra na tabela de tratamentos". Linha que já traz "Excelentíssimo Senhor" não é alterada e continua REVISAR pela tabela.
+3. Bairro vazio com CEP "70160-900", DF, Brasília: BAIRRO "Zona Cívico-Administrativa", alterado, com a regra do CEP; o mesmo com CEP "70165900" fica vazio e REVISAR "Bairro vazio". Número "s/n" sai "S/N", alterado.
+4. Planilha de divergências (fixture fictícia: lista Padrão com 3 nomes e `deputado.xls` fictício com 3 deputados, 2 em comum, um deles pelo nome civil com abreviação): aba "Lista original" com 3 linhas nos valores gravados; aba "Divergencias" com 2 "Permanece", 1 "Saiu" e 1 linha "Entrou" com o endereço de §15.2 e o protocolo no gênero; homônimo (dois deputados com o mesmo nome parlamentar) sai "Conferir". Não é gerada quando a lista é a planilha do site, quando o grupo não é "Deputados Federais" ou quando não há planilha da Câmara, e o Resumo diz o motivo.
+5. Coluna "Registro do GT": pessoa com decisão `mesma_pessoa` vigente mostra "Decisão do GT (DD/MM/AAAA, validado): mesma pessoa · convite pelo grupo X · Pendente de bloqueio no Posse" (texto das pendências por `textoDasPendencias`); pessoa em dois grupos sem caso mostra "Em mais de um grupo · sem decisão registrada"; arquivo de decisões ausente mostra "registro de decisões não lido" em toda linha com ocorrência.
+6. Rodar o comando sobre a lista real dividida em dois arquivos, com `--preencher-protocolo`, as bases de 21/11 e o `deputado.xls` do dia: as contagens do Resumo fecham com a inspeção da skill (516 e 204 linhas; 518 bairros preenchidos no total das duas rodadas), nenhum REVISAR por bairro vazio ou por tratamento vazio nas linhas da Câmara, e a planilha de divergências é gerada só na rodada dos atuais.
+7. Suíte verde, `npm run typecheck` e `npm run build` limpos; nenhum nome real em teste, log ou stdout; nenhum arquivo do GT no git.
+
+### 16.8 Decisões minhas (o Clovis pode derrubar)
+
+- Número "s/n" vira "S/N" (caixa), como alterado.
+- A planilha de divergências tem a aba Resumo além das duas pedidas, e a data do `deputado.xls` é a de modificação do arquivo.
+- A opção para o arquivo do site chama-se `--camara`; sem ela vale a planilha reconhecida em `--eleitos`.
+- O nome da pasta por grupo em "Listas Tratadas - Contatos" é o rótulo do grupo como `grupoNoNomeDeArquivo` o escreve.
+- A coluna "Registro do GT" entra também na aba Revisoes e na planilha de divergências, não só na Simulacao.
+- O CARGO dos eleitos fica como a lista traz ("Deputado Federal eleito"), por analogia com os senadores eleitos já cadastrados; o Fiscal compara cargo por papel e "eleito" não contradiz "Deputado Federal".
+- Coluna "Registro do GT" (16.6), três leituras da revisão de 25/11: pessoa já cadastrada em um só grupo e sem caso também recebe "sem decisão registrada" (regra do Clovis de 19/11: toda linha diz o que há registrado; só quem está em mais de um grupo ganha o prefixo "Em mais de um grupo"); pessoa nova (sem ocorrência na base) cujo caso registrado cruza o grupo escolhido mostra a decisão inteira, não só "sem decisão registrada" (é o caso do eleito que o GT já julgou contra outro grupo); arquivo de decisões ausente conta como não lido ("registro de decisões não lido"), igual ao ilegível, para um caminho errado em `--decisoes` não passar em silêncio.
+- Planilha de divergências (16.5): linha "Repetida na própria lista" não entra no casamento com o site (a repetição já está apontada na rodada; a primeira linha é a que casa); a abreviação do nome civil só é tentada quando a linha não casou ninguém pelo nome exato; com mais de uma planilha de deputados em exercício em `--eleitos`, o comando avisa e exige `--camara`.

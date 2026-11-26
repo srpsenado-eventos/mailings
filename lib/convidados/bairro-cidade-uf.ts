@@ -31,9 +31,36 @@ const DE_PARA_NORMALIZADO: ReadonlyMap<string, string> = new Map(
   Object.entries(DE_PARA_BAIRRO).map(([chave, valor]) => [normalizarTexto(chave), valor]),
 );
 
-export function tratarBairro(bairro: string): ResultadoCampo {
+/** CEP da Câmara dos Deputados (Praça dos Três Poderes), só dígitos. */
+export const CEP_CAMARA = "70160900";
+const BAIRRO_DA_CAMARA = "Zona Cívico-Administrativa";
+const REGRA_BAIRRO_PELO_CEP = "Bairro preenchido pelo CEP 70160-900 (Praça dos Três Poderes)";
+
+/** Contexto do endereço já curado (CEP, UF e cidade gravados), para completar o bairro pelo CEP. */
+export interface ContextoBairro {
+  cep: string;
+  uf: string;
+  cidade: string;
+}
+
+/** Só o CEP da Câmara, em DF e Brasília, define o bairro (spec 2026-11-08 §16.4): é o CEP que decide, não o logradouro. */
+function ehEnderecoDaCamara(contexto: ContextoBairro | undefined): boolean {
+  if (contexto === undefined) return false;
+  return (
+    contexto.cep.replace(/\D/g, "") === CEP_CAMARA &&
+    contexto.uf.trim().toUpperCase() === "DF" &&
+    normalizarTexto(contexto.cidade) === "brasilia"
+  );
+}
+
+function bairroVazio(contexto: ContextoBairro | undefined): ResultadoCampo {
+  if (ehEnderecoDaCamara(contexto)) return { valor: BAIRRO_DA_CAMARA, regras: [REGRA_BAIRRO_PELO_CEP] };
+  return { valor: "", regras: [], revisao: { marca: "revisar", texto: "Bairro vazio" } };
+}
+
+export function tratarBairro(bairro: string, contexto?: ContextoBairro): ResultadoCampo {
   let valor = bairro.trim();
-  if (!valor) return { valor: "", regras: [], revisao: { marca: "revisar", texto: "Bairro vazio" } };
+  if (!valor) return bairroVazio(contexto);
   const regras: string[] = [];
 
   const doDePara = DE_PARA_NORMALIZADO.get(normalizarTexto(valor));

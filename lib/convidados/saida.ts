@@ -1,6 +1,8 @@
 import ExcelJS from "exceljs";
 import * as XLSX from "xlsx";
 import { REGRAS_TEXTO } from "@/lib/convidados/regras-texto";
+import { TITULO_COLUNA_REGISTRO_GT } from "@/lib/convidados/registro-gt";
+import { cabecalhoAzul, CORES, FONTE, fonteDasCelulas, larguras, paraArrayBuffer, preencher } from "@/lib/convidados/saida-estilo";
 import { textoDaSituacao } from "@/lib/convidados/tratar";
 import {
   CABECALHO_PRODASEN,
@@ -13,18 +15,25 @@ import {
   type TipoAchado,
 } from "@/lib/convidados/tipos";
 
-/** Cores em ARGB, como o exceljs pede. */
-export const CORES = {
-  amarelo: "FFFFF2CC",
-  laranja: "FFF8CBAD",
-  verde: "FFE2EFDA",
-  cinza: "FFE7E6E6",
-  azul: "FFDDEBF7",
-  cabecalho: "FF1F4E78",
-} as const;
+/** As cores moram em `saida-estilo.ts`; seguem exportadas daqui para quem já importava deste módulo. */
+export { CORES };
 
-const FONTE = "Arial";
-const COLUNA_REVISAO = 27;
+const CABECALHO_SIMULACAO: readonly string[] = [
+  "Linha na lista", "Situação",
+  ...CAMPOS_MODELO.flatMap((campo) => [`${campo} RECEBIDO`, `${campo} GRAVADO`]),
+  "Campos alterados", "Regras aplicadas", "Revisão / validação", "Trecho que não coube",
+  "Já no Contatos (Id · grupo)", TITULO_COLUNA_REGISTRO_GT, "Referência (Câmara / TSE)",
+];
+const colunaDaSimulacao = (titulo: string): number => CABECALHO_SIMULACAO.indexOf(titulo) + 1;
+const COLUNA_REVISAO = colunaDaSimulacao("Revisão / validação");
+const COLUNA_JA_NO_CONTATOS = colunaDaSimulacao("Já no Contatos (Id · grupo)");
+const TOTAL_COLUNAS_SIMULACAO = CABECALHO_SIMULACAO.length;
+/** Primeira coluna GRAVADO (a do NOME); as seguintes vêm de duas em duas. */
+const PRIMEIRA_COLUNA_GRAVADO = colunaDaSimulacao("NOME GRAVADO");
+
+const CABECALHO_REVISOES: readonly string[] = [
+  "Linha na lista", "Nome", "Tipo", "Campo", "Valor recebido", "Sugestão da ferramenta", "Motivo", TITULO_COLUNA_REGISTRO_GT, "Decisão (preencher)",
+];
 
 const MARCA_DO_ACHADO: Readonly<Record<TipoAchado, string>> = {
   validar: "VALIDAR",
@@ -42,45 +51,13 @@ const COMO_LER = [
   "Aba 'Modelo PRODASEN': cópia exata do arquivo de importação gerado ao lado ('Importacao PRODASEN - <grupo> - <data>.xlsx'), só com as linhas 'Novo: importar', já com os ajustes.",
   "Aba 'Revisoes': só o que pede ação humana, uma linha por achado, com a sugestão da ferramenta e a coluna 'Decisão' em branco para preencher.",
   "Aba 'Regras': as regras aplicadas nesta rodada, na ordem.",
-  "Tratamento e Endereçamento chegam preenchidos na lista; a ferramenta só confere pela tabela de tratamentos e aponta divergência, sem mudar o valor.",
+  "Tratamento e Endereçamento: sem a opção de preencher o protocolo, a ferramenta só confere pela tabela de tratamentos e aponta divergência, sem mudar o valor; com a opção (ligada só depois do aval do GT), campo vazio é preenchido pela regra (eleitos: Senhor(a) / Ao Senhor; demais: tabela v02 para o cargo) e sai como alterado, e campo já preenchido continua só conferido.",
   "Grupo não vai no arquivo: é escolhido no Contatos na hora de subir o lote. Aqui ele serve só para a duplicidade.",
+  "Coluna 'Registro do GT (duplicidade / grupo do convite)': o que .fiscal/decisoes.json já diz sobre a pessoa (decisão vigente, grupo do convite, pendências de bloqueio no Posse); 'sem decisão registrada' quando há duplicidade sem decisão; 'registro de decisões não lido' quando o arquivo não pôde ser lido.",
 ];
-
-function paraArrayBuffer(buffer: ExcelJS.Buffer): ArrayBuffer {
-  const bytes = new Uint8Array(buffer);
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-}
-
-function preencher(cell: ExcelJS.Cell, argb: string): void {
-  cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb } };
-}
 
 function temCor(cell: ExcelJS.Cell): boolean {
   return (cell.fill as ExcelJS.FillPattern | undefined)?.fgColor?.argb !== undefined;
-}
-
-function cabecalhoAzul(ws: ExcelJS.Worksheet): void {
-  ws.getRow(1).eachCell((c) => {
-    c.font = { name: FONTE, size: 10, bold: true, color: { argb: "FFFFFFFF" } };
-    preencher(c, CORES.cabecalho);
-    c.alignment = { vertical: "middle", wrapText: true };
-  });
-}
-
-function fonteDasCelulas(ws: ExcelJS.Worksheet): void {
-  ws.eachRow((row, numero) => {
-    if (numero === 1) return;
-    row.eachCell({ includeEmpty: true }, (c) => {
-      c.font = { name: FONTE, size: 10 };
-      c.alignment = { vertical: "top", wrapText: true };
-    });
-  });
-}
-
-function larguras(ws: ExcelJS.Worksheet, valores: number[]): void {
-  valores.forEach((w, i) => {
-    ws.getColumn(i + 1).width = w;
-  });
 }
 
 function linhasDoArquivo(rodada: Rodada): string[][] {
@@ -158,7 +135,8 @@ function resumo(wb: ExcelJS.Workbook, rodada: Rodada, meta: MetaRodada): void {
     ["Base do Contatos usada", meta.baseNome],
     ["Base de endereços usada", meta.enderecosNome],
     ["Listas de referência", meta.referencias.length > 0 ? meta.referencias.join(", ") : "nenhuma encontrada"],
-    ["Gerado em", `${meta.geradoEm} · ${meta.comando}`],
+    ["Gerado em", `${meta.geradoEm} · ${meta.comando}${rodada.preencherProtocolo ? " · protocolo preenchido pela regra" : ""}`],
+    ...(meta.divergencias === undefined ? [] : [["Planilha de divergências", meta.divergencias] as [string, string]]),
   ];
   pares.forEach((p) => ws.addRow(p));
   ws.addRow([]);
@@ -173,6 +151,7 @@ function resumo(wb: ExcelJS.Workbook, rodada: Rodada, meta: MetaRodada): void {
     ["Já no Contatos: em outro grupo (fora do arquivo; incluir no grupo lá dentro)", c.jaOutroGrupo],
     ["Repetida na própria lista (fora do arquivo)", c.repetidas],
     ["Fora do arquivo: Tratamento ou Endereçamento vazio", c.semProtocolo],
+    ["Tratamento ou Endereçamento preenchidos pela ferramenta", c.protocoloPreenchido],
     ["Endereço novo para contato já cadastrado", c.enderecoNovo],
   ];
   contagens.forEach((p) => ws.addRow(p));
@@ -206,47 +185,45 @@ function ehValidarDoCampo(l: LinhaTratada, campo: string): boolean {
   return l.marcas.includes("validar") && l.achados.some((a: Achado) => a.tipo === "validar" && a.campo === campo);
 }
 
+/** Cores da linha da Simulacao: campos alterados, coluna de revisão (e a do Contatos no verde) e cinza em quem não entra. */
+function colorirLinhaDaSimulacao(row: ExcelJS.Row, l: LinhaTratada, revisao: string): void {
+  CAMPOS_MODELO.forEach((campo, i) => {
+    if (!l.camposAlterados.includes(campo)) return;
+    preencher(row.getCell(PRIMEIRA_COLUNA_GRAVADO + i * 2), ehValidarDoCampo(l, campo) ? CORES.azul : CORES.amarelo);
+  });
+  if (l.situacao === "ja_grupo_escolhido") {
+    preencher(row.getCell(COLUNA_REVISAO), CORES.verde);
+    preencher(row.getCell(COLUNA_JA_NO_CONTATOS), CORES.verde);
+  } else if (/REVISAR|ATENÇÃO/.test(revisao)) {
+    preencher(row.getCell(COLUNA_REVISAO), CORES.laranja);
+  } else if (revisao.includes("VALIDAR")) {
+    preencher(row.getCell(COLUNA_REVISAO), CORES.azul);
+  }
+  if (l.entraNoArquivo) return;
+  for (let i = 1; i <= TOTAL_COLUNAS_SIMULACAO; i += 1) {
+    const cell = row.getCell(i);
+    if (!temCor(cell)) preencher(cell, CORES.cinza);
+  }
+}
+
 function simulacao(wb: ExcelJS.Workbook, rodada: Rodada): void {
   const ws = wb.addWorksheet("Simulacao");
-  ws.addRow([
-    "Linha na lista", "Situação",
-    ...CAMPOS_MODELO.flatMap((campo) => [`${campo} RECEBIDO`, `${campo} GRAVADO`]),
-    "Campos alterados", "Regras aplicadas", "Revisão / validação", "Trecho que não coube",
-    "Já no Contatos (Id · grupo)", "Referência (Câmara / TSE)",
-  ]);
+  ws.addRow([...CABECALHO_SIMULACAO]);
   for (const l of rodada.linhas) {
     const revisao = textoRevisao(l);
     const row = ws.addRow([
       l.linha, textoDaSituacao(l),
       ...CAMPOS_MODELO.flatMap((campo) => [l.recebido[campo], l.gravado[campo]]),
       l.camposAlterados.join(", "), l.regras.join("; "), revisao, l.trechoQueNaoCoube,
-      textoOcorrencias(l), l.referencia,
+      textoOcorrencias(l), l.registroGt, l.referencia,
     ]);
-    CAMPOS_MODELO.forEach((campo, i) => {
-      if (!l.camposAlterados.includes(campo)) return;
-      preencher(row.getCell(4 + i * 2), ehValidarDoCampo(l, campo) ? CORES.azul : CORES.amarelo);
-    });
-    const jaNoGrupo = l.situacao === "ja_grupo_escolhido";
-    if (jaNoGrupo) {
-      preencher(row.getCell(COLUNA_REVISAO), CORES.verde);
-      preencher(row.getCell(29), CORES.verde);
-    } else if (/REVISAR|ATENÇÃO/.test(revisao)) {
-      preencher(row.getCell(COLUNA_REVISAO), CORES.laranja);
-    } else if (revisao.includes("VALIDAR")) {
-      preencher(row.getCell(COLUNA_REVISAO), CORES.azul);
-    }
-    if (!l.entraNoArquivo) {
-      for (let i = 1; i <= 30; i += 1) {
-        const cell = row.getCell(i);
-        if (!temCor(cell)) preencher(cell, CORES.cinza);
-      }
-    }
+    colorirLinhaDaSimulacao(row, l, revisao);
   }
   fonteDasCelulas(ws);
   cabecalhoAzul(ws);
-  larguras(ws, [10, 30, ...CAMPOS_MODELO.flatMap(() => [22, 22]), 20, 40, 60, 30, 36, 30]);
+  larguras(ws, [10, 30, ...CAMPOS_MODELO.flatMap(() => [22, 22]), 20, 40, 60, 30, 36, 50, 30]);
   ws.views = [{ state: "frozen", xSplit: 2, ySplit: 1, topLeftCell: "C2" }];
-  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: 30 } };
+  ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: TOTAL_COLUNAS_SIMULACAO } };
 }
 
 function modeloProdasen(wb: ExcelJS.Workbook, rodada: Rodada): void {
@@ -267,15 +244,17 @@ function corDoTipo(tipo: TipoAchado): string | undefined {
 
 function revisoes(wb: ExcelJS.Workbook, rodada: Rodada): void {
   const ws = wb.addWorksheet("Revisoes");
-  ws.addRow(["Linha na lista", "Nome", "Tipo", "Campo", "Valor recebido", "Sugestão da ferramenta", "Motivo", "Decisão (preencher)"]);
-  for (const a of rodada.linhas.flatMap((l) => l.achados)) {
-    const row = ws.addRow([a.linha, a.nome, TEXTO_TIPO_ACHADO[a.tipo], a.campo, a.valorRecebido, a.sugestao, a.motivo, ""]);
-    const cor = corDoTipo(a.tipo);
-    if (cor) preencher(row.getCell(3), cor);
+  ws.addRow([...CABECALHO_REVISOES]);
+  for (const l of rodada.linhas) {
+    for (const a of l.achados) {
+      const row = ws.addRow([a.linha, a.nome, TEXTO_TIPO_ACHADO[a.tipo], a.campo, a.valorRecebido, a.sugestao, a.motivo, l.registroGt, ""]);
+      const cor = corDoTipo(a.tipo);
+      if (cor) preencher(row.getCell(3), cor);
+    }
   }
   fonteDasCelulas(ws);
   cabecalhoAzul(ws);
-  larguras(ws, [10, 36, 34, 16, 36, 36, 70, 30]);
+  larguras(ws, [10, 36, 34, 16, 36, 36, 70, 50, 30]);
   ws.views = [{ state: "frozen", xSplit: 0, ySplit: 1 }];
 }
 

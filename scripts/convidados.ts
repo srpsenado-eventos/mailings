@@ -1,37 +1,46 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { lerLista } from "../lib/convidados/lista";
-import { tratarLista } from "../lib/convidados/tratar";
+import { armazemDecisoesEmArquivo, CAMINHO_DECISOES_PADRAO } from "../lib/armazem-decisoes";
+import {
+  formatarData,
+  formatarDataHora,
+  grupoConhecido,
+  linhasDasContagens,
+  MOTIVO_SEM_PLANILHA_DA_CAMARA,
+  motivoSemDivergencias,
+  textoDaOrigem,
+  textoDasContagensDeDivergencias,
+  textoDasDecisoes,
+  textoDoComando,
+  textoDoProtocolo,
+} from "../lib/convidados/comando";
+import { compararComSite } from "../lib/convidados/divergencias";
+import type { ReferenciasEleicao } from "../lib/convidados/duplicidade";
+import { lerLista, type ListaDeEntrada } from "../lib/convidados/lista";
+import { maisRecente, nomeConferencia, nomeDaPastaDaRodada, nomeDivergencias, nomeImportacao, sufixoDaData } from "../lib/convidados/rodada-nomes";
 import { gerarConferencia, gerarImportacao } from "../lib/convidados/saida";
-import { maisRecente, nomeConferencia, nomeDaPastaDaRodada, nomeImportacao, sufixoDaData } from "../lib/convidados/rodada-nomes";
-import { mesmoGrupo, type ReferenciasEleicao } from "../lib/convidados/duplicidade";
+import { gerarDivergencias } from "../lib/convidados/saida-divergencias";
 import type { MetaRodada, Rodada } from "../lib/convidados/tipos";
+import { tratarLista } from "../lib/convidados/tratar";
+import type { HistoricoDecisoes } from "../lib/decisoes";
 import { ColunaFaltanteError, lerPlanilha } from "../lib/planilha";
 import { lerPlanilhaEnderecos } from "../lib/planilha-enderecos";
 import { lerPlanilhaEleicao, PlanilhaEleicaoDesconhecidaError } from "../lib/planilha-eleitos";
-import type { ContatoPlanilha, DeputadoAtual, EleitoPlanilha, GovernadorPlanilha } from "../lib/types";
-import { GRUPOS_POSSE } from "../data/grupos-posse";
+import type { ContatoPlanilha, DeputadoAtual, EleitoPlanilha, EnderecoEstruturado, GovernadorPlanilha } from "../lib/types";
 
 const PASTA_BASES = "Bases de comparação -PLANILHAS CONTATOS";
 const ELEITOS_PADRAO = "../GT Posse/Eleitos 2026";
 const SAIDA_PADRAO = "../GT Posse/Contatos/Tratamento - Lista de Convidados";
 const NOME_MODELO = "Modelo_Importacao_Contatos_PRODASEN.xlsx";
 
-const USO = `Uso: npm run convidados -- "<lista.xlsx | deputado.xls da Câmara>" --grupo "<rótulo do grupo>" [--base <xlsx>] [--enderecos <xlsx>] [--eleitos <pasta>] [--saida <pasta>] [--modelo <xlsx>]`;
-
-const ROTULOS_CONTAGEM: readonly (readonly [keyof Rodada["contagens"], string])[] = [
-  ["linhas", "Linhas lidas"],
-  ["novos", "Novo: importar"],
-  ["novosAlterados", "Novo: com campo alterado"],
-  ["novosValidar", "Novo: a validar"],
-  ["novosRevisar", "Novo: a revisar"],
-  ["jaGrupoEscolhido", "Já no Contatos: no grupo escolhido"],
-  ["jaOutroGrupo", "Já no Contatos: em outro grupo"],
-  ["repetidas", "Repetida na própria lista"],
-  ["semProtocolo", "Sem tratamento ou endereçamento"],
-  ["enderecoNovo", "Endereço novo para contato já cadastrado"],
-];
+const USO = [
+  `Uso: npm run convidados -- "<lista.xlsx | deputado.xls da Câmara>" --grupo "<rótulo do grupo>"`,
+  "  [--base <xlsx>] [--enderecos <xlsx>] [--eleitos <pasta>] [--saida <pasta>] [--modelo <xlsx>]",
+  "  [--preencher-protocolo]   preenche Tratamento e Endereçamento vazios pela regra (só depois do aval do GT)",
+  "  [--camara <deputado.xls>] planilha do site da Câmara do dia, para a planilha de divergências (Deputados Federais)",
+  `  [--decisoes <json>]       registro de decisões do GT (padrão: ${CAMINHO_DECISOES_PADRAO})`,
+].join("\n");
 
 interface Opcoes {
   lista: string;
@@ -41,6 +50,9 @@ interface Opcoes {
   eleitos: string;
   saida: string;
   modelo?: string;
+  preencherProtocolo: boolean;
+  camara?: string;
+  decisoes: string;
 }
 
 class FalhaDeUso extends Error {}
@@ -62,6 +74,9 @@ function lerArgumentos(argv: string[]): Opcoes {
       eleitos: { type: "string" },
       saida: { type: "string" },
       modelo: { type: "string" },
+      "preencher-protocolo": { type: "boolean" },
+      camara: { type: "string" },
+      decisoes: { type: "string" },
     },
   });
   const lista = positionals[0];
@@ -74,6 +89,9 @@ function lerArgumentos(argv: string[]): Opcoes {
     eleitos: values.eleitos ?? ELEITOS_PADRAO,
     saida: values.saida ?? SAIDA_PADRAO,
     modelo: values.modelo,
+    preencherProtocolo: values["preencher-protocolo"] ?? false,
+    camara: values.camara,
+    decisoes: values.decisoes ?? CAMINHO_DECISOES_PADRAO,
   };
 }
 
@@ -94,20 +112,31 @@ function exigirArquivo(caminho: string, rotulo: string): string {
   return caminho;
 }
 
-function lerReferencias(pasta: string): { referencias: ReferenciasEleicao; nomes: string[] } {
+/** `arquivosDeputados`: caminhos das planilhas do site da Câmara (tipo `atuais`) achadas na pasta. */
+interface ReferenciasLidas {
+  referencias: ReferenciasEleicao;
+  nomes: string[];
+  arquivosDeputados: string[];
+}
+
+function lerReferencias(pasta: string): ReferenciasLidas {
   const deputados: DeputadoAtual[] = [];
   const eleitos: EleitoPlanilha[] = [];
   const governadores: GovernadorPlanilha[] = [];
   const nomes: string[] = [];
-  if (!existsSync(pasta)) return { referencias: { deputados, eleitos, governadores }, nomes };
+  const arquivosDeputados: string[] = [];
+  if (!existsSync(pasta)) return { referencias: { deputados, eleitos, governadores }, nomes, arquivosDeputados };
   for (const nome of readdirSync(pasta)) {
     if (![".xlsx", ".xls"].includes(extname(nome).toLowerCase())) continue;
     // Arquivo de trava do Excel aberto ("~$Planilha.xlsx"): não é planilha.
     if (nome.startsWith(PREFIXO_TEMPORARIO_DO_EXCEL)) continue;
+    const caminho = join(pasta, nome);
     try {
-      const arquivo = lerPlanilhaEleicao(lerBuffer(join(pasta, nome)));
-      if (arquivo.tipo === "atuais") deputados.push(...arquivo.deputados);
-      else if (arquivo.tipo === "governo") governadores.push(...arquivo.governadores.eleitos);
+      const arquivo = lerPlanilhaEleicao(lerBuffer(caminho));
+      if (arquivo.tipo === "atuais") {
+        deputados.push(...arquivo.deputados);
+        arquivosDeputados.push(caminho);
+      } else if (arquivo.tipo === "governo") governadores.push(...arquivo.governadores.eleitos);
       else eleitos.push(...arquivo.eleitos);
       nomes.push(nome);
     } catch (e) {
@@ -116,7 +145,7 @@ function lerReferencias(pasta: string): { referencias: ReferenciasEleicao; nomes
       console.log(`Referência ignorada: ${nome} (${motivoCurto(e)})`);
     }
   }
-  return { referencias: { deputados, eleitos, governadores }, nomes };
+  return { referencias: { deputados, eleitos, governadores }, nomes, arquivosDeputados };
 }
 
 /** Primeira linha da mensagem do erro, curta; a mensagem da leitura de planilha é técnica, sem dado da planilha. */
@@ -136,84 +165,208 @@ function lerOuFalhar<T>(ler: () => T, rotulo: string): T {
   }
 }
 
-/** O grupo escolhido casa algum dos 28 grupos da Posse (rótulo ou apelido) ou algum grupo da base. */
-function grupoConhecido(grupo: string, base: readonly ContatoPlanilha[]): boolean {
-  const daPosse = GRUPOS_POSSE.flatMap((g) => [g.rotulo, ...(g.apelidos ?? [])]);
-  const daBase = base.flatMap((c) => c.grupo.split(";").map((g) => g.trim()).filter(Boolean));
-  return [...daPosse, ...daBase].some((rotulo) => mesmoGrupo(rotulo, grupo));
+/** A planilha de `--camara` tem que ser a dos deputados em exercício do site (tipo `atuais`); outra planilha é erro claro. */
+function lerDeputadosDoSite(caminho: string): DeputadoAtual[] {
+  const rotulo = "Planilha da Câmara";
+  try {
+    const arquivo = lerPlanilhaEleicao(lerBuffer(caminho));
+    if (arquivo.tipo === "atuais") return arquivo.deputados;
+    throw new FalhaDeLeitura(`${rotulo} não reconhecida: ${basename(caminho)} não traz as colunas dos deputados em exercício do site.`);
+  } catch (e) {
+    if (e instanceof ColunaFaltanteError || e instanceof PlanilhaEleicaoDesconhecidaError) {
+      throw new FalhaDeLeitura(`${rotulo} não reconhecida: ${e.message}`);
+    }
+    throw e;
+  }
 }
 
-function dataHora(d: Date): string {
-  const p = (n: number): string => String(n).padStart(2, "0");
-  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+/**
+ * Arquivo ausente, ilegível (`DecisoesIlegiveisError`) ou com outro erro de leitura vira aviso e `null`:
+ * a coluna do GT diz "registro de decisões não lido" e a rodada segue (§16.6).
+ */
+async function lerDecisoes(caminho: string): Promise<HistoricoDecisoes | null> {
+  const aviso = (motivo: string): null => {
+    console.log(`Aviso: registro de decisões não lido (${motivo})`);
+    return null;
+  };
+  if (!existsSync(caminho)) return aviso(`arquivo não encontrado: ${basename(caminho)}`);
+  try {
+    return await armazemDecisoesEmArquivo(caminho).ler();
+  } catch (e) {
+    return aviso(motivoCurto(e));
+  }
 }
 
-function imprimirContagens(rodada: Rodada): void {
-  for (const [campo, rotulo] of ROTULOS_CONTAGEM) console.log(`${rotulo}: ${rodada.contagens[campo]}`);
+interface Caminhos {
+  lista: string;
+  base: string;
+  enderecos: string;
+  modelo: string;
+  saida: string;
+  decisoes: string;
+}
+
+function resolverCaminhos(opcoes: Opcoes, raiz: string): Caminhos {
+  const saida = resolve(raiz, opcoes.saida);
+  return {
+    lista: exigirArquivo(resolve(raiz, opcoes.lista), "Lista"),
+    base: exigirArquivo(opcoes.base ? resolve(raiz, opcoes.base) : baseMaisRecente(raiz, "BASE GRUPOS POSSE", "Base de grupos"), "Base de grupos"),
+    enderecos: exigirArquivo(opcoes.enderecos ? resolve(raiz, opcoes.enderecos) : baseMaisRecente(raiz, "BASE ENDERECO", "Base de endereços"), "Base de endereços"),
+    modelo: exigirArquivo(resolve(raiz, opcoes.modelo ?? join(saida, NOME_MODELO)), "Modelo de importação"),
+    saida,
+    decisoes: resolve(raiz, opcoes.decisoes),
+  };
+}
+
+/** Planilha do site da Câmara usada nas divergências: a de `--camara` ou, sem a opção, a única reconhecida em `--eleitos`. */
+interface FonteDaCamara {
+  caminho: string;
+  deputados: readonly DeputadoAtual[];
+}
+
+/** `planilhas` conta as planilhas do site com deputados; `fonte` só existe quando é exatamente uma. */
+interface PlanilhasDaCamara {
+  planilhas: number;
+  fonte?: FonteDaCamara;
+}
+
+function planilhasDaCamara(opcoes: Opcoes, raiz: string, lidas: ReferenciasLidas): PlanilhasDaCamara {
+  if (opcoes.camara !== undefined) {
+    const caminho = exigirArquivo(resolve(raiz, opcoes.camara), "Planilha da Câmara");
+    const deputados = lerDeputadosDoSite(caminho);
+    return deputados.length > 0 ? { planilhas: 1, fonte: { caminho, deputados } } : { planilhas: 0 };
+  }
+  const { arquivosDeputados, referencias } = lidas;
+  if (arquivosDeputados.length !== 1 || referencias.deputados.length === 0) return { planilhas: arquivosDeputados.length };
+  return { planilhas: 1, fonte: { caminho: arquivosDeputados[0], deputados: referencias.deputados } };
+}
+
+interface Entradas {
+  lida: ListaDeEntrada;
+  base: ContatoPlanilha[];
+  enderecos: EnderecoEstruturado[];
+  referencias: ReferenciasEleicao;
+  nomesRef: string[];
+  camara: PlanilhasDaCamara;
+  decisoes: HistoricoDecisoes | null;
+}
+
+async function lerEntradas(opcoes: Opcoes, raiz: string, caminhos: Caminhos): Promise<Entradas> {
+  const lida = lerOuFalhar(() => lerLista(lerBuffer(caminhos.lista), { protocoloOpcional: opcoes.preencherProtocolo }), "Lista");
+  const lidas = lerReferencias(resolve(raiz, opcoes.eleitos));
+  // A lista da Câmara é a própria referência dos deputados em exercício: "Consta na lista da Câmara" não se calcula.
+  const referencias = lida.origem === "camara" ? { ...lidas.referencias, deputados: [] } : lidas.referencias;
+  const base = lerOuFalhar(() => lerPlanilha(lerBuffer(caminhos.base)), "Base do Contatos");
+  const enderecos = lerOuFalhar(() => lerPlanilhaEnderecos(lerBuffer(caminhos.enderecos)), "Base de endereços");
+  const camara = planilhasDaCamara(opcoes, raiz, lidas);
+  const decisoes = await lerDecisoes(caminhos.decisoes);
+  return { lida, base, enderecos, referencias, nomesRef: lidas.nomes, camara, decisoes };
+}
+
+type Divergencias =
+  | { gerada: true; nome: string; buffer: ArrayBuffer; resumo: string }
+  | { gerada: false; motivo: string };
+
+interface ContextoDivergencias {
+  listaNome: string;
+  grupo: string;
+  sufixo: string;
+}
+
+async function montarDivergencias(rodada: Rodada, fonte: FonteDaCamara, ctx: ContextoDivergencias): Promise<Divergencias> {
+  const arquivoCamara = basename(fonte.caminho);
+  const dataCamara = formatarData(statSync(fonte.caminho).mtime);
+  const d = compararComSite(rodada.linhas, fonte.deputados);
+  const buffer = await gerarDivergencias(d, { listaNome: ctx.listaNome, arquivoCamara, dataCamara, grupo: ctx.grupo });
+  const resumo = `Divergências com o site da Câmara (${arquivoCamara}, ${dataCamara}): ${textoDasContagensDeDivergencias(d.contagens)}`;
+  return { gerada: true, nome: nomeDivergencias(ctx.sufixo), buffer, resumo };
+}
+
+/** Gera a planilha de divergências só para "Deputados Federais", lista do modelo Padrão e uma única planilha do site (§16.5). */
+async function divergenciasDaRodada(rodada: Rodada, entradas: Entradas, ctx: ContextoDivergencias): Promise<Divergencias> {
+  const { planilhas, fonte } = entradas.camara;
+  const motivo = motivoSemDivergencias(ctx.grupo, entradas.lida.origem, planilhas);
+  if (motivo !== undefined || fonte === undefined) return { gerada: false, motivo: motivo ?? MOTIVO_SEM_PLANILHA_DA_CAMARA };
+  return montarDivergencias(rodada, fonte, ctx);
+}
+
+interface ArquivoDeSaida {
+  nome: string;
+  buffer: ArrayBuffer;
+}
+
+/** Cria a pasta da rodada (nunca sobrescreve a de outra rodada do dia) e grava os arquivos nela. */
+function gravarArquivos(saida: string, sufixo: string, arquivos: readonly ArquivoDeSaida[]): string {
+  mkdirSync(saida, { recursive: true });
+  const pasta = join(saida, nomeDaPastaDaRodada(sufixo, readdirSync(saida)));
+  mkdirSync(pasta);
+  for (const a of arquivos) writeFileSync(join(pasta, a.nome), Buffer.from(a.buffer));
+  return pasta;
+}
+
+function imprimirCabecalho(opcoes: Opcoes, entradas: Entradas, rodada: Rodada, meta: MetaRodada, caminhoDecisoes: string): void {
+  console.log(`Lista: ${meta.listaNome} (${rodada.contagens.linhas} linhas)`);
+  console.log(textoDaOrigem(entradas.lida));
+  console.log(`Grupo: ${opcoes.grupo}`);
+  console.log(textoDoProtocolo(opcoes.preencherProtocolo));
+  console.log(`Base: ${meta.baseNome}`);
+  console.log(`Endereços: ${meta.enderecosNome}`);
+  console.log(`Referências: ${entradas.nomesRef.length > 0 ? entradas.nomesRef.join(", ") : "nenhuma"}`);
+  console.log(textoDasDecisoes(entradas.decisoes, basename(caminhoDecisoes)));
+}
+
+function imprimirRelatorio(rodada: Rodada, divergencias: Divergencias, pasta: string, nomes: readonly string[]): void {
+  console.log("");
+  for (const linha of linhasDasContagens(rodada.contagens)) console.log(linha);
+  console.log("");
+  console.log(divergencias.gerada ? divergencias.resumo : `Planilha de divergências: não gerada (${divergencias.motivo})`);
+  console.log("");
+  console.log(`Gravado em ${pasta}:`);
+  for (const nome of nomes) console.log(nome);
 }
 
 async function executar(opcoes: Opcoes): Promise<void> {
   const raiz = process.cwd();
-  const caminhoLista = exigirArquivo(resolve(raiz, opcoes.lista), "Lista");
-  const saida = resolve(raiz, opcoes.saida);
-  const caminhoBase = exigirArquivo(opcoes.base ? resolve(raiz, opcoes.base) : baseMaisRecente(raiz, "BASE GRUPOS POSSE", "Base de grupos"), "Base de grupos");
-  const caminhoEnderecos = exigirArquivo(opcoes.enderecos ? resolve(raiz, opcoes.enderecos) : baseMaisRecente(raiz, "BASE ENDERECO", "Base de endereços"), "Base de endereços");
-  const caminhoModelo = exigirArquivo(resolve(raiz, opcoes.modelo ?? join(saida, NOME_MODELO)), "Modelo de importação");
-
-  const lida = lerOuFalhar(() => lerLista(lerBuffer(caminhoLista)), "Lista");
-  const linhas = lida.linhas;
-  const lidas = lerReferencias(resolve(raiz, opcoes.eleitos));
-  const nomesRef = lidas.nomes;
-  // A lista da Câmara é a própria referência dos deputados em exercício: "Consta na lista da Câmara" não se calcula.
-  const referencias = lida.origem === "camara" ? { ...lidas.referencias, deputados: [] } : lidas.referencias;
-  const base = lerOuFalhar(() => lerPlanilha(lerBuffer(caminhoBase)), "Base do Contatos");
-  const enderecos = lerOuFalhar(() => lerPlanilhaEnderecos(lerBuffer(caminhoEnderecos)), "Base de endereços");
-  if (!grupoConhecido(opcoes.grupo, base)) {
-    console.log(`Aviso: o grupo "${opcoes.grupo}" não está entre os 28 grupos da Posse nem na base; toda pessoa já cadastrada sairá como "em outro grupo".`);
+  const caminhos = resolverCaminhos(opcoes, raiz);
+  const entradas = await lerEntradas(opcoes, raiz, caminhos);
+  if (!grupoConhecido(opcoes.grupo, entradas.base)) {
+    console.log(`Aviso: o grupo "${opcoes.grupo}" não está entre os grupos da Posse nem na base; toda pessoa já cadastrada sairá como "em outro grupo".`);
   }
-  const rodada = tratarLista({ linhas, grupo: opcoes.grupo, base, enderecos, referencias });
+  const rodada = tratarLista({
+    linhas: entradas.lida.linhas, grupo: opcoes.grupo, base: entradas.base, enderecos: entradas.enderecos,
+    referencias: entradas.referencias, preencherProtocolo: opcoes.preencherProtocolo, decisoes: entradas.decisoes,
+  });
 
   const agora = new Date();
   const sufixo = sufixoDaData(agora);
+  const listaNome = basename(caminhos.lista);
+  const divergencias = await divergenciasDaRodada(rodada, entradas, { listaNome, grupo: opcoes.grupo, sufixo });
+  const linhas = entradas.lida.linhas;
   const meta: MetaRodada = {
-    listaNome: basename(caminhoLista),
+    listaNome,
     primeiraLinha: linhas.length > 0 ? linhas[0].linha : 0,
     ultimaLinha: linhas.length > 0 ? linhas[linhas.length - 1].linha : 0,
-    baseNome: basename(caminhoBase),
-    enderecosNome: basename(caminhoEnderecos),
-    referencias: nomesRef,
-    geradoEm: dataHora(agora),
-    origem: lida.origem,
-    aba: lida.aba,
-    comando: `comando: npm run convidados -- "${basename(caminhoLista)}" --grupo "${opcoes.grupo}"`,
+    baseNome: basename(caminhos.base),
+    enderecosNome: basename(caminhos.enderecos),
+    referencias: entradas.nomesRef,
+    geradoEm: formatarDataHora(agora),
+    origem: entradas.lida.origem,
+    aba: entradas.lida.aba,
+    comando: textoDoComando({
+      lista: listaNome, grupo: opcoes.grupo, preencherProtocolo: opcoes.preencherProtocolo,
+      ...(opcoes.camara !== undefined ? { camara: basename(opcoes.camara) } : {}),
+    }),
+    divergencias: divergencias.gerada ? divergencias.nome : `não gerada: ${divergencias.motivo}`,
   };
-  const importacao = await gerarImportacao(rodada, lerBuffer(caminhoModelo));
-  const conferencia = await gerarConferencia(rodada, meta);
+  const arquivos: ArquivoDeSaida[] = [
+    { nome: nomeImportacao(opcoes.grupo, sufixo), buffer: await gerarImportacao(rodada, lerBuffer(caminhos.modelo)) },
+    { nome: nomeConferencia(sufixo), buffer: await gerarConferencia(rodada, meta) },
+    ...(divergencias.gerada ? [{ nome: divergencias.nome, buffer: divergencias.buffer }] : []),
+  ];
+  const pasta = gravarArquivos(caminhos.saida, sufixo, arquivos);
 
-  mkdirSync(saida, { recursive: true });
-  const pasta = join(saida, nomeDaPastaDaRodada(sufixo, readdirSync(saida)));
-  mkdirSync(pasta);
-  const arquivoImportacao = nomeImportacao(opcoes.grupo, sufixo);
-  const arquivoConferencia = nomeConferencia(sufixo);
-  writeFileSync(join(pasta, arquivoImportacao), Buffer.from(importacao));
-  writeFileSync(join(pasta, arquivoConferencia), Buffer.from(conferencia));
-
-  console.log(`Lista: ${meta.listaNome} (${rodada.contagens.linhas} linhas)`);
-  console.log(
-    lida.origem === "camara"
-      ? "Origem: planilha do site da Câmara (deputados em exercício)"
-      : `Origem: modelo Padrão (aba '${lida.aba}')`,
-  );
-  console.log(`Grupo: ${opcoes.grupo}`);
-  console.log(`Base: ${meta.baseNome}`);
-  console.log(`Endereços: ${meta.enderecosNome}`);
-  console.log(`Referências: ${nomesRef.length > 0 ? nomesRef.join(", ") : "nenhuma"}`);
-  console.log("");
-  imprimirContagens(rodada);
-  console.log("");
-  console.log(`Gravado em ${pasta}:`);
-  console.log(arquivoImportacao);
-  console.log(arquivoConferencia);
+  imprimirCabecalho(opcoes, entradas, rodada, meta, caminhos.decisoes);
+  imprimirRelatorio(rodada, divergencias, pasta, arquivos.map((a) => a.nome));
 }
 
 async function principal(): Promise<number> {

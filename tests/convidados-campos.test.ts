@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { abreviarLote, ehEnderecoDoDf, tratarNumero } from "@/lib/convidados/numero";
 import { tratarCep, ufDoCep } from "@/lib/convidados/cep";
-import { tratarBairro, tratarCidade, tratarUf } from "@/lib/convidados/bairro-cidade-uf";
+import { CEP_CAMARA, tratarBairro, tratarCidade, tratarUf } from "@/lib/convidados/bairro-cidade-uf";
 import { comIniciaisMaiusculas, semTitulo, sugestaoNomeCurto, tratarNome } from "@/lib/convidados/nome";
 import { conferirProtocolo, formaNoGenero } from "@/lib/convidados/protocolo";
 import { abreviarAteCaber, classeDoSegmento, encaixarLogradouroComplemento, NIVEL_2_COMPLEMENTO, PASSOS_LOGRADOURO } from "@/lib/convidados/abreviacoes";
@@ -136,6 +136,13 @@ describe("número", () => {
     expect(r.numero).toBe("Casa Amarela");
     expect(r.revisao?.texto).toBe("Número acima de 6 caracteres sem lote/casa/bloco");
   });
+  test("'s/n' em qualquer caixa sai S/N com a regra; 'S/N' recebido não ganha regra; 's/nº' e 'sn' ficam como vieram", () => {
+    expect(tratarNumero({ ...base, numero: "s/n" })).toMatchObject({ numero: "S/N", regras: ["Número S/N em caixa alta"] });
+    expect(tratarNumero({ ...base, numero: " S/n " })).toMatchObject({ numero: "S/N", regras: ["Número S/N em caixa alta"] });
+    expect(tratarNumero({ ...base, numero: "S/N" })).toMatchObject({ numero: "S/N", regras: [] });
+    expect(tratarNumero({ ...base, numero: "s/nº" })).toMatchObject({ numero: "s/nº", regras: [] });
+    expect(tratarNumero({ ...base, numero: "sn" })).toMatchObject({ numero: "sn", regras: [] });
+  });
   test("abreviarLote cobre lote, casa, chácara e bloco", () => {
     expect(abreviarLote("Chácara 7 Bloco B")).toBe("Ch 7 Bl B");
     expect(abreviarLote("Lotes 1, 2")).toBe("Lt 1, 2");
@@ -176,6 +183,16 @@ describe("bairro, cidade e uf", () => {
     const medio = tratarBairro("Residencial Exemplo das Palmeiras");
     expect(medio.valor.length).toBeLessThanOrEqual(30);
     expect(medio.revisao).toBeUndefined();
+  });
+  test("bairro vazio com o CEP da Câmara, DF e Brasília é preenchido pelo CEP; fora da condição exata continua REVISAR", () => {
+    const camara = { cep: "70160-900", uf: "DF", cidade: "Brasília" };
+    expect(CEP_CAMARA).toBe("70160900");
+    expect(tratarBairro("", camara)).toEqual({ valor: "Zona Cívico-Administrativa", regras: ["Bairro preenchido pelo CEP 70160-900 (Praça dos Três Poderes)"] });
+    expect(tratarBairro("", { ...camara, cep: "70165900" }).revisao?.texto).toBe("Bairro vazio");
+    expect(tratarBairro("", { ...camara, uf: "GO" }).revisao?.texto).toBe("Bairro vazio");
+    expect(tratarBairro("", { ...camara, cidade: "Goiânia" }).revisao?.texto).toBe("Bairro vazio");
+    expect(tratarBairro("", { ...camara, uf: "", cidade: "" }).revisao?.texto).toBe("Bairro vazio");
+    expect(tratarBairro("Asa Sul", camara)).toEqual({ valor: "Asa Sul", regras: [] });
   });
   test("cidade: Brasília padronizada, vazia é REVISAR", () => {
     expect(tratarCidade("brasilia").valor).toBe("Brasília");
